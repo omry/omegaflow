@@ -26,5 +26,4 @@ The current repository also preserves older OmegaFlow design work under
 The website is configured for `https://omegaflow.dev` and includes a GitHub
 Pages workflow at `.github/workflows/deploy-website.yml`. The workflow builds
 `website/` with pnpm and deploys `website/build`; `website/static/CNAME`
-contains the custom domain. GitHub Pages and DNS still need to be configured in
-the `omry/omegaflow` repository before the domain is live.
+contains the custom domain.
