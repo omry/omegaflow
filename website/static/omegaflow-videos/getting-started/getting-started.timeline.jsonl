@@ -1,0 +1,20 @@
+{"beat": "overview", "phase": "beat_start", "time": 0.04}
+{"beat": "overview", "caption": "Start from a versioned Studio script.", "phase": "caption_start", "time": 0.057}
+{"beat": "overview", "caption": "Start from a versioned Studio script.", "phase": "caption_end", "time": 0.074}
+{"action_id": "overview_1", "beat": "overview", "phase": "action_start", "time": 0.109}
+{"action_id": "overview_1", "after": "", "beat": "overview", "chunk_index": 0, "color": 1, "command": "find studio -maxdepth 2 -type f | sort", "command_id": "", "follow_along": "false", "phase": "command_prompt_start", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "prompt": "$", "retime": "normal", "show_prompt_after": "true", "time": 0.361}
+{"action_id": "overview_1", "after": "", "beat": "overview", "chunk_index": 0, "color": 1, "command": "find studio -maxdepth 2 -type f | sort", "command_id": "", "follow_along": "false", "phase": "command_prompt_end", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "prompt": "$", "show_prompt_after": "true", "time": 0.378}
+{"action_id": "overview_1", "after": "", "beat": "overview", "chunk_index": 0, "command": "find studio -maxdepth 2 -type f | sort", "command_id": "", "display": "find studio -maxdepth 2 -type f | sort", "fake_output": "", "follow_along": "false", "output_mode": "real", "phase": "command_run_start", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "progress": "", "retime": "normal", "time": 0.395}
+{"action_id": "overview_1", "after": "", "beat": "overview", "chunk_index": 0, "command_id": "", "follow_along": "false", "phase": "command_run_end", "status": 0, "time": 0.432}
+{"action_id": "overview_1", "beat": "overview", "phase": "action_end", "status": 0, "time": 0.449}
+{"beat": "overview", "phase": "beat_end", "time": 0.466}
+{"beat": "build", "phase": "beat_start", "time": 0.483}
+{"beat": "build", "caption": "Use the Studio CLI to build or inspect video outputs.", "phase": "caption_start", "time": 0.5}
+{"beat": "build", "caption": "Use the Studio CLI to build or inspect video outputs.", "phase": "caption_end", "time": 0.516}
+{"action_id": "build_1", "beat": "build", "phase": "action_start", "time": 0.552}
+{"action_id": "build_1", "after": "", "beat": "build", "chunk_index": 0, "color": 1, "command": "studio recording=getting-started action=build dry_run=true", "command_id": "", "follow_along": "false", "phase": "command_prompt_start", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "prompt": "$", "retime": "normal", "show_prompt_after": "true", "time": 0.803}
+{"action_id": "build_1", "after": "", "beat": "build", "chunk_index": 0, "color": 1, "command": "studio recording=getting-started action=build dry_run=true", "command_id": "", "follow_along": "false", "phase": "command_prompt_end", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "prompt": "$", "show_prompt_after": "true", "time": 0.82}
+{"action_id": "build_1", "after": "", "beat": "build", "chunk_index": 0, "command": "python -c \"print('build plan: record -> retime -> publish')\"", "command_id": "", "display": "studio recording=getting-started action=build dry_run=true", "fake_output": "", "follow_along": "false", "output_mode": "real", "phase": "command_run_start", "post_command_pause": "", "post_enter_pause": "", "pre_command_pause": "", "pre_enter_pause": "", "progress": "", "retime": "normal", "time": 0.836}
+{"action_id": "build_1", "after": "", "beat": "build", "chunk_index": 0, "command_id": "", "follow_along": "false", "phase": "command_run_end", "status": 0, "time": 0.888}
+{"action_id": "build_1", "beat": "build", "phase": "action_end", "status": 0, "time": 0.905}
+{"beat": "build", "phase": "beat_end", "time": 0.922}

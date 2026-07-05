@@ -1,0 +1,8 @@
+{"version":3,"term":{"cols":90,"rows":24},"timestamp":1783242175,"command":"studio recording=getting-started step=session","title":"Getting Started With OmegaFlow Studio"}
+[0.260, "o", "\r\n\u001b[36;1m# Start from a versioned Studio script.\u001b[0m\r\n\r\n"]
+[0.356, "o", "studio/conf/config.yaml\r\nstudio/recordings/getting-started.md\r\n"]
+[0.037, "o", "\r\n"]
+[0.050, "o", "\r\n\u001b[36;1m# Use the Studio CLI to build or inspect video outputs.\u001b[0m\r\n\r\n"]
+[0.366, "o", "build plan: record -> retime -> publish\r\n"]
+[0.040, "o", "\r\n"]
+[0.037, "x", "0"]

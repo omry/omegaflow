@@ -1,0 +1,810 @@
+#!/usr/bin/env python3
+"""Compose OmegaFlow Studio configuration with Hydra."""
+
+from __future__ import annotations
+
+import os
+import re
+import shlex
+from dataclasses import dataclass, field
+from enum import Enum
+from hashlib import sha256
+from pathlib import Path
+from typing import Any, Sequence
+
+from hydra import compose, initialize_config_dir
+from hydra.core.config_store import ConfigStore
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
+
+
+def project_root() -> Path:
+    configured = os.environ.get("OMEGAFLOW_STUDIO_PROJECT_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    cwd = Path.cwd().resolve()
+    for candidate in (cwd, *cwd.parents):
+        if (candidate / "studio" / "conf" / "config.yaml").exists():
+            return candidate
+    return cwd
+
+
+PROJECT_ROOT = project_root()
+REPO_ROOT = PROJECT_ROOT
+CONFIG_DIR = PROJECT_ROOT / "studio" / "conf"
+RECORDING_SCRIPT_DIR = PROJECT_ROOT / "studio" / "recordings"
+GENERATED_DIR = PROJECT_ROOT / "studio" / "generated"
+MAX_INLINE_RUN_LINES = 10
+NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
+NARRATION_MARKER_RE = re.compile(
+    r"@(?:(wait):([A-Za-z][A-Za-z0-9_-]*)(?:\+([0-9]+(?:\.[0-9]+)?)(ms|s))?|([A-Za-z][A-Za-z0-9_-]*))@"
+)
+
+
+class StudioConfigError(RuntimeError):
+    pass
+
+
+def normalize_studio_token(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
+
+
+def studio_run_dir(
+    action: object,
+    step: object,
+    dry_run: object,
+    recording_id: object,
+    timestamp: object,
+) -> str:
+    action_text = normalize_studio_token(action) or "build"
+    step_text = normalize_studio_token(step)
+    recording_text = normalize_studio_token(recording_id) or "recording"
+    timestamp_text = normalize_studio_token(timestamp)
+    dry_run_enabled = str(dry_run).lower() == "true"
+    is_recording_run = not dry_run_enabled and (
+        step_text in {"record", "session"}
+        or (not step_text and action_text in {"build", "record"})
+    )
+    if is_recording_run:
+        return f"studio/runs/{recording_text}/{timestamp_text}"
+    job_kind = step_text or action_text
+    return f"studio/studio-runs/{job_kind}/{recording_text}/{timestamp_text}"
+
+
+def register_resolvers() -> None:
+    if not OmegaConf.has_resolver("studio_run_dir"):
+        OmegaConf.register_new_resolver("studio_run_dir", studio_run_dir)
+
+
+class StudioAction(str, Enum):
+    build = "build"
+    check = "check"
+    clean = "clean"
+    play = "play"
+    watch = "watch"
+    inspect = "inspect"
+    output = "output"
+    runs = "runs"
+    list = "list"
+
+
+class StudioStep(str, Enum):
+    record = "record"
+    record_check = "record_check"
+    record_dry_run = "record_dry_run"
+    session = "session"
+    dry_run = "dry_run"
+    sync_narration = "sync_narration"
+    retime = "retime"
+    retime_check = "retime_check"
+    generate = "generate"
+    publish = "publish"
+    audio_check = "audio_check"
+    audio_dry_run = "audio_dry_run"
+    audio_generate = "audio_generate"
+    audio_publish = "audio_publish"
+    align = "align"
+    align_check = "align_check"
+
+
+@dataclass
+class StudioConfig:
+    action: StudioAction = StudioAction.build
+    step: StudioStep | None = None
+    output_format: str = "text"
+    verbose: bool = False
+    load_env_file: bool = True
+    env_file: str | None = ".env"
+    env_override: bool = False
+    output: str | None = None
+    cast: str | None = None
+    timeline: str | None = None
+    surface: str | None = None
+    dry_run: bool = False
+    headed: bool = False
+    force: bool = False
+    timestamps: bool = True
+    allow_mismatch: bool = False
+    run_id: str | None = None
+    runs_since: str | None = None
+    runs_limit: int | None = 10
+    studio: dict[str, Any] = field(default_factory=dict)
+    script_params: Any = field(default_factory=dict)
+    narration: dict[str, Any] = field(default_factory=dict)
+    publish: dict[str, Any] = field(default_factory=dict)
+    recording: Any = None
+
+
+def register_studio_schema() -> None:
+    ConfigStore.instance().store(name="studio_schema", node=StudioConfig)
+
+
+register_resolvers()
+register_studio_schema()
+
+
+def list_recording_ids() -> list[str]:
+    if not RECORDING_SCRIPT_DIR.exists():
+        return []
+    return sorted(path.stem for path in RECORDING_SCRIPT_DIR.glob("*.md"))
+
+
+def normalize_hydra_override(override: str) -> str:
+    if override.count("=") <= 1:
+        return override
+    key, value = override.split("=", 1)
+    if value.startswith(("'", '"')):
+        return override
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"{key}='{escaped}'"
+
+
+def compose_studio_config(
+    recording_id: str | None,
+    overrides: Sequence[str] = (),
+) -> dict[str, Any]:
+    if not CONFIG_DIR.exists():
+        raise StudioConfigError(f"studio config directory not found: {CONFIG_DIR}")
+
+    hydra_overrides = [
+        normalize_hydra_override(str(override)) for override in overrides
+    ]
+    if recording_id is not None:
+        hydra_overrides.insert(0, f"recording={recording_id}")
+    try:
+        with initialize_config_dir(
+            version_base=None,
+            config_dir=str(CONFIG_DIR),
+        ):
+            cfg = compose(config_name="config", overrides=hydra_overrides)
+            data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
+    except Exception as exc:
+        details = f"recording {recording_id!r}" if recording_id else "default recording"
+        raise StudioConfigError(
+            f"failed to compose media config for {details}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise StudioConfigError("composed media config must be a mapping")
+    return data
+
+
+def container_from_hydra_cfg(cfg: DictConfig) -> dict[str, Any]:
+    data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
+    if not isinstance(data, dict):
+        raise StudioConfigError("composed Hydra config must be a mapping")
+    return data
+
+
+def resolve_config_path(path: str) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    return REPO_ROOT / candidate
+
+
+def dotenv_entry(line: str, *, path: Path, line_number: int) -> tuple[str, str] | None:
+    try:
+        tokens = shlex.split(line, comments=True, posix=True)
+    except ValueError as exc:
+        raise StudioConfigError(
+            f"failed to parse env file {path}:{line_number}: {exc}"
+        ) from exc
+    if not tokens:
+        return None
+    if tokens[0] == "export":
+        tokens = tokens[1:]
+    if len(tokens) != 1 or "=" not in tokens[0]:
+        raise StudioConfigError(
+            f"failed to parse env file {path}:{line_number}: expected KEY=VALUE"
+        )
+    key, value = tokens[0].split("=", 1)
+    if not key.isidentifier():
+        raise StudioConfigError(
+            f"failed to parse env file {path}:{line_number}: invalid key {key!r}"
+        )
+    return key, value
+
+
+def load_env_file(path: Path, *, override: bool = False) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    loaded: dict[str, str] = {}
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), 1
+    ):
+        entry = dotenv_entry(line, path=path, line_number=line_number)
+        if entry is None:
+            continue
+        key, value = entry
+        if override or key not in os.environ:
+            os.environ[key] = value
+            loaded[key] = value
+    return loaded
+
+
+def load_configured_env_file(config: dict[str, Any]) -> dict[str, str]:
+    enabled = config.get("load_env_file", True)
+    if not isinstance(enabled, bool):
+        raise StudioConfigError("load_env_file must be a boolean")
+    if not enabled:
+        return {}
+
+    env_file = config.get("env_file", ".env")
+    if env_file is None:
+        return {}
+    if not isinstance(env_file, str) or not env_file:
+        raise StudioConfigError("env_file must be a non-empty string or null")
+
+    override = config.get("env_override", False)
+    if not isinstance(override, bool):
+        raise StudioConfigError("env_override must be a boolean")
+
+    return load_env_file(resolve_config_path(env_file), override=override)
+
+
+def merge_mapping(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = merge_mapping(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def studio_directive_blocks(
+    script_text: str, *, resolve: bool = True
+) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    lines = script_text.splitlines()
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if stripped not in {
+            "```studio-directive",
+            "```studio-directive yaml",
+            "```yaml studio-directive",
+        }:
+            index += 1
+            continue
+        start_line = index + 1
+        index += 1
+        block_lines: list[str] = []
+        while index < len(lines) and lines[index].strip() != "```":
+            block_lines.append(lines[index])
+            index += 1
+        if index >= len(lines):
+            raise StudioConfigError(
+                f"studio-directive block starting on line {start_line} is not closed"
+            )
+        text = "\n".join(block_lines).strip()
+        if text:
+            try:
+                config = OmegaConf.create(text)
+                value = OmegaConf.to_container(
+                    config,
+                    resolve=resolve,
+                    enum_to_str=True,
+                )
+            except OmegaConfBaseException as exc:
+                raise StudioConfigError(
+                    f"invalid studio-directive config near line {start_line}: {exc}"
+                ) from exc
+            if not isinstance(value, dict):
+                raise StudioConfigError(
+                    f"studio-directive block near line {start_line} must be a mapping"
+                )
+            blocks.append(value)
+        index += 1
+    return blocks
+
+
+def inline_run_line_count(text: str) -> int:
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+def validate_step_inline_run_length(step: dict[str, Any], *, field: str) -> None:
+    run = step.get("run")
+    if run is None:
+        return
+    if not isinstance(run, str):
+        raise StudioConfigError(f"{field}.run must be a string")
+    line_count = inline_run_line_count(run)
+    if line_count > MAX_INLINE_RUN_LINES:
+        raise StudioConfigError(
+            f"{field}.run has {line_count} non-empty lines; "
+            f"inline run blocks are limited to {MAX_INLINE_RUN_LINES}. "
+            "Move longer shell into an organized run_file."
+        )
+
+
+def validate_step_command_inline_run_lengths(
+    step: dict[str, Any], *, field: str
+) -> None:
+    commands = step.get("commands")
+    if commands is None:
+        return
+    if not isinstance(commands, list):
+        raise StudioConfigError(f"{field}.commands must be a list")
+    for index, command in enumerate(commands, start=1):
+        if not isinstance(command, dict):
+            raise StudioConfigError(f"{field}.commands.{index} must be a mapping")
+        validate_step_inline_run_length(
+            command,
+            field=f"{field}.commands.{index}",
+        )
+
+
+def validate_recording_inline_run_lengths(spec: dict[str, Any]) -> None:
+    for field in ["setup", "cleanup"]:
+        value = spec.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            raise StudioConfigError(f"recording.{field} must be a list")
+        for index, step in enumerate(value, start=1):
+            if not isinstance(step, dict):
+                raise StudioConfigError(f"recording.{field}.{index} must be a mapping")
+            validate_step_inline_run_length(step, field=f"recording.{field}.{index}")
+    beats = spec.get("beats")
+    if beats is None:
+        return
+    if not isinstance(beats, list):
+        raise StudioConfigError("recording.beats must be a list")
+    for beat_index, beat in enumerate(beats, start=1):
+        if not isinstance(beat, dict):
+            raise StudioConfigError(f"recording.beats.{beat_index} must be a mapping")
+        beat_id = beat.get("id", beat_index)
+        for field in ["actions", "checks"]:
+            value = beat.get(field)
+            if value is None:
+                continue
+            if not isinstance(value, list):
+                raise StudioConfigError(
+                    f"recording.beats.{beat_id}.{field} must be a list"
+                )
+            for index, step in enumerate(value, start=1):
+                if not isinstance(step, dict):
+                    raise StudioConfigError(
+                        f"recording.beats.{beat_id}.{field}.{index} must be a mapping"
+                    )
+                validate_step_inline_run_length(
+                    step,
+                    field=f"recording.beats.{beat_id}.{field}.{index}",
+                )
+                validate_step_command_inline_run_lengths(
+                    step,
+                    field=f"recording.beats.{beat_id}.{field}.{index}",
+                )
+
+
+def normalize_narration_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def narration_marker_gap_seconds(value: str | None, unit: str | None) -> float:
+    if value is None:
+        return 0.0
+    gap = float(value)
+    return gap / 1000.0 if unit == "ms" else gap
+
+
+def narration_text_and_anchors(
+    text: str,
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    parts: list[str] = []
+    anchors: list[dict[str, Any]] = []
+    waits: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    previous = 0
+    for match in NARRATION_MARKER_RE.finditer(text):
+        before = text[match.start() - 1] if match.start() > 0 else ""
+        after = text[match.end()] if match.end() < len(text) else ""
+        if before.isalnum() or before == "_" or after.isalnum() or after == "_":
+            raise StudioConfigError(
+                f"narration marker {match.group(0)} must be separated from words"
+            )
+        parts.append(text[previous : match.start()])
+        marker = match.group(0)
+        marker_offset = len(normalize_narration_text("".join(parts)))
+        marker_kind = match.group(1)
+        if marker_kind == "wait":
+            wait_target = match.group(2)
+            gap_seconds = narration_marker_gap_seconds(match.group(3), match.group(4))
+            waits.append(
+                {
+                    "target": wait_target,
+                    "marker": marker,
+                    "text_offset": marker_offset,
+                    "gap_seconds": gap_seconds,
+                }
+            )
+            previous = match.end()
+            continue
+        anchor_id = match.group(5)
+        if anchor_id in seen:
+            raise StudioConfigError(f"duplicate narration anchor: @{anchor_id}@")
+        seen.add(anchor_id)
+        anchors.append(
+            {
+                "id": anchor_id,
+                "marker": marker,
+                "text_offset": marker_offset,
+            }
+        )
+        previous = match.end()
+    parts.append(text[previous:])
+    return normalize_narration_text("".join(parts)), anchors, waits
+
+
+def scene_title_from_directive(value: object) -> str:
+    if isinstance(value, str):
+        title = value.strip()
+    elif isinstance(value, dict):
+        title_value = value.get("title")
+        title = title_value.strip() if isinstance(title_value, str) else ""
+    else:
+        title = ""
+    if not title:
+        raise StudioConfigError("studio-directive scene must define a non-empty title")
+    return title
+
+
+def beat_values_from_directive(block: dict[str, Any]) -> list[object]:
+    values: list[object] = []
+    if "beat" in block:
+        values.append(block["beat"])
+    if "beats" in block:
+        beats = block["beats"]
+        if not isinstance(beats, list):
+            raise StudioConfigError("studio-directive beats must be a list")
+        values.extend(beats)
+    return values
+
+
+def narration_from_script(
+    *, recording_id: str, script_path: Path, blocks: list[dict[str, Any]]
+) -> dict[str, Any]:
+    scene_title = ""
+    beats: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for block in blocks:
+        if "scene" in block:
+            if scene_title:
+                raise StudioConfigError("duplicate studio-directive scene")
+            scene_title = scene_title_from_directive(block["scene"])
+        for value in beat_values_from_directive(block):
+            if not isinstance(value, dict):
+                raise StudioConfigError("studio-directive beat must be a mapping")
+            beat_id = value.get("id")
+            heading = value.get("heading")
+            narration = value.get("narration")
+            if not isinstance(beat_id, str) or not beat_id.strip():
+                raise StudioConfigError(
+                    "studio-directive beat.id must be a non-empty string"
+                )
+            if not isinstance(heading, str) or not heading.strip():
+                raise StudioConfigError(
+                    "studio-directive beat.heading must be a non-empty string"
+                )
+            if not isinstance(narration, str) or not narration.strip():
+                raise StudioConfigError(
+                    "studio-directive beat.narration must be a non-empty string"
+                )
+            normalized_id = beat_id.strip()
+            if normalized_id in seen_ids:
+                raise StudioConfigError(f"duplicate narration beat id: {normalized_id}")
+            seen_ids.add(normalized_id)
+            text, anchors, waits = narration_text_and_anchors(narration)
+            beat = {
+                "id": normalized_id,
+                "heading": heading.strip(),
+                "text": text,
+            }
+            if anchors:
+                beat["anchors"] = anchors
+            if waits:
+                beat["waits"] = waits
+            viewer_hold = value.get("viewer_hold")
+            if viewer_hold is not None:
+                if not isinstance(viewer_hold, (int, float)) or viewer_hold < 0:
+                    raise StudioConfigError(
+                        f"studio-directive beat {normalized_id}.viewer_hold "
+                        "must be a non-negative number"
+                    )
+                beat["viewer_hold"] = float(viewer_hold)
+            beats.append(beat)
+    if not scene_title:
+        raise StudioConfigError(f"recording script must define a scene: {script_path}")
+    if not beats:
+        raise StudioConfigError(
+            f"recording script must define narrated beats: {script_path}"
+        )
+    return {
+        "source_script": display_path(script_path),
+        "source_sha256": sha256(script_path.read_bytes()).hexdigest(),
+        "generated": False,
+        "scene": {"id": recording_id, "title": scene_title},
+        "beats": beats,
+    }
+
+
+def recording_beat_values_from_script(
+    blocks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    recording_beats: list[dict[str, Any]] = []
+    for block in blocks:
+        for value in beat_values_from_directive(block):
+            if not isinstance(value, dict):
+                continue
+            beat_id = value.get("id")
+            if not isinstance(beat_id, str) or not beat_id.strip():
+                continue
+            executable_keys = set(value) - NARRATION_BEAT_KEYS
+            if not executable_keys:
+                continue
+            beat = {
+                key: data
+                for key, data in value.items()
+                if key not in {"heading", "narration"}
+            }
+            beat["id"] = beat_id.strip()
+            recording_beats.append(beat)
+    return recording_beats
+
+
+def merge_script_recording_beats(
+    spec: dict[str, Any], blocks: list[dict[str, Any]]
+) -> None:
+    inline_beats = recording_beat_values_from_script(blocks)
+    if not inline_beats:
+        return
+    existing = spec.get("beats")
+    if existing is None:
+        spec["beats"] = inline_beats
+        return
+    if not isinstance(existing, list):
+        raise StudioConfigError("recording.beats must be a list")
+    seen_ids = {
+        beat.get("id")
+        for beat in existing
+        if isinstance(beat, dict) and isinstance(beat.get("id"), str)
+    }
+    duplicate_ids = sorted(
+        beat["id"] for beat in inline_beats if beat["id"] in seen_ids
+    )
+    if duplicate_ids:
+        raise StudioConfigError(
+            "recording beat defined in both recording.beats and beat directive: "
+            + ", ".join(duplicate_ids)
+        )
+    spec["beats"] = [*existing, *inline_beats]
+
+
+def recording_id_from_config(config: dict[str, Any], recording_id: str | None) -> str:
+    if recording_id:
+        return recording_id
+    value = config.get("recording")
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, dict):
+        candidate = value.get("id")
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    raise StudioConfigError("recording id must be a non-empty string")
+
+
+def resolve_recording_spec_interpolations(spec: dict[str, Any]) -> dict[str, Any]:
+    try:
+        config = OmegaConf.create({"recording": spec})
+        resolved = OmegaConf.to_container(config, resolve=True, enum_to_str=True)
+    except OmegaConfBaseException as exc:
+        raise StudioConfigError(
+            f"failed to resolve recording script config: {exc}"
+        ) from exc
+    if not isinstance(resolved, dict) or not isinstance(
+        resolved.get("recording"), dict
+    ):
+        raise StudioConfigError("resolved recording script config must be a mapping")
+    return resolved["recording"]
+
+
+def recording_script_path(recording_id: str) -> Path:
+    return RECORDING_SCRIPT_DIR / f"{recording_id}.md"
+
+
+def recording_from_script(recording_id: str) -> dict[str, Any]:
+    script_path = recording_script_path(recording_id)
+    if not script_path.exists():
+        raise StudioConfigError(f"recording script not found: {script_path}")
+    script_text = script_path.read_text(encoding="utf-8")
+    blocks = studio_directive_blocks(script_text, resolve=False)
+    recording_blocks = [block["recording"] for block in blocks if "recording" in block]
+    if len(recording_blocks) != 1:
+        raise StudioConfigError(
+            f"recording script must contain exactly one recording directive: {script_path}"
+        )
+    recording = recording_blocks[0]
+    if not isinstance(recording, dict):
+        raise StudioConfigError("studio-directive recording must be a mapping")
+    spec = dict(recording)
+    spec.setdefault("id", recording_id)
+    spec["script"] = display_path(script_path)
+    merge_script_recording_beats(spec, blocks)
+    spec["narration"] = narration_from_script(
+        recording_id=recording_id,
+        script_path=script_path,
+        blocks=blocks,
+    )
+    spec = resolve_recording_spec_interpolations(spec)
+    validate_recording_inline_run_lengths(spec)
+    return spec
+
+
+def script_parameter_defaults(spec: dict[str, Any]) -> dict[str, Any]:
+    parameters = spec.get("parameters", {})
+    if parameters is None:
+        return {}
+    if not isinstance(parameters, dict):
+        raise StudioConfigError("recording.parameters must be a mapping")
+    defaults: dict[str, Any] = {}
+    for key, value in parameters.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise StudioConfigError(
+                "recording.parameters keys must be shell-safe names"
+            )
+        if isinstance(value, dict) and "default" in value:
+            defaults[key] = value["default"]
+        else:
+            defaults[key] = value
+    return defaults
+
+
+def resolved_script_parameters(
+    spec: dict[str, Any],
+    overrides: object,
+) -> dict[str, Any]:
+    defaults = script_parameter_defaults(spec)
+    if overrides is None:
+        return defaults
+    if not isinstance(overrides, dict):
+        raise StudioConfigError("script_params must be a mapping")
+    unknown = sorted(set(overrides) - set(defaults))
+    if unknown:
+        raise StudioConfigError("unknown script parameter(s): " + ", ".join(unknown))
+    return merge_mapping(defaults, overrides)
+
+
+def recording_spec_from_config(
+    config: dict[str, Any],
+    *,
+    recording_id: str | None,
+    overrides: Sequence[str],
+    hydra_output_dir: str | None = None,
+) -> dict[str, Any]:
+    resolved_recording_id = recording_id_from_config(config, recording_id)
+    recording = config.get("recording")
+    if isinstance(recording, dict) and recording:
+        spec = dict(recording)
+        spec.setdefault("id", resolved_recording_id)
+        script = spec.get("script")
+        if isinstance(script, str) and script:
+            script_path = resolve_config_path(script)
+            if script_path.exists():
+                script_text = script_path.read_text(encoding="utf-8")
+                blocks = studio_directive_blocks(script_text, resolve=False)
+                spec.setdefault(
+                    "narration",
+                    narration_from_script(
+                        recording_id=resolved_recording_id,
+                        script_path=script_path,
+                        blocks=blocks,
+                    ),
+                )
+                merge_script_recording_beats(spec, blocks)
+                spec = resolve_recording_spec_interpolations(spec)
+                validate_recording_inline_run_lengths(spec)
+    else:
+        spec = recording_from_script(resolved_recording_id)
+
+    for key in [
+        "studio",
+        "requirements",
+        "capture",
+        "style",
+        "outputs",
+        "retime",
+        "environment",
+        "audio",
+        "narration",
+        "publish",
+    ]:
+        value = config.get(key)
+        if not isinstance(value, dict):
+            continue
+        current = spec.get(key)
+        if isinstance(current, dict):
+            spec[key] = merge_mapping(value, current)
+        else:
+            spec[key] = value
+
+    validate_recording_inline_run_lengths(spec)
+
+    spec["parameters"] = resolved_script_parameters(
+        spec,
+        config.get("script_params", {}),
+    )
+
+    resolved_recording_id = spec.get("id")
+    if not isinstance(resolved_recording_id, str) or not resolved_recording_id:
+        raise StudioConfigError("recording.id must be a non-empty string")
+
+    manifest_path = recording_script_path(resolved_recording_id)
+    spec["_manifest_path"] = str(manifest_path)
+    spec["_config_dir"] = str(CONFIG_DIR)
+    spec["_recording_id"] = resolved_recording_id
+    spec["_overrides"] = list(overrides)
+    spec["_studio_config"] = config
+    if hydra_output_dir is not None:
+        studio = config.get("studio", {})
+        keep_output_dir = False
+        if isinstance(studio, dict):
+            keep_output_dir = bool(studio.get("keep_output_dir", False))
+        spec["_hydra_output_dir"] = hydra_output_dir
+        spec["_keep_hydra_output_dir"] = keep_output_dir
+    return spec
+
+
+def load_recording_spec(
+    recording_id: str | None,
+    overrides: Sequence[str] = (),
+) -> dict[str, Any]:
+    config = compose_studio_config(recording_id, overrides)
+    return recording_spec_from_config(
+        config,
+        recording_id=recording_id,
+        overrides=overrides,
+    )
+
+
+def load_recording_spec_from_hydra_cfg(cfg: DictConfig) -> dict[str, Any]:
+    hydra_cfg = HydraConfig.get()
+    return recording_spec_from_config(
+        container_from_hydra_cfg(cfg),
+        recording_id=None,
+        overrides=list(hydra_cfg.overrides.task),
+        hydra_output_dir=str(hydra_cfg.runtime.output_dir),
+    )

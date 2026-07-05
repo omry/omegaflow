@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "omegaflow-studio"
+version = "0.1.0"
+description = "Scripted terminal and video flow authoring for OmegaFlow Studio"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Omry Yadan" },
+]
+dependencies = [
+  "hydra-core>=1.3",
+  "omegaconf>=2.3",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pytest>=8.0",
+]
+
+[project.scripts]
+studio = "omegaflow_studio.studio:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/omegaflow_studio"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

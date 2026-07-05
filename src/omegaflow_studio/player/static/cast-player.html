@@ -1,0 +1,2348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmegaFlow Video</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #282a36;
+        --panel: #1f2130;
+        --fg: #f8f8f2;
+        --muted: #b9bed6;
+        --border: #44475a;
+        --cyan: #8be9fd;
+        --green: #50fa7b;
+        --pink: #ff79c6;
+        --purple: #bd93f9;
+        --red: #ff5555;
+        --yellow: #f1fa8c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.4 Inter, ui-sans-serif, system-ui, -apple-system,
+          BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .player {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: calc(2.7em + 1.3rem + 1px);
+        padding: 0.65rem 0.8rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+
+      .narration {
+        flex: 1 1 auto;
+        min-width: 10rem;
+        overflow-x: hidden;
+        overflow-y: hidden;
+        color: var(--fg);
+        font-weight: 650;
+        height: 2.7em;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: break-word;
+      }
+
+      .narration-word {
+        border-radius: 0.18rem;
+        transition: color 120ms ease, opacity 120ms ease;
+      }
+
+      .narration-word.past {
+        color: rgba(248, 248, 242, 0.82);
+      }
+
+      .narration-word.current {
+        background: rgba(139, 233, 253, 0.18);
+        color: var(--fg);
+      }
+
+      .narration-word.future {
+        opacity: 0.72;
+      }
+
+      button {
+        flex: 0 0 auto;
+        min-height: 2rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.3rem 0.65rem;
+        background: #343746;
+        color: var(--fg);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
+      button:hover {
+        border-color: var(--cyan);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        min-width: 2rem;
+        height: 2rem;
+        min-height: 2rem;
+        padding: 0;
+      }
+
+      .icon-button svg {
+        width: 1rem;
+        height: 1rem;
+        stroke: currentColor;
+        stroke-width: 2.25;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      .icon-button[data-active="true"] {
+        border-color: var(--cyan);
+        color: var(--cyan);
+      }
+
+      .transport {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .terminal {
+        cursor: pointer;
+        min-height: 0;
+        margin: 0;
+        overflow: hidden;
+        padding: 1rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .stage {
+        position: relative;
+        min-height: 0;
+        overflow: hidden;
+        background: var(--bg);
+      }
+
+      .stage .terminal {
+        width: 100%;
+        height: 100%;
+      }
+
+      .playback-flash {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 5rem;
+        height: 5rem;
+        border: 1px solid rgba(248, 248, 242, 0.35);
+        border-radius: 50%;
+        background: rgba(25, 26, 36, 0.72);
+        color: var(--fg);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -50%) scale(0.96);
+        transition: opacity 600ms ease, transform 600ms ease;
+      }
+
+      .playback-flash[data-visible="true"] {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        transition-duration: 80ms;
+      }
+
+      .playback-flash[data-fading="true"] {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(2);
+      }
+
+      .playback-flash svg {
+        width: 2.25rem;
+        height: 2.25rem;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      .guide-modal {
+        position: absolute;
+        inset: 0;
+        display: block;
+        padding: 1rem;
+        pointer-events: auto;
+      }
+
+      .guide-modal[hidden] {
+        display: none;
+      }
+
+      .guide-card {
+        position: absolute;
+        top: 28%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(44rem, 100%);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        background: var(--panel);
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
+        pointer-events: auto;
+      }
+
+      .guide-title {
+        margin: 0 0 0.45rem;
+        color: var(--cyan);
+        cursor: move;
+        font-size: 1rem;
+        user-select: none;
+      }
+
+      .guide-hint {
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+      }
+
+      .guide-command {
+        margin: 0.85rem 0 0;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.75rem;
+        background: #191a24;
+        color: var(--fg);
+        font: 0.9rem/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        white-space: pre-wrap;
+      }
+
+      .guide-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.55rem;
+        margin-top: 1rem;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-height: 2.4rem;
+        padding: 0.45rem 0.8rem;
+        border-top: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .progress {
+        --position: 0%;
+        --thumb-size: 0.9rem;
+        width: 100%;
+        height: 0.45rem;
+        border: 0;
+        border-radius: 999px;
+        background:
+          linear-gradient(90deg, var(--cyan), var(--green)) 0 / var(--position) 100%
+            no-repeat,
+          #191a24;
+        cursor: pointer;
+        appearance: none;
+      }
+
+      .progress-wrap {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 8rem;
+        display: flex;
+        align-items: center;
+      }
+
+      .section-tooltip {
+        position: absolute;
+        bottom: calc(100% + 0.55rem);
+        max-width: min(24rem, 70vw);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.25rem 0.5rem;
+        background: var(--panel);
+        color: var(--fg);
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+        font-size: 0.78rem;
+        font-weight: 700;
+        pointer-events: none;
+        text-overflow: ellipsis;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        z-index: 3;
+      }
+
+      .section-tooltip[hidden] {
+        display: none;
+      }
+
+      .section-markers {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .section-marker {
+        position: absolute;
+        top: 50%;
+        --thumb-offset: 0rem;
+        width: 2px;
+        height: 0.9rem;
+        border-radius: 999px;
+        background: rgba(248, 248, 242, 0.72);
+        box-shadow: 0 0 0 1px rgba(25, 26, 36, 0.85);
+        transform: translate(calc(-50% + var(--thumb-offset)), -50%);
+      }
+
+      .section-marker.debug {
+        width: 1px;
+        height: 0.52rem;
+        background: var(--cyan);
+        opacity: 0.58;
+        box-shadow: 0 0 0 1px rgba(25, 26, 36, 0.75);
+      }
+
+      .section-marker.active {
+        width: 3px;
+        height: 1.1rem;
+        background: var(--green);
+      }
+
+      .section-marker.debug.active {
+        width: 2px;
+        height: 0.86rem;
+        background: var(--cyan);
+        opacity: 1;
+      }
+
+      .progress::-webkit-slider-thumb {
+        width: var(--thumb-size);
+        height: var(--thumb-size);
+        border: 2px solid var(--panel);
+        border-radius: 999px;
+        background: var(--fg);
+        appearance: none;
+      }
+
+      .progress::-moz-range-thumb {
+        width: 0.65rem;
+        height: 0.65rem;
+        border: 2px solid var(--panel);
+        border-radius: 999px;
+        background: var(--fg);
+      }
+
+      .status button {
+        min-height: 2rem;
+        padding: 0;
+        font-size: 0.82rem;
+      }
+
+      #clock {
+        flex: 0 0 auto;
+        min-width: 4.8rem;
+      }
+
+      #voice {
+        flex: 0 0 auto;
+        position: relative;
+        width: 1rem;
+        min-height: 1em;
+        background:
+          linear-gradient(currentColor, currentColor) center / 2px 0.64rem
+            no-repeat;
+        color: rgba(139, 233, 253, 0.42);
+        opacity: 0;
+        transition: color 180ms ease;
+      }
+
+      #voice::after,
+      #voice::before {
+        position: absolute;
+        top: 50%;
+        width: 2px;
+        border-radius: 999px;
+        background: currentColor;
+        content: "";
+        opacity: 1;
+        transform: translateY(-50%);
+        transform-origin: 50% 50%;
+        transition: background-color 180ms ease, opacity 180ms ease;
+      }
+
+      #voice::before {
+        left: 0.16rem;
+        height: 0.38rem;
+      }
+
+      #voice::after {
+        right: 0.16rem;
+        height: 0.48rem;
+      }
+
+      #voice[data-state="ready"],
+      #voice[data-state="playing"] {
+        color: var(--cyan);
+        opacity: 1;
+      }
+
+      #voice[data-state="playing"] {
+        animation: voiceover-wave-center 1.2s ease-in-out infinite;
+      }
+
+      #voice[data-state="playing"]::before {
+        animation: voiceover-wave-side 1.2s ease-in-out infinite;
+      }
+
+      #voice[data-state="playing"]::after {
+        animation: voiceover-wave-side 1.2s ease-in-out 180ms infinite;
+      }
+
+      @keyframes voiceover-wave-center {
+        0%,
+        100% {
+          background-size: 2px 0.5rem;
+          opacity: 0.6;
+        }
+        50% {
+          background-size: 2px 0.9rem;
+          opacity: 1;
+        }
+      }
+
+      @keyframes voiceover-wave-side {
+        0%,
+        100% {
+          opacity: 0.45;
+          transform: translateY(-50%) scaleY(0.7);
+        }
+        50% {
+          opacity: 0.9;
+          transform: translateY(-50%) scaleY(1.25);
+        }
+      }
+
+      .ansi-black { color: #21222c; }
+      .ansi-red { color: var(--red); }
+      .ansi-green { color: var(--green); }
+      .ansi-yellow { color: var(--yellow); }
+      .ansi-blue { color: #6272a4; }
+      .ansi-magenta { color: var(--purple); }
+      .ansi-cyan { color: var(--cyan); }
+      .ansi-white { color: var(--fg); }
+      .ansi-bright-black { color: #6272a4; }
+      .ansi-bright-red { color: #ff6e6e; }
+      .ansi-bright-green { color: var(--green); }
+      .ansi-bright-yellow { color: var(--yellow); }
+      .ansi-bright-blue { color: #82aaff; }
+      .ansi-bright-magenta { color: var(--pink); }
+      .ansi-bright-cyan { color: var(--cyan); }
+      .ansi-bright-white { color: #ffffff; }
+
+      @media (max-width: 620px) {
+        .bar,
+        .status {
+          flex-wrap: wrap;
+        }
+
+        .narration {
+          flex-basis: 100%;
+        }
+
+        .progress-wrap {
+          order: 3;
+          flex-basis: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="player">
+      <div class="bar">
+        <div class="narration" id="narration">Terminal recording</div>
+      </div>
+      <div class="stage">
+        <pre class="terminal" id="terminal" aria-live="polite"></pre>
+        <div class="playback-flash" id="playback-flash" aria-hidden="true"></div>
+        <div class="guide-modal" id="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title" hidden>
+          <div class="guide-card" id="guide-card">
+            <h2 class="guide-title" id="guide-title">Checkpoint</h2>
+            <p class="guide-hint" id="guide-summary">Try this command before continuing.</p>
+            <pre class="guide-command" id="guide-command"></pre>
+            <p class="guide-hint" id="guide-hint"></p>
+            <div class="guide-actions">
+              <button id="guide-copy" type="button">Copy command</button>
+              <button id="guide-restart" type="button">Restart section</button>
+              <button id="guide-continue" type="button">Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="status">
+        <span id="clock">0:00 / 0:00</span>
+        <div class="transport" aria-label="Playback controls">
+          <button class="icon-button" id="prev-section" type="button" aria-label="Previous section" title="Previous section" disabled></button>
+          <button class="icon-button" id="play" type="button" aria-label="Play" title="Play"></button>
+          <button class="icon-button" id="restart" type="button" aria-label="Restart" title="Restart" disabled></button>
+          <button class="icon-button" id="next-section" type="button" aria-label="Next section" title="Next section" disabled></button>
+          <button class="icon-button" id="guided" type="button" aria-label="Guided mode off" title="Guided mode"></button>
+        </div>
+        <div class="progress-wrap" id="progress-wrap">
+          <input
+            class="progress"
+            id="progress"
+            type="range"
+            min="0"
+            max="1000"
+            value="0"
+            aria-label="Seek recording"
+          />
+          <div class="section-markers" id="section-markers" aria-hidden="true"></div>
+          <div class="section-tooltip" id="section-tooltip" role="tooltip" hidden></div>
+        </div>
+        <button class="icon-button" id="mute" type="button" aria-label="Mute" title="Mute" disabled></button>
+        <span id="voice"></span>
+      </div>
+    </main>
+
+    <script src="cast-player-core.js"></script>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const castUrl = params.get('cast');
+      const audioUrl = params.get('audio');
+      const audioMetaUrl = params.get('audioMeta');
+      const introText = params.get('intro') || '';
+      const explicitIntroSeconds = params.has('introSeconds');
+      let introSeconds = Math.max(0, Number(params.get('introSeconds') || '0'));
+      const introSegment = params.get('introSegment') || '';
+      function parentDebugMode() {
+        try {
+          if (window.parent && window.parent !== window) {
+            return new URLSearchParams(window.parent.location.search).get('debug') === '1';
+          }
+        } catch {
+          return false;
+        }
+        return false;
+      }
+      const debugMode = params.get('debug') === '1' || parentDebugMode();
+      const titleText = params.get('title') || 'Terminal recording';
+
+      const terminal = document.getElementById('terminal');
+      const narration = document.getElementById('narration');
+      const playButton = document.getElementById('play');
+      const restartButton = document.getElementById('restart');
+      const prevSectionButton = document.getElementById('prev-section');
+      const nextSectionButton = document.getElementById('next-section');
+      const muteButton = document.getElementById('mute');
+      const clock = document.getElementById('clock');
+      const progressWrap = document.getElementById('progress-wrap');
+      const progress = document.getElementById('progress');
+      const sectionMarkers = document.getElementById('section-markers');
+      const sectionTooltip = document.getElementById('section-tooltip');
+      const playbackFlash = document.getElementById('playback-flash');
+      const voice = document.getElementById('voice');
+      const guidedButton = document.getElementById('guided');
+      const guideModal = document.getElementById('guide');
+      const guideCard = document.getElementById('guide-card');
+      const guideTitle = document.getElementById('guide-title');
+      const guideSummary = document.getElementById('guide-summary');
+      const guideCommand = document.getElementById('guide-command');
+      const guideHint = document.getElementById('guide-hint');
+      const guideCopyButton = document.getElementById('guide-copy');
+      const guideRestartButton = document.getElementById('guide-restart');
+      const guideContinueButton = document.getElementById('guide-continue');
+
+      narration.textContent = titleText;
+
+      let events = [];
+      let castSeconds = 0;
+      let totalSeconds = 0;
+      let eventIndex = 0;
+      let currentSeconds = 0;
+      let startedAt = 0;
+      let playing = false;
+      let timers = [];
+      let progressTimer = null;
+      let activeClass = '';
+      let activeStyle = '';
+      let terminalLines = [[]];
+      let cursorColumn = 0;
+      let audio = null;
+      let audioReady = false;
+      let introActive = false;
+      let resumeAfterSeek = false;
+      let muted = false;
+      let narrationSegments = [];
+      let narrationRenderedHtml = '';
+      let narrationRenderedTitle = '';
+      let narrationScrollTarget = 0;
+      let narrationScrollAnimation = null;
+      let audioPlaybackSegments = [];
+      let audioPresentationSeconds = 0;
+      let audioTimer = null;
+      let guidedMode = false;
+      let guidedPausePoints = [];
+      let pausedAtGuidedPoint = false;
+      let activeGuideCheckpoint = null;
+      let guideDrag = null;
+      let scrubbing = false;
+      let playbackFlashTimers = [];
+      const checkpointSnapSeconds = 3.0;
+
+      const icons = {
+        play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+        pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14"/><path d="M15 5v14"/></svg>',
+        restart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>',
+        previous: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20 9 12l10-8v16z"/><path d="M5 19V5"/></svg>',
+        next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 10 8-10 8V4z"/><path d="M19 5v14"/></svg>',
+        guided: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M9 12l2 2 4-5"/></svg>',
+        volume: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a8 8 0 0 1 0 10"/></svg>',
+        muted: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="m17 9 4 4"/><path d="m21 9-4 4"/></svg>',
+      };
+
+      const colorMap = {
+        30: 'ansi-black',
+        31: 'ansi-red',
+        32: 'ansi-green',
+        33: 'ansi-yellow',
+        34: 'ansi-blue',
+        35: 'ansi-magenta',
+        36: 'ansi-cyan',
+        37: 'ansi-white',
+        90: 'ansi-bright-black',
+        91: 'ansi-bright-red',
+        92: 'ansi-bright-green',
+        93: 'ansi-bright-yellow',
+        94: 'ansi-bright-blue',
+        95: 'ansi-bright-magenta',
+        96: 'ansi-bright-cyan',
+        97: 'ansi-bright-white',
+      };
+
+      function audioTimeline() {
+        return CastPlayerCore.createCastAudioTimeline(audioPlaybackSegments);
+      }
+
+      function escapeHtml(text) {
+        return text
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+      }
+
+      function escapeAttribute(text) {
+        return escapeHtml(text).replaceAll('"', '&quot;');
+      }
+
+      function ansi256Color(value) {
+        const color = Number(value);
+        if (!Number.isInteger(color) || color < 0 || color > 255) {
+          return '';
+        }
+        if (color < 16) {
+          return '';
+        }
+        if (color >= 232) {
+          const level = 8 + ((color - 232) * 10);
+          const hex = level.toString(16).padStart(2, '0');
+          return `#${hex}${hex}${hex}`;
+        }
+        const channel = (component) => (
+          component === 0 ? 0 : 55 + (component * 40)
+        );
+        const offset = color - 16;
+        const red = channel(Math.floor(offset / 36));
+        const green = channel(Math.floor((offset % 36) / 6));
+        const blue = channel(offset % 6);
+        return `#${[red, green, blue]
+          .map((component) => component.toString(16).padStart(2, '0'))
+          .join('')}`;
+      }
+
+      function timestampUrl(reference) {
+        const value = String(reference || '').trim();
+        if (!value) {
+          return null;
+        }
+        if (/^https?:\/\//.test(value) || value.startsWith('/')) {
+          return value;
+        }
+        if (value.startsWith('website/static/')) {
+          return `/${value.slice('website/static/'.length)}`;
+        }
+        return new URL(value, window.location.href).toString();
+      }
+
+      function wordNeedle(word) {
+        return String(word || '')
+          .trim()
+          .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+          .toLocaleLowerCase();
+      }
+
+      function alignTimestampWords(text, words) {
+        if (!text || !Array.isArray(words)) {
+          return [];
+        }
+        const lowerText = text.toLocaleLowerCase();
+        let cursor = 0;
+        const spans = [];
+        for (const word of words) {
+          const needle = wordNeedle(word?.word);
+          const start = Number(word?.start);
+          const end = Number(word?.end);
+          if (!needle || !Number.isFinite(start) || !Number.isFinite(end)) {
+            continue;
+          }
+          const index = lowerText.indexOf(needle, cursor);
+          if (index < 0) {
+            continue;
+          }
+          spans.push({
+            end,
+            textEnd: index + needle.length,
+            textStart: index,
+            start,
+          });
+          cursor = index + needle.length;
+        }
+        for (let index = 0; index < spans.length; index += 1) {
+          const span = spans[index];
+          if (span.end > span.start) {
+            continue;
+          }
+          const next = spans[index + 1];
+          const fallbackEnd = next && next.end > span.start
+            ? Math.min(next.end, span.start + 0.2)
+            : span.start + 0.2;
+          span.end = Number(fallbackEnd.toFixed(3));
+          if (next && next.start < span.end) {
+            next.start = span.end;
+          }
+        }
+        return spans;
+      }
+
+      async function loadSegmentTimestamps(segment) {
+        const url = timestampUrl(segment.timestamps);
+        if (!url) {
+          return;
+        }
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            return;
+          }
+          const payload = await response.json();
+          segment.wordSpans = alignTimestampWords(segment.text, payload.words);
+        } catch {
+          segment.wordSpans = [];
+        }
+      }
+
+      function setAnsi(paramsText) {
+        const codes = paramsText
+          ? paramsText.split(';').map((value) => Number(value || '0'))
+          : [0];
+        for (let index = 0; index < codes.length; index += 1) {
+          const code = codes[index];
+          if (code === 0 || code === 39) {
+            activeClass = '';
+            activeStyle = '';
+          } else if (
+            code === 38 &&
+            codes[index + 1] === 5 &&
+            Number.isInteger(codes[index + 2])
+          ) {
+            const color = ansi256Color(codes[index + 2]);
+            if (color) {
+              activeClass = '';
+              activeStyle = `color: ${color}`;
+            }
+            index += 2;
+          } else if (
+            code === 38 &&
+            codes[index + 1] === 2 &&
+            Number.isInteger(codes[index + 2]) &&
+            Number.isInteger(codes[index + 3]) &&
+            Number.isInteger(codes[index + 4])
+          ) {
+            const red = Math.min(255, Math.max(0, codes[index + 2]));
+            const green = Math.min(255, Math.max(0, codes[index + 3]));
+            const blue = Math.min(255, Math.max(0, codes[index + 4]));
+            activeClass = '';
+            activeStyle = `color: rgb(${red}, ${green}, ${blue})`;
+            index += 4;
+          } else if (colorMap[code]) {
+            activeClass = colorMap[code];
+            activeStyle = '';
+          }
+        }
+      }
+
+      function resetTerminalBuffer() {
+        terminalLines = [[]];
+        cursorColumn = 0;
+        activeClass = '';
+        activeStyle = '';
+      }
+
+      function currentTerminalLine() {
+        if (!terminalLines.length) {
+          terminalLines.push([]);
+        }
+        return terminalLines[terminalLines.length - 1];
+      }
+
+      function putTerminalChar(char) {
+        const line = currentTerminalLine();
+        line[cursorColumn] = {
+          char,
+          className: activeClass,
+          style: activeStyle,
+        };
+        cursorColumn += 1;
+      }
+
+      function clearTerminalLineAfterCursor() {
+        currentTerminalLine().length = cursorColumn;
+      }
+
+      function clearTerminalScreen() {
+        terminalLines = [[]];
+        cursorColumn = 0;
+      }
+
+      function renderTerminalLine(line) {
+        let rendered = '';
+        let openRenderKey = '';
+        const closeRenderSpan = () => {
+          if (openRenderKey) {
+            rendered += '</span>';
+            openRenderKey = '';
+          }
+        };
+        for (const cell of line) {
+          const className = cell?.className || '';
+          const style = cell?.style || '';
+          const renderKey = `${className}\n${style}`;
+          if (renderKey !== openRenderKey) {
+            closeRenderSpan();
+            if (className || style) {
+              openRenderKey = renderKey;
+              const classAttribute = className
+                ? ` class="${escapeAttribute(className)}"`
+                : '';
+              const styleAttribute = style
+                ? ` style="${escapeAttribute(style)}"`
+                : '';
+              rendered += `<span${classAttribute}${styleAttribute}>`;
+            }
+          }
+          rendered += escapeHtml(cell?.char || ' ');
+        }
+        closeRenderSpan();
+        return rendered;
+      }
+
+      function renderTerminalBuffer() {
+        terminal.innerHTML = terminalLines.map(renderTerminalLine).join('\n');
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      function appendChunk(chunk) {
+        if (introActive) {
+          introActive = false;
+          resetTerminalBuffer();
+        }
+        for (let index = 0; index < chunk.length; index += 1) {
+          const char = chunk[index];
+          if (char === '\u001b') {
+            const match = chunk.slice(index).match(/^\u001b\[([0-9;?]*)([A-Za-z])/);
+            if (match) {
+              if (match[2] === 'm') {
+                setAnsi(match[1]);
+              } else if (match[2] === 'K') {
+                clearTerminalLineAfterCursor();
+              } else if (match[2] === 'J') {
+                const mode = match[1] || '0';
+                if (mode === '2' || mode === '3') {
+                  clearTerminalScreen();
+                }
+              } else if (match[2] === 'H') {
+                cursorColumn = 0;
+              }
+              index += match[0].length - 1;
+              continue;
+            }
+            const oscEnd = chunk.indexOf('\u0007', index);
+            if (oscEnd > index) {
+              index = oscEnd;
+              continue;
+            }
+          }
+          if (char === '\r') {
+            cursorColumn = 0;
+            continue;
+          }
+          if (char === '\n') {
+            terminalLines.push([]);
+            cursorColumn = 0;
+            continue;
+          }
+          if (char === '\b') {
+            cursorColumn = Math.max(0, cursorColumn - 1);
+            continue;
+          }
+          putTerminalChar(char);
+        }
+        renderTerminalBuffer();
+      }
+
+      function formatTime(seconds) {
+        const safe = Math.max(0, Math.floor(seconds));
+        const minutes = Math.floor(safe / 60);
+        const rest = String(safe % 60).padStart(2, '0');
+        return `${minutes}:${rest}`;
+      }
+
+      function plainTerminalText(payload) {
+        return String(payload || '')
+          .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+          .replaceAll('\r', '');
+      }
+
+      function isCaptionPayload(payload) {
+        if (!String(payload || '').includes('\u001b[36;1m# ')) {
+          return false;
+        }
+        const lines = plainTerminalText(payload)
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+        return lines.length === 1 && lines[0].startsWith('# ');
+      }
+
+      function isTypedCaptionStart(events, index) {
+        return (
+          events[index]?.data === '\u001b[36;1m' &&
+          events[index + 1]?.data === '#'
+        );
+      }
+
+      function updateTotalSeconds() {
+        const audioSeconds =
+          audioReady && !audioPlaybackSegments.length && Number.isFinite(audio.duration)
+            ? audio.duration
+            : 0;
+        totalSeconds = Math.max(castSeconds, audioPresentationSeconds, audioSeconds);
+        renderSectionMarkers();
+      }
+
+      function renderSectionMarkers() {
+        sectionMarkers.textContent = '';
+        hideSectionTooltip();
+        if (!totalSeconds || !guidedPausePoints.length) {
+          return;
+        }
+        const seen = new Set();
+        for (const point of guidedPausePoints) {
+          const start = Number(point.time || 0);
+          if (!Number.isFinite(start) || seen.has(start)) {
+            continue;
+          }
+          seen.add(start);
+          const marker = document.createElement('span');
+          marker.className = 'section-marker';
+          if (point.debugOnly) {
+            marker.classList.add('debug');
+          }
+          const ratio = Math.min(1, Math.max(0, start / totalSeconds));
+          const percent = ratio * 100;
+          marker.style.left = `${percent}%`;
+          marker.style.setProperty(
+            '--thumb-offset',
+            `${((0.5 - ratio) * 0.9).toFixed(4)}rem`,
+          );
+          marker.dataset.start = String(start);
+          marker.dataset.kind = point.debugOnly ? 'debug' : 'checkpoint';
+          marker.dataset.heading = point.heading || 'Checkpoint';
+          marker.title = point.debugOnly
+            ? `Debug checkpoint: ${point.heading || 'Beat'}`
+            : point.heading || 'Checkpoint';
+          sectionMarkers.appendChild(marker);
+        }
+      }
+
+      function updateSectionMarkerState(seconds) {
+        const markers = [...sectionMarkers.querySelectorAll('.section-marker')];
+        if (!markers.length) {
+          return;
+        }
+        let active = null;
+        for (const marker of markers) {
+          const start = Number(marker.dataset.start || 0);
+          if (Number.isFinite(start) && start <= seconds + 0.05) {
+            active = marker;
+          }
+          marker.classList.remove('active');
+        }
+        if (active) {
+          active.classList.add('active');
+        }
+      }
+
+      function sectionForSeconds(seconds) {
+        if (!audioPlaybackSegments.length) {
+          return null;
+        }
+        const clamped = Math.max(0, seconds);
+        return [...audioPlaybackSegments]
+          .reverse()
+          .find((segment) => clamped >= segment.presentationStart) ?? null;
+      }
+
+      function sectionTooltipText(segment) {
+        return segment.heading || segment.text || titleText || 'Section';
+      }
+
+      function secondsFromProgressPointer(event) {
+        if (!totalSeconds) {
+          return null;
+        }
+        const rect = progress.getBoundingClientRect();
+        if (!rect.width) {
+          return null;
+        }
+        const ratio = Math.min(
+          1,
+          Math.max(0, (event.clientX - rect.left) / rect.width),
+        );
+        return ratio * totalSeconds;
+      }
+
+      function hideSectionTooltip() {
+        sectionTooltip.hidden = true;
+      }
+
+      function showSectionTooltip(event) {
+        const seconds = secondsFromProgressPointer(event);
+        const section = seconds == null ? null : sectionForSeconds(seconds);
+        if (!section) {
+          hideSectionTooltip();
+          return;
+        }
+        sectionTooltip.textContent = sectionTooltipText(section);
+        sectionTooltip.hidden = false;
+
+        const wrapRect = progressWrap.getBoundingClientRect();
+        const tooltipRect = sectionTooltip.getBoundingClientRect();
+        const halfWidth = tooltipRect.width / 2;
+        const minLeft = halfWidth + 4;
+        const maxLeft = Math.max(minLeft, wrapRect.width - halfWidth - 4);
+        const left = Math.min(
+          maxLeft,
+          Math.max(minLeft, event.clientX - wrapRect.left),
+        );
+        sectionTooltip.style.left = `${left}px`;
+      }
+
+      function narrationSegmentForSeconds(seconds) {
+        if (audioPlaybackSegments.length) {
+          const clamped = Math.max(0, seconds);
+          const active = audioPlaybackSegments.find((segment) => (
+            clamped >= segment.presentationStart &&
+            clamped < segment.presentationEnd
+          ));
+          if (active) {
+            return {
+              localSeconds: (active.audioLocalStart || 0)
+                + (clamped - active.presentationStart),
+              segment: active,
+            };
+          }
+          const previous = [...audioPlaybackSegments]
+            .reverse()
+            .find((segment) => clamped >= segment.presentationEnd);
+          if (previous) {
+            return {
+              localSeconds: previous.audioLocalEnd ?? previous.duration,
+              segment: previous,
+            };
+          }
+        }
+        if (!narrationSegments.length) {
+          return null;
+        }
+        const clamped = Math.max(0, seconds);
+        const active = narrationSegments.find((segment) => {
+          const start = Number(segment.offset || 0);
+          const end = start + Number(segment.duration || 0);
+          return clamped >= start && clamped < end;
+        });
+        const segment = active || narrationSegments[narrationSegments.length - 1];
+        return {
+          localSeconds: active ? clamped - segment.offset : segment.duration,
+          segment,
+        };
+      }
+
+      function narrationHtmlForSegment(segment, localSeconds) {
+        const text = segment?.text || segment?.heading || titleText;
+        const spans = Array.isArray(segment?.wordSpans) ? segment.wordSpans : [];
+        if (!spans.length) {
+          return escapeHtml(text);
+        }
+        let cursor = 0;
+        let html = '';
+        for (const span of spans) {
+          if (span.textStart > cursor) {
+            html += escapeHtml(text.slice(cursor, span.textStart));
+          }
+          const state = localSeconds >= span.end
+            ? 'past'
+            : localSeconds >= span.start
+              ? 'current'
+              : 'future';
+          html += `<span class="narration-word ${state}">${escapeHtml(
+            text.slice(span.textStart, span.textEnd),
+          )}</span>`;
+          cursor = span.textEnd;
+        }
+        if (cursor < text.length) {
+          html += escapeHtml(text.slice(cursor));
+        }
+        return html;
+      }
+
+      function cancelNarrationScrollAnimation() {
+        if (
+          narrationScrollAnimation != null &&
+          typeof window.cancelAnimationFrame === 'function'
+        ) {
+          window.cancelAnimationFrame(narrationScrollAnimation);
+        }
+        narrationScrollAnimation = null;
+      }
+
+      function animateNarrationScrollTop(target) {
+        cancelNarrationScrollAnimation();
+        if (typeof window.requestAnimationFrame !== 'function') {
+          narration.scrollTop = target;
+          return;
+        }
+        const start = narration.scrollTop;
+        const distance = target - start;
+        if (Math.abs(distance) <= 0.5) {
+          narration.scrollTop = target;
+          return;
+        }
+        const durationMs = 320;
+        const startTime = performance.now();
+        const step = (now) => {
+          const progress = Math.min(1, Math.max(0, (now - startTime) / durationMs));
+          const eased = 1 - ((1 - progress) ** 3);
+          narration.scrollTop = start + distance * eased;
+          narration.scrollLeft = 0;
+          if (progress < 1) {
+            narrationScrollAnimation = window.requestAnimationFrame(step);
+          } else {
+            narration.scrollTop = target;
+            narrationScrollAnimation = null;
+          }
+        };
+        narrationScrollAnimation = window.requestAnimationFrame(step);
+      }
+
+      function setNarrationScrollTop(target, {animate = false} = {}) {
+        const next = Math.max(0, Number(target) || 0);
+        const previousTarget = narrationScrollTarget;
+        narrationScrollTarget = next;
+        narration.scrollLeft = 0;
+        if (animate && Math.abs(previousTarget - next) <= 0.5) {
+          return;
+        }
+        if (
+          animate &&
+          next > narration.scrollTop &&
+          Math.abs(previousTarget - next) > 0.5
+        ) {
+          animateNarrationScrollTop(next);
+        } else {
+          cancelNarrationScrollAnimation();
+          narration.scrollTop = next;
+        }
+        narration.scrollLeft = 0;
+      }
+
+      function updateNarrationScroll({animate = false} = {}) {
+        const overflow = narration.scrollHeight - narration.clientHeight;
+        narration.scrollLeft = 0;
+        if (overflow <= 1) {
+          setNarrationScrollTop(0);
+          return;
+        }
+        const current = narration.querySelector('.narration-word.current');
+        if (!current) {
+          if (animate) {
+            narration.scrollLeft = 0;
+            return;
+          }
+          setNarrationScrollTop(0);
+          return;
+        }
+        const lineHeight = Math.max(1, narration.clientHeight / 2);
+        const targetLine = Math.floor(current.offsetTop / lineHeight);
+        setNarrationScrollTop(Math.min(overflow, targetLine * lineHeight), {
+          animate,
+        });
+      }
+
+      function updateNarration(seconds, {animateScroll = false} = {}) {
+        const active = narrationSegmentForSeconds(seconds);
+        const text = active?.segment?.text || active?.segment?.heading || introText || titleText;
+        const html = active
+          ? narrationHtmlForSegment(active.segment, active.localSeconds)
+          : escapeHtml(text);
+        if (html !== narrationRenderedHtml) {
+          narration.innerHTML = html;
+          narrationRenderedHtml = html;
+        }
+        if (text !== narrationRenderedTitle) {
+          narration.title = text;
+          narrationRenderedTitle = text;
+        }
+        narration.scrollLeft = 0;
+        updateNarrationScroll({animate: animateScroll});
+      }
+
+      function updateProgress() {
+        if (playing) {
+          currentSeconds = (performance.now() - startedAt) / 1000;
+        }
+        const clamped = Math.min(currentSeconds, totalSeconds);
+        const percent = totalSeconds
+          ? Math.min(100, (clamped / totalSeconds) * 100)
+          : 0;
+        clock.textContent = `${formatTime(clamped)} / ${formatTime(totalSeconds)}`;
+        progress.value = totalSeconds
+          ? String(Math.round((clamped / totalSeconds) * 1000))
+          : '0';
+        progress.style.setProperty('--position', `${percent}%`);
+        updateNarration(clamped, {animateScroll: playing && !scrubbing});
+        updateSectionMarkerState(clamped);
+        updateTransportButtons();
+      }
+
+      function clearTimers() {
+        for (const timer of timers) {
+          clearTimeout(timer);
+        }
+        timers = [];
+        if (audioTimer) {
+          clearTimeout(audioTimer);
+          audioTimer = null;
+        }
+        if (progressTimer) {
+          clearInterval(progressTimer);
+          progressTimer = null;
+        }
+      }
+
+      function setIconButton(button, iconName, label) {
+        if (button.dataset.icon !== iconName) {
+          button.innerHTML = icons[iconName];
+          button.dataset.icon = iconName;
+        }
+        button.setAttribute('aria-label', label);
+        button.title = label;
+      }
+
+      function clearPlaybackFlashTimers() {
+        playbackFlashTimers.forEach((timer) => clearTimeout(timer));
+        playbackFlashTimers = [];
+      }
+
+      function showPlaybackFlash(iconName) {
+        if (!playbackFlash || !icons[iconName]) {
+          return;
+        }
+        clearPlaybackFlashTimers();
+        playbackFlash.innerHTML = icons[iconName];
+        playbackFlash.dataset.visible = 'true';
+        playbackFlash.dataset.fading = 'false';
+        playbackFlashTimers.push(
+          setTimeout(() => {
+            playbackFlash.dataset.fading = 'true';
+            playbackFlash.dataset.visible = 'false';
+          }, 100),
+        );
+        playbackFlashTimers.push(
+          setTimeout(() => {
+            playbackFlash.removeAttribute('data-visible');
+            playbackFlash.removeAttribute('data-fading');
+          }, 700),
+        );
+      }
+
+      function sectionStartTimes() {
+        const source = audioPlaybackSegments.length
+          ? audioPlaybackSegments.map((segment) => segment.presentationStart)
+          : [0, ...guidedPausePoints.map((point) => point.time)];
+        return [...new Set(source
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value >= 0 && value <= totalSeconds))]
+          .sort((left, right) => left - right);
+      }
+
+      function currentSectionIndex(seconds) {
+        const starts = sectionStartTimes();
+        let active = -1;
+        for (let index = 0; index < starts.length; index += 1) {
+          if (starts[index] <= seconds + 0.05) {
+            active = index;
+          }
+        }
+        return active;
+      }
+
+      function hasPreviousSection(seconds) {
+        const starts = sectionStartTimes();
+        const active = currentSectionIndex(seconds);
+        return active > 0 || (active === 0 && seconds > starts[0] + 0.75);
+      }
+
+      function hasNextSection(seconds) {
+        return sectionStartTimes().some((start) => start > seconds + 0.25);
+      }
+
+      function updateTransportButtons() {
+        const clamped = Math.min(currentSeconds, totalSeconds);
+        const ready = Boolean(events.length && totalSeconds);
+        const playLabel = playing
+          ? 'Pause'
+          : pausedAtGuidedPoint
+            ? 'Continue'
+            : clamped >= totalSeconds && totalSeconds > 0
+              ? 'Play again'
+              : 'Play';
+        setIconButton(playButton, playing ? 'pause' : 'play', playLabel);
+        setIconButton(restartButton, 'restart', 'Restart');
+        setIconButton(prevSectionButton, 'previous', 'Previous section');
+        setIconButton(nextSectionButton, 'next', 'Next section');
+        setIconButton(guidedButton, 'guided', guidedMode ? 'Guided mode on' : 'Guided mode off');
+        guidedButton.dataset.active = guidedMode ? 'true' : 'false';
+        guidedButton.setAttribute('aria-pressed', guidedMode ? 'true' : 'false');
+        setIconButton(muteButton, muted ? 'muted' : 'volume', muted ? 'Unmute' : 'Mute');
+        playButton.disabled = !ready;
+        restartButton.disabled = !ready;
+        prevSectionButton.disabled = !ready || !hasPreviousSection(clamped);
+        nextSectionButton.disabled = !ready || !hasNextSection(clamped);
+        muteButton.disabled = !audioReady;
+      }
+
+      function setVoiceStatus(text, state = '', label = text) {
+        voice.textContent = '';
+        if (label) {
+          voice.setAttribute('aria-label', label);
+          voice.title = label;
+        } else {
+          voice.removeAttribute('aria-label');
+          voice.removeAttribute('title');
+        }
+        if (state) {
+          voice.dataset.state = state;
+        } else {
+          delete voice.dataset.state;
+        }
+      }
+
+      function resetGuidePosition() {
+        guideCard.style.left = '50%';
+        guideCard.style.top = '28%';
+        guideCard.style.transform = 'translateX(-50%)';
+      }
+
+      function moveGuideCard(clientX, clientY) {
+        if (!guideDrag) {
+          return;
+        }
+        const modal = guideModal.getBoundingClientRect();
+        const card = guideCard.getBoundingClientRect();
+        const nextLeft = Math.min(
+          Math.max(clientX - modal.left - guideDrag.offsetX, 8),
+          Math.max(8, modal.width - card.width - 8),
+        );
+        const nextTop = Math.min(
+          Math.max(clientY - modal.top - guideDrag.offsetY, 8),
+          Math.max(8, modal.height - card.height - 8),
+        );
+        guideCard.style.left = `${nextLeft}px`;
+        guideCard.style.top = `${nextTop}px`;
+        guideCard.style.transform = 'none';
+      }
+
+      function startGuideDrag(event) {
+        if (guideModal.hidden) {
+          return;
+        }
+        const card = guideCard.getBoundingClientRect();
+        guideDrag = {
+          offsetX: event.clientX - card.left,
+          offsetY: event.clientY - card.top,
+        };
+        guideTitle.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }
+
+      function endGuideDrag(event) {
+        if (guideDrag) {
+          guideDrag = null;
+          if (guideTitle.hasPointerCapture(event.pointerId)) {
+            guideTitle.releasePointerCapture(event.pointerId);
+          }
+        }
+      }
+
+      function hideGuideModal() {
+        guideModal.hidden = true;
+        activeGuideCheckpoint = null;
+      }
+
+      function showGuideModal(point) {
+        hideSectionTooltip();
+        const guide = point.guide || {};
+        const commands = Array.isArray(guide.commands) ? guide.commands : [];
+        const commandText = commands.join('\n');
+        const hint = String(guide.success_hint || '').trim();
+        guideTitle.textContent = point.heading
+          ? `Checkpoint: ${point.heading}`
+          : 'Checkpoint';
+        guideSummary.textContent = commands.length
+          ? commands.length === 1
+            ? 'Run this command in your terminal before continuing.'
+            : 'Run these commands in your terminal before continuing.'
+          : 'Pause here and confirm your local terminal is in the same state.';
+        guideCommand.hidden = !commandText;
+        guideCopyButton.hidden = !commandText;
+        guideCommand.textContent = commandText;
+        guideHint.textContent = hint || 'Continue when your local result matches the video.';
+        resetGuidePosition();
+        guideModal.hidden = false;
+        guideContinueButton.focus();
+      }
+
+      function copyGuideCommand() {
+        const command = guideCommand.textContent || '';
+        if (!command) {
+          return;
+        }
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(command)
+            .then(() => {
+              guideCopyButton.textContent = 'Copied';
+              setTimeout(() => {
+                guideCopyButton.textContent = 'Copy command';
+              }, 1200);
+            })
+            .catch(() => {
+              guideCopyButton.textContent = 'Copy failed';
+              setTimeout(() => {
+                guideCopyButton.textContent = 'Copy command';
+              }, 1200);
+            });
+        }
+      }
+
+      function restartGuidedSection() {
+        const target = activeGuideCheckpoint?.sectionStart ?? currentSeconds;
+        hideGuideModal();
+        pausedAtGuidedPoint = false;
+        seekTo(target, {resume: true});
+      }
+
+      function nextGuidedPausePoint(seconds) {
+        if (!guidedMode) {
+          return null;
+        }
+        return guidedPausePoints.find((point) => point.time > seconds + 0.05) ?? null;
+      }
+
+      function nearestCheckpoint(seconds) {
+        if (!guidedPausePoints.length) {
+          return null;
+        }
+        let nearest = null;
+        let distance = Infinity;
+        for (const point of guidedPausePoints) {
+          const pointDistance = Math.abs(point.time - seconds);
+          if (pointDistance < distance) {
+            nearest = point;
+            distance = pointDistance;
+          }
+        }
+        return distance <= checkpointSnapSeconds ? nearest : null;
+      }
+
+      function nearestStageMarker(seconds) {
+        const starts = sectionStartTimes();
+        if (!starts.length) {
+          return null;
+        }
+        let nearest = null;
+        let distance = Infinity;
+        for (const start of starts) {
+          const markerDistance = Math.abs(start - seconds);
+          if (markerDistance < distance) {
+            nearest = start;
+            distance = markerDistance;
+          }
+        }
+        return distance <= checkpointSnapSeconds ? nearest : null;
+      }
+
+      function snapSeekSeconds(seconds) {
+        return nearestStageMarker(seconds) ?? seconds;
+      }
+
+      function jumpSection(direction) {
+        const starts = sectionStartTimes();
+        if (!starts.length) {
+          return;
+        }
+        const liveSeconds = playing
+          ? (performance.now() - startedAt) / 1000
+          : currentSeconds;
+        const clamped = Math.max(0, Math.min(liveSeconds, totalSeconds));
+        const active = currentSectionIndex(clamped);
+        let target = null;
+        if (direction < 0) {
+          if (active > 0 && clamped <= starts[active] + 0.75) {
+            target = starts[active - 1];
+          } else if (active >= 0) {
+            target = starts[active];
+          }
+        } else {
+          target = starts.find((start) => start > clamped + 0.25) ?? null;
+        }
+        if (target == null) {
+          return;
+        }
+        seekTo(target, {resume: playing});
+      }
+
+      function seekBy(deltaSeconds) {
+        if (!totalSeconds || !Number.isFinite(deltaSeconds)) {
+          return;
+        }
+        const liveSeconds = playing
+          ? (performance.now() - startedAt) / 1000
+          : currentSeconds;
+        const rawTarget = Math.max(0, Math.min(liveSeconds + deltaSeconds, totalSeconds));
+        const target = snapSeekSeconds(rawTarget);
+        seekTo(target, {resume: playing});
+      }
+
+      function ignoresPlaybackShortcut(event) {
+        const target = event?.target;
+        if (!target || target === progress) {
+          return false;
+        }
+        const tagName = String(target.tagName || '').toLowerCase();
+        return (
+          tagName === 'input' ||
+          tagName === 'textarea' ||
+          tagName === 'select' ||
+          Boolean(target.isContentEditable)
+        );
+      }
+
+      function handleKeyboardSeek(event) {
+        if (
+          event.defaultPrevented ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          ignoresPlaybackShortcut(event)
+        ) {
+          return false;
+        }
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          seekBy(-10);
+          return true;
+        }
+        if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          seekBy(10);
+          return true;
+        }
+        return false;
+      }
+
+      function progressValueSeconds() {
+        return totalSeconds
+          ? (Number(progress.value) / 1000) * totalSeconds
+          : 0;
+      }
+
+      function previewSeek(seconds) {
+        currentSeconds = Math.max(0, Math.min(seconds, totalSeconds));
+        updateProgress();
+      }
+
+      function beginScrub() {
+        scrubbing = true;
+        resumeAfterSeek = playing;
+        if (playing) {
+          currentSeconds = (performance.now() - startedAt) / 1000;
+          playing = false;
+          clearTimers();
+          if (audio) {
+            audio.pause();
+          }
+        }
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+      }
+
+      function commitProgressSeek() {
+        if (!totalSeconds) {
+          scrubbing = false;
+          resumeAfterSeek = false;
+          return;
+        }
+        const rawTarget = progressValueSeconds();
+        const checkpoint = nearestCheckpoint(rawTarget);
+        const target = checkpoint?.time ?? rawTarget;
+        seekTo(target, {
+          resume: checkpoint ? false : resumeAfterSeek,
+          openCheckpoint: Boolean(checkpoint),
+        });
+        scrubbing = false;
+        resumeAfterSeek = false;
+      }
+
+      function finishPlayback() {
+        playing = false;
+        currentSeconds = totalSeconds;
+        if (audio) {
+          audio.pause();
+        }
+        setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        updateProgress();
+      }
+
+      function pauseForGuidedPoint(point) {
+        currentSeconds = point.time;
+        playing = false;
+        pausedAtGuidedPoint = true;
+        activeGuideCheckpoint = point;
+        clearTimers();
+        if (audio) {
+          audio.pause();
+        }
+        setVoiceStatus(
+          audioReady ? 'waiting for continue' : 'voiceover unavailable',
+          audioReady ? 'waiting' : 'unavailable',
+        );
+        showGuideModal(point);
+        updateProgress();
+      }
+
+      function scheduleEvents() {
+        clearTimers();
+        startedAt = performance.now() - currentSeconds * 1000;
+        const guidedPausePoint = nextGuidedPausePoint(currentSeconds);
+        while (eventIndex < events.length && events[eventIndex].time < currentSeconds) {
+          eventIndex += 1;
+        }
+        for (let index = eventIndex; index < events.length; index += 1) {
+          const event = events[index];
+          if (guidedPausePoint != null && event.time >= guidedPausePoint.time) {
+            break;
+          }
+          const delay = Math.max(0, (event.time - currentSeconds) * 1000);
+          timers.push(setTimeout(() => {
+            appendChunk(event.data);
+            eventIndex = Math.max(eventIndex, index + 1);
+          }, delay));
+        }
+        if (guidedPausePoint != null) {
+          timers.push(
+            setTimeout(
+              () => pauseForGuidedPoint(guidedPausePoint),
+              Math.max(0, (guidedPausePoint.time - currentSeconds) * 1000),
+            ),
+          );
+        } else {
+          timers.push(
+            setTimeout(
+              finishPlayback,
+              Math.max(0, (totalSeconds - currentSeconds) * 1000),
+            ),
+          );
+        }
+        progressTimer = setInterval(updateProgress, 250);
+      }
+
+      function renderAt(seconds) {
+        const clamped = Math.max(0, Math.min(seconds, totalSeconds));
+        resetTerminalBuffer();
+        introActive = Boolean(introText && introSeconds > 0);
+        terminal.innerHTML = '';
+        eventIndex = 0;
+        for (let index = 0; index < events.length; index += 1) {
+          const event = events[index];
+          if (event.time > clamped) {
+            break;
+          }
+          appendChunk(event.data);
+          eventIndex = index + 1;
+        }
+        currentSeconds = clamped;
+        if (audioReady && audio) {
+          audio.currentTime = audioTimeForPresentation(clamped);
+        }
+        updateProgress();
+      }
+
+      function resetPlayback() {
+        clearTimers();
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+        playing = false;
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        renderAt(0);
+        setVoiceStatus(
+          audioReady ? '' : 'voiceover unavailable',
+          audioReady ? 'ready' : 'unavailable',
+          audioReady ? 'voiceover ready' : 'voiceover unavailable',
+        );
+        updateProgress();
+      }
+
+      function seekTo(seconds, {resume = playing, openCheckpoint = false} = {}) {
+        const shouldResume = Boolean(resume);
+        playing = false;
+        clearTimers();
+        if (audio) {
+          audio.pause();
+        }
+        setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        renderAt(seconds);
+        const checkpoint = openCheckpoint ? nearestCheckpoint(currentSeconds) : null;
+        if (guidedMode && checkpoint && Math.abs(checkpoint.time - currentSeconds) < 0.05) {
+          pauseForGuidedPoint(checkpoint);
+          return;
+        }
+        if (shouldResume && currentSeconds < totalSeconds) {
+          playing = true;
+          scheduleEvents();
+          startAudio();
+        } else {
+          updateTransportButtons();
+        }
+      }
+
+      function startAudio() {
+        if (!audioReady || !audio) {
+          return;
+        }
+        if (!playing || pausedAtGuidedPoint) {
+          audio.pause();
+          setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
+          return;
+        }
+        if (playing) {
+          currentSeconds = (performance.now() - startedAt) / 1000;
+        }
+        if (audioTimer) {
+          clearTimeout(audioTimer);
+          audioTimer = null;
+        }
+
+        const timeline = audioTimeline();
+        const segment = timeline.segmentForPresentation(currentSeconds);
+        if (!audioPlaybackSegments.length || segment) {
+          const targetTime = segment
+            ? segment.audioStart + (currentSeconds - segment.presentationStart)
+            : Math.min(currentSeconds, audio.duration || currentSeconds);
+          if (
+            !Number.isFinite(audio.currentTime) ||
+            Math.abs(audio.currentTime - targetTime) > 0.15
+          ) {
+            audio.currentTime = Math.max(0, targetTime);
+          }
+          audio.muted = muted;
+          audio.play()
+            .then(() => {
+              if (playing) {
+                currentSeconds = (performance.now() - startedAt) / 1000;
+              }
+              if (!playing || pausedAtGuidedPoint) {
+                audio.pause();
+                setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
+                return;
+              }
+              if (audioPlaybackSegments.length && !timeline.segmentForPresentation(currentSeconds)) {
+                audio.pause();
+                const next = timeline.nextSegmentAfter(currentSeconds);
+                setVoiceStatus(
+                  '',
+                  next ? 'waiting' : 'ready',
+                  next ? 'voiceover waiting' : 'voiceover ready',
+                );
+                return;
+              }
+              setVoiceStatus('', 'playing', 'voiceover playing');
+              if (segment) {
+                audioTimer = setTimeout(
+                  () => advanceAudioBoundary(segment),
+                  Math.max(0, (segment.presentationEnd - currentSeconds) * 1000),
+                );
+              }
+            })
+            .catch(() => {
+              setVoiceStatus('voiceover unavailable', 'unavailable');
+            });
+          return;
+        }
+
+        audio.pause();
+        audio.currentTime = audioTimeForPresentation(currentSeconds);
+        const next = audioTimeline().nextSegmentAfter(currentSeconds);
+        if (next && playing) {
+          setVoiceStatus('voiceover waiting', 'waiting');
+          audioTimer = setTimeout(
+            startAudio,
+            Math.max(0, (next.presentationStart - currentSeconds) * 1000),
+          );
+        } else {
+          setVoiceStatus('', 'ready', 'voiceover ready');
+        }
+      }
+
+      function advanceAudioBoundary(segment) {
+        if (!playing || pausedAtGuidedPoint) {
+          return;
+        }
+        currentSeconds = (performance.now() - startedAt) / 1000;
+        const advancedSeconds = audioTimeline().advanceBoundary(currentSeconds, segment);
+        if (advancedSeconds !== currentSeconds) {
+          currentSeconds = advancedSeconds;
+          startedAt = performance.now() - currentSeconds * 1000;
+        }
+        startAudio();
+      }
+
+      function updateMuteButton() {
+        if (audio) {
+          audio.muted = muted;
+        }
+        updateTransportButtons();
+      }
+
+      function toggleMute() {
+        muted = !muted;
+        updateMuteButton();
+      }
+
+      async function loadAudioMeta() {
+        if (!audioMetaUrl || explicitIntroSeconds) {
+          return;
+        }
+        const response = await fetch(audioMetaUrl);
+        if (!response.ok) {
+          throw new Error(`could not load audio metadata: ${response.status}`);
+        }
+        const metadata = await response.json();
+        const segments = Array.isArray(metadata.segments) ? metadata.segments : [];
+        narrationSegments = segments
+          .map((segment) => ({
+            id: String(segment.id || ''),
+            offset: Number(segment.offset || 0),
+            duration: Number(segment.duration || 0),
+            heading: String(segment.heading || ''),
+            text: String(segment.text || ''),
+            timestamps: String(segment.timestamps || ''),
+            guide: normalizeGuide(segment.guide),
+            pauseAfter: normalizePauseAfter(segment.pause_after),
+            waits: normalizePresentationWaits(segment.waits),
+            wordSpans: [],
+          }))
+          .filter(
+            (segment) =>
+              Number.isFinite(segment.offset) &&
+              Number.isFinite(segment.duration) &&
+              segment.duration >= 0,
+          );
+        await Promise.all(narrationSegments.map(loadSegmentTimestamps));
+        const selected = introSegment
+          ? segments.find((segment) => segment.id === introSegment)
+          : segments[0];
+        if (!selected) {
+          if (introSegment) {
+            throw new Error(`audio metadata missing intro segment: ${introSegment}`);
+          }
+          return;
+        }
+        const offset = Number(selected.offset || 0);
+        const duration = Number(selected.duration || 0);
+        if (!Number.isFinite(offset) || !Number.isFinite(duration)) {
+          throw new Error('audio metadata contains invalid intro timing');
+        }
+        introSeconds = Math.max(0, offset + duration);
+      }
+
+      function normalizeGuide(value) {
+        if (!value || typeof value !== 'object') {
+          return null;
+        }
+        const rawCommands = Array.isArray(value.commands) ? value.commands : [];
+        const commands = rawCommands
+          .map((command) => String(command || '').trim())
+          .filter(Boolean);
+        const successHint = String(value.success_hint || '').trim();
+        if (!commands.length && !successHint) {
+          return null;
+        }
+        return {
+          commands,
+          success_hint: successHint,
+        };
+      }
+
+      function normalizePauseAfter(value) {
+        const seconds = Number(value || 0);
+        if (!Number.isFinite(seconds) || seconds < 0) {
+          return 0;
+        }
+        return seconds;
+      }
+
+      function normalizePresentationWaits(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+        return value
+          .map((wait) => ({
+            marker: String(wait?.marker || ''),
+            audioSecond: Number(wait?.audio_second),
+            pauseSeconds: Number(wait?.pause_seconds),
+          }))
+          .filter((wait) => (
+            wait.marker &&
+            Number.isFinite(wait.audioSecond) &&
+            Number.isFinite(wait.pauseSeconds) &&
+            wait.audioSecond >= 0 &&
+            wait.pauseSeconds >= 0
+          ))
+          .sort((left, right) => left.audioSecond - right.audioSecond);
+      }
+
+      function appendAudioPlaybackSegments(segment, presentationStart) {
+        const duration = Math.max(0, segment.duration);
+        const waits = (Array.isArray(segment.waits) ? segment.waits : [])
+          .filter((wait) => wait.audioSecond <= duration);
+        let audioCursor = 0;
+        let presentationCursor = presentationStart;
+        let presentationEnd = presentationStart;
+
+        for (const wait of waits) {
+          const waitAudioSecond = Math.max(audioCursor, wait.audioSecond);
+          const sliceDuration = waitAudioSecond - audioCursor;
+          if (sliceDuration > 0) {
+            const sliceEnd = presentationCursor + sliceDuration;
+            audioPlaybackSegments.push({
+              ...segment,
+              audioStart: segment.offset + audioCursor,
+              audioEnd: segment.offset + waitAudioSecond,
+              audioLocalStart: audioCursor,
+              audioLocalEnd: waitAudioSecond,
+              presentationStart: presentationCursor,
+              presentationEnd: sliceEnd,
+              postPauseEnd: sliceEnd,
+            });
+            presentationCursor = sliceEnd;
+            presentationEnd = Math.max(presentationEnd, sliceEnd);
+          }
+          presentationCursor += wait.pauseSeconds;
+          presentationEnd = Math.max(presentationEnd, presentationCursor);
+          audioCursor = waitAudioSecond;
+        }
+
+        if (audioCursor < duration) {
+          const sliceEnd = presentationCursor + (duration - audioCursor);
+          audioPlaybackSegments.push({
+            ...segment,
+            audioStart: segment.offset + audioCursor,
+            audioEnd: segment.offset + duration,
+            audioLocalStart: audioCursor,
+            audioLocalEnd: duration,
+            presentationStart: presentationCursor,
+            presentationEnd: sliceEnd,
+            postPauseEnd: sliceEnd + segment.pauseAfter,
+          });
+          presentationEnd = Math.max(presentationEnd, sliceEnd + segment.pauseAfter);
+        } else {
+          presentationEnd = Math.max(presentationEnd, presentationCursor + segment.pauseAfter);
+        }
+        return presentationEnd;
+      }
+
+      function selectedIntroSegmentIndex() {
+        if (!narrationSegments.length) {
+          return -1;
+        }
+        if (introSegment) {
+          const found = narrationSegments.findIndex(
+            (segment) => segment.id === introSegment,
+          );
+          return found >= 0 ? found : -1;
+        }
+        return introSeconds > 0 ? 0 : -1;
+      }
+
+      function buildPresentationEvents(rawEvents) {
+        audioPlaybackSegments = [];
+        audioPresentationSeconds = 0;
+        guidedPausePoints = [];
+
+        const introIndex = selectedIntroSegmentIndex();
+        let introPresentationEnd = introSeconds;
+        if (introIndex >= 0) {
+          const segment = narrationSegments[introIndex];
+          introPresentationEnd = appendAudioPlaybackSegments(segment, 0);
+          audioPresentationSeconds = Math.max(audioPresentationSeconds, introPresentationEnd);
+        }
+
+        let segmentIndex = introIndex >= 0 ? introIndex + 1 : 0;
+        let shift = introIndex >= 0 ? introPresentationEnd : introSeconds;
+        let captionCount = 0;
+        let currentSection = null;
+        const presentationEvents = [];
+
+        for (const [eventIndex, event] of rawEvents.entries()) {
+          const shifted = {
+            time: event.time + shift,
+            data: event.data,
+          };
+          presentationEvents.push(shifted);
+
+          if (
+            (isCaptionPayload(event.data) ||
+              isTypedCaptionStart(rawEvents, eventIndex)) &&
+            segmentIndex < narrationSegments.length
+          ) {
+            captionCount += 1;
+            const segment = narrationSegments[segmentIndex];
+            segmentIndex += 1;
+            if (segment.duration > 0) {
+              const presentationStart = shifted.time;
+              const postPauseEnd = appendAudioPlaybackSegments(segment, presentationStart);
+              if (
+                captionCount > 1 &&
+                currentSection &&
+                (currentSection.guide || debugMode)
+              ) {
+                guidedPausePoints.push({
+                  time: presentationStart,
+                  sectionStart: currentSection.start,
+                  heading: currentSection.heading,
+                  guide: currentSection.guide,
+                  debugOnly: !currentSection.guide,
+                });
+              }
+              currentSection = {
+                start: presentationStart,
+                heading: segment.heading,
+                guide: segment.guide,
+              };
+              audioPresentationSeconds = Math.max(
+                audioPresentationSeconds,
+                postPauseEnd,
+              );
+            }
+          }
+        }
+
+        if (audioPlaybackSegments.length) {
+          audioPresentationSeconds = Math.max(
+            audioPresentationSeconds,
+            ...audioPlaybackSegments.map((segment) => (
+              segment.postPauseEnd || segment.presentationEnd
+            )),
+          );
+        }
+
+        return presentationEvents;
+      }
+
+      function audioSegmentForPresentation(seconds) {
+        return audioTimeline().segmentForPresentation(seconds);
+      }
+
+      function nextAudioSegmentAfter(seconds) {
+        return audioTimeline().nextSegmentAfter(seconds);
+      }
+
+      function audioTimeForPresentation(seconds) {
+        return audioTimeline().audioTimeForPresentation(seconds, audio?.duration || seconds);
+      }
+
+      function play(options = {}) {
+        if (!events.length) {
+          return;
+        }
+        if (currentSeconds >= totalSeconds) {
+          resetPlayback();
+        }
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        playing = true;
+        updateTransportButtons();
+        scheduleEvents();
+        startAudio();
+        if (options.feedback === true) {
+          showPlaybackFlash('play');
+        }
+      }
+
+      function pause(options = {}) {
+        if (!playing) {
+          return;
+        }
+        currentSeconds = (performance.now() - startedAt) / 1000;
+        playing = false;
+        clearTimers();
+        if (audio) {
+          audio.pause();
+        }
+        setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        updateProgress();
+        if (options.feedback === true) {
+          showPlaybackFlash('pause');
+        }
+      }
+
+      function togglePlaybackFromTerminal() {
+        const selection = window.getSelection();
+        if (
+          selection &&
+          !selection.isCollapsed &&
+          terminal.contains(selection.anchorNode)
+        ) {
+          return;
+        }
+        if (playing) {
+          pause({feedback: true});
+        } else {
+          play({feedback: true});
+        }
+      }
+
+      function togglePlayPause() {
+        if (playing) {
+          pause({feedback: true});
+        } else {
+          play({feedback: true});
+        }
+      }
+
+      async function loadCast() {
+        if (!castUrl) {
+          throw new Error('missing cast parameter');
+        }
+        const response = await fetch(castUrl);
+        if (!response.ok) {
+          throw new Error(`could not load cast: ${response.status}`);
+        }
+        const lines = (await response.text()).trim().split('\n');
+        lines.shift();
+        let time = 0;
+        const rawEvents = lines
+          .map((line) => JSON.parse(line))
+          .filter((event) => event[1] === 'o')
+          .map((event) => {
+            time += Number(event[0]);
+            return {time, data: String(event[2] || '')};
+          });
+        events = buildPresentationEvents(rawEvents);
+        castSeconds = events.length
+          ? Math.max(...events.map((event) => event.time))
+          : time + introSeconds;
+        updateTotalSeconds();
+      }
+
+      async function loadAudio() {
+        if (!audioUrl) {
+          setVoiceStatus('voiceover unavailable', 'unavailable');
+          updateMuteButton();
+          return;
+        }
+        audio = new Audio(audioUrl);
+        audio.preload = 'metadata';
+        audio.addEventListener('ended', () => {
+          if (playing && currentSeconds >= totalSeconds) {
+            finishPlayback();
+          }
+        });
+        await new Promise((resolve) => {
+          audio.addEventListener('loadedmetadata', () => {
+            audioReady = true;
+            setVoiceStatus('', 'ready', 'voiceover ready');
+            updateMuteButton();
+            updateTotalSeconds();
+            resolve();
+          }, {once: true});
+          audio.addEventListener('error', () => {
+            audioReady = false;
+            setVoiceStatus('voiceover unavailable', 'unavailable');
+            updateMuteButton();
+            updateTotalSeconds();
+            resolve();
+          }, {once: true});
+        });
+      }
+
+      playButton.addEventListener('click', togglePlayPause);
+      guideContinueButton.addEventListener('click', play);
+      guideCopyButton.addEventListener('click', copyGuideCommand);
+      guideRestartButton.addEventListener('click', restartGuidedSection);
+      guideTitle.addEventListener('pointerdown', startGuideDrag);
+      guideTitle.addEventListener('pointermove', (event) => {
+        if (guideDrag) {
+          moveGuideCard(event.clientX, event.clientY);
+        }
+      });
+      guideTitle.addEventListener('pointerup', endGuideDrag);
+      guideTitle.addEventListener('pointercancel', endGuideDrag);
+      guidedButton.addEventListener('click', () => {
+        guidedMode = !guidedMode;
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        updateTransportButtons();
+        if (playing) {
+          currentSeconds = (performance.now() - startedAt) / 1000;
+          scheduleEvents();
+          startAudio();
+        }
+      });
+      restartButton.addEventListener('click', () => {
+        resetPlayback();
+        play();
+      });
+      prevSectionButton.addEventListener('click', () => jumpSection(-1));
+      nextSectionButton.addEventListener('click', () => jumpSection(1));
+      muteButton.addEventListener('click', toggleMute);
+      terminal.addEventListener('click', togglePlaybackFromTerminal);
+      progressWrap.addEventListener('pointermove', showSectionTooltip);
+      progressWrap.addEventListener('pointerleave', hideSectionTooltip);
+      progress.addEventListener('pointerdown', beginScrub);
+      progress.addEventListener('keydown', (event) => {
+        if (handleKeyboardSeek(event)) {
+          return;
+        }
+        resumeAfterSeek = playing;
+      });
+      progress.addEventListener('input', () => {
+        if (!totalSeconds) {
+          return;
+        }
+        const rawTarget = progressValueSeconds();
+        if (scrubbing) {
+          previewSeek(rawTarget);
+          return;
+        }
+        const target = snapSeekSeconds(rawTarget);
+        seekTo(target, {resume: false});
+      });
+      progress.addEventListener('change', commitProgressSeek);
+      progress.addEventListener('pointercancel', () => {
+        scrubbing = false;
+      });
+      document.addEventListener('keydown', handleKeyboardSeek);
+
+      updateTransportButtons();
+
+      loadAudioMeta()
+        .then(() => Promise.all([loadCast(), loadAudio()]))
+        .then(() => {
+          updateTotalSeconds();
+          resetPlayback();
+        })
+        .catch((error) => {
+          terminal.textContent = error.message;
+          playButton.disabled = true;
+          restartButton.disabled = true;
+          prevSectionButton.disabled = true;
+          nextSectionButton.disabled = true;
+          guidedButton.disabled = true;
+          muteButton.disabled = true;
+          setVoiceStatus('recording unavailable', 'unavailable');
+        });
+    </script>
+  </body>
+</html>
