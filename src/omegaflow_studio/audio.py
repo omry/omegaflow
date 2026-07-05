@@ -1776,6 +1776,7 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         force = config.get("force", False)
         timestamps = config.get("timestamps", False)
         output_format = config.get("output_format", "text")
+        output_override = config.get("output")
         verbose = config.get("verbose", False)
         if not isinstance(force, bool):
             raise AudioError("force must be a boolean")
@@ -1783,6 +1784,8 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
             raise AudioError("timestamps must be a boolean")
         if not isinstance(output_format, str):
             raise AudioError("output_format must be a string")
+        if output_override is not None and not isinstance(output_override, str):
+            raise AudioError("output must be a string or null")
         if not isinstance(verbose, bool):
             raise AudioError("verbose must be a boolean")
         recording_id = require_string(spec, "_recording_id", field="recording")
@@ -1835,7 +1838,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
             anchors_by_segment_id = anchors_by_segment_id_from_spec(spec, plan)
             waits_by_segment_id = waits_by_segment_id_from_spec(spec, plan)
             pause_after_by_segment_id = pause_after_by_segment_id_from_spec(spec, plan)
-            published_audio = output_audio_path(spec, recording_id, settings)
+            published_audio = (
+                relative_path(output_override)
+                if output_override
+                else output_audio_path(spec, recording_id, settings)
+            )
             published_metadata = output_audio_metadata_path(spec, published_audio)
             if action == "dry_run":
                 print_plan(

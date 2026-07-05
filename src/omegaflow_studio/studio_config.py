@@ -19,22 +19,89 @@ from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
 
-def project_root() -> Path:
+@dataclass(frozen=True)
+class ProjectLayout:
+    root: Path
+    data_dir: Path
+    config_dir: Path
+    recording_script_dir: Path
+
+
+def discover_project_layout() -> ProjectLayout:
     configured = os.environ.get("OMEGAFLOW_STUDIO_PROJECT_ROOT")
     if configured:
-        return Path(configured).expanduser().resolve()
-    cwd = Path.cwd().resolve()
-    for candidate in (cwd, *cwd.parents):
-        if (candidate / "studio" / "conf" / "config.yaml").exists():
-            return candidate
-    return cwd
+        root = Path(configured).expanduser().resolve()
+    else:
+        cwd = Path.cwd().resolve()
+        root = cwd
+        for candidate in (cwd, *cwd.parents):
+            if (candidate / "studio" / "conf" / "config.yaml").exists():
+                root = candidate
+                break
+            if (candidate / "media" / "conf" / "config.yaml").exists():
+                root = candidate
+                break
+
+    config_dir_value = os.environ.get("OMEGAFLOW_STUDIO_CONFIG_DIR")
+    recording_dir_value = os.environ.get("OMEGAFLOW_STUDIO_RECORDING_DIR")
+    data_dir_value = os.environ.get("OMEGAFLOW_STUDIO_DATA_DIR")
+    if config_dir_value:
+        config_dir = Path(config_dir_value).expanduser()
+        if not config_dir.is_absolute():
+            config_dir = root / config_dir
+    else:
+        config_dir = None
+        for relative in (Path("studio") / "conf", Path("media") / "conf"):
+            candidate = root / relative
+            if (candidate / "config.yaml").exists():
+                config_dir = candidate
+                break
+        if config_dir is None:
+            config_dir = root / "studio" / "conf"
+
+    if data_dir_value:
+        data_dir = Path(data_dir_value).expanduser()
+        if not data_dir.is_absolute():
+            data_dir = root / data_dir
+    else:
+        data_dir = config_dir.parent
+
+    if recording_dir_value:
+        recording_dir = Path(recording_dir_value).expanduser()
+        if not recording_dir.is_absolute():
+            recording_dir = root / recording_dir
+    else:
+        if data_dir.name == "media":
+            recording_dir = data_dir / "recording-scripts"
+        else:
+            recording_dir = data_dir / "recordings"
+
+    return ProjectLayout(
+        root=root,
+        data_dir=data_dir.resolve(),
+        config_dir=config_dir.resolve(),
+        recording_script_dir=recording_dir.resolve(),
+    )
 
 
-PROJECT_ROOT = project_root()
+def project_root() -> Path:
+    return discover_project_layout().root
+
+
+def relative_project_path(path: Path) -> str:
+    try:
+        return path.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+PROJECT_LAYOUT = discover_project_layout()
+PROJECT_ROOT = PROJECT_LAYOUT.root
 REPO_ROOT = PROJECT_ROOT
-CONFIG_DIR = PROJECT_ROOT / "studio" / "conf"
-RECORDING_SCRIPT_DIR = PROJECT_ROOT / "studio" / "recordings"
-GENERATED_DIR = PROJECT_ROOT / "studio" / "generated"
+PROJECT_DATA_DIR = PROJECT_LAYOUT.data_dir
+CONFIG_DIR = PROJECT_LAYOUT.config_dir
+RECORDING_SCRIPT_DIR = PROJECT_LAYOUT.recording_script_dir
+GENERATED_DIR = PROJECT_DATA_DIR / "generated"
 MAX_INLINE_RUN_LINES = 10
 NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
 NARRATION_MARKER_RE = re.compile(
@@ -54,26 +121,43 @@ def normalize_studio_token(value: object) -> str:
     return str(value)
 
 
-def studio_run_dir(
-    action: object,
-    step: object,
-    dry_run: object,
-    recording_id: object,
-    timestamp: object,
-) -> str:
+def project_data_dir_from_value(value: object) -> str:
+    data_dir_text = normalize_studio_token(value)
+    if not data_dir_text:
+        return relative_project_path(PROJECT_DATA_DIR)
+    data_dir = Path(data_dir_text).expanduser()
+    if data_dir.is_absolute():
+        return data_dir.as_posix()
+    return data_dir.as_posix()
+
+
+def studio_run_dir(*args: object) -> str:
+    if len(args) == 5:
+        data_dir_value = relative_project_path(PROJECT_DATA_DIR)
+        action, step, dry_run, recording_id, timestamp = args
+    elif len(args) == 6:
+        data_dir_value, action, step, dry_run, recording_id, timestamp = args
+    else:
+        raise StudioConfigError(
+            "studio_run_dir expects data_dir, action, step, dry_run, "
+            "recording_id, timestamp"
+        )
     action_text = normalize_studio_token(action) or "build"
     step_text = normalize_studio_token(step)
-    recording_text = normalize_studio_token(recording_id) or "recording"
+    recording_text = normalize_studio_token(recording_id)
+    has_recording_id = bool(recording_text)
+    recording_text = recording_text or "unselected"
     timestamp_text = normalize_studio_token(timestamp)
     dry_run_enabled = str(dry_run).lower() == "true"
-    is_recording_run = not dry_run_enabled and (
+    is_recording_run = has_recording_id and not dry_run_enabled and (
         step_text in {"record", "session"}
         or (not step_text and action_text in {"build", "record"})
     )
+    data_dir = project_data_dir_from_value(data_dir_value)
     if is_recording_run:
-        return f"studio/runs/{recording_text}/{timestamp_text}"
+        return f"{data_dir}/runs/{recording_text}/{timestamp_text}"
     job_kind = step_text or action_text
-    return f"studio/studio-runs/{job_kind}/{recording_text}/{timestamp_text}"
+    return f"{data_dir}/runs/.scratch/{job_kind}/{recording_text}/{timestamp_text}"
 
 
 def register_resolvers() -> None:

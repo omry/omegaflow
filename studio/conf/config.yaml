@@ -27,11 +27,12 @@ runs_since: null
 runs_limit: 10
 
 studio:
+  data_dir: studio
   keep_output_dir: true
 
 hydra:
   output_subdir: null
   run:
-    dir: ${studio_run_dir:${action},${step},${dry_run},${recording},${now:%Y%m%d-%H%M%S}}
+    dir: ${studio_run_dir:${studio.data_dir},${action},${step},${dry_run},${recording},${now:%Y%m%d-%H%M%S}}
   job:
     chdir: false

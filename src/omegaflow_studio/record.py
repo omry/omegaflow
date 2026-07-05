@@ -23,6 +23,7 @@ from omegaconf import DictConfig
 
 from .studio_config import (
     CONFIG_DIR,
+    PROJECT_DATA_DIR,
     PROJECT_ROOT,
     RECORDING_SCRIPT_DIR,
     StudioConfigError,
@@ -637,6 +638,8 @@ def run_artifact_dir(spec: dict[str, Any]) -> Path:
 
 def copy_run_artifact(source: Path, destination: Path) -> None:
     if not source.exists():
+        return
+    if source.resolve() == destination.resolve():
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
@@ -1723,6 +1726,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "  local cleanup_name",
             "  local cleanup_command",
             "  local status",
+            "  local cleanup_status=0",
             "  local marker",
             '  for index in "${!cleanup_commands[@]}"; do',
             '    cleanup_name="${cleanup_names[$index]}"',
@@ -1730,14 +1734,24 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '    marker="::: cleanup cleanup_$((index + 1))"',
             '    printf "%s start %s\\n" "$marker" "$cleanup_name" >>"$recording_progress_path"',
             "    set +e",
-            '    eval "$cleanup_command" >>"$recording_stdout_path" 2>>"$recording_stderr_path"',
+            '    ( eval "$cleanup_command" ) >>"$recording_stdout_path" 2>>"$recording_stderr_path"',
             "    status=$?",
             "    set -e",
             '    printf "%s end status=%s\\n" "$marker" "$status" >>"$recording_progress_path"',
+            '    if [[ "$status" -ne 0 ]]; then',
+            '      [[ "$cleanup_status" -eq 0 ]] && cleanup_status="$status"',
+            '      record_failure cleanup "cleanup_$((index + 1))" "$cleanup_name" "exited $status, expected 0" "$recording_stdout_path" "$recording_stderr_path" "$recording_progress_path"',
+            "    fi",
             "  done",
+            '  return "$cleanup_status"',
             "}",
             "cleanup() {",
+            "  local exit_status=$?",
+            "  trap - EXIT",
+            "  set +e",
+            "  local cleanup_status=0",
             "  run_script_cleanups",
+            "  cleanup_status=$?",
             "  local pid",
             '  for pid in "${cleanup_pids[@]}"; do',
             '    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then',
@@ -1747,8 +1761,14 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "  done",
             "  local path",
             '  for path in "${cleanup_paths[@]}"; do',
-            '    [[ -n "$path" ]] && rm -rf "$path"',
+            '    if [[ -n "$path" ]]; then',
+            '      rm -rf "$path" || cleanup_status=1',
+            "    fi",
             "  done",
+            '  if [[ "$exit_status" -eq 0 && "$cleanup_status" -ne 0 ]]; then',
+            '    exit "$cleanup_status"',
+            "  fi",
+            '  exit "$exit_status"',
             "}",
             "trap cleanup EXIT",
             "",
@@ -2894,7 +2914,11 @@ def recording_runs_dir(spec: dict[str, Any]) -> Path:
         hydra_output_dir.parent.parent.name == "runs"
     ):
         return hydra_output_dir.parent
-    return REPO_ROOT / "studio" / "runs" / recording_id
+    return PROJECT_DATA_DIR / "runs" / recording_id
+
+
+def all_recording_runs_root() -> Path:
+    return PROJECT_DATA_DIR / "runs"
 
 
 def validate_run_id(run_id: str) -> None:
@@ -2912,7 +2936,7 @@ def run_dir_for_id(spec: dict[str, Any], run_id: str) -> Path:
 
 def find_run_dir_by_id(run_id: str) -> Path:
     validate_run_id(run_id)
-    runs_root = REPO_ROOT / "studio" / "runs"
+    runs_root = all_recording_runs_root()
     matches = sorted(
         path
         for path in runs_root.glob(f"*/{run_id}")
@@ -2938,6 +2962,10 @@ def run_dir_has_artifact(run_dir: Path, artifact: str) -> bool:
         return (run_dir / "recording.cast").exists() or (
             run_dir / "failed.cast"
         ).exists()
+    if artifact == "success":
+        return (run_dir / "recording.cast").exists() and not (
+            run_dir / "failure.json"
+        ).exists()
     if artifact == "preserved":
         return (
             (run_dir / "enter").exists()
@@ -2951,7 +2979,7 @@ def run_dir_has_artifact(run_dir: Path, artifact: str) -> bool:
 def find_latest_run_dir(
     recording_id: str | None = None, *, artifact: str = "preserved"
 ) -> Path:
-    runs_root = REPO_ROOT / "studio" / "runs"
+    runs_root = all_recording_runs_root()
     if not runs_root.is_dir():
         raise RecordingError(f"no preserved runs found under: {runs_root}")
     if recording_id is None:
@@ -3168,7 +3196,7 @@ def collect_run_jobs(
     limit: int | None = 10,
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    runs_root = REPO_ROOT / "studio" / "runs"
+    runs_root = all_recording_runs_root()
     if not runs_root.is_dir():
         return []
     if now is None:
@@ -3357,15 +3385,16 @@ def run_tool_from_hydra_cfg(cfg: Any) -> int:
     if action == "list":
         return list_recordings()
     if action == "runs":
-        spec = spec_from_hydra_cfg(cfg)
         output_format = config.get("output_format", "text")
         if not isinstance(output_format, str):
             raise RecordingError("output_format must be a string")
         since = parse_runs_since(config.get("runs_since"))
         limit = parse_runs_limit(config.get("runs_limit"))
-        recording_id = (
-            require_string(spec, "id") if recording_was_explicit(spec) else None
-        )
+        requested_recording = config.get("recording")
+        recording_id = None
+        if isinstance(requested_recording, str) and requested_recording:
+            spec = spec_from_hydra_cfg(cfg)
+            recording_id = require_string(spec, "id")
         return list_run_jobs(
             recording_id=recording_id,
             output_format=output_format,
