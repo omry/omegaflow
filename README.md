@@ -4,10 +4,9 @@ OmegaFlow Studio is a tool for scripted terminal and video flows. Operators
 author an OmegaFlow Studio script, then build a website-ready OmegaFlow Video
 from that source.
 
-This repository is being migrated from Arbiter's media studio into a standalone
-project. The initial migration target is a Python package named
-`omegaflow-studio`, a `studio` CLI, a Docusaurus website for `omegaflow.dev`,
-and a first getting-started recording under `studio/recordings/`.
+The project includes a Python package named `omegaflow-studio`, a `studio` CLI,
+a Docusaurus website for `omegaflow.dev`, and a first getting-started recording
+under `studio/recordings/`.
 
 ## Development
 
