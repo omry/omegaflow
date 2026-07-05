@@ -1640,7 +1640,15 @@
 
       function previewSeek(seconds) {
         currentSeconds = Math.max(0, Math.min(seconds, totalSeconds));
-        updateProgress();
+        const clamped = Math.min(currentSeconds, totalSeconds);
+        const percent = totalSeconds
+          ? Math.min(100, (clamped / totalSeconds) * 100)
+          : 0;
+        clock.textContent = `${formatTime(clamped)} / ${formatTime(totalSeconds)}`;
+        progress.style.setProperty('--position', `${percent}%`);
+        updateNarration(clamped, {animateScroll: false});
+        updateSectionMarkerState(clamped);
+        updateTransportButtons();
       }
 
       function beginScrub() {

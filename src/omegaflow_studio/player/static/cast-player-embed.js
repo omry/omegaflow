@@ -64,9 +64,34 @@
     return iframe;
   }
 
+  function hrefFor(value) {
+    try {
+      const base = document.baseURI || global.location?.href || window.location?.href;
+      return new URL(value, base).href;
+    } catch (_error) {
+      return value;
+    }
+  }
+
   function renderCastPlayerEmbed(element) {
+    const options = iframeOptionsFromElement(element);
+    const nextSrc = buildCastPlayerUrl(options);
+    const nextTitle = options.title || 'Terminal recording';
+    const existing = element.querySelector('iframe');
+    if (existing) {
+      if (hrefFor(existing.src) !== hrefFor(nextSrc)) {
+        existing.src = nextSrc;
+      }
+      if (existing.title !== nextTitle) {
+        existing.title = nextTitle;
+      }
+      existing.loading = 'lazy';
+      existing.allow = 'autoplay';
+      existing.allowFullscreen = true;
+      return;
+    }
     element.textContent = '';
-    element.appendChild(createCastPlayerIframe(iframeOptionsFromElement(element)));
+    element.appendChild(createCastPlayerIframe(options));
   }
 
   const api = {
