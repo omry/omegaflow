@@ -471,6 +471,37 @@ def test_build_publish_surface_names_can_disable_build_publish() -> None:
     assert studio.build_publish_surface_names({}, spec) == []
 
 
+def test_watch_player_url_path_allows_silent_recordings(tmp_path, monkeypatch) -> None:
+    retimed_cast = tmp_path / "runs" / "hello" / "recording.retimed.cast"
+    retimed_cast.parent.mkdir(parents=True)
+    retimed_cast.write_text('{"version": 3}\n', encoding="utf-8")
+    spec = {
+        "_recording_id": "hello",
+        "title": "Hello",
+        "audio": {
+            "enabled": False,
+            "provider": "openai",
+            "env": "OPENAI_API_KEY",
+            "model": "gpt-4o-mini-tts",
+            "voice": "marin",
+            "format": "mp3",
+        },
+    }
+    paths = {
+        "retimed_cast": retimed_cast,
+        "audio": tmp_path / "missing.mp3",
+        "audio_metadata": tmp_path / "missing.json",
+    }
+    monkeypatch.setattr(studio, "latest_run_artifact_paths", lambda _spec: paths)
+
+    url_path, artifacts = studio.watch_player_url_path(spec)
+
+    assert "cast=" in url_path
+    assert "audio=" not in url_path
+    assert "audioMeta=" not in url_path
+    assert artifacts == {"cast": retimed_cast.resolve()}
+
+
 def test_session_cleanup_failure_fails_run(tmp_path) -> None:
     run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
     spec = {

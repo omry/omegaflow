@@ -1760,9 +1760,10 @@ def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
         )
     required = {
         "cast": paths["retimed_cast"],
-        "audio": paths["audio"],
-        "audioMeta": paths["audio_metadata"],
     }
+    if audio.audio_settings(spec).enabled:
+        required["audio"] = paths["audio"]
+        required["audioMeta"] = paths["audio_metadata"]
     missing = [display_path(path) for path in required.values() if not path.exists()]
     if missing:
         formatted = ", ".join(path for path in missing if path is not None)
@@ -1775,13 +1776,14 @@ def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
     params = {
         "title": optional_string(spec.get("title")) or str(spec["_recording_id"]),
         "cast": watch_artifact_url(paths["retimed_cast"], "cast", artifacts),
-        "audio": watch_artifact_url(paths["audio"], "audio", artifacts),
-        "audioMeta": watch_artifact_url(
+    }
+    if audio.audio_settings(spec).enabled:
+        params["audio"] = watch_artifact_url(paths["audio"], "audio", artifacts)
+        params["audioMeta"] = watch_artifact_url(
             paths["audio_metadata"],
             "audioMeta",
             artifacts,
-        ),
-    }
+        )
     return "/cast-player.html?" + urlencode(params), artifacts
 
 
