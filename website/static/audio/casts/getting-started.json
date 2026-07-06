@@ -1,0 +1,82 @@
+{
+  "audio": "website/static/audio/casts/getting-started.mp3",
+  "duration": 48.072,
+  "recording": "getting-started",
+  "segments": [
+    {
+      "audio": "studio/cache/audio/getting-started/install-910d0beb6e2afd49.mp3",
+      "duration": 8.616,
+      "guide": {
+        "commands": [
+          "python -m pip install omegaflow-studio"
+        ],
+        "success_hint": "The install provides the studio command."
+      },
+      "heading": "Install The CLI",
+      "id": "install",
+      "offset": 0.0,
+      "text": "Start with the Studio command line tool. Install the package, then use the studio command to create and build recordings from Markdown scripts.",
+      "timestamps": "website/static/audio/casts/getting-started.install.timestamps.json"
+    },
+    {
+      "audio": "studio/cache/audio/getting-started/create-8e90a9e09f424d23.mp3",
+      "duration": 8.952,
+      "guide": {
+        "commands": [
+          "sed -n '1,70p' /tmp/omegaflow-hello/studio/recordings/hello.md"
+        ],
+        "success_hint": "The script defines one beat and publish surfaces."
+      },
+      "heading": "Create A Small Recording",
+      "id": "create",
+      "offset": 8.616,
+      "text": "A recording is just Markdown with studio directive blocks. This tiny example records one command and declares two publish surfaces.",
+      "timestamps": "website/static/audio/casts/getting-started.create.timestamps.json"
+    },
+    {
+      "audio": "studio/cache/audio/getting-started/record-2feb85f937fc11b2.mp3",
+      "duration": 9.0,
+      "guide": {
+        "commands": [
+          "studio recording=hello action=build"
+        ],
+        "success_hint": "The build writes a retimed cast and publish surfaces."
+      },
+      "heading": "Record The Video",
+      "id": "record",
+      "offset": 17.568,
+      "text": "Now build the recording. Studio records a baseline cast, retimes it for viewing, checks alignment, and writes the selected publish surface.",
+      "timestamps": "website/static/audio/casts/getting-started.record.timestamps.json"
+    },
+    {
+      "audio": "studio/cache/audio/getting-started/play-b307dc038eda91c0.mp3",
+      "duration": 9.552,
+      "guide": {
+        "commands": [
+          "studio recording=hello action=play"
+        ],
+        "success_hint": "The terminal should replay the generated cast."
+      },
+      "heading": "Play It In The Terminal",
+      "id": "play",
+      "offset": 26.568,
+      "text": "You can review the generated video without opening a browser. The play action replays the retimed asciinema cast directly in the terminal.",
+      "timestamps": "website/static/audio/casts/getting-started.play.timestamps.json"
+    },
+    {
+      "audio": "studio/cache/audio/getting-started/publish-0ea5ec3de7ad5fe6.mp3",
+      "duration": 11.952,
+      "guide": {
+        "commands": [
+          "studio recording=hello action=build dry_run=true"
+        ],
+        "success_hint": "The dry run lists the Docusaurus and standalone HTML surfaces."
+      },
+      "heading": "Understand Publish Surfaces",
+      "id": "publish",
+      "offset": 36.12,
+      "text": "Publish surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for docs and write standalone HTML for a direct browser page.",
+      "timestamps": "website/static/audio/casts/getting-started.publish.timestamps.json"
+    }
+  ]
+}

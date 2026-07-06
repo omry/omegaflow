@@ -1,9 +1,12 @@
 import json
 import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from omegaflow_studio import __version__
 from omegaflow_studio import record
+from omegaflow_studio import retime_cast
 from omegaflow_studio import studio
 from omegaflow_studio.record import collect_run_jobs
 from omegaflow_studio.studio_config import (
@@ -298,3 +301,66 @@ def test_session_cleanup_failure_fails_run(tmp_path) -> None:
     assert failure["name"] == "Cleanup fails"
     assert failure["message"] == "exited 7, expected 0"
     assert "cleanup failed" in failure["stderr"]
+
+
+def test_environment_path_prepend_takes_precedence(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "demo"
+    spec = {
+        "id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "environment": {
+            "working_directory": str(tmp_path),
+            "path_prepend": ["tools/bin"],
+        },
+        "style": {"color": False, "typing": False},
+        "capture": {"baseline_compressed": True},
+        "beats": [{"id": "done"}],
+    }
+
+    script = record.render_session_script(spec)
+
+    path_line = next(line for line in script.splitlines() if line.startswith("export PATH="))
+    assert path_line.index("tools/bin") < path_line.index(str(Path(sys.executable).parent))
+
+
+def test_require_fresh_retimed_cast_rejects_unmaterialized_waits(tmp_path) -> None:
+    cast = tmp_path / "demo.cast"
+    timeline = tmp_path / "demo.timeline.jsonl"
+    retimed = tmp_path / "demo.retimed.cast"
+    metadata = tmp_path / "demo.json"
+    cast.write_text('{"version": 3}\n', encoding="utf-8")
+    timeline.write_text('{"time": 0}\n', encoding="utf-8")
+    metadata.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "id": "intro",
+                        "waits": [
+                            {
+                                "marker": "@wait:server@",
+                                "target": "server",
+                                "text_offset": 4,
+                                "gap_seconds": 0.0,
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    retimed.write_text('{"version": 3}\n', encoding="utf-8")
+
+    try:
+        retime_cast.require_fresh_retimed_cast(
+            cast_path=cast,
+            timeline_path=timeline,
+            output_path=retimed,
+            audio_metadata_path=metadata,
+        )
+    except retime_cast.RetimeError as exc:
+        assert "has not been materialized by retime" in str(exc)
+    else:
+        raise AssertionError("expected unmaterialized wait to fail freshness check")

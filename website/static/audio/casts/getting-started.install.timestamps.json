@@ -1,0 +1,129 @@
+{
+  "duration": 8.61,
+  "recording": "getting-started",
+  "segment": "install",
+  "source_text": "Start with the Studio command line tool. Install the package, then use the studio command to create and build recordings from Markdown scripts.",
+  "timestamp_granularities": [
+    "word",
+    "segment"
+  ],
+  "transcript": "Start with the Studio Command Line tool. Install the package, then use the Studio command to create and build recordings from Markdown scripts.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.46,
+      "start": 0.0,
+      "word": "Start"
+    },
+    {
+      "end": 0.82,
+      "start": 0.46,
+      "word": "with"
+    },
+    {
+      "end": 1.36,
+      "start": 0.82,
+      "word": "the"
+    },
+    {
+      "end": 1.44,
+      "start": 1.36,
+      "word": "Studio"
+    },
+    {
+      "end": 1.82,
+      "start": 1.44,
+      "word": "Command"
+    },
+    {
+      "end": 2.08,
+      "start": 1.82,
+      "word": "Line"
+    },
+    {
+      "end": 2.4,
+      "start": 2.08,
+      "word": "tool"
+    },
+    {
+      "end": 3.26,
+      "start": 3.26,
+      "word": "Install"
+    },
+    {
+      "end": 3.42,
+      "start": 3.26,
+      "word": "the"
+    },
+    {
+      "end": 3.78,
+      "start": 3.42,
+      "word": "package"
+    },
+    {
+      "end": 4.42,
+      "start": 4.24,
+      "word": "then"
+    },
+    {
+      "end": 4.66,
+      "start": 4.42,
+      "word": "use"
+    },
+    {
+      "end": 4.88,
+      "start": 4.66,
+      "word": "the"
+    },
+    {
+      "end": 5.22,
+      "start": 4.88,
+      "word": "Studio"
+    },
+    {
+      "end": 5.56,
+      "start": 5.22,
+      "word": "command"
+    },
+    {
+      "end": 5.86,
+      "start": 5.56,
+      "word": "to"
+    },
+    {
+      "end": 6.24,
+      "start": 5.86,
+      "word": "create"
+    },
+    {
+      "end": 6.52,
+      "start": 6.24,
+      "word": "and"
+    },
+    {
+      "end": 6.78,
+      "start": 6.52,
+      "word": "build"
+    },
+    {
+      "end": 7.22,
+      "start": 6.78,
+      "word": "recordings"
+    },
+    {
+      "end": 7.56,
+      "start": 7.22,
+      "word": "from"
+    },
+    {
+      "end": 7.98,
+      "start": 7.56,
+      "word": "Markdown"
+    },
+    {
+      "end": 8.26,
+      "start": 7.98,
+      "word": "scripts"
+    }
+  ]
+}

@@ -1493,6 +1493,7 @@ def publish_artifacts_from_run(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        shutil.copystat(source_paths["audio_metadata"], targets["audio_metadata"])
         written.append(targets["audio_metadata"])
     return written
 

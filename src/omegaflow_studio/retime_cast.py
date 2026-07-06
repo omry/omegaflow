@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -271,6 +272,52 @@ def require_fresh_retimed_cast(
         artifact_name="retimed cast",
         rerun_hint="run studio step=retime",
     )
+    require_materialized_audio_waits(audio_metadata_path)
+
+
+def require_materialized_audio_waits(metadata_path: Path | None) -> None:
+    if metadata_path is None or not metadata_path.exists():
+        return
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RetimeError(f"invalid audio metadata JSON: {metadata_path}") from exc
+    if not isinstance(payload, dict):
+        raise RetimeError(f"audio metadata must be a mapping: {metadata_path}")
+    segments = payload.get("segments")
+    if not isinstance(segments, list):
+        raise RetimeError(f"audio metadata missing segments list: {metadata_path}")
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        segment_id = str(segment.get("id", "<unknown>"))
+        waits = segment.get("waits")
+        if not isinstance(waits, list):
+            continue
+        for wait in waits:
+            if not isinstance(wait, dict) or not isinstance(wait.get("marker"), str):
+                continue
+            has_logical_wait = (
+                isinstance(wait.get("target"), str)
+                and isinstance(wait.get("text_offset"), int)
+            )
+            if not has_logical_wait:
+                continue
+            audio_second = wait.get("audio_second")
+            pause_seconds = wait.get("pause_seconds")
+            if (
+                not isinstance(audio_second, (int, float))
+                or not isinstance(pause_seconds, (int, float))
+                or not math.isfinite(float(audio_second))
+                or not math.isfinite(float(pause_seconds))
+                or float(audio_second) < 0
+                or float(pause_seconds) < 0
+            ):
+                marker = wait.get("marker")
+                raise RetimeError(
+                    f"audio wait {marker} in segment {segment_id!r} "
+                    "has not been materialized by retime; run studio step=retime"
+                )
 
 
 def metadata_relative_path(raw_path: str, metadata_path: Path) -> Path:
@@ -2033,7 +2080,7 @@ def adjusted_audio_seconds(
         wait_presentation_time = beat_start + wait.seconds + pause_seconds
         resume_time = target_end + wait.gap_seconds
         wait_pause = max(0.0, resume_time - wait_presentation_time)
-        if wait_pause > 0 and wait_windows is not None:
+        if wait_windows is not None:
             wait_windows[wait.marker] = {
                 "target": wait.target,
                 "marker": wait.marker,

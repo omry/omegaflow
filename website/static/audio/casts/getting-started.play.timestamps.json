@@ -1,0 +1,124 @@
+{
+  "duration": 9.55,
+  "recording": "getting-started",
+  "segment": "play",
+  "source_text": "You can review the generated video without opening a browser. The play action replays the retimed asciinema cast directly in the terminal.",
+  "timestamp_granularities": [
+    "word",
+    "segment"
+  ],
+  "transcript": "You can review the generated video without opening a browser. The play action replays the retimed Ask AnimaCast directly in the terminal.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.26,
+      "start": 0.0,
+      "word": "You"
+    },
+    {
+      "end": 0.6,
+      "start": 0.26,
+      "word": "can"
+    },
+    {
+      "end": 1.1,
+      "start": 0.6,
+      "word": "review"
+    },
+    {
+      "end": 1.48,
+      "start": 1.1,
+      "word": "the"
+    },
+    {
+      "end": 1.82,
+      "start": 1.48,
+      "word": "generated"
+    },
+    {
+      "end": 2.24,
+      "start": 1.82,
+      "word": "video"
+    },
+    {
+      "end": 2.66,
+      "start": 2.24,
+      "word": "without"
+    },
+    {
+      "end": 3.06,
+      "start": 2.66,
+      "word": "opening"
+    },
+    {
+      "end": 3.58,
+      "start": 3.06,
+      "word": "a"
+    },
+    {
+      "end": 3.58,
+      "start": 3.58,
+      "word": "browser"
+    },
+    {
+      "end": 5.1,
+      "start": 5.0,
+      "word": "The"
+    },
+    {
+      "end": 5.36,
+      "start": 5.1,
+      "word": "play"
+    },
+    {
+      "end": 5.76,
+      "start": 5.36,
+      "word": "action"
+    },
+    {
+      "end": 6.44,
+      "start": 5.76,
+      "word": "replays"
+    },
+    {
+      "end": 6.52,
+      "start": 6.44,
+      "word": "the"
+    },
+    {
+      "end": 7.12,
+      "start": 6.52,
+      "word": "retimed"
+    },
+    {
+      "end": 7.44,
+      "start": 7.12,
+      "word": "Ask"
+    },
+    {
+      "end": 8.04,
+      "start": 7.44,
+      "word": "AnimaCast"
+    },
+    {
+      "end": 8.66,
+      "start": 8.04,
+      "word": "directly"
+    },
+    {
+      "end": 8.98,
+      "start": 8.66,
+      "word": "in"
+    },
+    {
+      "end": 9.28,
+      "start": 8.98,
+      "word": "the"
+    },
+    {
+      "end": 9.34,
+      "start": 9.28,
+      "word": "terminal"
+    }
+  ]
+}

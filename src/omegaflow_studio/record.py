@@ -1498,8 +1498,8 @@ def render_session_script(spec: dict[str, Any]) -> str:
     path_prepend = as_list(
         environment.get("path_prepend"), field="environment.path_prepend"
     )
-    path_entries = [str(Path(sys.executable).parent)]
-    path_entries.extend(str(relative_path(str(entry))) for entry in path_prepend)
+    path_entries = [str(relative_path(str(entry))) for entry in path_prepend]
+    path_entries.append(str(Path(sys.executable).parent))
     path_prefix = ":".join(path_entries)
     environment_variables = as_mapping(
         environment.get("variables"), field="environment.variables"

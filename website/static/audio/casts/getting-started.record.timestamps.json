@@ -1,0 +1,124 @@
+{
+  "duration": 9.0,
+  "recording": "getting-started",
+  "segment": "record",
+  "source_text": "Now build the recording. Studio records a baseline cast, retimes it for viewing, checks alignment, and writes the selected publish surface.",
+  "timestamp_granularities": [
+    "word",
+    "segment"
+  ],
+  "transcript": "Now, build the recording, Studio records a baseline cast, re-times it for viewing, checks alignment, and writes the selected published surface.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.4,
+      "start": 0.0,
+      "word": "Now"
+    },
+    {
+      "end": 0.94,
+      "start": 0.66,
+      "word": "build"
+    },
+    {
+      "end": 1.12,
+      "start": 0.94,
+      "word": "the"
+    },
+    {
+      "end": 1.46,
+      "start": 1.12,
+      "word": "recording"
+    },
+    {
+      "end": 2.36,
+      "start": 2.32,
+      "word": "Studio"
+    },
+    {
+      "end": 2.78,
+      "start": 2.36,
+      "word": "records"
+    },
+    {
+      "end": 2.98,
+      "start": 2.78,
+      "word": "a"
+    },
+    {
+      "end": 3.36,
+      "start": 2.98,
+      "word": "baseline"
+    },
+    {
+      "end": 3.78,
+      "start": 3.36,
+      "word": "cast"
+    },
+    {
+      "end": 4.46,
+      "start": 4.4,
+      "word": "re"
+    },
+    {
+      "end": 4.66,
+      "start": 4.46,
+      "word": "times"
+    },
+    {
+      "end": 4.8,
+      "start": 4.66,
+      "word": "it"
+    },
+    {
+      "end": 5.28,
+      "start": 4.8,
+      "word": "for"
+    },
+    {
+      "end": 5.28,
+      "start": 5.28,
+      "word": "viewing"
+    },
+    {
+      "end": 5.94,
+      "start": 5.92,
+      "word": "checks"
+    },
+    {
+      "end": 6.4,
+      "start": 5.94,
+      "word": "alignment"
+    },
+    {
+      "end": 7.0,
+      "start": 6.84,
+      "word": "and"
+    },
+    {
+      "end": 7.2,
+      "start": 7.0,
+      "word": "writes"
+    },
+    {
+      "end": 7.48,
+      "start": 7.2,
+      "word": "the"
+    },
+    {
+      "end": 7.8,
+      "start": 7.48,
+      "word": "selected"
+    },
+    {
+      "end": 8.28,
+      "start": 7.8,
+      "word": "published"
+    },
+    {
+      "end": 8.7,
+      "start": 8.28,
+      "word": "surface"
+    }
+  ]
+}

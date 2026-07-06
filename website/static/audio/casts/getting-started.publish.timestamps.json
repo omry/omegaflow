@@ -1,0 +1,149 @@
+{
+  "duration": 11.95,
+  "recording": "getting-started",
+  "segment": "publish",
+  "source_text": "Publish surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for docs and write standalone HTML for a direct browser page.",
+  "timestamp_granularities": [
+    "word",
+    "segment"
+  ],
+  "transcript": "Published surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for Docs and write standalone HTML for a direct browser page.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.56,
+      "start": 0.0,
+      "word": "Published"
+    },
+    {
+      "end": 1.1,
+      "start": 0.56,
+      "word": "surfaces"
+    },
+    {
+      "end": 1.66,
+      "start": 1.1,
+      "word": "describe"
+    },
+    {
+      "end": 1.88,
+      "start": 1.66,
+      "word": "where"
+    },
+    {
+      "end": 2.14,
+      "start": 1.88,
+      "word": "the"
+    },
+    {
+      "end": 2.44,
+      "start": 2.14,
+      "word": "finished"
+    },
+    {
+      "end": 2.86,
+      "start": 2.44,
+      "word": "recording"
+    },
+    {
+      "end": 3.26,
+      "start": 2.86,
+      "word": "is"
+    },
+    {
+      "end": 3.54,
+      "start": 3.26,
+      "word": "embedded"
+    },
+    {
+      "end": 4.64,
+      "start": 4.56,
+      "word": "The"
+    },
+    {
+      "end": 4.96,
+      "start": 4.64,
+      "word": "same"
+    },
+    {
+      "end": 5.32,
+      "start": 4.96,
+      "word": "recording"
+    },
+    {
+      "end": 5.66,
+      "start": 5.32,
+      "word": "can"
+    },
+    {
+      "end": 6.04,
+      "start": 5.66,
+      "word": "update"
+    },
+    {
+      "end": 6.76,
+      "start": 6.04,
+      "word": "Docusaurus"
+    },
+    {
+      "end": 7.38,
+      "start": 6.76,
+      "word": "MDX"
+    },
+    {
+      "end": 7.88,
+      "start": 7.38,
+      "word": "for"
+    },
+    {
+      "end": 8.02,
+      "start": 7.88,
+      "word": "Docs"
+    },
+    {
+      "end": 8.62,
+      "start": 8.02,
+      "word": "and"
+    },
+    {
+      "end": 8.94,
+      "start": 8.62,
+      "word": "write"
+    },
+    {
+      "end": 9.46,
+      "start": 8.94,
+      "word": "standalone"
+    },
+    {
+      "end": 10.04,
+      "start": 9.46,
+      "word": "HTML"
+    },
+    {
+      "end": 10.42,
+      "start": 10.04,
+      "word": "for"
+    },
+    {
+      "end": 10.62,
+      "start": 10.42,
+      "word": "a"
+    },
+    {
+      "end": 10.96,
+      "start": 10.62,
+      "word": "direct"
+    },
+    {
+      "end": 11.3,
+      "start": 10.96,
+      "word": "browser"
+    },
+    {
+      "end": 11.7,
+      "start": 11.3,
+      "word": "page"
+    }
+  ]
+}

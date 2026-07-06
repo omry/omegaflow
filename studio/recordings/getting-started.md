@@ -23,6 +23,7 @@ recording:
     typing_seed: 5
   outputs:
     cast: website/static/omegaflow-videos/getting-started/getting-started.cast
+    audio: website/static/audio/casts/getting-started.mp3
   publish:
     default: docusaurus
     surfaces:
@@ -44,57 +45,234 @@ recording:
     minimum_section_spacing: 0.6
   environment:
     working_directory: .
+    path_prepend:
+    - studio/recordings/getting-started/bin
   audio:
-    enabled: false
+    enabled: true
     provider: openai
-    env: OPENAI_API_KEY
+    env: OPENAI_OMEGAFLOW_API_KEY
     model: gpt-4o-mini-tts
     voice: marin
     format: mp3
 ```
 
-Purpose: show a new user the shape of OmegaFlow Studio: source script in,
-website-ready OmegaFlow Video out.
+Purpose: show a new user the first real loop: install the Studio CLI, create a
+tiny recording, build it, play it in the terminal, and inspect the publish
+surfaces.
 
 Audience: someone evaluating OmegaFlow Studio for technical walkthroughs,
 interactive docs, or reproducible terminal demos.
 
 ```yaml studio-directive
 beat:
-  id: overview
-  heading: Start With A Script
+  id: install
+  heading: Install The CLI
   narration: >-
-    OmegaFlow Studio treats a recording like a compiled artifact. You keep a
-    script in the repository, then rebuild the video when the workflow changes.
-    Start by looking at the project layout.
-  marker: overview
-  caption: Start from a versioned Studio script.
+    Start with the Studio command line tool. Install the package, then use the
+    studio command to create and build recordings from Markdown scripts.
+  marker: install
+  caption: Install the Studio CLI.
   actions:
   - commands:
-    - run: find studio -maxdepth 2 -type f | sort
+    - run: python -m pip install omegaflow-studio
+      display: python -m pip install omegaflow-studio
+      output:
+        mode: fake
+        text: |
+          Successfully installed omegaflow-studio
   guide:
     commands:
-    - find studio -maxdepth 2 -type f | sort
-    success_hint: The getting-started script should appear under studio/recordings.
+    - python -m pip install omegaflow-studio
+    success_hint: The install provides the studio command.
 ```
 
 ```yaml studio-directive
 beat:
-  id: build
-  heading: Build An OmegaFlow Video
+  id: create
+  heading: Create A Small Recording
   narration: >-
-    The studio command composes config, checks the script, records terminal
-    actions, and publishes website assets. A dry run shows the
-    build shape without recording anything yet.
-  marker: build
-  caption: Use the Studio CLI to build or inspect video outputs.
+    A recording is just Markdown with studio directive blocks. This tiny
+    example records one command and declares two publish surfaces.
+  marker: create
+  caption: Create a one-command Studio recording.
   actions:
   - commands:
-    - run: >-
-        python -c "print('build plan: record -> retime -> publish')"
-      display: studio recording=getting-started action=build dry_run=true
+    - run: bash studio/recordings/getting-started/create-demo-project.sh
+      display: |-
+        python - <<'PY'
+        from pathlib import Path
+
+        root = Path("/tmp/omegaflow-hello")
+        (root / "studio/conf").mkdir(parents=True, exist_ok=True)
+        (root / "studio/recordings").mkdir(parents=True, exist_ok=True)
+        (root / "docs").mkdir(parents=True, exist_ok=True)
+        dollar = "$"
+        (root / "studio/conf/config.yaml").write_text(f"""defaults:
+          - studio_schema
+          - override hydra/job_logging: disabled
+          - override hydra/hydra_logging: disabled
+          - _self_
+
+        recording: null
+        action: build
+        load_env_file: false
+        studio:
+          data_dir: studio
+          keep_output_dir: true
+        hydra:
+          output_subdir: null
+          run:
+            dir: {dollar}{{studio_run_dir:{{studio.data_dir}},{{action}},{{step}},{{dry_run}},{{recording}},{{now:%Y%m%d-%H%M%S}}}}
+          job:
+            chdir: false
+        """)
+        (root / "docs/hello.md").write_text("# Hello Video\n\n<!-- studio:hello-video:start -->\n<!-- studio:hello-video:end -->\n")
+
+        fence = "`" * 3
+        (root / "studio/recordings/hello.md").write_text(f"""# Hello Video
+
+        {fence}yaml studio-directive
+        scene: Hello Video
+        {fence}
+
+        {fence}yaml studio-directive
+        recording:
+          id: hello
+          title: Hello Video
+          capture:
+            window_size: 72x14
+            headless: true
+          outputs:
+            cast: site/videos/hello.cast
+          publish:
+            default: docs
+            build_surfaces:
+            - docs
+            - html
+            surfaces:
+              docs:
+                type: docusaurus_mdx
+                file: docs/hello.md
+                placeholder: hello-video
+                component: OmegaFlowVideo
+              html:
+                type: standalone_html
+                file: site/videos/hello.html
+          audio:
+            enabled: false
+        {fence}
+
+        {fence}yaml studio-directive
+        beat:
+          id: hello
+          heading: Say Hello
+          narration: Print one line in the terminal.
+          actions:
+          - commands:
+            - run: printf 'hello from OmegaFlow\\n'
+        {fence}
+        """)
+        PY
+      output:
+        mode: fake
+        text: |
+          Wrote /tmp/omegaflow-hello/studio/conf/config.yaml
+          Wrote /tmp/omegaflow-hello/studio/recordings/hello.md
+          Wrote /tmp/omegaflow-hello/docs/hello.md
+    - run: find /tmp/omegaflow-hello -maxdepth 3 -type f | sort
+      display: find /tmp/omegaflow-hello -maxdepth 3 -type f | sort
+      output:
+        mode: fake
+        text: |
+          /tmp/omegaflow-hello/docs/hello.md
+          /tmp/omegaflow-hello/studio/conf/config.yaml
+          /tmp/omegaflow-hello/studio/recordings/hello.md
+    - run: sed -n '1,70p' /tmp/omegaflow-hello/studio/recordings/hello.md
+      display: sed -n '1,70p' /tmp/omegaflow-hello/studio/recordings/hello.md
   guide:
     commands:
-    - studio recording=getting-started action=build dry_run=true
-    success_hint: The command should print the build plan for this recording.
+    - sed -n '1,70p' /tmp/omegaflow-hello/studio/recordings/hello.md
+    success_hint: The script defines one beat and publish surfaces.
+```
+
+```yaml studio-directive
+beat:
+  id: record
+  heading: Record The Video
+  narration: >-
+    Now build the recording. Studio records a baseline cast, retimes it for
+    viewing, checks alignment, and writes the selected publish surface.
+  marker: record
+  caption: Build the tiny video from the script.
+  actions:
+  - commands:
+    - run: bash studio/recordings/getting-started/build-demo-project.sh
+      display: studio recording=hello action=build
+      output:
+        mode: fake
+        text: |
+          pass wrote recording: site/videos/hello.cast
+          pass wrote retimed cast: site/videos/hello.retimed.cast
+          pass wrote publish surface: docs/hello.md
+          pass wrote publish surface: site/videos/hello.html
+      expect:
+        file_exists:
+        - /tmp/omegaflow-hello/site/videos/hello.retimed.cast
+        - /tmp/omegaflow-hello/docs/hello.md
+        - /tmp/omegaflow-hello/site/videos/hello.html
+  guide:
+    commands:
+    - studio recording=hello action=build
+    success_hint: The build writes a retimed cast and publish surfaces.
+```
+
+```yaml studio-directive
+beat:
+  id: play
+  heading: Play It In The Terminal
+  narration: >-
+    You can review the generated video without opening a browser. The play
+    action replays the retimed asciinema cast directly in the terminal.
+  marker: play
+  caption: Play the generated cast in the terminal.
+  actions:
+  - commands:
+    - run: bash studio/recordings/getting-started/play-demo-project.sh
+      display: studio recording=hello action=play
+      output:
+        mode: fake
+        text: |
+          hello from OmegaFlow
+      expect:
+        output_contains:
+        - hello from OmegaFlow
+  guide:
+    commands:
+    - studio recording=hello action=play
+    success_hint: The terminal should replay the generated cast.
+```
+
+```yaml studio-directive
+beat:
+  id: publish
+  heading: Understand Publish Surfaces
+  narration: >-
+    Publish surfaces describe where the finished recording is embedded. The same
+    recording can update Docusaurus MDX for docs and write standalone HTML for
+    a direct browser page.
+  marker: publish
+  caption: Inspect the configured publish surfaces.
+  actions:
+  - commands:
+    - run: bash studio/recordings/getting-started/inspect-demo-project.sh
+      display: studio recording=hello action=build dry_run=true
+      expect:
+        output_contains:
+        - "Publish surfaces:"
+        - "type: docusaurus_mdx"
+        - "type: standalone_html"
+  guide:
+    commands:
+    - studio recording=hello action=build dry_run=true
+    success_hint: The dry run lists the Docusaurus and standalone HTML surfaces.
 ```

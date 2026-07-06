@@ -16,6 +16,8 @@ OmegaFlow Video in the website.
 <OmegaFlowVideo
   title="Getting Started With OmegaFlow Studio"
   src="/omegaflow-videos/getting-started/getting-started.retimed.cast"
+  audio="/audio/casts/getting-started.mp3"
+  audioMeta="/audio/casts/getting-started.json"
 />
 <!-- studio:getting-started:end -->
 
