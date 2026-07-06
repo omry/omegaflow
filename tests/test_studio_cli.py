@@ -18,6 +18,7 @@ from omegaflow_studio.studio_config import (
     StudioConfigError,
     discover_project_layout,
     recording_from_script,
+    studio_directive_blocks,
     studio_run_dir,
 )
 
@@ -242,6 +243,59 @@ beat:
         assert "cannot define recording identity fields: title" in str(exc)
     else:
         raise AssertionError("expected shared recording config identity to fail")
+
+
+def test_studio_directive_schema_rejects_unknown_top_level_key() -> None:
+    script = """
+```yaml studio-directive
+wat: true
+```
+""".lstrip()
+
+    try:
+        studio_directive_blocks(script)
+    except StudioConfigError as exc:
+        assert "Key 'wat' not in 'StudioDirectiveBlock'" in str(exc)
+    else:
+        raise AssertionError("expected unknown directive key to fail")
+
+
+def test_studio_directive_schema_rejects_unknown_nested_key() -> None:
+    script = """
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+  surprise: nope
+```
+""".lstrip()
+
+    try:
+        studio_directive_blocks(script)
+    except StudioConfigError as exc:
+        assert "Key 'surprise' not in 'StudioDirectiveBeat'" in str(exc)
+    else:
+        raise AssertionError("expected unknown beat key to fail")
+
+
+def test_studio_directive_schema_does_not_inject_defaults() -> None:
+    script = """
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+  - commands:
+    - run: printf 'hello\\n'
+```
+""".lstrip()
+
+    block = studio_directive_blocks(script)[0]
+    command = block["beat"]["actions"][0]["commands"][0]
+
+    assert command == {"run": "printf 'hello\\n'"}
 
 
 def test_run_file_resolves_from_recording_script_dir(tmp_path) -> None:

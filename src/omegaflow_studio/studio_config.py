@@ -234,11 +234,74 @@ class RecordingSpec(RecordingDefaults):
     script: str | None = None
 
 
+@dataclass
+class StudioDirectiveScene:
+    title: str | None = None
+
+
+@dataclass
+class StudioDirectiveCommand:
+    id: str | None = None
+    run: str | None = None
+    run_file: str | None = None
+    display: str | None = None
+    after: str | None = None
+    follow_along: bool = False
+    show_prompt_after: bool = True
+    output: Any = None
+    expect: dict[str, Any] = field(default_factory=dict)
+    retime: str = "normal"
+    pre_command_pause: float | None = None
+    pre_enter_pause: float | None = None
+    post_enter_pause: float | None = None
+    post_command_pause: float | None = None
+
+
+@dataclass
+class StudioDirectiveStep:
+    run: str | None = None
+    run_file: str | None = None
+    display: str | None = None
+    name: str | None = None
+    after: str | None = None
+    progress: list[str] = field(default_factory=list)
+    output: Any = None
+    expect: dict[str, Any] = field(default_factory=dict)
+    commands: list[StudioDirectiveCommand] | None = None
+
+
+@dataclass
+class StudioDirectiveGuide:
+    commands: list[str] = field(default_factory=list)
+    success_hint: str | None = None
+
+
+@dataclass
+class StudioDirectiveBeat:
+    id: str = ""
+    heading: str = ""
+    narration: str = ""
+    marker: str | None = None
+    caption: str | None = None
+    viewer_hold: float | None = None
+    actions: list[StudioDirectiveStep] = field(default_factory=list)
+    checks: list[StudioDirectiveStep] = field(default_factory=list)
+    guide: StudioDirectiveGuide | None = None
+
+
+@dataclass
+class StudioDirectiveBlock:
+    scene: Any = None
+    beat: StudioDirectiveBeat | None = None
+    beats: list[StudioDirectiveBeat] = field(default_factory=list)
+
+
 def register_studio_schema() -> None:
     store = ConfigStore.instance()
     store.store(name="studio_schema", node=StudioConfig)
     store.store(name="recording_defaults_schema", node=RecordingDefaults)
     store.store(name="recording_spec_schema", node=RecordingSpec)
+    store.store(name="studio_directive_schema", node=StudioDirectiveBlock)
 
 
 register_resolvers()
@@ -404,6 +467,26 @@ def validate_config_keys(
         raise StudioConfigError(f"invalid {source}: {exc}") from exc
 
 
+def structured_config_mapping(
+    data: dict[str, Any],
+    *,
+    schema: type[Any],
+    source: str,
+) -> dict[str, Any]:
+    try:
+        config = OmegaConf.merge(OmegaConf.structured(schema), data)
+        value = OmegaConf.to_container(
+            config,
+            resolve=False,
+            enum_to_str=True,
+        )
+    except OmegaConfBaseException as exc:
+        raise StudioConfigError(f"invalid {source}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise StudioConfigError(f"{source} must be a mapping")
+    return value
+
+
 def recording_defaults_config_path(script_dir: Path) -> Path:
     return script_dir / "config.yaml"
 
@@ -461,6 +544,52 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
+def validate_studio_directive_scene(value: object, *, source: str) -> object:
+    if isinstance(value, str) or value is None:
+        return value
+    if not isinstance(value, dict):
+        raise StudioConfigError(f"{source}.scene must be a string or mapping")
+    return structured_config_mapping(
+        value,
+        schema=StudioDirectiveScene,
+        source=f"{source}.scene",
+    )
+
+
+def project_schema_values_onto_input(value: object, source: object) -> object:
+    if isinstance(value, dict) and isinstance(source, dict):
+        return {
+            key: project_schema_values_onto_input(value[key], source_value)
+            for key, source_value in source.items()
+        }
+    if isinstance(value, list) and isinstance(source, list):
+        return [
+            project_schema_values_onto_input(value_item, source_item)
+            for value_item, source_item in zip(value, source, strict=False)
+        ]
+    return value
+
+
+def validate_studio_directive_block(
+    block: dict[str, Any], *, line: int
+) -> dict[str, Any]:
+    source = f"studio-directive block near line {line}"
+    structured = structured_config_mapping(
+        block,
+        schema=StudioDirectiveBlock,
+        source=source,
+    )
+    validated = project_schema_values_onto_input(structured, block)
+    if not isinstance(validated, dict):
+        raise StudioConfigError(f"{source} must be a mapping")
+    if "scene" in validated:
+        validated["scene"] = validate_studio_directive_scene(
+            validated["scene"],
+            source=source,
+        )
+    return validated
+
+
 def studio_directive_blocks(
     script_text: str, *, resolve: bool = True
 ) -> list[dict[str, Any]]:
@@ -503,7 +632,7 @@ def studio_directive_blocks(
                 raise StudioConfigError(
                     f"studio-directive block near line {start_line} must be a mapping"
                 )
-            blocks.append(value)
+            blocks.append(validate_studio_directive_block(value, line=start_line))
         index += 1
     return blocks
 
@@ -650,8 +779,7 @@ def scene_title_from_directive(value: object) -> str:
     if isinstance(value, str):
         title = value.strip()
     elif isinstance(value, dict):
-        title_value = value.get("title")
-        title = title_value.strip() if isinstance(title_value, str) else ""
+        title = str(value.get("title") or "").strip()
     else:
         title = ""
     if not title:
@@ -659,15 +787,11 @@ def scene_title_from_directive(value: object) -> str:
     return title
 
 
-def beat_values_from_directive(block: dict[str, Any]) -> list[object]:
-    values: list[object] = []
-    if "beat" in block:
+def beat_values_from_directive(block: dict[str, Any]) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    if block.get("beat") is not None:
         values.append(block["beat"])
-    if "beats" in block:
-        beats = block["beats"]
-        if not isinstance(beats, list):
-            raise StudioConfigError("studio-directive beats must be a list")
-        values.extend(beats)
+    values.extend(block.get("beats") or [])
     return values
 
 
@@ -683,20 +807,18 @@ def narration_from_script(
                 raise StudioConfigError("duplicate studio-directive scene")
             scene_title = scene_title_from_directive(block["scene"])
         for value in beat_values_from_directive(block):
-            if not isinstance(value, dict):
-                raise StudioConfigError("studio-directive beat must be a mapping")
-            beat_id = value.get("id")
-            heading = value.get("heading")
-            narration = value.get("narration")
-            if not isinstance(beat_id, str) or not beat_id.strip():
+            beat_id = value["id"]
+            heading = value["heading"]
+            narration = value["narration"]
+            if not beat_id.strip():
                 raise StudioConfigError(
                     "studio-directive beat.id must be a non-empty string"
                 )
-            if not isinstance(heading, str) or not heading.strip():
+            if not heading.strip():
                 raise StudioConfigError(
                     "studio-directive beat.heading must be a non-empty string"
                 )
-            if not isinstance(narration, str) or not narration.strip():
+            if not narration.strip():
                 raise StudioConfigError(
                     "studio-directive beat.narration must be a non-empty string"
                 )
@@ -716,7 +838,7 @@ def narration_from_script(
                 beat["waits"] = waits
             viewer_hold = value.get("viewer_hold")
             if viewer_hold is not None:
-                if not isinstance(viewer_hold, (int, float)) or viewer_hold < 0:
+                if viewer_hold < 0:
                     raise StudioConfigError(
                         f"studio-directive beat {normalized_id}.viewer_hold "
                         "must be a non-negative number"
@@ -744,10 +866,8 @@ def recording_beat_values_from_script(
     recording_beats: list[dict[str, Any]] = []
     for block in blocks:
         for value in beat_values_from_directive(block):
-            if not isinstance(value, dict):
-                continue
             beat_id = value.get("id")
-            if not isinstance(beat_id, str) or not beat_id.strip():
+            if not beat_id.strip():
                 continue
             executable_keys = set(value) - NARRATION_BEAT_KEYS
             if not executable_keys:

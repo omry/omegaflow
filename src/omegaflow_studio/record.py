@@ -304,7 +304,7 @@ def action_command_entries(
     raw_commands = action.get("commands")
     if raw_commands is None:
         return None
-    if "run" in action or "run_file" in action or "display" in action:
+    if any(action.get(key) is not None for key in ("run", "run_file", "display")):
         raise RecordingError(
             f"{field}.{index} must use commands or run/run_file/display, not both"
         )

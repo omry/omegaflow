@@ -194,8 +194,7 @@ def scene_title_from_directive(value: object) -> str:
     if isinstance(value, str):
         title = value.strip()
     elif isinstance(value, dict):
-        title_value = value.get("title")
-        title = title_value.strip() if isinstance(title_value, str) else ""
+        title = str(value.get("title") or "").strip()
     else:
         title = ""
     if not title:
@@ -203,17 +202,15 @@ def scene_title_from_directive(value: object) -> str:
     return title
 
 
-def beat_from_directive(value: object) -> NarrationSegment:
-    if not isinstance(value, dict):
-        raise AudioError("studio-directive beat must be a mapping")
+def beat_from_directive(value: dict[str, Any]) -> NarrationSegment:
     segment_id = value.get("id")
     heading = value.get("heading")
     narration = value.get("narration")
-    if not isinstance(segment_id, str) or not segment_id.strip():
+    if not segment_id.strip():
         raise AudioError("studio-directive beat.id must be a non-empty string")
-    if not isinstance(heading, str) or not heading.strip():
+    if not heading.strip():
         raise AudioError("studio-directive beat.heading must be a non-empty string")
-    if not isinstance(narration, str) or not narration.strip():
+    if not narration.strip():
         raise AudioError("studio-directive beat.narration must be a non-empty string")
     return NarrationSegment(
         segment_id=segment_id.strip(),
@@ -222,15 +219,11 @@ def beat_from_directive(value: object) -> NarrationSegment:
     )
 
 
-def beat_values_from_directive(block: dict[str, Any]) -> list[object]:
-    values: list[object] = []
-    if "beat" in block:
+def beat_values_from_directive(block: dict[str, Any]) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    if block.get("beat") is not None:
         values.append(block["beat"])
-    if "beats" in block:
-        beats = block["beats"]
-        if not isinstance(beats, list):
-            raise AudioError("studio-directive beats must be a list")
-        values.extend(beats)
+    values.extend(block.get("beats") or [])
     return values
 
 
