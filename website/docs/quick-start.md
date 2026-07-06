@@ -8,7 +8,7 @@ import OmegaFlowVideo from "@site/src/components/OmegaFlowVideo";
 # Quick Start
 
 This repository includes one starter recording at
-`studio/recordings/getting-started.md`. It demonstrates the basic loop:
+`recordings/getting-started.md`. It demonstrates the basic loop:
 write a Studio script, build the terminal recording, and embed the generated
 OmegaFlow Video in the website.
 

@@ -25,9 +25,10 @@ allow_mismatch: false
 run_id: null
 runs_since: null
 runs_limit: 10
+workspace: null
 
 studio:
-  data_dir: studio
+  data_dir: .omegaflow
   keep_output_dir: true
 
 hydra:

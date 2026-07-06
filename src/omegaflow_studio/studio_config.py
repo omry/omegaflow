@@ -28,6 +28,7 @@ class ProjectLayout:
 
 
 def discover_project_layout() -> ProjectLayout:
+    bundled_config_dir = Path(__file__).resolve().parent / "conf"
     configured = os.environ.get("OMEGAFLOW_STUDIO_PROJECT_ROOT")
     if configured:
         root = Path(configured).expanduser().resolve()
@@ -35,10 +36,7 @@ def discover_project_layout() -> ProjectLayout:
         cwd = Path.cwd().resolve()
         root = cwd
         for candidate in (cwd, *cwd.parents):
-            if (candidate / "studio" / "conf" / "config.yaml").exists():
-                root = candidate
-                break
-            if (candidate / "media" / "conf" / "config.yaml").exists():
+            if (candidate / "recordings" / "config.yaml").exists():
                 root = candidate
                 break
 
@@ -50,31 +48,21 @@ def discover_project_layout() -> ProjectLayout:
         if not config_dir.is_absolute():
             config_dir = root / config_dir
     else:
-        config_dir = None
-        for relative in (Path("studio") / "conf", Path("media") / "conf"):
-            candidate = root / relative
-            if (candidate / "config.yaml").exists():
-                config_dir = candidate
-                break
-        if config_dir is None:
-            config_dir = root / "studio" / "conf"
+        config_dir = bundled_config_dir
 
     if data_dir_value:
         data_dir = Path(data_dir_value).expanduser()
         if not data_dir.is_absolute():
             data_dir = root / data_dir
     else:
-        data_dir = config_dir.parent
+        data_dir = root / ".omegaflow"
 
     if recording_dir_value:
         recording_dir = Path(recording_dir_value).expanduser()
         if not recording_dir.is_absolute():
             recording_dir = root / recording_dir
     else:
-        if data_dir.name == "media":
-            recording_dir = data_dir / "recording-scripts"
-        else:
-            recording_dir = data_dir / "recordings"
+        recording_dir = root / "recordings"
 
     return ProjectLayout(
         root=root,
@@ -132,16 +120,12 @@ def project_data_dir_from_value(value: object) -> str:
 
 
 def studio_run_dir(*args: object) -> str:
-    if len(args) == 5:
-        data_dir_value = relative_project_path(PROJECT_DATA_DIR)
-        action, step, dry_run, recording_id, timestamp = args
-    elif len(args) == 6:
-        data_dir_value, action, step, dry_run, recording_id, timestamp = args
-    else:
+    if len(args) != 6:
         raise StudioConfigError(
             "studio_run_dir expects data_dir, action, step, dry_run, "
             "recording_id, timestamp"
         )
+    data_dir_value, action, step, dry_run, recording_id, timestamp = args
     action_text = normalize_studio_token(action) or "build"
     step_text = normalize_studio_token(step)
     recording_text = normalize_studio_token(recording_id)
@@ -162,10 +146,11 @@ def studio_run_dir(*args: object) -> str:
 
 def register_resolvers() -> None:
     if not OmegaConf.has_resolver("studio_run_dir"):
-        OmegaConf.register_new_resolver("studio_run_dir", studio_run_dir)
+        OmegaConf.register_resolver("studio_run_dir", studio_run_dir)
 
 
 class StudioAction(str, Enum):
+    bootstrap = "bootstrap"
     build = "build"
     check = "check"
     clean = "clean"
@@ -217,15 +202,43 @@ class StudioConfig:
     run_id: str | None = None
     runs_since: str | None = None
     runs_limit: int | None = 10
+    workspace: str | None = None
     studio: dict[str, Any] = field(default_factory=dict)
     script_params: Any = field(default_factory=dict)
+    recording: str | None = None
+
+
+@dataclass
+class RecordingDefaults:
+    studio: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
+    requirements: dict[str, Any] = field(default_factory=dict)
+    capture: dict[str, Any] = field(default_factory=dict)
+    style: dict[str, Any] = field(default_factory=dict)
+    outputs: dict[str, Any] = field(default_factory=dict)
+    retime: dict[str, Any] = field(default_factory=dict)
+    environment: dict[str, Any] = field(default_factory=dict)
+    audio: dict[str, Any] = field(default_factory=dict)
     narration: dict[str, Any] = field(default_factory=dict)
     publish: dict[str, Any] = field(default_factory=dict)
-    recording: Any = None
+    failure_summary: dict[str, Any] = field(default_factory=dict)
+    setup: list[Any] = field(default_factory=list)
+    cleanup: list[Any] = field(default_factory=list)
+    beats: list[Any] = field(default_factory=list)
+
+
+@dataclass
+class RecordingSpec(RecordingDefaults):
+    id: str = ""
+    title: str | None = None
+    script: str | None = None
 
 
 def register_studio_schema() -> None:
-    ConfigStore.instance().store(name="studio_schema", node=StudioConfig)
+    store = ConfigStore.instance()
+    store.store(name="studio_schema", node=StudioConfig)
+    store.store(name="recording_defaults_schema", node=RecordingDefaults)
+    store.store(name="recording_spec_schema", node=RecordingSpec)
 
 
 register_resolvers()
@@ -360,6 +373,85 @@ def merge_mapping(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, An
         else:
             merged[key] = value
     return merged
+
+
+def parse_yaml_mapping(text: str, *, source: str) -> dict[str, Any]:
+    try:
+        config = OmegaConf.create(text)
+        value = OmegaConf.to_container(
+            config,
+            resolve=False,
+            enum_to_str=True,
+        )
+    except OmegaConfBaseException as exc:
+        raise StudioConfigError(f"invalid YAML in {source}: {exc}") from exc
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise StudioConfigError(f"{source} must be a mapping")
+    return value
+
+
+def validate_config_keys(
+    data: dict[str, Any],
+    *,
+    schema: type[Any],
+    source: str,
+) -> None:
+    try:
+        OmegaConf.merge(OmegaConf.structured(schema), data)
+    except OmegaConfBaseException as exc:
+        raise StudioConfigError(f"invalid {source}: {exc}") from exc
+
+
+def recording_defaults_config_path(script_dir: Path) -> Path:
+    return script_dir / "config.yaml"
+
+
+def load_recording_defaults(script_dir: Path) -> dict[str, Any]:
+    config_path = recording_defaults_config_path(script_dir)
+    if not config_path.exists():
+        return {}
+    defaults = parse_yaml_mapping(
+        config_path.read_text(encoding="utf-8"),
+        source=str(config_path),
+    )
+    identity_keys = sorted({"id", "title"} & set(defaults))
+    if identity_keys:
+        raise StudioConfigError(
+            f"{config_path} cannot define recording identity fields: "
+            + ", ".join(identity_keys)
+        )
+    validate_config_keys(
+        defaults,
+        schema=RecordingDefaults,
+        source=str(config_path),
+    )
+    return defaults
+
+
+def split_frontmatter(script_text: str, *, source: Path) -> tuple[dict[str, Any], str]:
+    lines = script_text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return {}, script_text
+    closing_index: int | None = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            closing_index = index
+            break
+    if closing_index is None:
+        raise StudioConfigError(f"frontmatter in {source} is not closed")
+    frontmatter_text = "".join(lines[1:closing_index]).strip()
+    body = "".join(lines[closing_index + 1 :])
+    if not frontmatter_text:
+        return {}, body
+    config = parse_yaml_mapping(frontmatter_text, source=f"{source} frontmatter")
+    validate_config_keys(
+        config,
+        schema=RecordingSpec,
+        source=f"{source} frontmatter",
+    )
+    return config, body
 
 
 def display_path(path: Path) -> str:
@@ -704,10 +796,6 @@ def recording_id_from_config(config: dict[str, Any], recording_id: str | None) -
     value = config.get("recording")
     if isinstance(value, str) and value:
         return value
-    if isinstance(value, dict):
-        candidate = value.get("id")
-        if isinstance(candidate, str) and candidate:
-            return candidate
     raise StudioConfigError("recording id must be a non-empty string")
 
 
@@ -735,18 +823,27 @@ def recording_from_script(recording_id: str) -> dict[str, Any]:
     if not script_path.exists():
         raise StudioConfigError(f"recording script not found: {script_path}")
     script_text = script_path.read_text(encoding="utf-8")
-    blocks = studio_directive_blocks(script_text, resolve=False)
-    recording_blocks = [block["recording"] for block in blocks if "recording" in block]
-    if len(recording_blocks) != 1:
+    frontmatter, script_body = split_frontmatter(script_text, source=script_path)
+    blocks = studio_directive_blocks(script_body, resolve=False)
+    if any("recording" in block for block in blocks):
         raise StudioConfigError(
-            f"recording script must contain exactly one recording directive: {script_path}"
+            f"recording directives are no longer supported; use frontmatter: "
+            f"{script_path}"
         )
-    recording = recording_blocks[0]
-    if not isinstance(recording, dict):
-        raise StudioConfigError("studio-directive recording must be a mapping")
-    spec = dict(recording)
+    if not frontmatter:
+        raise StudioConfigError(
+            f"recording script must contain frontmatter config: {script_path}"
+        )
+    defaults = load_recording_defaults(script_path.parent)
+    spec = merge_mapping(defaults, frontmatter)
     spec.setdefault("id", recording_id)
     spec["script"] = display_path(script_path)
+    spec["_script_dir"] = display_path(script_path.parent)
+    validate_config_keys(
+        {key: value for key, value in spec.items() if not key.startswith("_")},
+        schema=RecordingSpec,
+        source=str(script_path),
+    )
     merge_script_recording_beats(spec, blocks)
     spec["narration"] = narration_from_script(
         recording_id=recording_id,
@@ -800,51 +897,13 @@ def recording_spec_from_config(
     hydra_output_dir: str | None = None,
 ) -> dict[str, Any]:
     resolved_recording_id = recording_id_from_config(config, recording_id)
-    recording = config.get("recording")
-    if isinstance(recording, dict) and recording:
-        spec = dict(recording)
-        spec.setdefault("id", resolved_recording_id)
-        script = spec.get("script")
-        if isinstance(script, str) and script:
-            script_path = resolve_config_path(script)
-            if script_path.exists():
-                script_text = script_path.read_text(encoding="utf-8")
-                blocks = studio_directive_blocks(script_text, resolve=False)
-                spec.setdefault(
-                    "narration",
-                    narration_from_script(
-                        recording_id=resolved_recording_id,
-                        script_path=script_path,
-                        blocks=blocks,
-                    ),
-                )
-                merge_script_recording_beats(spec, blocks)
-                spec = resolve_recording_spec_interpolations(spec)
-                validate_recording_inline_run_lengths(spec)
-    else:
-        spec = recording_from_script(resolved_recording_id)
+    spec = recording_from_script(resolved_recording_id)
 
-    for key in [
-        "studio",
-        "requirements",
-        "capture",
-        "style",
-        "outputs",
-        "retime",
-        "environment",
-        "audio",
-        "narration",
-        "publish",
-    ]:
-        value = config.get(key)
-        if not isinstance(value, dict):
-            continue
-        current = spec.get(key)
-        if isinstance(current, dict):
-            spec[key] = merge_mapping(value, current)
-        else:
-            spec[key] = value
-
+    validate_config_keys(
+        {key: value for key, value in spec.items() if not key.startswith("_")},
+        schema=RecordingSpec,
+        source=f"recording {resolved_recording_id}",
+    )
     validate_recording_inline_run_lengths(spec)
 
     spec["parameters"] = resolved_script_parameters(
@@ -856,7 +915,12 @@ def recording_spec_from_config(
     if not isinstance(resolved_recording_id, str) or not resolved_recording_id:
         raise StudioConfigError("recording.id must be a non-empty string")
 
-    manifest_path = recording_script_path(resolved_recording_id)
+    script = spec.get("script")
+    manifest_path = (
+        resolve_config_path(script)
+        if isinstance(script, str) and script
+        else recording_script_path(resolved_recording_id)
+    )
     spec["_manifest_path"] = str(manifest_path)
     spec["_config_dir"] = str(CONFIG_DIR)
     spec["_recording_id"] = resolved_recording_id

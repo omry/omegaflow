@@ -6,7 +6,7 @@ from that source.
 
 The project includes a Python package named `omegaflow-studio`, a `studio` CLI,
 a Docusaurus website for `omegaflow.dev`, and a first getting-started recording
-under `studio/recordings/`.
+under `recordings/`.
 
 ## Development
 

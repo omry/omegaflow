@@ -1,0 +1,14 @@
+capture:
+  window_size: 80x20
+  headless: true
+  baseline_compressed: true
+style:
+  color: true
+  typing: true
+audio:
+  enabled: false
+  provider: openai
+  env: OPENAI_API_KEY
+  model: gpt-4o-mini-tts
+  voice: marin
+  format: mp3

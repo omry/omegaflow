@@ -9,6 +9,7 @@ import http.server
 import io
 import json
 import os
+import re
 import shutil
 import shlex
 import subprocess
@@ -713,8 +714,6 @@ def optional_string(value: object) -> str | None:
 def recording_id_from_value(value: object) -> str | None:
     if isinstance(value, str) and value:
         return value
-    if isinstance(value, dict):
-        return optional_string(value.get("id"))
     return None
 
 
@@ -732,6 +731,127 @@ def print_available_recording_scripts(*, selected_required: bool) -> int:
     else:
         print(f"No recording scripts found in {RECORDING_SCRIPT_DIR}.")
     return 1 if selected_required else 0
+
+
+BOOTSTRAP_WORKSPACE_CONFIG = """\
+capture:
+  window_size: 80x20
+  headless: true
+  baseline_compressed: true
+style:
+  color: true
+  typing: true
+audio:
+  enabled: false
+  provider: openai
+  env: OPENAI_API_KEY
+  model: gpt-4o-mini-tts
+  voice: marin
+  format: mp3
+"""
+
+
+def bootstrap_recording_text(recording_id: str, title: str) -> str:
+    return f"""\
+---
+id: {recording_id}
+title: {title}
+outputs:
+  cast: .omegaflow/videos/{recording_id}.cast
+publish:
+  default: html
+  surfaces:
+    html:
+      type: standalone_html
+      file: .omegaflow/videos/{recording_id}.html
+---
+
+# {title}
+
+```yaml studio-directive
+scene: {title}
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line in the terminal.
+  actions:
+  - commands:
+    - run_file: {recording_id}/hello.sh
+      display: bash {recording_id}/hello.sh
+```
+"""
+
+
+def bootstrap_support_script_text(recording_id: str) -> str:
+    return f"""\
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'hello from {recording_id}\\n'
+"""
+
+
+def bootstrap_workspace_path(config: dict[str, Any]) -> Path:
+    value = optional_string(config.get("workspace"))
+    if value is None:
+        return RECORDING_SCRIPT_DIR
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return studio_config_module.PROJECT_ROOT / path
+
+
+def write_bootstrap_file(
+    path: Path,
+    text: str,
+    *,
+    executable: bool = False,
+    force: bool = False,
+) -> str:
+    existed = path.exists()
+    if existed and not force:
+        return "exists"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    if executable:
+        path.chmod(path.stat().st_mode | 0o111)
+    return "updated" if existed else "created"
+
+
+def run_bootstrap(config: dict[str, Any]) -> int:
+    workspace = bootstrap_workspace_path(config)
+    recording_id = recording_id_from_value(config.get("recording")) or "hello"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", recording_id):
+        raise StudioError("bootstrap recording id must be lowercase kebab-case")
+    title = recording_id.replace("-", " ").title()
+    force = bool_config(config, "force")
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    writes = [
+        (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG, False),
+        (workspace / f"{recording_id}.md", bootstrap_recording_text(recording_id, title), False),
+        (
+            workspace / recording_id / "hello.sh",
+            bootstrap_support_script_text(recording_id),
+            True,
+        ),
+    ]
+
+    print(f"workspace {display_path(workspace)}")
+    for path, text, executable in writes:
+        status = write_bootstrap_file(
+            path,
+            text,
+            executable=executable,
+            force=force,
+        )
+        print(f"{status:>7} {display_path(path)}")
+    print()
+    print(f"next    studio recording={recording_id} action=build")
+    return 0
 
 
 def as_mapping(value: object, *, field: str) -> dict[str, Any]:
@@ -892,7 +1012,7 @@ def fingerprint_dependency_paths(spec: dict[str, Any]) -> list[Path]:
     if manifest_path is not None:
         paths.append(retime_cast.relative_path(manifest_path))
     for value in collect_run_file_values(spec):
-        paths.append(retime_cast.relative_path(value))
+        paths.append(record.run_file_path(value, spec))
     paths.extend(
         [
             Path(__file__),
@@ -1799,8 +1919,6 @@ def print_success_followups(cfg: DictConfig) -> None:
     if OmegaConf.select(cfg, "output_format", default="text") == "json":
         return
     recording_value = OmegaConf.select(cfg, "recording")
-    if isinstance(recording_value, DictConfig):
-        recording_value = OmegaConf.to_container(recording_value, resolve=False)
     recording_id = recording_id_from_value(recording_value)
     if not isinstance(recording_id, str) or not recording_id:
         return
@@ -1954,6 +2072,9 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
 
     if step is None and action == "list":
         return print_available_recording_scripts(selected_required=False)
+
+    if step is None and action == "bootstrap":
+        return run_bootstrap(config)
 
     recording_required = step is not None or action in {
         "build",

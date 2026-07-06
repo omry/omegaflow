@@ -29,6 +29,7 @@ from .studio_config import (
     StudioConfigError,
     container_from_hydra_cfg,
     load_configured_env_file,
+    load_env_file,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
     studio_directive_blocks as parse_studio_directive_blocks,
@@ -113,6 +114,8 @@ class AudioSettings:
     voice: str
     format: str
     cache_dir: Path
+    env_file: Path | None = None
+    env_override: bool = False
     instructions: str | None = None
     tts_usd_per_1m_characters: float = DEFAULT_OPENAI_TTS_USD_PER_1M_CHARACTERS
 
@@ -279,7 +282,17 @@ def audio_settings(spec: dict[str, Any]) -> AudioSettings:
         not isinstance(instructions, str) or not instructions
     ):
         raise AudioError("audio.instructions must be a non-empty string")
-    cache_dir = audio.get("cache_dir", "studio/cache/audio")
+    env_file_value = audio.get("env_file")
+    if env_file_value is None:
+        env_file = None
+    else:
+        if not isinstance(env_file_value, str) or not env_file_value:
+            raise AudioError("audio.env_file must be a non-empty string or null")
+        env_file = relative_path(env_file_value)
+    env_override = audio.get("env_override", False)
+    if not isinstance(env_override, bool):
+        raise AudioError("audio.env_override must be a boolean")
+    cache_dir = audio.get("cache_dir", ".omegaflow/cache/audio")
     if not isinstance(cache_dir, str) or not cache_dir:
         raise AudioError("audio.cache_dir must be a non-empty string")
     billing = as_mapping(audio.get("billing"), field="audio.billing")
@@ -301,10 +314,31 @@ def audio_settings(spec: dict[str, Any]) -> AudioSettings:
         model=require_string(audio, "model", field="audio"),
         voice=require_string(audio, "voice", field="audio"),
         format=fmt,
+        env_file=env_file,
+        env_override=env_override,
         instructions=instructions,
         cache_dir=relative_path(cache_dir),
         tts_usd_per_1m_characters=float(tts_usd_per_1m_characters),
     )
+
+
+def load_audio_env_file(settings: AudioSettings) -> dict[str, str]:
+    if settings.env_file is None:
+        return {}
+    try:
+        return load_env_file(settings.env_file, override=settings.env_override)
+    except StudioConfigError as exc:
+        raise AudioError(str(exc)) from exc
+
+
+def audio_environment(
+    settings: AudioSettings,
+    environ: dict[str, str] | None,
+) -> dict[str, str]:
+    if environ is not None:
+        return environ
+    load_audio_env_file(settings)
+    return os.environ
 
 
 def transcription_settings(spec: dict[str, Any]) -> TranscriptionSettings:
@@ -728,7 +762,7 @@ def openai_speech_bytes(
     environ: dict[str, str] | None = None,
     urlopen: Callable[..., Any] = urllib.request.urlopen,
 ) -> bytes:
-    env = os.environ if environ is None else environ
+    env = audio_environment(settings, environ)
     api_key = env.get(settings.env)
     if not api_key:
         raise AudioError(f"missing OpenAI API key environment variable: {settings.env}")
@@ -1457,7 +1491,7 @@ def openai_transcription_json(
     environ: dict[str, str] | None = None,
     urlopen: Callable[..., Any] = urllib.request.urlopen,
 ) -> dict[str, Any]:
-    env = os.environ if environ is None else environ
+    env = audio_environment(settings, environ)
     api_key = env.get(settings.env)
     if not api_key:
         raise AudioError(f"missing OpenAI API key environment variable: {settings.env}")

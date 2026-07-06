@@ -190,6 +190,23 @@ def relative_path(path: str) -> Path:
     return REPO_ROOT / candidate
 
 
+def run_file_path(run_file: str, spec: dict[str, Any] | None = None) -> Path:
+    candidate = Path(run_file)
+    if candidate.is_absolute():
+        return candidate
+    search_roots: list[Path] = []
+    if spec is not None:
+        script_dir = spec.get("_script_dir")
+        if isinstance(script_dir, str) and script_dir:
+            search_roots.append(relative_path(script_dir))
+    search_roots.append(REPO_ROOT)
+    for root in search_roots:
+        path = root / candidate
+        if path.exists():
+            return path
+    return search_roots[0] / candidate
+
+
 def display_path(path: Path) -> str:
     try:
         return str(path.relative_to(REPO_ROOT))
@@ -197,7 +214,13 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def step_command_text(step: dict[str, Any], index: int, *, field: str) -> str:
+def step_command_text(
+    step: dict[str, Any],
+    index: int,
+    *,
+    field: str,
+    spec: dict[str, Any] | None = None,
+) -> str:
     has_run = "run" in step and step.get("run") is not None
     has_run_file = "run_file" in step and step.get("run_file") is not None
     if has_run and has_run_file:
@@ -212,7 +235,7 @@ def step_command_text(step: dict[str, Any], index: int, *, field: str) -> str:
     run_file = step.get("run_file")
     if not isinstance(run_file, str) or not run_file:
         raise RecordingError(f"{field}.{index}.run_file must be a non-empty string")
-    path = relative_path(run_file)
+    path = run_file_path(run_file, spec)
     if not path.is_file():
         raise RecordingError(f"{field}.{index}.run_file does not exist: {path}")
     try:
@@ -276,6 +299,7 @@ def action_command_entries(
     index: int,
     *,
     field: str,
+    spec: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]] | None:
     raw_commands = action.get("commands")
     if raw_commands is None:
@@ -304,7 +328,12 @@ def action_command_entries(
             raise RecordingError(
                 f"{field}.{index}.commands.{command_index}.id must be identifier-like"
             )
-        run = require_string(raw_command, "run")
+        run = step_command_text(
+            raw_command,
+            command_index,
+            field=f"{field}.{index}.commands",
+            spec=spec,
+        )
         display = raw_command.get("display", run)
         if not isinstance(display, str) or not display:
             raise RecordingError(
@@ -374,12 +403,22 @@ def action_command_entries(
     return entries
 
 
-def setup_command_text(step: dict[str, Any], index: int) -> str:
-    return step_command_text(step, index, field="setup")
+def setup_command_text(
+    step: dict[str, Any],
+    index: int,
+    *,
+    spec: dict[str, Any] | None = None,
+) -> str:
+    return step_command_text(step, index, field="setup", spec=spec)
 
 
-def cleanup_command_text(step: dict[str, Any], index: int) -> str:
-    return step_command_text(step, index, field="cleanup")
+def cleanup_command_text(
+    step: dict[str, Any],
+    index: int,
+    *,
+    spec: dict[str, Any] | None = None,
+) -> str:
+    return step_command_text(step, index, field="cleanup", spec=spec)
 
 
 def check_asciinema() -> str:
@@ -527,7 +566,7 @@ def validate_manifest(spec: dict[str, Any]) -> None:
     for index, step in enumerate(setup, start=1):
         if not isinstance(step, dict):
             raise RecordingError("each setup step must be a mapping")
-        setup_command_text(step, index)
+        step_command_text(step, index, field="setup", spec=spec)
         name = step.get("name")
         if name is not None and (not isinstance(name, str) or not name):
             raise RecordingError(f"setup.{index}.name must be a non-empty string")
@@ -535,7 +574,7 @@ def validate_manifest(spec: dict[str, Any]) -> None:
     for index, step in enumerate(cleanup, start=1):
         if not isinstance(step, dict):
             raise RecordingError("each cleanup step must be a mapping")
-        cleanup_command_text(step, index)
+        step_command_text(step, index, field="cleanup", spec=spec)
         name = step.get("name")
         if name is not None and (not isinstance(name, str) or not name):
             raise RecordingError(f"cleanup.{index}.name must be a non-empty string")
@@ -554,14 +593,25 @@ def validate_manifest(spec: dict[str, Any]) -> None:
                 action,
                 index,
                 field=f"beats.{beat['id']}.actions",
+                spec=spec,
             )
             if entries is None:
-                step_command_text(action, index, field=f"beats.{beat['id']}.actions")
+                step_command_text(
+                    action,
+                    index,
+                    field=f"beats.{beat['id']}.actions",
+                    spec=spec,
+                )
         checks = as_list(beat.get("checks"), field=f"beats.{beat['id']}.checks")
         for index, check in enumerate(checks, start=1):
             if not isinstance(check, dict):
                 raise RecordingError(f"beat {beat['id']} check must be a mapping")
-            step_command_text(check, index, field=f"beats.{beat['id']}.checks")
+            step_command_text(
+                check,
+                index,
+                field=f"beats.{beat['id']}.checks",
+                spec=spec,
+            )
             name = check.get("name")
             if name is not None and (not isinstance(name, str) or not name):
                 raise RecordingError(
@@ -1709,7 +1759,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
     for index, step in enumerate(
         as_list(spec.get("cleanup"), field="cleanup"), start=1
     ):
-        command = cleanup_command_text(step, index)
+        command = cleanup_command_text(step, index, spec=spec)
         cleanup_name = step.get("name", f"cleanup step {index}")
         if not isinstance(cleanup_name, str) or not cleanup_name:
             raise RecordingError(f"cleanup.{index}.name must be a non-empty string")
@@ -2561,7 +2611,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
 
     setup = as_list(spec.get("setup"), field="setup")
     for index, step in enumerate(setup, start=1):
-        command = setup_command_text(step, index)
+        command = setup_command_text(step, index, spec=spec)
         check_name = step.get("name", f"setup step {index}")
         if not isinstance(check_name, str) or not check_name:
             raise RecordingError(f"setup.{index}.name must be a non-empty string")
@@ -2607,6 +2657,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
                 action,
                 index,
                 field=f"beats.{beat_id}.actions",
+                spec=spec,
             )
             expect = as_mapping(
                 action.get("expect"), field=f"beats.{beat_id}.actions.{index}.expect"
@@ -2630,6 +2681,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
                     action,
                     index,
                     field=f"beats.{beat_id}.actions",
+                    spec=spec,
                 )
                 display_command = action.get("display", command)
                 if not isinstance(display_command, str) or not display_command:
@@ -2664,6 +2716,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
                 check,
                 index,
                 field=f"beats.{beat_id}.checks",
+                spec=spec,
             )
             check_name = check.get("name", f"{beat_id} check {index}")
             if not isinstance(check_name, str) or not check_name:

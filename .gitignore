@@ -78,10 +78,8 @@ docs/_build/
 /website/build/
 /website/node_modules/
 
-# OmegaFlow Studio
-/studio/cache/
-/studio/runs/
-/studio/studio-runs/
+# OmegaFlow Studio runtime
+/.omegaflow/
 
 # PyBuilder
 .pybuilder/
