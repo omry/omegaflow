@@ -4,14 +4,15 @@
   "packageManager": "pnpm@10.14.0",
   "scripts": {
     "build": "docusaurus build",
-    "serve": "docusaurus serve",
-    "start": "docusaurus start"
+    "serve": "docusaurus serve --port 6761",
+    "start": "docusaurus start --port 6761"
   },
   "dependencies": {
     "@docusaurus/core": "^3.8.0",
     "@docusaurus/preset-classic": "^3.8.0",
+    "@docusaurus/theme-mermaid": "^3.8.0",
+    "@mermaid-js/layout-elk": "^0.1.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
-  },
-  "devDependencies": {}
+  }
 }
