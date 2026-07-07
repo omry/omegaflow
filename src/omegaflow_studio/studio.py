@@ -9,7 +9,6 @@ import http.server
 import io
 import json
 import os
-import re
 import shutil
 import shlex
 import subprocess
@@ -38,6 +37,7 @@ from .studio_config import (
     StudioConfigError,
     StudioStep,
     container_from_hydra_cfg,
+    is_valid_recording_id,
     list_recording_ids,
     load_configured_env_file,
     load_recording_spec_from_hydra_cfg,
@@ -845,9 +845,11 @@ def write_bootstrap_file(
 def run_bootstrap(config: dict[str, Any]) -> int:
     workspace = bootstrap_workspace_path(config)
     recording_id = recording_id_from_value(config.get("recording")) or "hello"
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", recording_id):
-        raise StudioError("bootstrap recording id must be lowercase kebab-case")
-    title = recording_id.replace("-", " ").title()
+    if not is_valid_recording_id(recording_id):
+        raise StudioError(
+            "bootstrap recording id must be a lowercase kebab-case path"
+        )
+    title = recording_id.rsplit("/", 1)[-1].replace("-", " ").title()
     force = bool_config(config, "force")
 
     workspace.mkdir(parents=True, exist_ok=True)

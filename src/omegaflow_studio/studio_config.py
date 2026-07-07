@@ -72,6 +72,7 @@ STUDIO_CONFIG_NAME = "base-config"
 RECORDING_SCRIPT_DIR = PROJECT_LAYOUT.recording_script_dir
 GENERATED_DIR = PROJECT_DATA_DIR / "generated"
 RECORDING_SOURCE_NAME = "omegaflow.md"
+RECORDING_ID_COMPONENT_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
 MAX_INLINE_RUN_LINES = 10
 NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
 NARRATION_MARKER_RE = re.compile(
@@ -138,6 +139,8 @@ def studio_run_dir(*args: object) -> str:
     step_text = normalize_studio_token(step)
     recording_text = normalize_studio_token(recording_id)
     has_recording_id = bool(recording_text)
+    if has_recording_id and not is_valid_recording_id(recording_text):
+        recording_text = "invalid-recording"
     recording_text = recording_text or "unselected"
     timestamp_text = normalize_studio_token(timestamp)
     dry_run_enabled = str(dry_run).lower() == "true"
@@ -461,11 +464,33 @@ def list_recording_ids(recording_dir: Path | None = None) -> list[str]:
     script_dir = recording_dir or RECORDING_SCRIPT_DIR
     if not script_dir.exists():
         return []
-    return sorted(
-        path.name
-        for path in script_dir.iterdir()
-        if path.is_dir() and (path / RECORDING_SOURCE_NAME).is_file()
+    recording_ids: list[str] = []
+    for path in script_dir.rglob(RECORDING_SOURCE_NAME):
+        if not path.is_file():
+            continue
+        recording_id = path.parent.relative_to(script_dir).as_posix()
+        if is_valid_recording_id(recording_id):
+            recording_ids.append(recording_id)
+    return sorted(recording_ids)
+
+
+def is_valid_recording_id(recording_id: object) -> bool:
+    if not isinstance(recording_id, str) or not recording_id:
+        return False
+    if recording_id.startswith("/") or "\\" in recording_id:
+        return False
+    return all(
+        bool(RECORDING_ID_COMPONENT_RE.fullmatch(component))
+        for component in recording_id.split("/")
     )
+
+
+def validate_recording_id(recording_id: str) -> str:
+    if not is_valid_recording_id(recording_id):
+        raise StudioConfigError(
+            "recording id must be a lowercase kebab-case path"
+        )
+    return recording_id
 
 
 def normalize_hydra_override(override: str) -> str:
@@ -1066,10 +1091,10 @@ def merge_script_recording_beats(
 
 def recording_id_from_config(config: dict[str, Any], recording_id: str | None) -> str:
     if recording_id:
-        return recording_id
+        return validate_recording_id(recording_id)
     value = config.get("recording")
     if isinstance(value, str) and value:
-        return value
+        return validate_recording_id(value)
     raise StudioConfigError("recording id must be a non-empty string")
 
 
@@ -1091,7 +1116,7 @@ def recording_script_path(
     recording_dir: Path | None = None,
 ) -> Path:
     script_dir = recording_dir or RECORDING_SCRIPT_DIR
-    return script_dir / recording_id / RECORDING_SOURCE_NAME
+    return script_dir / validate_recording_id(recording_id) / RECORDING_SOURCE_NAME
 
 
 def recording_from_script(

@@ -21,6 +21,15 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
+- [ ] `P2` Design a short hello-recording tutorial curriculum.
+      The current `hello` recording is useful as a tiny fixture, but a separate
+      tutorial track could use it to explain how OmegaFlow recordings are
+      authored. Acceptance checks: outline a small lesson sequence covering the
+      recording file, scene, beat, support script, output expectation, and
+      publish surface; keep it separate from the default hello script until the
+      tutorial direction is approved; and identify which parts belong in a
+      future video versus written docs.
+
 - [ ] `P1` Add a generic prompt system for OmegaFlow recordings.
       The recorder currently treats `$` as the canonical prompt, with a small
       virtualenv-prefix special case. Recordings should be able to declare the

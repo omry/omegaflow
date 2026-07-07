@@ -212,6 +212,72 @@ beat:
     assert spec["_manifest_path"] == str(recordings_dir / "hello" / "omegaflow.md")
 
 
+def test_nested_recording_directories_are_listed_and_loaded(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "tutorial" / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "omegaflow.md").write_text(
+        """
+---
+id: tutorial/hello
+title: Tutorial Hello
+---
+
+```yaml studio-directive
+scene: Tutorial Hello
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_spec_from_config(
+        {
+            "recording": "tutorial/hello",
+            "studio": {
+                "recording_dir": str(recordings_dir),
+            },
+        },
+        recording_id=None,
+        overrides=("recording=tutorial/hello",),
+    )
+
+    assert list_recording_ids(recordings_dir) == ["tutorial/hello"]
+    assert spec["id"] == "tutorial/hello"
+    assert spec["_manifest_path"] == str(recording_dir / "omegaflow.md")
+
+
+def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+
+    try:
+        recording_from_script("../secret", recording_dir=recordings_dir)
+    except StudioConfigError as exc:
+        assert "lowercase kebab-case path" in str(exc)
+    else:
+        raise AssertionError("expected path traversal recording id to be rejected")
+
+
+def test_studio_run_dir_uses_safe_placeholder_for_invalid_recording_id() -> None:
+    run_dir = studio_config_module.studio_run_dir(
+        "recordings/.omegaflow",
+        "build",
+        None,
+        False,
+        "../secret",
+        "20260705-010203",
+    )
+
+    assert run_dir == "recordings/.omegaflow/runs/invalid-recording/20260705-010203"
+
+
 def test_flat_recording_file_is_not_supported(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
@@ -252,6 +318,33 @@ def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
     assert [job["job_id"] for job in jobs] == ["20260705-010203"]
     assert jobs[0]["type"] == "demo"
     assert jobs[0]["result"] == "success"
+
+
+def test_collect_run_jobs_handles_nested_recording_ids(tmp_path) -> None:
+    data_dir = tmp_path / "media"
+    run_dir = data_dir / "runs" / "tutorial" / "hello" / "20260705-010203"
+    run_dir.mkdir(parents=True)
+    (run_dir / "recording.cast").write_text(
+        '{"version": 2}\n[1.25, "o", "ok"]\n',
+        encoding="utf-8",
+    )
+
+    jobs = collect_run_jobs(
+        now=datetime(2026, 7, 5, 1, 3, 3),
+        data_dir=data_dir,
+    )
+
+    assert [job["job_id"] for job in jobs] == ["20260705-010203"]
+    assert jobs[0]["type"] == "tutorial/hello"
+    assert record.find_latest_run_dir(
+        "tutorial/hello",
+        artifact="success",
+        data_dir=data_dir,
+    ) == run_dir
+    assert record.find_run_dir_by_id(
+        "20260705-010203",
+        data_dir=data_dir,
+    ) == run_dir
 
 
 def test_success_artifact_filter_excludes_failed_runs(tmp_path) -> None:
@@ -639,6 +732,29 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
     assert "output_contains:" in recording
     assert "- hello from demo-recording" in recording
     assert support_script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
+    assert support_script.stat().st_mode & 0o111
+
+
+def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
+    workspace = tmp_path / "recordings"
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "recording": "tutorial/hello",
+            "force": False,
+        }
+    )
+
+    assert status == 0
+    recording = (workspace / "tutorial" / "hello" / "omegaflow.md").read_text(
+        encoding="utf-8"
+    )
+    support_script = workspace / "tutorial" / "hello" / "scripts" / "hello.sh"
+
+    assert "id: tutorial/hello" in recording
+    assert "title: Hello" in recording
+    assert "- hello from tutorial/hello" in recording
     assert support_script.stat().st_mode & 0o111
 
 

@@ -29,6 +29,7 @@ from .studio_config import (
     STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
+    is_valid_recording_id,
     list_recording_ids,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
@@ -533,8 +534,8 @@ def failure_summary_config(spec: dict[str, Any]) -> dict[str, Any]:
 
 def validate_manifest(spec: dict[str, Any]) -> None:
     recording_id = require_string(spec, "id")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", recording_id):
-        raise RecordingError("recording id must be lowercase kebab-case")
+    if not is_valid_recording_id(recording_id):
+        raise RecordingError("recording id must be a lowercase kebab-case path")
     require_string(spec, "title")
     outputs = as_mapping(spec.get("outputs"), field="outputs")
     require_string(outputs, "cast")
@@ -3008,13 +3009,15 @@ def find_run_dir_by_id(run_id: str, *, data_dir: Path | None = None) -> Path:
     runs_root = all_recording_runs_root(data_dir)
     matches = sorted(
         path
-        for path in runs_root.glob(f"*/{run_id}")
+        for path in runs_root.rglob(run_id)
         if path.is_dir() and path.parent != runs_root
     )
     if not matches:
         raise RecordingError(f"recording run not found for run_id: {run_id}")
     if len(matches) > 1:
-        candidates = ", ".join(path.parent.name for path in matches)
+        candidates = ", ".join(
+            path.parent.relative_to(runs_root).as_posix() for path in matches
+        )
         raise RecordingError(
             f"run_id {run_id} is ambiguous across recordings: {candidates}; "
             "add recording=<id>"
@@ -3055,26 +3058,28 @@ def find_latest_run_dir(
     if not runs_root.is_dir():
         raise RecordingError(f"no preserved runs found under: {runs_root}")
     if recording_id is None:
-        recording_dirs = sorted(path for path in runs_root.iterdir() if path.is_dir())
+        run_dirs = sorted(path for path in runs_root.rglob("*") if path.is_dir())
     else:
         recording_dir = runs_root / recording_id
-        recording_dirs = [recording_dir] if recording_dir.is_dir() else []
+        run_dirs = (
+            sorted(path for path in recording_dir.iterdir() if path.is_dir())
+            if recording_dir.is_dir()
+            else []
+        )
 
     candidates: list[tuple[str, int, str, Path]] = []
-    for recording_dir in recording_dirs:
-        for run_dir in recording_dir.iterdir():
-            if not run_dir.is_dir():
-                continue
-            if not run_dir_has_artifact(run_dir, artifact):
-                continue
-            candidates.append(
-                (
-                    run_dir.name,
-                    run_dir.stat().st_mtime_ns,
-                    recording_dir.name,
-                    run_dir,
-                )
+    for run_dir in run_dirs:
+        if not run_dir_has_artifact(run_dir, artifact):
+            continue
+        recording_name = run_dir.parent.relative_to(runs_root).as_posix()
+        candidates.append(
+            (
+                run_dir.name,
+                run_dir.stat().st_mtime_ns,
+                recording_name,
+                run_dir,
             )
+        )
     if not candidates:
         scope = f" for recording: {recording_id}" if recording_id else ""
         raise RecordingError(
@@ -3281,29 +3286,30 @@ def collect_run_jobs(
     if now is None:
         now = datetime.now()
     cutoff = now - since if since is not None else None
-    recording_dirs: list[Path]
     if recording_id is None:
-        recording_dirs = sorted(path for path in runs_root.iterdir() if path.is_dir())
+        run_dirs = sorted(path for path in runs_root.rglob("*") if path.is_dir())
     else:
         recording_dir = runs_root / recording_id
-        recording_dirs = [recording_dir] if recording_dir.is_dir() else []
+        run_dirs = (
+            sorted(path for path in recording_dir.iterdir() if path.is_dir())
+            if recording_dir.is_dir()
+            else []
+        )
 
     candidates: list[tuple[int, str, str, Path]] = []
-    for recording_dir in recording_dirs:
-        for run_dir in recording_dir.iterdir():
-            if not run_dir.is_dir():
-                continue
-            run_timestamp = parse_run_id_timestamp(run_dir.name)
-            if cutoff is not None and (run_timestamp is None or run_timestamp < cutoff):
-                continue
-            candidates.append(
-                (
-                    run_dir.stat().st_mtime_ns,
-                    run_dir.name,
-                    recording_dir.name,
-                    run_dir,
-                )
+    for run_dir in run_dirs:
+        run_timestamp = parse_run_id_timestamp(run_dir.name)
+        if cutoff is not None and (run_timestamp is None or run_timestamp < cutoff):
+            continue
+        recording_name = run_dir.parent.relative_to(runs_root).as_posix()
+        candidates.append(
+            (
+                run_dir.stat().st_mtime_ns,
+                run_dir.name,
+                recording_name,
+                run_dir,
             )
+        )
     jobs: list[dict[str, Any]] = []
     for _mtime, _run_id, candidate_recording_id, run_dir in sorted(
         candidates,
