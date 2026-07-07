@@ -33,13 +33,19 @@ timing:
   post_command_pause: 0.55
   minimum_section_spacing: 0.6
 environment:
-  working_directory: .
+  working_directory: /tmp
   path_prepend:
   - recordings/quickstart-demo/bin
 audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
   env_file: .env
+setup:
+- name: prepare clean demo project
+  run: |-
+    rm -rf /tmp/omegaflow-quickstart-demo
+    mkdir -p /tmp/omegaflow-quickstart-demo
+    cd /tmp/omegaflow-quickstart-demo
 ---
 
 # Quickstart Demo
@@ -107,7 +113,7 @@ beat:
   actions:
   - commands:
     - id: bootstrap_run
-      run: bash recordings/quickstart-demo/scripts/create-demo-project.sh
+      run_file: scripts/create-demo-project.sh
       display: omegaflow action=bootstrap
       after: "@bootstrap@"
       pre_command_pause: 0.45
@@ -136,7 +142,7 @@ beat:
   actions:
   - commands:
     - id: build_command
-      run: bash recordings/quickstart-demo/scripts/build-demo-project.sh
+      run_file: scripts/build-demo-project.sh
       display: omegaflow recording=quickstart action=build
       after: "@build@"
       timing: realtime
