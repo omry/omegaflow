@@ -26,12 +26,14 @@ from .studio_config import (
     CONFIG_DIR,
     GENERATED_DIR,
     PROJECT_ROOT,
+    STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
     load_configured_env_file,
     load_env_file,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    studio_data_dir_from_config,
     studio_directive_blocks as parse_studio_directive_blocks,
 )
 from .terminal_style import ANSI_CYAN_BOLD, ANSI_GREEN_BOLD
@@ -285,7 +287,7 @@ def audio_settings(spec: dict[str, Any]) -> AudioSettings:
     env_override = audio.get("env_override", False)
     if not isinstance(env_override, bool):
         raise AudioError("audio.env_override must be a boolean")
-    cache_dir = audio.get("cache_dir", ".omegaflow/cache/audio")
+    cache_dir = audio.get("cache_dir", "recordings/.omegaflow/cache/audio")
     if not isinstance(cache_dir, str) or not cache_dir:
         raise AudioError("audio.cache_dir must be a non-empty string")
     billing = as_mapping(audio.get("billing"), field="audio.billing")
@@ -395,7 +397,19 @@ def sha256_file(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
 
-def narration_config_path(recording_id: str) -> Path:
+def narration_config_path(
+    recording_id: str,
+    spec: dict[str, Any] | None = None,
+) -> Path:
+    if spec is not None:
+        config = spec.get("_studio_config")
+        if isinstance(config, dict):
+            return (
+                studio_data_dir_from_config(config)
+                / "generated"
+                / "narration"
+                / f"{recording_id}.yaml"
+            )
     return GENERATED_DIR / "narration" / f"{recording_id}.yaml"
 
 
@@ -475,7 +489,7 @@ def sync_narration_config(
     if not script_narration.segments:
         raise AudioError(f"no Narration blocks found in {script_path}")
     validate_script_narration_against_recording(script_narration, spec)
-    target = output_path or narration_config_path(recording_id)
+    target = output_path or narration_config_path(recording_id, spec)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         narration_yaml_text(recording_id, script_path, source_digest, script_narration),
@@ -2072,7 +2086,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         raise AudioError(str(exc)) from exc
 
 
-@hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")
+@hydra.main(
+    version_base=None,
+    config_path=str(CONFIG_DIR),
+    config_name=STUDIO_CONFIG_NAME,
+)
 def main(cfg: DictConfig) -> None:
     try:
         raise SystemExit(run_tool_from_hydra_cfg(cfg))

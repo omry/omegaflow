@@ -40,35 +40,15 @@ def discover_project_layout() -> ProjectLayout:
                 root = candidate
                 break
 
-    config_dir_value = os.environ.get("OMEGAFLOW_STUDIO_CONFIG_DIR")
-    recording_dir_value = os.environ.get("OMEGAFLOW_STUDIO_RECORDING_DIR")
-    data_dir_value = os.environ.get("OMEGAFLOW_STUDIO_DATA_DIR")
-    if config_dir_value:
-        config_dir = Path(config_dir_value).expanduser()
-        if not config_dir.is_absolute():
-            config_dir = root / config_dir
-    else:
-        config_dir = bundled_config_dir
+    config_dir = bundled_config_dir
 
-    if data_dir_value:
-        data_dir = Path(data_dir_value).expanduser()
-        if not data_dir.is_absolute():
-            data_dir = root / data_dir
-    else:
-        data_dir = root / ".omegaflow"
-
-    if recording_dir_value:
-        recording_dir = Path(recording_dir_value).expanduser()
-        if not recording_dir.is_absolute():
-            recording_dir = root / recording_dir
-    else:
-        recording_dir = root / "recordings"
+    data_dir = root / "recordings" / ".omegaflow"
 
     return ProjectLayout(
         root=root,
         data_dir=data_dir.resolve(),
         config_dir=config_dir.resolve(),
-        recording_script_dir=recording_dir.resolve(),
+        recording_script_dir=(root / "recordings").resolve(),
     )
 
 
@@ -88,6 +68,7 @@ PROJECT_ROOT = PROJECT_LAYOUT.root
 REPO_ROOT = PROJECT_ROOT
 PROJECT_DATA_DIR = PROJECT_LAYOUT.data_dir
 CONFIG_DIR = PROJECT_LAYOUT.config_dir
+STUDIO_CONFIG_NAME = "base-config"
 RECORDING_SCRIPT_DIR = PROJECT_LAYOUT.recording_script_dir
 GENERATED_DIR = PROJECT_DATA_DIR / "generated"
 MAX_INLINE_RUN_LINES = 10
@@ -117,6 +98,32 @@ def project_data_dir_from_value(value: object) -> str:
     if data_dir.is_absolute():
         return data_dir.as_posix()
     return data_dir.as_posix()
+
+
+def recording_script_dir_from_config(config: dict[str, Any] | None) -> Path:
+    root = project_root()
+    studio = config.get("studio", {}) if config else {}
+    recording_dir_value = None
+    if isinstance(studio, dict):
+        recording_dir_value = studio.get("recording_dir")
+    recording_dir_text = normalize_studio_token(recording_dir_value) or "recordings"
+    recording_dir = Path(recording_dir_text).expanduser()
+    if not recording_dir.is_absolute():
+        recording_dir = root / recording_dir
+    return recording_dir.resolve()
+
+
+def studio_data_dir_from_config(config: dict[str, Any] | None) -> Path:
+    root = project_root()
+    studio = config.get("studio", {}) if config else {}
+    data_dir_value = None
+    if isinstance(studio, dict):
+        data_dir_value = studio.get("data_dir")
+    data_dir_text = normalize_studio_token(data_dir_value) or "recordings/.omegaflow"
+    data_dir = Path(data_dir_text).expanduser()
+    if not data_dir.is_absolute():
+        data_dir = root / data_dir
+    return data_dir.resolve()
 
 
 def studio_run_dir(*args: object) -> str:
@@ -182,6 +189,13 @@ class StudioStep(str, Enum):
 
 
 @dataclass
+class StudioRuntimeConfig:
+    recording_dir: str = "recordings"
+    data_dir: str = "recordings/.omegaflow"
+    keep_output_dir: bool = True
+
+
+@dataclass
 class StudioConfig:
     action: StudioAction = StudioAction.build
     step: StudioStep | None = None
@@ -203,44 +217,121 @@ class StudioConfig:
     runs_since: str | None = None
     runs_limit: int | None = 10
     workspace: str | None = None
-    studio: dict[str, Any] = field(default_factory=dict)
+    studio: StudioRuntimeConfig = field(default_factory=StudioRuntimeConfig)
     script_params: Any = field(default_factory=dict)
     recording: str | None = None
 
 
 @dataclass
-class RecordingDefaults:
-    studio: dict[str, Any] = field(default_factory=dict)
-    parameters: dict[str, Any] = field(default_factory=dict)
-    requirements: dict[str, Any] = field(default_factory=dict)
-    capture: dict[str, Any] = field(default_factory=dict)
-    style: dict[str, Any] = field(default_factory=dict)
-    outputs: dict[str, Any] = field(default_factory=dict)
-    retime: dict[str, Any] = field(default_factory=dict)
-    environment: dict[str, Any] = field(default_factory=dict)
-    audio: dict[str, Any] = field(default_factory=dict)
-    narration: dict[str, Any] = field(default_factory=dict)
-    publish: dict[str, Any] = field(default_factory=dict)
-    failure_summary: dict[str, Any] = field(default_factory=dict)
-    setup: list[Any] = field(default_factory=list)
-    cleanup: list[Any] = field(default_factory=list)
-    beats: list[Any] = field(default_factory=list)
+class RecordingCaptureConfig:
+    window_size: str = "100x28"
+    headless: bool = True
+    baseline_compressed: bool = False
+    idle_time_limit: float | None = None
 
 
 @dataclass
-class RecordingSpec(RecordingDefaults):
-    id: str = ""
-    title: str | None = None
-    script: str | None = None
+class RecordingStyleConfig:
+    color: bool = True
+    typing: bool = True
+    typing_min_delay: float = 0.012
+    typing_max_delay: float = 0.045
+    typing_space_delay: float = 0.025
+    typing_punctuation_delay: float = 0.05
+    typing_newline_delay: float = 0.16
+    typing_seed: int = 17
 
 
 @dataclass
-class StudioDirectiveScene:
-    title: str | None = None
+class RecordingOutputsConfig:
+    dir: str = "recordings/.omegaflow/videos"
+    cast: str = "${outputs.dir}/${id}.cast"
+    retimed_cast: str | None = None
+    audio: str | None = None
+    audio_metadata: str | None = None
 
 
 @dataclass
-class StudioDirectiveCommand:
+class RecordingRetimeConfig:
+    typing_char_delay: float = 0.035
+    typing_space_delay: float = 0.02
+    typing_punctuation_delay: float = 0.05
+    typing_newline_delay: float = 0.0
+    post_enter_pause: float = 0.35
+    post_command_pause: float = 0.85
+    minimum_section_spacing: float = 0.0
+
+
+@dataclass
+class RecordingEnvironmentConfig:
+    working_directory: str = "."
+    path_prepend: list[str] = field(default_factory=list)
+    variables: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class RecordingAudioBillingConfig:
+    tts_usd_per_1m_characters: float = 15.0
+    transcription_usd_per_minute: float = 0.006
+
+
+@dataclass
+class RecordingAudioTranscriptionConfig:
+    model: str = "whisper-1"
+    timestamp_granularities: list[str] = field(default_factory=lambda: ["word"])
+
+
+@dataclass
+class RecordingAudioConfig:
+    enabled: bool = False
+    provider: str = "openai"
+    env: str = "OPENAI_API_KEY"
+    model: str = "gpt-4o-mini-tts"
+    voice: str = "marin"
+    format: str = "mp3"
+    cache_dir: str = "recordings/.omegaflow/cache/audio"
+    env_file: str | None = None
+    env_override: bool = False
+    instructions: str | None = None
+    billing: RecordingAudioBillingConfig = field(
+        default_factory=RecordingAudioBillingConfig
+    )
+    transcription: RecordingAudioTranscriptionConfig = field(
+        default_factory=RecordingAudioTranscriptionConfig
+    )
+
+
+@dataclass
+class RecordingPublishSurfaceConfig:
+    type: str = ""
+    file: str = ""
+    placeholder: str | None = None
+    component: str | None = None
+
+
+@dataclass
+class RecordingPublishConfig:
+    default: str | None = None
+    on_build: bool = True
+    build_surfaces: list[str] | None = None
+    surfaces: dict[str, RecordingPublishSurfaceConfig] = field(default_factory=dict)
+
+
+@dataclass
+class RecordingFailureAnimationConfig:
+    regex: str = ""
+    replacement: str = ""
+
+
+@dataclass
+class RecordingFailureSummaryConfig:
+    terminal_animations: list[RecordingFailureAnimationConfig] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class RecordingCommandConfig:
     id: str | None = None
     run: str | None = None
     run_file: str | None = None
@@ -258,7 +349,7 @@ class StudioDirectiveCommand:
 
 
 @dataclass
-class StudioDirectiveStep:
+class RecordingStepConfig:
     run: str | None = None
     run_file: str | None = None
     display: str | None = None
@@ -267,23 +358,80 @@ class StudioDirectiveStep:
     progress: list[str] = field(default_factory=list)
     output: Any = None
     expect: dict[str, Any] = field(default_factory=dict)
-    commands: list[StudioDirectiveCommand] | None = None
+    commands: list[RecordingCommandConfig] | None = None
 
 
 @dataclass
-class StudioDirectiveGuide:
+class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
     success_hint: str | None = None
 
 
 @dataclass
-class StudioDirectiveBeat:
+class RecordingBeatConfig:
     id: str = ""
     heading: str = ""
     narration: str = ""
     marker: str | None = None
     caption: str | None = None
     viewer_hold: float | None = None
+    actions: list[RecordingStepConfig] = field(default_factory=list)
+    checks: list[RecordingStepConfig] = field(default_factory=list)
+    guide: RecordingGuideConfig | None = None
+
+
+@dataclass
+class RecordingDefaults:
+    studio: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
+    requirements: dict[str, Any] = field(default_factory=dict)
+    capture: RecordingCaptureConfig = field(default_factory=RecordingCaptureConfig)
+    style: RecordingStyleConfig = field(default_factory=RecordingStyleConfig)
+    outputs: RecordingOutputsConfig = field(default_factory=RecordingOutputsConfig)
+    retime: RecordingRetimeConfig = field(default_factory=RecordingRetimeConfig)
+    environment: RecordingEnvironmentConfig = field(
+        default_factory=RecordingEnvironmentConfig
+    )
+    audio: RecordingAudioConfig = field(default_factory=RecordingAudioConfig)
+    narration: dict[str, Any] = field(default_factory=dict)
+    publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
+    failure_summary: RecordingFailureSummaryConfig = field(
+        default_factory=RecordingFailureSummaryConfig
+    )
+    setup: list[RecordingStepConfig] = field(default_factory=list)
+    cleanup: list[RecordingStepConfig] = field(default_factory=list)
+    beats: list[RecordingBeatConfig] = field(default_factory=list)
+
+
+@dataclass
+class RecordingSpec(RecordingDefaults):
+    id: str = ""
+    title: str | None = None
+    script: str | None = None
+
+
+@dataclass
+class StudioDirectiveScene:
+    title: str | None = None
+
+
+@dataclass
+class StudioDirectiveCommand(RecordingCommandConfig):
+    pass
+
+
+@dataclass
+class StudioDirectiveStep(RecordingStepConfig):
+    commands: list[StudioDirectiveCommand] | None = None
+
+
+@dataclass
+class StudioDirectiveGuide(RecordingGuideConfig):
+    pass
+
+
+@dataclass
+class StudioDirectiveBeat(RecordingBeatConfig):
     actions: list[StudioDirectiveStep] = field(default_factory=list)
     checks: list[StudioDirectiveStep] = field(default_factory=list)
     guide: StudioDirectiveGuide | None = None
@@ -308,10 +456,11 @@ register_resolvers()
 register_studio_schema()
 
 
-def list_recording_ids() -> list[str]:
-    if not RECORDING_SCRIPT_DIR.exists():
+def list_recording_ids(recording_dir: Path | None = None) -> list[str]:
+    script_dir = recording_dir or RECORDING_SCRIPT_DIR
+    if not script_dir.exists():
         return []
-    return sorted(path.stem for path in RECORDING_SCRIPT_DIR.glob("*.md"))
+    return sorted(path.stem for path in script_dir.glob("*.md"))
 
 
 def normalize_hydra_override(override: str) -> str:
@@ -341,7 +490,7 @@ def compose_studio_config(
             version_base=None,
             config_dir=str(CONFIG_DIR),
         ):
-            cfg = compose(config_name="config", overrides=hydra_overrides)
+            cfg = compose(config_name=STUDIO_CONFIG_NAME, overrides=hydra_overrides)
             data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
     except Exception as exc:
         details = f"recording {recording_id!r}" if recording_id else "default recording"
@@ -921,25 +1070,30 @@ def recording_id_from_config(config: dict[str, Any], recording_id: str | None) -
 
 def resolve_recording_spec_interpolations(spec: dict[str, Any]) -> dict[str, Any]:
     try:
-        config = OmegaConf.create({"recording": spec})
+        config = OmegaConf.create(spec)
         resolved = OmegaConf.to_container(config, resolve=True, enum_to_str=True)
     except OmegaConfBaseException as exc:
         raise StudioConfigError(
             f"failed to resolve recording script config: {exc}"
         ) from exc
-    if not isinstance(resolved, dict) or not isinstance(
-        resolved.get("recording"), dict
-    ):
+    if not isinstance(resolved, dict):
         raise StudioConfigError("resolved recording script config must be a mapping")
-    return resolved["recording"]
+    return resolved
 
 
-def recording_script_path(recording_id: str) -> Path:
-    return RECORDING_SCRIPT_DIR / f"{recording_id}.md"
+def recording_script_path(
+    recording_id: str,
+    recording_dir: Path | None = None,
+) -> Path:
+    script_dir = recording_dir or RECORDING_SCRIPT_DIR
+    return script_dir / f"{recording_id}.md"
 
 
-def recording_from_script(recording_id: str) -> dict[str, Any]:
-    script_path = recording_script_path(recording_id)
+def recording_from_script(
+    recording_id: str,
+    recording_dir: Path | None = None,
+) -> dict[str, Any]:
+    script_path = recording_script_path(recording_id, recording_dir=recording_dir)
     if not script_path.exists():
         raise StudioConfigError(f"recording script not found: {script_path}")
     script_text = script_path.read_text(encoding="utf-8")
@@ -958,12 +1112,12 @@ def recording_from_script(recording_id: str) -> dict[str, Any]:
     spec = merge_mapping(defaults, frontmatter)
     spec.setdefault("id", recording_id)
     spec["script"] = display_path(script_path)
-    spec["_script_dir"] = display_path(script_path.parent)
-    validate_config_keys(
-        {key: value for key, value in spec.items() if not key.startswith("_")},
+    spec = structured_config_mapping(
+        spec,
         schema=RecordingSpec,
         source=str(script_path),
     )
+    spec["_script_dir"] = display_path(script_path.parent)
     merge_script_recording_beats(spec, blocks)
     spec["narration"] = narration_from_script(
         recording_id=recording_id,
@@ -1017,7 +1171,8 @@ def recording_spec_from_config(
     hydra_output_dir: str | None = None,
 ) -> dict[str, Any]:
     resolved_recording_id = recording_id_from_config(config, recording_id)
-    spec = recording_from_script(resolved_recording_id)
+    recording_dir = recording_script_dir_from_config(config)
+    spec = recording_from_script(resolved_recording_id, recording_dir=recording_dir)
 
     validate_config_keys(
         {key: value for key, value in spec.items() if not key.startswith("_")},
@@ -1039,10 +1194,11 @@ def recording_spec_from_config(
     manifest_path = (
         resolve_config_path(script)
         if isinstance(script, str) and script
-        else recording_script_path(resolved_recording_id)
+        else recording_script_path(resolved_recording_id, recording_dir=recording_dir)
     )
     spec["_manifest_path"] = str(manifest_path)
     spec["_config_dir"] = str(CONFIG_DIR)
+    spec["_recording_dir"] = str(recording_dir)
     spec["_recording_id"] = resolved_recording_id
     spec["_overrides"] = list(overrides)
     spec["_studio_config"] = config

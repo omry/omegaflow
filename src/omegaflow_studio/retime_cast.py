@@ -18,6 +18,7 @@ from omegaconf import DictConfig
 from .studio_config import (
     CONFIG_DIR,
     PROJECT_ROOT,
+    STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
     load_recording_spec,
@@ -2619,7 +2620,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         raise RetimeError(str(exc)) from exc
 
 
-@hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")
+@hydra.main(
+    version_base=None,
+    config_path=str(CONFIG_DIR),
+    config_name=STUDIO_CONFIG_NAME,
+)
 def main(cfg: DictConfig) -> None:
     try:
         raise SystemExit(run_tool_from_hydra_cfg(cfg))

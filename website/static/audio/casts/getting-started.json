@@ -4,7 +4,7 @@
   "recording": "getting-started",
   "segments": [
     {
-      "audio": ".omegaflow/cache/audio/getting-started/install-910d0beb6e2afd49.mp3",
+      "audio": "recordings/.omegaflow/cache/audio/getting-started/install-910d0beb6e2afd49.mp3",
       "duration": 8.616,
       "guide": {
         "commands": [
@@ -19,7 +19,7 @@
       "timestamps": "website/static/audio/casts/getting-started.install.timestamps.json"
     },
     {
-      "audio": ".omegaflow/cache/audio/getting-started/create-8e90a9e09f424d23.mp3",
+      "audio": "recordings/.omegaflow/cache/audio/getting-started/create-8e90a9e09f424d23.mp3",
       "duration": 8.952,
       "guide": {
         "commands": [
@@ -34,7 +34,7 @@
       "timestamps": "website/static/audio/casts/getting-started.create.timestamps.json"
     },
     {
-      "audio": ".omegaflow/cache/audio/getting-started/record-2feb85f937fc11b2.mp3",
+      "audio": "recordings/.omegaflow/cache/audio/getting-started/record-2feb85f937fc11b2.mp3",
       "duration": 9.0,
       "guide": {
         "commands": [
@@ -49,7 +49,7 @@
       "timestamps": "website/static/audio/casts/getting-started.record.timestamps.json"
     },
     {
-      "audio": ".omegaflow/cache/audio/getting-started/play-b307dc038eda91c0.mp3",
+      "audio": "recordings/.omegaflow/cache/audio/getting-started/play-b307dc038eda91c0.mp3",
       "duration": 9.552,
       "guide": {
         "commands": [
@@ -64,7 +64,7 @@
       "timestamps": "website/static/audio/casts/getting-started.play.timestamps.json"
     },
     {
-      "audio": ".omegaflow/cache/audio/getting-started/publish-0ea5ec3de7ad5fe6.mp3",
+      "audio": "recordings/.omegaflow/cache/audio/getting-started/publish-0ea5ec3de7ad5fe6.mp3",
       "duration": 11.952,
       "guide": {
         "commands": [

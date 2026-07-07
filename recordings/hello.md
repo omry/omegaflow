@@ -1,14 +1,12 @@
 ---
 id: hello
 title: Hello
-outputs:
-  cast: .omegaflow/videos/hello.cast
 publish:
   default: html
   surfaces:
     html:
       type: standalone_html
-      file: .omegaflow/videos/hello.html
+      file: ${outputs.dir}/${id}.html
 ---
 
 # Hello

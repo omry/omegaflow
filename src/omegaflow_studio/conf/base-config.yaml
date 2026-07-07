@@ -1,0 +1,15 @@
+defaults:
+  - studio_schema
+  - _self_
+  - optional /.omegaflow-studio@_here_: config
+  - override hydra/job_logging: disabled
+  - override hydra/hydra_logging: disabled
+
+hydra:
+  searchpath:
+    - file://.
+  output_subdir: null
+  run:
+    dir: ${studio_run_dir:${studio.data_dir},${action},${step},${dry_run},${recording},${now:%Y%m%d-%H%M%S}}
+  job:
+    chdir: false

@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "build": "docusaurus build",
+    "schema-docs": "python3 scripts/update_recording_schema_docs.py",
+    "build": "python3 scripts/update_recording_schema_docs.py && docusaurus build",
     "serve": "docusaurus serve --port 6761",
     "start": "docusaurus start --port 6761"
   },

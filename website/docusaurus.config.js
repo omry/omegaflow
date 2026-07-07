@@ -36,6 +36,9 @@ const config = {
       disableSwitch: true,
       respectPrefersColorScheme: false,
     },
+    prism: {
+      additionalLanguages: ['bash', 'yaml'],
+    },
     navbar: {
       title: 'OmegaFlow Studio',
       items: [

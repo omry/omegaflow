@@ -33,7 +33,7 @@ from . import retime_cast
 from . import studio_config as studio_config_module
 from .studio_config import (
     CONFIG_DIR,
-    RECORDING_SCRIPT_DIR,
+    STUDIO_CONFIG_NAME,
     StudioAction,
     StudioConfigError,
     StudioStep,
@@ -41,6 +41,7 @@ from .studio_config import (
     list_recording_ids,
     load_configured_env_file,
     load_recording_spec_from_hydra_cfg,
+    recording_script_dir_from_config,
     recording_spec_from_config,
 )
 from .terminal_style import (
@@ -717,8 +718,13 @@ def recording_id_from_value(value: object) -> str | None:
     return None
 
 
-def print_available_recording_scripts(*, selected_required: bool) -> int:
-    recording_ids = list_recording_ids()
+def print_available_recording_scripts(
+    *,
+    selected_required: bool,
+    config: dict[str, Any] | None = None,
+) -> int:
+    recording_dir = recording_script_dir_from_config(config)
+    recording_ids = list_recording_ids(recording_dir)
     if selected_required:
         print("No recording script selected.")
     if recording_ids:
@@ -729,7 +735,7 @@ def print_available_recording_scripts(*, selected_required: bool) -> int:
             print()
             print(f"Run with: studio recording={recording_ids[0]}")
     else:
-        print(f"No recording scripts found in {RECORDING_SCRIPT_DIR}.")
+        print(f"No recording scripts found in {recording_dir}.")
     return 1 if selected_required else 0
 
 
@@ -756,14 +762,12 @@ def bootstrap_recording_text(recording_id: str, title: str) -> str:
 ---
 id: {recording_id}
 title: {title}
-outputs:
-  cast: .omegaflow/videos/{recording_id}.cast
 publish:
   default: html
   surfaces:
     html:
       type: standalone_html
-      file: .omegaflow/videos/{recording_id}.html
+      file: ${{outputs.dir}}/${{id}}.html
 ---
 
 # {title}
@@ -797,7 +801,7 @@ printf 'hello from {recording_id}\\n'
 def bootstrap_workspace_path(config: dict[str, Any]) -> Path:
     value = optional_string(config.get("workspace"))
     if value is None:
-        return RECORDING_SCRIPT_DIR
+        return recording_script_dir_from_config(config)
     path = Path(value).expanduser()
     if path.is_absolute():
         return path
@@ -868,7 +872,7 @@ def artifact_paths(spec: dict[str, Any]) -> dict[str, Path]:
     settings = audio.audio_settings(spec)
     audio_path = audio.output_audio_path(spec, recording_id, settings)
     audio_metadata_path = audio.output_audio_metadata_path(spec, audio_path)
-    narration_path = audio.narration_config_path(recording_id)
+    narration_path = audio.narration_config_path(recording_id, spec)
     audio_cache = settings.cache_dir / recording_id
     return {
         "cast": cast_path,
@@ -888,7 +892,11 @@ def current_recording_run_dir(spec: dict[str, Any]) -> Path:
 def latest_successful_recording_run_dir(spec: dict[str, Any]) -> Path | None:
     recording_id = str(spec["_recording_id"])
     try:
-        return record.find_latest_run_dir(recording_id, artifact="success")
+        return record.find_latest_run_dir(
+            recording_id,
+            artifact="success",
+            data_dir=record.recording_data_dir(spec),
+        )
     except record.RecordingError:
         return None
 
@@ -904,7 +912,7 @@ def run_artifact_paths(run_dir: Path, spec: dict[str, Any]) -> dict[str, Path]:
         "retimed_cast": run_dir / "recording.retimed.cast",
         "audio": audio_path,
         "audio_metadata": audio_path.with_suffix(".json"),
-        "narration_config": audio.narration_config_path(recording_id),
+        "narration_config": audio.narration_config_path(recording_id, spec),
         "audio_cache": settings.cache_dir / recording_id,
     }
 
@@ -2073,7 +2081,10 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     step = validate_step(config.get("step"))
 
     if step is None and action == "list":
-        return print_available_recording_scripts(selected_required=False)
+        return print_available_recording_scripts(
+            selected_required=False,
+            config=config,
+        )
 
     if step is None and action == "bootstrap":
         return run_bootstrap(config)
@@ -2085,7 +2096,10 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         "watch",
     }
     if recording_required and recording_id_from_value(config.get("recording")) is None:
-        return print_available_recording_scripts(selected_required=True)
+        return print_available_recording_scripts(
+            selected_required=True,
+            config=config,
+        )
 
     if step is None and action == "build" and bool_config(config, "dry_run"):
         return run_build_dry_run(cfg, config)
@@ -2117,7 +2131,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     raise StudioError(f"unknown studio action: {action}")
 
 
-@hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")
+@hydra.main(
+    version_base=None,
+    config_path=str(CONFIG_DIR),
+    config_name=STUDIO_CONFIG_NAME,
+)
 def main(cfg: DictConfig) -> None:
     use_color = record.host_color_enabled(sys.stderr)
     try:

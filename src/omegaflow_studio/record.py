@@ -26,11 +26,14 @@ from .studio_config import (
     PROJECT_DATA_DIR,
     PROJECT_ROOT,
     RECORDING_SCRIPT_DIR,
+    STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
     list_recording_ids,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    recording_script_dir_from_config,
+    studio_data_dir_from_config,
 )
 from .terminal_style import (
     ANSI_CYAN_BOLD,
@@ -1534,6 +1537,10 @@ def has_recording_config(spec: dict[str, Any]) -> bool:
     manifest = spec.get("_manifest_path")
     if isinstance(manifest, str) and manifest:
         return relative_path(manifest).exists()
+    recording_dir = spec.get("_recording_dir")
+    if isinstance(recording_dir, str) and recording_dir:
+        recording_id = require_string(spec, "id")
+        return (Path(recording_dir) / f"{recording_id}.md").exists()
     recording_id = require_string(spec, "id")
     return (RECORDING_SCRIPT_DIR / f"{recording_id}.md").exists()
 
@@ -2960,6 +2967,14 @@ def record(
     return 0
 
 
+def recording_data_dir(spec: dict[str, Any] | None) -> Path:
+    if spec is not None:
+        config = spec.get("_studio_config")
+        if isinstance(config, dict):
+            return studio_data_dir_from_config(config)
+    return PROJECT_DATA_DIR
+
+
 def recording_runs_dir(spec: dict[str, Any]) -> Path:
     recording_id = require_string(spec, "id")
     hydra_output_dir = relative_path(require_string(spec, "_hydra_output_dir"))
@@ -2967,11 +2982,11 @@ def recording_runs_dir(spec: dict[str, Any]) -> Path:
         hydra_output_dir.parent.parent.name == "runs"
     ):
         return hydra_output_dir.parent
-    return PROJECT_DATA_DIR / "runs" / recording_id
+    return recording_data_dir(spec) / "runs" / recording_id
 
 
-def all_recording_runs_root() -> Path:
-    return PROJECT_DATA_DIR / "runs"
+def all_recording_runs_root(data_dir: Path | None = None) -> Path:
+    return (data_dir or PROJECT_DATA_DIR) / "runs"
 
 
 def validate_run_id(run_id: str) -> None:
@@ -2987,9 +3002,9 @@ def run_dir_for_id(spec: dict[str, Any], run_id: str) -> Path:
     return run_dir
 
 
-def find_run_dir_by_id(run_id: str) -> Path:
+def find_run_dir_by_id(run_id: str, *, data_dir: Path | None = None) -> Path:
     validate_run_id(run_id)
-    runs_root = all_recording_runs_root()
+    runs_root = all_recording_runs_root(data_dir)
     matches = sorted(
         path
         for path in runs_root.glob(f"*/{run_id}")
@@ -3030,9 +3045,12 @@ def run_dir_has_artifact(run_dir: Path, artifact: str) -> bool:
 
 
 def find_latest_run_dir(
-    recording_id: str | None = None, *, artifact: str = "preserved"
+    recording_id: str | None = None,
+    *,
+    artifact: str = "preserved",
+    data_dir: Path | None = None,
 ) -> Path:
-    runs_root = all_recording_runs_root()
+    runs_root = all_recording_runs_root(data_dir)
     if not runs_root.is_dir():
         raise RecordingError(f"no preserved runs found under: {runs_root}")
     if recording_id is None:
@@ -3070,15 +3088,21 @@ def run_dir_for_optional_id(
     run_id: str | None,
     *,
     artifact: str = "preserved",
+    data_dir: Path | None = None,
 ) -> Path:
+    resolved_data_dir = data_dir or recording_data_dir(spec)
     if run_id:
         return (
             run_dir_for_id(spec, run_id)
             if spec is not None
-            else find_run_dir_by_id(run_id)
+            else find_run_dir_by_id(run_id, data_dir=resolved_data_dir)
         )
     recording_id = require_string(spec, "id") if spec is not None else None
-    return find_latest_run_dir(recording_id, artifact=artifact)
+    return find_latest_run_dir(
+        recording_id,
+        artifact=artifact,
+        data_dir=resolved_data_dir,
+    )
 
 
 def recording_was_explicit(spec: dict[str, Any]) -> bool:
@@ -3248,8 +3272,9 @@ def collect_run_jobs(
     since: timedelta | None = None,
     limit: int | None = 10,
     now: datetime | None = None,
+    data_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
-    runs_root = all_recording_runs_root()
+    runs_root = all_recording_runs_root(data_dir)
     if not runs_root.is_dir():
         return []
     if now is None:
@@ -3330,8 +3355,15 @@ def list_run_jobs(
     since: timedelta | None = None,
     limit: int | None = 10,
     now: datetime | None = None,
+    data_dir: Path | None = None,
 ) -> int:
-    jobs = collect_run_jobs(recording_id, since=since, limit=limit, now=now)
+    jobs = collect_run_jobs(
+        recording_id,
+        since=since,
+        limit=limit,
+        now=now,
+        data_dir=data_dir,
+    )
     if output_format == "json":
         print(json.dumps(jobs, indent=2, sort_keys=True))
     else:
@@ -3339,8 +3371,18 @@ def list_run_jobs(
     return 0
 
 
-def inspect_run(spec: dict[str, Any] | None, *, run_id: str | None) -> int:
-    run_dir = run_dir_for_optional_id(spec, run_id, artifact="inspect")
+def inspect_run(
+    spec: dict[str, Any] | None,
+    *,
+    run_id: str | None,
+    data_dir: Path | None = None,
+) -> int:
+    run_dir = run_dir_for_optional_id(
+        spec,
+        run_id,
+        artifact="inspect",
+        data_dir=data_dir,
+    )
     entrypoint = run_dir / "enter"
     if not entrypoint.exists():
         raise RecordingError(f"postmortem entrypoint not found: {entrypoint}")
@@ -3374,8 +3416,18 @@ def page_or_print(path: Path) -> int:
     return 0
 
 
-def output_run(spec: dict[str, Any] | None, *, run_id: str | None) -> int:
-    run_dir = run_dir_for_optional_id(spec, run_id, artifact="output")
+def output_run(
+    spec: dict[str, Any] | None,
+    *,
+    run_id: str | None,
+    data_dir: Path | None = None,
+) -> int:
+    run_dir = run_dir_for_optional_id(
+        spec,
+        run_id,
+        artifact="output",
+        data_dir=data_dir,
+    )
     output_path = failure_output_path(run_dir)
     if output_path is None:
         raise RecordingError(f"no captured failure output found in run: {run_dir}")
@@ -3387,11 +3439,17 @@ def play_recording(
     *,
     run_id: str | None,
     cast_override: str | None,
+    data_dir: Path | None = None,
 ) -> int:
     if cast_override:
         cast_path = relative_path(cast_override)
     else:
-        run_dir = run_dir_for_optional_id(spec, run_id, artifact="play")
+        run_dir = run_dir_for_optional_id(
+            spec,
+            run_id,
+            artifact="play",
+            data_dir=data_dir,
+        )
         cast_path = run_cast_path(run_dir)
         if cast_path is None:
             raise RecordingError(f"no preserved cast found in run: {run_dir}")
@@ -3434,9 +3492,10 @@ def tool_step(config: dict[str, Any], default: str) -> str:
 
 def run_tool_from_hydra_cfg(cfg: Any) -> int:
     config = control_config_from_hydra_cfg(cfg)
+    data_dir = studio_data_dir_from_config(config)
     action = tool_step(config, "record")
     if action == "list":
-        return list_recordings()
+        return list_recordings(config)
     if action == "runs":
         output_format = config.get("output_format", "text")
         if not isinstance(output_format, str):
@@ -3453,6 +3512,7 @@ def run_tool_from_hydra_cfg(cfg: Any) -> int:
             output_format=output_format,
             since=since,
             limit=limit,
+            data_dir=data_dir,
         )
     cast_override = config.get("cast")
     if cast_override is not None and not isinstance(cast_override, str):
@@ -3464,16 +3524,21 @@ def run_tool_from_hydra_cfg(cfg: Any) -> int:
         spec = spec_from_hydra_cfg(cfg)
         if not cast_override and not recording_was_explicit(spec):
             spec = None
-        return play_recording(spec, run_id=run_id, cast_override=cast_override)
+        return play_recording(
+            spec,
+            run_id=run_id,
+            cast_override=cast_override,
+            data_dir=data_dir,
+        )
     spec = spec_from_hydra_cfg(cfg)
     if action == "inspect":
         if not recording_was_explicit(spec):
             spec = None
-        return inspect_run(spec, run_id=run_id)
+        return inspect_run(spec, run_id=run_id, data_dir=data_dir)
     if action == "output":
         if not recording_was_explicit(spec):
             spec = None
-        return output_run(spec, run_id=run_id)
+        return output_run(spec, run_id=run_id, data_dir=data_dir)
     if action == "session":
         validate_manifest(spec)
         check_required_commands(spec)
@@ -3503,13 +3568,18 @@ def run_tool_from_hydra_cfg(cfg: Any) -> int:
     )
 
 
-def list_recordings() -> int:
-    for recording_id in list_recording_ids():
+def list_recordings(config: dict[str, Any] | None = None) -> int:
+    recording_dir = recording_script_dir_from_config(config)
+    for recording_id in list_recording_ids(recording_dir):
         print(recording_id)
     return 0
 
 
-@hydra.main(version_base=None, config_path=str(CONFIG_DIR), config_name="config")
+@hydra.main(
+    version_base=None,
+    config_path=str(CONFIG_DIR),
+    config_name=STUDIO_CONFIG_NAME,
+)
 def main(cfg: DictConfig) -> None:
     use_color = host_color_enabled(sys.stderr)
     try:

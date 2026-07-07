@@ -19,6 +19,9 @@ Recording scripts are Markdown files with `studio-directive` YAML blocks. The
 Markdown keeps the human-readable walkthrough close to the machine-readable
 instructions that build it.
 
+See [Recording Files](./recording-files/overview.md) for the frontmatter and
+`studio-directive` schema.
+
 A recording can define:
 
 - capture settings such as terminal size and headless mode

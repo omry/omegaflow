@@ -79,7 +79,7 @@ docs/_build/
 /website/node_modules/
 
 # OmegaFlow Studio runtime
-/.omegaflow/
+/recordings/.omegaflow/
 
 # PyBuilder
 .pybuilder/

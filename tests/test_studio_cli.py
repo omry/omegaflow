@@ -5,6 +5,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from omegaconf import OmegaConf
+
 from omegaflow_studio import __version__
 from omegaflow_studio import audio
 from omegaflow_studio import record
@@ -15,9 +17,12 @@ from omegaflow_studio.record import collect_run_jobs
 from omegaflow_studio.studio_config import (
     CONFIG_DIR,
     RECORDING_SCRIPT_DIR,
+    STUDIO_CONFIG_NAME,
     StudioConfigError,
+    compose_studio_config,
     discover_project_layout,
     recording_from_script,
+    recording_spec_from_config,
     studio_directive_blocks,
     studio_run_dir,
 )
@@ -27,8 +32,27 @@ def test_version_is_available() -> None:
     assert __version__ == "0.1.0"
 
 
+def test_recording_schema_docs_are_generated() -> None:
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "website/scripts/update_recording_schema_docs.py",
+            "--check",
+        ],
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_studio_paths_use_canonical_recordings_workspace() -> None:
     assert CONFIG_DIR.parts[-2:] == ("omegaflow_studio", "conf")
+    assert STUDIO_CONFIG_NAME == "base-config"
     assert RECORDING_SCRIPT_DIR.parts[-1:] == ("recordings",)
 
 
@@ -38,9 +62,6 @@ def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
     (recordings_dir / "config.yaml").write_text("audio:\n  enabled: false\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OMEGAFLOW_STUDIO_PROJECT_ROOT", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_CONFIG_DIR", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_RECORDING_DIR", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_DATA_DIR", raising=False)
 
     layout = discover_project_layout()
 
@@ -53,38 +74,143 @@ def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
 def test_empty_workspace_uses_bundled_config(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OMEGAFLOW_STUDIO_PROJECT_ROOT", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_CONFIG_DIR", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_RECORDING_DIR", raising=False)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_DATA_DIR", raising=False)
 
     layout = discover_project_layout()
 
     assert layout.root == tmp_path
     assert layout.config_dir.name == "conf"
     assert layout.config_dir.parent.name == "omegaflow_studio"
-    assert layout.data_dir == tmp_path / ".omegaflow"
+    assert layout.data_dir == tmp_path / "recordings" / ".omegaflow"
     assert layout.recording_script_dir == tmp_path / "recordings"
 
 
 def test_studio_run_dir_uses_data_directory() -> None:
     assert (
-        studio_run_dir(".omegaflow", "build", "record", False, "demo", "20260705-010203")
-        == ".omegaflow/runs/demo/20260705-010203"
+        studio_run_dir(
+            "recordings/.omegaflow",
+            "build",
+            "record",
+            False,
+            "demo",
+            "20260705-010203",
+        )
+        == "recordings/.omegaflow/runs/demo/20260705-010203"
     )
     assert (
-        studio_run_dir(".omegaflow", "inspect", None, False, "demo", "20260705-010203")
-        == ".omegaflow/runs/.scratch/inspect/demo/20260705-010203"
+        studio_run_dir(
+            "recordings/.omegaflow",
+            "inspect",
+            None,
+            False,
+            "demo",
+            "20260705-010203",
+        )
+        == "recordings/.omegaflow/runs/.scratch/inspect/demo/20260705-010203"
     )
 
 
 def test_studio_run_dir_routes_missing_recording_to_scratch() -> None:
     assert (
-        studio_run_dir(".omegaflow", "build", None, False, None, "20260705-010203")
-        == ".omegaflow/runs/.scratch/build/unselected/20260705-010203"
+        studio_run_dir(
+            "recordings/.omegaflow",
+            "build",
+            None,
+            False,
+            None,
+            "20260705-010203",
+        )
+        == "recordings/.omegaflow/runs/.scratch/build/unselected/20260705-010203"
     )
 
 
-def test_collect_run_jobs_uses_project_data_dir(tmp_path, monkeypatch) -> None:
+def test_studio_config_loads_cwd_local_config(tmp_path, monkeypatch) -> None:
+    local_config_dir = tmp_path / ".omegaflow-studio"
+    local_config_dir.mkdir()
+    (local_config_dir / "config.yaml").write_text(
+        """
+studio:
+  recording_dir: demos
+  data_dir: demos/.omegaflow
+env_file: .env.studio
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    config = compose_studio_config(None, ())
+
+    assert config["studio"]["recording_dir"] == "demos"
+    assert config["studio"]["data_dir"] == "demos/.omegaflow"
+    assert config["env_file"] == ".env.studio"
+
+
+def test_runs_action_uses_config_data_dir(tmp_path, monkeypatch, capsys) -> None:
+    local_config_dir = tmp_path / ".omegaflow-studio"
+    local_config_dir.mkdir()
+    (local_config_dir / "config.yaml").write_text(
+        """
+studio:
+  data_dir: custom-state
+""".lstrip(),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "custom-state" / "runs" / "demo" / "20260705-010203"
+    run_dir.mkdir(parents=True)
+    (run_dir / "recording.cast").write_text(
+        '{"version": 2}\n[1.25, "o", "ok"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(None, ("action=runs", "output_format=json"))
+
+    assert record.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    jobs = json.loads(capsys.readouterr().out)
+    assert [job["job_id"] for job in jobs] == ["20260705-010203"]
+    assert jobs[0]["type"] == "demo"
+
+
+def test_studio_recording_dir_comes_from_config(tmp_path) -> None:
+    recordings_dir = tmp_path / "docs" / "recordings"
+    recordings_dir.mkdir(parents=True)
+    (recordings_dir / "hello.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_spec_from_config(
+        {
+            "recording": "hello",
+            "studio": {
+                "recording_dir": str(recordings_dir),
+            },
+        },
+        recording_id=None,
+        overrides=("studio.recording_dir=" + str(recordings_dir),),
+    )
+
+    assert spec["id"] == "hello"
+    assert spec["_recording_dir"] == str(recordings_dir.resolve())
+    assert spec["_manifest_path"] == str(recordings_dir / "hello.md")
+
+
+def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
     data_dir = tmp_path / "media"
     run_dir = data_dir / "runs" / "demo" / "20260705-010203"
     run_dir.mkdir(parents=True)
@@ -92,9 +218,11 @@ def test_collect_run_jobs_uses_project_data_dir(tmp_path, monkeypatch) -> None:
         '{"version": 2}\n[1.25, "o", "ok"]\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(record, "PROJECT_DATA_DIR", data_dir)
 
-    jobs = collect_run_jobs(now=datetime(2026, 7, 5, 1, 3, 3))
+    jobs = collect_run_jobs(
+        now=datetime(2026, 7, 5, 1, 3, 3),
+        data_dir=data_dir,
+    )
 
     assert [job["job_id"] for job in jobs] == ["20260705-010203"]
     assert jobs[0]["type"] == "demo"
@@ -164,6 +292,8 @@ audio:
   enabled: false
   provider: openai
   env: SHARED_KEY
+outputs:
+  dir: site/videos
 style:
   color: false
 """.lstrip(),
@@ -205,6 +335,8 @@ beat:
     assert spec["audio"]["enabled"] is True
     assert spec["audio"]["provider"] == "openai"
     assert spec["audio"]["env"] == "SHARED_KEY"
+    assert spec["outputs"]["dir"] == "site/videos"
+    assert spec["outputs"]["cast"] == "site/videos/hello.cast"
     assert spec["style"]["color"] is False
     assert spec["beats"][0]["id"] == "hello"
 
@@ -243,6 +375,112 @@ beat:
         assert "cannot define recording identity fields: title" in str(exc)
     else:
         raise AssertionError("expected shared recording config identity to fail")
+
+
+def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello.md").write_text(
+        """
+---
+id: hello
+capture:
+  typo_window_size: 80x20
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    try:
+        recording_from_script("hello")
+    except StudioConfigError as exc:
+        assert "typo_window_size" in str(exc)
+    else:
+        raise AssertionError("expected unknown nested recording config to fail")
+
+
+def test_recording_schema_validates_frontmatter_command_fields(
+    tmp_path, monkeypatch
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello.md").write_text(
+        """
+---
+id: hello
+beats:
+- id: configured
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+  - commands:
+    - id: say-hello
+      run: printf 'hello\\n'
+      display: echo hello
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: narrated
+  heading: Narrated
+  narration: Narration text.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    spec = recording_from_script("hello")
+
+    configured = next(beat for beat in spec["beats"] if beat["id"] == "configured")
+    command = configured["actions"][0]["commands"][0]
+    assert command["run"] == "printf 'hello\\n'"
+    assert command["display"] == "echo hello"
+
+
+def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello.md").write_text(
+        """
+---
+id: hello
+beats:
+- id: hello
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+  - commands:
+    - run: printf 'hello\\n'
+      disaply: echo hello
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    try:
+        recording_from_script("hello")
+    except StudioConfigError as exc:
+        assert "disaply" in str(exc)
+    else:
+        raise AssertionError("expected unknown command field to fail")
 
 
 def test_studio_directive_schema_rejects_unknown_top_level_key() -> None:
@@ -361,16 +599,22 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
     assert "title:" not in shared_config
     assert "id: demo-recording" in recording
     assert "type: standalone_html" in recording
+    assert "cast:" not in recording
+    assert "file: ${outputs.dir}/${id}.html" in recording
     assert "run_file: demo-recording/hello.sh" in recording
     assert support_script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
     assert support_script.stat().st_mode & 0o111
 
 
-def minimal_recording_spec(run_dir) -> dict[str, object]:
+def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str, object]:
+    config: dict[str, object] = {}
+    if data_dir is not None:
+        config["studio"] = {"data_dir": str(data_dir)}
     return {
         "id": "demo",
         "_recording_id": "demo",
         "_hydra_output_dir": str(run_dir),
+        "_studio_config": config,
         "outputs": {"cast": "website/static/casts/demo.cast"},
         "audio": {
             "enabled": False,
@@ -383,9 +627,7 @@ def minimal_recording_spec(run_dir) -> dict[str, object]:
     }
 
 
-def test_recording_skip_reason_uses_latest_successful_run(
-    tmp_path, monkeypatch
-) -> None:
+def test_recording_skip_reason_uses_latest_successful_run(tmp_path) -> None:
     data_dir = tmp_path / "media"
     run_dir = data_dir / "runs" / "demo" / "20260705-010203"
     run_dir.mkdir(parents=True)
@@ -397,8 +639,7 @@ def test_recording_skip_reason_uses_latest_successful_run(
         '{"time": 0, "phase": "start"}\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(record, "PROJECT_DATA_DIR", data_dir)
-    spec = minimal_recording_spec(run_dir)
+    spec = minimal_recording_spec(run_dir, data_dir=data_dir)
     studio.write_recording_fingerprint(
         spec,
         fingerprint_path=run_dir / "recording.fingerprint.json",
