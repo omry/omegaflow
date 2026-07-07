@@ -1,177 +1,282 @@
 {
-  "duration": 14.2,
+  "duration": 20.4,
   "recording": "quickstart-demo",
   "segment": "install",
-  "source_text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the omegaflow command used for the rest of the workflow.",
+  "source_text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video with generated voiceover. It is a Python tool, and it can record any terminal workflow. If your project does not already have a Python environment, create one now. Then install OmegaFlow. The omegaflow command is now ready for the rest of the workflow.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Omegaflow turns a markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the Omegaflow command used for the rest of the workflow.",
+  "transcript": "Omegaflow turns a markdown recording script into a rebuildable terminal video with generated voiceover. It is a Python tool, and it can record any terminal workflow. If your project does not already have a Python environment, create one now. Then install Omegaflow. The Omegaflow command is now ready for the rest of the workflow.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.78,
+      "end": 0.66,
       "start": 0.0,
       "word": "Omegaflow"
     },
     {
-      "end": 1.48,
-      "start": 0.78,
+      "end": 1.28,
+      "start": 0.66,
       "word": "turns"
     },
     {
-      "end": 1.78,
-      "start": 1.48,
+      "end": 1.54,
+      "start": 1.28,
       "word": "a"
     },
     {
-      "end": 2.22,
-      "start": 1.78,
+      "end": 1.94,
+      "start": 1.54,
       "word": "markdown"
     },
     {
-      "end": 2.76,
-      "start": 2.22,
+      "end": 2.46,
+      "start": 1.94,
       "word": "recording"
     },
     {
-      "end": 3.08,
-      "start": 2.76,
+      "end": 2.78,
+      "start": 2.46,
       "word": "script"
     },
     {
-      "end": 3.68,
-      "start": 3.08,
+      "end": 3.14,
+      "start": 2.78,
       "word": "into"
     },
     {
-      "end": 4.12,
-      "start": 3.68,
+      "end": 3.52,
+      "start": 3.14,
       "word": "a"
     },
     {
-      "end": 4.62,
-      "start": 4.12,
+      "end": 3.96,
+      "start": 3.52,
       "word": "rebuildable"
     },
     {
-      "end": 5.0,
-      "start": 4.62,
+      "end": 4.3,
+      "start": 3.96,
       "word": "terminal"
     },
     {
-      "end": 5.4,
-      "start": 5.0,
+      "end": 4.64,
+      "start": 4.3,
       "word": "video"
     },
     {
-      "end": 6.28,
-      "start": 6.28,
-      "word": "Start"
-    },
-    {
-      "end": 6.5,
-      "start": 6.28,
+      "end": 5.06,
+      "start": 4.64,
       "word": "with"
     },
     {
-      "end": 6.7,
-      "start": 6.5,
-      "word": "the"
+      "end": 5.62,
+      "start": 5.06,
+      "word": "generated"
     },
     {
-      "end": 6.96,
-      "start": 6.7,
-      "word": "command"
+      "end": 6.16,
+      "start": 5.62,
+      "word": "voiceover"
     },
     {
-      "end": 7.24,
-      "start": 6.96,
-      "word": "line"
+      "end": 6.82,
+      "start": 6.78,
+      "word": "It"
     },
     {
-      "end": 7.54,
-      "start": 7.24,
+      "end": 6.92,
+      "start": 6.82,
+      "word": "is"
+    },
+    {
+      "end": 7.2,
+      "start": 6.92,
+      "word": "a"
+    },
+    {
+      "end": 7.4,
+      "start": 7.2,
+      "word": "Python"
+    },
+    {
+      "end": 7.7,
+      "start": 7.4,
       "word": "tool"
     },
     {
-      "end": 8.62,
-      "start": 8.62,
-      "word": "Install"
+      "end": 8.22,
+      "start": 7.88,
+      "word": "and"
     },
     {
-      "end": 8.84,
-      "start": 8.62,
-      "word": "the"
+      "end": 8.36,
+      "start": 8.22,
+      "word": "it"
     },
     {
-      "end": 9.2,
-      "start": 8.84,
-      "word": "package"
+      "end": 8.52,
+      "start": 8.36,
+      "word": "can"
     },
     {
-      "end": 10.14,
-      "start": 10.0,
-      "word": "The"
+      "end": 8.82,
+      "start": 8.52,
+      "word": "record"
     },
     {
-      "end": 10.52,
-      "start": 10.14,
+      "end": 9.26,
+      "start": 8.82,
+      "word": "any"
+    },
+    {
+      "end": 9.58,
+      "start": 9.26,
+      "word": "terminal"
+    },
+    {
+      "end": 10.0,
+      "start": 9.58,
+      "word": "workflow"
+    },
+    {
+      "end": 10.8,
+      "start": 10.7,
+      "word": "If"
+    },
+    {
+      "end": 10.98,
+      "start": 10.8,
+      "word": "your"
+    },
+    {
+      "end": 11.32,
+      "start": 10.98,
+      "word": "project"
+    },
+    {
+      "end": 11.56,
+      "start": 11.32,
+      "word": "does"
+    },
+    {
+      "end": 11.76,
+      "start": 11.56,
+      "word": "not"
+    },
+    {
+      "end": 12.04,
+      "start": 11.76,
+      "word": "already"
+    },
+    {
+      "end": 12.22,
+      "start": 12.04,
+      "word": "have"
+    },
+    {
+      "end": 12.68,
+      "start": 12.22,
+      "word": "a"
+    },
+    {
+      "end": 12.68,
+      "start": 12.68,
+      "word": "Python"
+    },
+    {
+      "end": 13.18,
+      "start": 12.68,
+      "word": "environment"
+    },
+    {
+      "end": 14.0,
+      "start": 14.0,
+      "word": "create"
+    },
+    {
+      "end": 14.26,
+      "start": 14.0,
+      "word": "one"
+    },
+    {
+      "end": 14.56,
+      "start": 14.26,
+      "word": "now"
+    },
+    {
+      "end": 15.44,
+      "start": 15.14,
+      "word": "Then"
+    },
+    {
+      "end": 15.98,
+      "start": 15.44,
       "word": "install"
     },
     {
-      "end": 11.0,
-      "start": 10.52,
-      "word": "provides"
-    },
-    {
-      "end": 11.36,
-      "start": 11.0,
-      "word": "the"
-    },
-    {
-      "end": 11.66,
-      "start": 11.36,
+      "end": 16.6,
+      "start": 15.98,
       "word": "Omegaflow"
     },
     {
-      "end": 12.16,
-      "start": 11.66,
+      "end": 17.38,
+      "start": 17.12,
+      "word": "The"
+    },
+    {
+      "end": 17.8,
+      "start": 17.38,
+      "word": "Omegaflow"
+    },
+    {
+      "end": 18.18,
+      "start": 17.8,
       "word": "command"
     },
     {
-      "end": 12.86,
-      "start": 12.16,
-      "word": "used"
+      "end": 18.42,
+      "start": 18.18,
+      "word": "is"
     },
     {
-      "end": 13.08,
-      "start": 12.86,
+      "end": 18.8,
+      "start": 18.42,
+      "word": "now"
+    },
+    {
+      "end": 18.84,
+      "start": 18.8,
+      "word": "ready"
+    },
+    {
+      "end": 19.04,
+      "start": 18.84,
       "word": "for"
     },
     {
-      "end": 13.32,
-      "start": 13.08,
+      "end": 19.26,
+      "start": 19.04,
       "word": "the"
     },
     {
-      "end": 13.38,
-      "start": 13.32,
+      "end": 19.32,
+      "start": 19.26,
       "word": "rest"
     },
     {
-      "end": 13.66,
-      "start": 13.38,
+      "end": 19.54,
+      "start": 19.32,
       "word": "of"
     },
     {
-      "end": 13.78,
-      "start": 13.66,
+      "end": 19.7,
+      "start": 19.54,
       "word": "the"
     },
     {
-      "end": 13.96,
-      "start": 13.78,
+      "end": 19.86,
+      "start": 19.7,
       "word": "workflow"
     }
   ]

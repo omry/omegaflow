@@ -9,8 +9,8 @@ import VideoPlayer from "@site/src/components/VideoPlayer";
 
 This repository includes one short showcase recording at
 `recordings/quickstart-demo/index.md`. It demonstrates the basic loop:
-bootstrap the default `quickstart` recording, build it, play it, and inspect the
-publish surface.
+bootstrap the default `quickstart` recording, build it, view it in a browser,
+and publish it with the docs.
 
 <!-- studio:quickstart-demo:start -->
 <VideoPlayer
@@ -37,11 +37,10 @@ line up with the script.
 
 ```bash
 omegaflow action=list
-omegaflow recording=quickstart-demo action=inspect
 omegaflow recording=quickstart-demo action=watch
 omegaflow recording=quickstart-demo action=check
 ```
 
 Use `action=watch` while editing a recording and `action=check` before
-publishing. The generated website assets live under
-`website/static/omegaflow-videos/`.
+publishing. OmegaFlow currently supports plain HTML and Docusaurus publish
+surfaces. The generated website assets live under `website/static/`.

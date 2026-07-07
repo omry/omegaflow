@@ -31,7 +31,7 @@ from omegaflow_studio.studio_config import (
 
 
 def test_version_is_available() -> None:
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.3.0"
 
 
 def test_package_installs_omegaflow_command() -> None:
@@ -1365,6 +1365,38 @@ def test_watch_player_url_path_allows_silent_recordings(tmp_path, monkeypatch) -
     assert "audio=" not in url_path
     assert "audioMeta=" not in url_path
     assert artifacts == {"cast": retimed_cast.resolve()}
+
+
+def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
+    class FakeServer:
+        server_port = 51234
+
+        def __init__(self, _address, _handler_factory) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> bool:
+            return False
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(studio.http.server, "ThreadingHTTPServer", FakeServer)
+    monkeypatch.setattr(studio, "open_watch_url", lambda _url: True)
+
+    status = studio.run_watch_server(
+        OmegaConf.create({"output_format": "text"}),
+        "/cast-player.html?cast=/__watch_artifact__/cast",
+        {"cast": Path("recording.cast")},
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert "serving local watch server: http://127.0.0.1:51234/" in output
+    assert "opened browser; press Ctrl-C to stop" in output
+    assert "stopped local watch server" in output
 
 
 def test_session_cleanup_failure_fails_run(tmp_path) -> None:

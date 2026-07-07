@@ -1,168 +1,178 @@
 {
-  "duration": 13.32,
+  "duration": 11.06,
   "recording": "quickstart-demo",
   "segment": "bootstrap",
-  "source_text": "Bootstrap creates the default recording workspace. Run the bootstrap command. It writes shared config, a recording Markdown file, and a support script. List the generated files. Then open the recording script.",
+  "source_text": "From your repository root, run bootstrap. It prepares the project for recording videos and creates a small demo recording script. You can inspect that script later, when you are ready to customize it.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Bootstrap creates the default recording workspace. Run the bootstrap command. It writes shared config, a recording markdown file, and a support script. List the generated files. Then open the recording script.",
+  "transcript": "From your repository root, run bootstrap. It prepares the project for recording videos and creates a small demo recording script. You can inspect that script later when you are ready to customize it.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.7,
+      "end": 0.32,
       "start": 0.0,
-      "word": "Bootstrap"
+      "word": "From"
     },
     {
-      "end": 1.22,
-      "start": 0.7,
-      "word": "creates"
+      "end": 0.52,
+      "start": 0.32,
+      "word": "your"
     },
     {
-      "end": 1.5,
-      "start": 1.22,
-      "word": "the"
+      "end": 1.0,
+      "start": 0.52,
+      "word": "repository"
     },
     {
-      "end": 1.88,
-      "start": 1.5,
-      "word": "default"
+      "end": 1.4,
+      "start": 1.0,
+      "word": "root"
     },
     {
-      "end": 2.32,
-      "start": 1.88,
-      "word": "recording"
+      "end": 1.96,
+      "start": 1.68,
+      "word": "run"
     },
     {
-      "end": 2.92,
-      "start": 2.32,
-      "word": "workspace"
-    },
-    {
-      "end": 3.64,
-      "start": 3.64,
-      "word": "Run"
-    },
-    {
-      "end": 3.84,
-      "start": 3.64,
-      "word": "the"
-    },
-    {
-      "end": 4.18,
-      "start": 3.84,
+      "end": 2.5,
+      "start": 1.96,
       "word": "bootstrap"
     },
     {
-      "end": 4.6,
-      "start": 4.18,
-      "word": "command"
-    },
-    {
-      "end": 5.2,
-      "start": 5.14,
+      "end": 2.94,
+      "start": 2.86,
       "word": "It"
     },
     {
-      "end": 5.44,
-      "start": 5.2,
-      "word": "writes"
+      "end": 3.26,
+      "start": 2.94,
+      "word": "prepares"
     },
     {
-      "end": 5.78,
-      "start": 5.44,
-      "word": "shared"
+      "end": 3.48,
+      "start": 3.26,
+      "word": "the"
     },
     {
-      "end": 6.24,
-      "start": 5.78,
-      "word": "config"
+      "end": 3.84,
+      "start": 3.48,
+      "word": "project"
     },
     {
-      "end": 6.86,
-      "start": 6.68,
-      "word": "a"
+      "end": 4.08,
+      "start": 3.84,
+      "word": "for"
     },
     {
-      "end": 7.14,
-      "start": 6.86,
+      "end": 4.4,
+      "start": 4.08,
       "word": "recording"
     },
     {
-      "end": 7.58,
-      "start": 7.14,
-      "word": "markdown"
+      "end": 4.82,
+      "start": 4.4,
+      "word": "videos"
     },
     {
-      "end": 7.88,
-      "start": 7.58,
-      "word": "file"
-    },
-    {
-      "end": 8.46,
-      "start": 8.24,
+      "end": 5.36,
+      "start": 4.82,
       "word": "and"
     },
     {
-      "end": 8.62,
-      "start": 8.46,
+      "end": 5.62,
+      "start": 5.36,
+      "word": "creates"
+    },
+    {
+      "end": 5.82,
+      "start": 5.62,
       "word": "a"
     },
     {
-      "end": 8.9,
-      "start": 8.62,
-      "word": "support"
+      "end": 6.04,
+      "start": 5.82,
+      "word": "small"
     },
     {
-      "end": 9.16,
-      "start": 8.9,
+      "end": 6.32,
+      "start": 6.04,
+      "word": "demo"
+    },
+    {
+      "end": 6.74,
+      "start": 6.32,
+      "word": "recording"
+    },
+    {
+      "end": 7.02,
+      "start": 6.74,
       "word": "script"
     },
     {
-      "end": 9.9,
-      "start": 9.9,
-      "word": "List"
+      "end": 7.96,
+      "start": 7.9,
+      "word": "You"
+    },
+    {
+      "end": 8.22,
+      "start": 7.96,
+      "word": "can"
+    },
+    {
+      "end": 8.48,
+      "start": 8.22,
+      "word": "inspect"
+    },
+    {
+      "end": 8.86,
+      "start": 8.48,
+      "word": "that"
+    },
+    {
+      "end": 8.98,
+      "start": 8.86,
+      "word": "script"
+    },
+    {
+      "end": 9.32,
+      "start": 8.98,
+      "word": "later"
+    },
+    {
+      "end": 9.8,
+      "start": 9.32,
+      "word": "when"
+    },
+    {
+      "end": 9.88,
+      "start": 9.8,
+      "word": "you"
+    },
+    {
+      "end": 10.14,
+      "start": 9.88,
+      "word": "are"
     },
     {
       "end": 10.2,
-      "start": 9.9,
-      "word": "the"
+      "start": 10.14,
+      "word": "ready"
     },
     {
       "end": 10.48,
       "start": 10.2,
-      "word": "generated"
+      "word": "to"
     },
     {
-      "end": 10.84,
+      "end": 10.68,
       "start": 10.48,
-      "word": "files"
+      "word": "customize"
     },
     {
-      "end": 11.62,
-      "start": 11.38,
-      "word": "Then"
-    },
-    {
-      "end": 12.06,
-      "start": 11.62,
-      "word": "open"
-    },
-    {
-      "end": 12.26,
-      "start": 12.06,
-      "word": "the"
-    },
-    {
-      "end": 12.62,
-      "start": 12.26,
-      "word": "recording"
-    },
-    {
-      "end": 12.9,
-      "start": 12.62,
-      "word": "script"
+      "end": 10.96,
+      "start": 10.68,
+      "word": "it"
     }
   ]
 }

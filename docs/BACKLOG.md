@@ -21,6 +21,107 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
+- [ ] `P1` Rename the Python module from `omegaflow_studio` to `omegaflow`.
+      The public tool and package are moving to OmegaFlow, but the importable
+      module still carries the old Studio name. Acceptance checks: rename
+      `src/omegaflow_studio` to the canonical `omegaflow` module; update entry
+      points, imports, tests, generated schema/docs paths, and packaging
+      metadata; search the repository for remaining `omegaflow_studio`
+      references; and either remove or deliberately explain any leftover
+      compatibility surface.
+
+- [ ] `P1` Add a proper CI action.
+      The project needs a first GitHub Actions workflow that protects the
+      package and docs surfaces before the first public PyPI release.
+      Acceptance checks: run the Python test suite, schema/documentation
+      generation checks, and package build checks on pull requests and pushes;
+      cache dependencies where useful; keep secrets out of normal CI; and make
+      failures easy to diagnose from the Actions summary.
+
+- [ ] `P1` Improve handling for missing `asciinema`.
+      Recording and terminal playback currently fail with a clear but bare
+      requirement error when `asciinema` 3.x is unavailable. First-run users
+      need a better path forward. Acceptance checks: report the missing or
+      incompatible `asciinema` version with an actionable install command for
+      common environments; document the dependency in quickstart and install
+      docs; consider whether OmegaFlow can vendor, bundle, or install a known
+      compatible `asciinema` binary/package as the preferred path; make the
+      tradeoff explicit if vendoring is not practical; and add tests for missing
+      command, old version, and happy-path version detection.
+
+- [ ] `P1` Add automatic garbage collection for old recording runs.
+      `recordings/.omegaflow/runs` can accumulate stale successful and failed
+      runs quickly. Run retention should be controlled by the Studio/tool
+      configuration, not by each recording script. Acceptance checks: add
+      tool-config fields for enabling run GC and choosing retention limits such
+      as count and/or age; apply GC after successful builds without deleting the
+      current run; preserve enough failed-run data for debugging according to
+      the configured policy; provide dry-run/reporting output for what would be
+      removed; document the defaults; and add tests that cover successful runs,
+      failed runs, current-run protection, and disabled GC.
+
+- [ ] `P1` Polish the generated recording viewing experience.
+      The current videos are pretty, but the pacing and terminal surface can
+      feel messy: some waits are too long, some command output is not useful to
+      viewers, and status/progress text can compete with the teaching content.
+      Acceptance checks: review a generated demo end to end and identify every
+      long pause, redundant line, noisy status block, and confusing transition;
+      decide which output should be hidden, summarized, or rendered as progress;
+      tune timing defaults or per-recording timing fields where the problem is
+      systemic; keep real-time output only where it adds trust or visual value;
+      update the quickstart demo as the primary fixture; and add regression
+      checks or docs so future recordings do not drift back into noisy output.
+
+- [ ] `P2` Bolster the README for the public OmegaFlow package.
+      The README should be ready for people arriving from GitHub or PyPI.
+      Acceptance checks: add useful badges, a concise product description,
+      install and quickstart commands, links to docs and the repo, and a short
+      explanation of generated videos; investigate whether the generated video
+      can be represented directly in GitHub Markdown, and if GitHub blocks
+      embedded video/HTML, choose the best fallback such as a thumbnail link,
+      GIF, SVG/terminal cast preview, or docs-site link.
+
+- [ ] `P1` Organize publishing output into one asset directory per video.
+      Published surfaces should not scatter a video's cast, audio, player data,
+      HTML, and support assets across unrelated paths. Acceptance checks: define
+      a canonical output directory for each recording/video id; write all
+      generated publish assets for that video under that directory; update
+      publish surface defaults and docs to point at the new layout; avoid
+      preserving duplicate legacy output paths unless a concrete compatibility
+      need is identified; and add tests that prove two videos do not overwrite
+      or share generated assets accidentally.
+
+- [ ] `P1` Export recordings to a standard video file.
+      OmegaFlow should be able to produce a shareable video artifact in addition
+      to the interactive terminal player surfaces. Acceptance checks: define a
+      first supported format, likely H.264 MP4 for broad compatibility; include
+      terminal playback and generated narration/audio when present; keep timing
+      consistent with the interactive player; place the exported file inside
+      the video's canonical asset directory; document any required system
+      dependencies such as browser capture or ffmpeg; and add a smoke test or
+      fixture-level validation that proves the export path produces a playable
+      media file.
+
+- [ ] `P2` Add support for selecting a thumbnail frame.
+      Published videos need a stable preview image for docs, GitHub fallbacks,
+      social cards, and standard video exports. Acceptance checks: add a
+      recording-level field for choosing the thumbnail frame by timestamp,
+      marker, or beat id; generate the thumbnail into the video's canonical
+      asset directory; use it in supported publish surfaces; provide a sensible
+      default when no thumbnail is configured; and add tests or fixture checks
+      that prove the selected frame is deterministic.
+
+- [ ] `P1` Support publishing OmegaFlow videos to GitHub surfaces.
+      Authors should have a GitHub-friendly way to share a generated recording,
+      ideally preserving the embedded OmegaFlow player where GitHub allows it.
+      Acceptance checks: identify which GitHub surfaces can host or link the
+      interactive player, such as GitHub Pages, release assets, PR comments, or
+      README Markdown; define the generated artifact layout and URLs for that
+      surface; provide the best README/Markdown fallback when GitHub strips
+      embedded HTML or JavaScript, such as a thumbnail link, GIF, or exported
+      MP4; document the tradeoffs clearly; and add a sample publish surface that
+      can be validated without requiring secrets in normal tests.
+
 - [ ] `P1` Document narration anchors, command `after`, and audio wait markers.
       The Beat page only mentions `@anchor@`, `@wait:name+1s@`, and `after` in
       field tables. Authors need a short explanation of how narration anchors

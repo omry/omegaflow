@@ -15,10 +15,14 @@ export default function Home() {
               <h1>Rebuildable terminal demos.</h1>
               <p className="homeHero__lede">
                 Write the terminal flow once, then rebuild the video whenever the docs change.
+                To learn more, start the tutorial or read the docs.
               </p>
               <div className="homeHero__actions">
                 <Link className="button button--primary button--lg" to="/tutorial/quickstart">
                   Start the tutorial
+                </Link>
+                <Link className="button button--lg homeHero__docsButton" to="/intro">
+                  Read the docs
                 </Link>
               </div>
             </div>

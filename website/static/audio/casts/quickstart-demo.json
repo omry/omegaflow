@@ -1,39 +1,56 @@
 {
   "audio": "website/static/audio/casts/quickstart-demo.mp3",
-  "duration": 64.752,
+  "duration": 62.088,
   "recording": "quickstart-demo",
   "segments": [
     {
       "anchors": [
         {
+          "id": "python_env",
+          "marker": "@python_env@",
+          "text_offset": 225
+        },
+        {
           "id": "install",
           "marker": "@install@",
-          "text_offset": 78
+          "text_offset": 246
         }
       ],
-      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/install-b7db15a1c775f63b.mp3",
-      "duration": 14.208,
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/install-61ebe51f61b12fdc.mp3",
+      "duration": 20.4,
       "guide": {
         "commands": [
+          "python -m venv .venv",
+          "source .venv/bin/activate",
           "python -m pip install omegaflow"
         ],
-        "success_hint": "The install provides the omegaflow command."
+        "success_hint": "Use an existing Python environment when your project already has one."
       },
       "heading": "Install The CLI",
       "id": "install",
       "offset": 0.0,
-      "text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the omegaflow command used for the rest of the workflow.",
+      "text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video with generated voiceover. It is a Python tool, and it can record any terminal workflow. If your project does not already have a Python environment, create one now. Then install OmegaFlow. The omegaflow command is now ready for the rest of the workflow.",
       "timestamps": "website/static/audio/casts/quickstart-demo.install.timestamps.json",
       "waits": [
         {
-          "audio_second": 14.208,
+          "audio_second": 15.14,
+          "gap_seconds": 0.3,
+          "marker": "@wait:env_command+300ms@",
+          "pause_seconds": 0.84,
+          "presentation_end": 16.022,
+          "presentation_start": 15.182,
+          "target": "env_command",
+          "text_offset": 241
+        },
+        {
+          "audio_second": 17.12,
           "gap_seconds": 0.3,
           "marker": "@wait:install_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 14.255,
-          "presentation_start": 14.255,
+          "presentation_end": 18.002,
+          "presentation_start": 18.002,
           "target": "install_command",
-          "text_offset": 211
+          "text_offset": 265
         }
       ]
     },
@@ -42,44 +59,32 @@
         {
           "id": "bootstrap",
           "marker": "@bootstrap@",
-          "text_offset": 50
-        },
-        {
-          "id": "list_files",
-          "marker": "@list_files@",
-          "text_offset": 151
-        },
-        {
-          "id": "show_script",
-          "marker": "@show_script@",
-          "text_offset": 209
+          "text_offset": 26
         }
       ],
-      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/bootstrap-68711cb754a87531.mp3",
-      "duration": 13.32,
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/bootstrap-f91d11cf2e40397f.mp3",
+      "duration": 11.064,
       "guide": {
         "commands": [
-          "omegaflow action=bootstrap",
-          "tree -a .",
-          "sed -n '1,85p' recordings/quickstart/index.md"
+          "omegaflow action=bootstrap"
         ],
-        "success_hint": "Bootstrap writes tool config, a recording directory, and a local support script."
+        "success_hint": "Look at the generated recording script later when you are ready to customize it."
       },
       "heading": "Bootstrap Quickstart",
       "id": "bootstrap",
-      "offset": 14.208,
-      "text": "Bootstrap creates the default recording workspace. Run the bootstrap command. It writes shared config, a recording Markdown file, and a support script. List the generated files. Then open the recording script.",
+      "offset": 20.4,
+      "text": "From your repository root, run bootstrap. It prepares the project for recording videos and creates a small demo recording script. You can inspect that script later, when you are ready to customize it.",
       "timestamps": "website/static/audio/casts/quickstart-demo.bootstrap.timestamps.json",
       "waits": [
         {
-          "audio_second": 13.32,
+          "audio_second": 7.9,
           "gap_seconds": 0.3,
-          "marker": "@wait:show_script+300ms@",
-          "pause_seconds": 1.96,
-          "presentation_end": 29.535,
-          "presentation_start": 27.575,
-          "target": "show_script",
-          "text_offset": 209
+          "marker": "@wait:bootstrap_run+300ms@",
+          "pause_seconds": 0.0,
+          "presentation_end": 29.182,
+          "presentation_start": 29.182,
+          "target": "bootstrap_run",
+          "text_offset": 129
         }
       ]
     },
@@ -88,100 +93,66 @@
         {
           "id": "build",
           "marker": "@build@",
-          "text_offset": 34
+          "text_offset": 0
         }
       ],
-      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/build-955e338c86b5a43b.mp3",
-      "duration": 11.76,
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/build-9a0392bf92399582.mp3",
+      "duration": 8.904,
       "guide": {
         "commands": [
           "omegaflow recording=quickstart action=build"
         ],
-        "success_hint": "The build writes a retimed cast and standalone HTML surface."
+        "success_hint": "The generated video is ready to play."
       },
       "heading": "Build The Video",
       "id": "build",
-      "offset": 27.528,
-      "text": "Now build the generated recording. The build command records the terminal cast. After recording, OmegaFlow retimes the cast, checks alignment, and writes the configured publish surface.",
+      "offset": 31.464,
+      "text": "Run the OmegaFlow build command to generate the recording. OmegaFlow records the script, retimes the cast, and packages the browser player.",
       "timestamps": "website/static/audio/casts/quickstart-demo.build.timestamps.json",
       "waits": [
         {
-          "audio_second": 11.76,
+          "audio_second": 8.904,
           "gap_seconds": 0.3,
           "marker": "@wait:build_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 41.596,
-          "presentation_start": 41.596,
+          "presentation_end": 41.25,
+          "presentation_start": 41.25,
           "target": "build_command",
-          "text_offset": 185
+          "text_offset": 139
         }
       ]
     },
     {
       "anchors": [
         {
-          "id": "play",
-          "marker": "@play@",
-          "text_offset": 44
+          "id": "watch",
+          "marker": "@watch@",
+          "text_offset": 21
         }
       ],
-      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/play-88541096c7acb7cb.mp3",
-      "duration": 11.4,
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/view-and-publish-3a68f30da373727b.mp3",
+      "duration": 21.72,
       "guide": {
         "commands": [
-          "omegaflow recording=quickstart action=play"
+          "omegaflow recording=quickstart action=watch"
         ],
-        "success_hint": "The terminal should replay the generated cast."
+        "success_hint": "Use publish surfaces when the video should live with docs."
       },
-      "heading": "Play It In The Terminal",
-      "id": "play",
-      "offset": 39.288,
-      "text": "Review the result without opening a browser. The play action replays the retimed asciinema cast directly in the terminal. The generated video is now ready to inspect or publish.",
-      "timestamps": "website/static/audio/casts/quickstart-demo.play.timestamps.json",
+      "heading": "View And Publish",
+      "id": "view-and-publish",
+      "offset": 40.368,
+      "text": "To review the result, run action equals watch. OmegaFlow starts a local server and opens the recording in your browser when a graphical browser is available. If it cannot open the browser, it prints the URL instead. For publishing, OmegaFlow currently supports plain HTML and Docusaurus documentation pages. To learn more, start the tutorial or read the docs.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.view-and-publish.timestamps.json",
       "waits": [
         {
-          "audio_second": 11.4,
+          "audio_second": 12.74,
           "gap_seconds": 0.3,
-          "marker": "@wait:play_command+300ms@",
+          "marker": "@wait:watch_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 52.996,
-          "presentation_start": 52.996,
-          "target": "play_command",
-          "text_offset": 177
-        }
-      ]
-    },
-    {
-      "anchors": [
-        {
-          "id": "inspect",
-          "marker": "@inspect@",
-          "text_offset": 37
-        }
-      ],
-      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/publish-f767080e050efefd.mp3",
-      "duration": 14.064,
-      "guide": {
-        "commands": [
-          "omegaflow recording=quickstart action=build dry_run=true"
-        ],
-        "success_hint": "The dry run lists the configured publish surface."
-      },
-      "heading": "Inspect Publish Surfaces",
-      "id": "publish",
-      "offset": 50.688,
-      "text": "Finally, inspect the publish surface. A dry run shows the build plan without recording a new cast. The generated quickstart starts with standalone HTML, and other recordings can publish into docs pages.",
-      "timestamps": "website/static/audio/casts/quickstart-demo.publish.timestamps.json",
-      "waits": [
-        {
-          "audio_second": 14.064,
-          "gap_seconds": 0.3,
-          "marker": "@wait:inspect_command+300ms@",
-          "pause_seconds": 0.0,
-          "presentation_end": 67.06,
-          "presentation_start": 67.06,
-          "target": "inspect_command",
-          "text_offset": 202
+          "presentation_end": 53.99,
+          "presentation_start": 53.99,
+          "target": "watch_command",
+          "text_offset": 215
         }
       ]
     }

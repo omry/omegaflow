@@ -2066,7 +2066,7 @@ def run_watch_server(
         url = f"http://{WATCH_HOST}:{server.server_port}{url_path}"
         if text_output_enabled(cfg):
             step_line("watch recording")
-            pass_line(f"serving local player: {url}")
+            pass_line(f"serving local watch server: {url}")
         opened = open_watch_url(url)
         if text_output_enabled(cfg):
             if opened:
@@ -2077,7 +2077,7 @@ def run_watch_server(
             server.serve_forever()
         except KeyboardInterrupt:
             if text_output_enabled(cfg):
-                info_line("stopped local player")
+                info_line("stopped local watch server")
     return 0
 
 

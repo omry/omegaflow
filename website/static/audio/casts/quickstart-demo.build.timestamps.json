@@ -1,143 +1,118 @@
 {
-  "duration": 11.76,
+  "duration": 8.9,
   "recording": "quickstart-demo",
   "segment": "build",
-  "source_text": "Now build the generated recording. The build command records the terminal cast. After recording, OmegaFlow retimes the cast, checks alignment, and writes the configured publish surface.",
+  "source_text": "Run the OmegaFlow build command to generate the recording. OmegaFlow records the script, retimes the cast, and packages the browser player.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Now build the generated recording. The build command records the terminal cast. After recording, Omegaflow retons the cast, checks alignment, and writes the configured published surface.",
+  "transcript": "Run the omegaflow build command to generate the recording. Omegaflow records the script, retimes the cast, and packages the browser player.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.42,
+      "end": 0.4,
       "start": 0.0,
-      "word": "Now"
+      "word": "Run"
     },
     {
-      "end": 0.84,
-      "start": 0.42,
-      "word": "build"
-    },
-    {
-      "end": 1.14,
-      "start": 0.84,
+      "end": 0.76,
+      "start": 0.4,
       "word": "the"
     },
     {
-      "end": 1.58,
-      "start": 1.14,
-      "word": "generated"
+      "end": 1.2,
+      "start": 0.76,
+      "word": "omegaflow"
     },
     {
-      "end": 2.06,
-      "start": 1.58,
-      "word": "recording"
-    },
-    {
-      "end": 2.64,
-      "start": 2.54,
-      "word": "The"
-    },
-    {
-      "end": 2.88,
-      "start": 2.64,
+      "end": 1.54,
+      "start": 1.2,
       "word": "build"
     },
     {
-      "end": 3.3,
-      "start": 2.88,
+      "end": 1.94,
+      "start": 1.54,
       "word": "command"
     },
     {
-      "end": 3.76,
-      "start": 3.3,
-      "word": "records"
+      "end": 2.4,
+      "start": 1.94,
+      "word": "to"
     },
     {
-      "end": 4.06,
-      "start": 3.76,
+      "end": 2.7,
+      "start": 2.4,
+      "word": "generate"
+    },
+    {
+      "end": 2.92,
+      "start": 2.7,
       "word": "the"
     },
     {
-      "end": 4.32,
-      "start": 4.06,
-      "word": "terminal"
-    },
-    {
-      "end": 4.78,
-      "start": 4.32,
-      "word": "cast"
-    },
-    {
-      "end": 5.6,
-      "start": 5.44,
-      "word": "After"
-    },
-    {
-      "end": 6.12,
-      "start": 5.6,
+      "end": 3.28,
+      "start": 2.92,
       "word": "recording"
     },
     {
-      "end": 7.06,
-      "start": 6.68,
+      "end": 4.46,
+      "start": 4.14,
       "word": "Omegaflow"
     },
     {
-      "end": 7.52,
-      "start": 7.06,
-      "word": "retons"
+      "end": 4.92,
+      "start": 4.46,
+      "word": "records"
     },
     {
-      "end": 8.08,
-      "start": 7.52,
+      "end": 5.46,
+      "start": 4.92,
       "word": "the"
     },
     {
-      "end": 8.08,
-      "start": 8.08,
+      "end": 5.46,
+      "start": 5.46,
+      "word": "script"
+    },
+    {
+      "end": 6.3,
+      "start": 6.04,
+      "word": "retimes"
+    },
+    {
+      "end": 6.48,
+      "start": 6.3,
+      "word": "the"
+    },
+    {
+      "end": 6.84,
+      "start": 6.48,
       "word": "cast"
     },
     {
-      "end": 8.72,
-      "start": 8.72,
-      "word": "checks"
-    },
-    {
-      "end": 9.16,
-      "start": 8.72,
-      "word": "alignment"
-    },
-    {
-      "end": 9.78,
-      "start": 9.58,
+      "end": 7.56,
+      "start": 7.26,
       "word": "and"
     },
     {
-      "end": 9.98,
-      "start": 9.78,
-      "word": "writes"
+      "end": 7.76,
+      "start": 7.56,
+      "word": "packages"
     },
     {
-      "end": 10.34,
-      "start": 9.98,
+      "end": 8.08,
+      "start": 7.76,
       "word": "the"
     },
     {
-      "end": 10.64,
-      "start": 10.34,
-      "word": "configured"
+      "end": 8.34,
+      "start": 8.08,
+      "word": "browser"
     },
     {
-      "end": 11.14,
-      "start": 10.64,
-      "word": "published"
-    },
-    {
-      "end": 11.54,
-      "start": 11.14,
-      "word": "surface"
+      "end": 8.68,
+      "start": 8.34,
+      "word": "player"
     }
   ]
 }
