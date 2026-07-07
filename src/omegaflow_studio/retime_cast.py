@@ -1999,6 +1999,10 @@ def schedule_typing(
     return local_time
 
 
+def terminal_line_endings(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+
+
 def schedule_command_output(
     *,
     scheduled: list[ScheduledEvent],
@@ -2012,6 +2016,7 @@ def schedule_command_output(
         fake_output = command.fake_output
         if fake_output and not fake_output.endswith("\n"):
             fake_output = f"{fake_output}\n"
+        fake_output = terminal_line_endings(fake_output)
         if not fake_output:
             return output_start
         scheduled.append(

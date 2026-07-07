@@ -111,16 +111,6 @@ beat:
       display: omegaflow action=bootstrap
       after: "@bootstrap@"
       pre_command_pause: 0.45
-      output:
-        mode: fake
-        text: |
-          workspace recordings
-          created .omegaflow/config.yaml
-          created recordings/config.yaml
-          created recordings/quickstart/index.md
-          created recordings/quickstart/scripts/hello.sh
-
-          next    omegaflow recording=quickstart action=build
       expect:
         file_exists:
         - /tmp/omegaflow-quickstart-demo/.omegaflow/config.yaml

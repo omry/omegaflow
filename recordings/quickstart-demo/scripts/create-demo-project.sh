@@ -8,4 +8,4 @@ rm -rf "$demo_dir"
 mkdir -p "$demo_dir"
 cd "$demo_dir"
 
-"$repo_root/.venv/bin/omegaflow" action=bootstrap force=true
+"$repo_root/.venv/bin/omegaflow" action=bootstrap

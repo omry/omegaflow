@@ -2,7 +2,7 @@
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "48ae8960c15ec2df8f2752a157907a9458e12970e08d1c37c66084bb0f8e839d"
+      "sha256": "01efbdfa43e5ed360de7d4ce5419311a60790ada334e9c1b7f869e23d25f3da5"
     },
     {
       "path": "src/omegaflow_studio/record.py",
@@ -17,8 +17,8 @@
       "sha256": "d8d1c06fe875e2185b8d63ca29cb4a8dca5dffb1c201204813d360e0259d3f2d"
     }
   ],
-  "fingerprint": "20b069bbcfaf6121dc9aea5da796560033022a1a1d2db94f501f9558b12bb9aa",
+  "fingerprint": "1e1e3c024ad6dcecb8bfdcfb3cac8c80a8b232fd8f6dacb1aab4ee4671dafe84",
   "recording": "quickstart-demo",
-  "spec_sha256": "c96c10a54b2aefffa913a432672c3af1ffed69ea3c2b28d99431cc15585d6ae6",
+  "spec_sha256": "92e50d7dbadf9f973319d08e5a83d422fdada438f0d0daee803f9f262f8c1cbd",
   "version": 2
 }

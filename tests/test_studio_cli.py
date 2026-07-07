@@ -1790,3 +1790,48 @@ def test_adjusted_audio_seconds_can_start_command_at_same_second_as_wait() -> No
 
     assert command_start == 2.0
     assert after_wait == 11.3
+
+
+def fake_presentation_command(*, fake_output: str) -> retime_cast.PresentationCommand:
+    interval = retime_cast.TimelineInterval(
+        start=0.0,
+        end=0.0,
+        start_event={},
+        end_event={},
+    )
+    return retime_cast.PresentationCommand(
+        key=("beat", "action", "command"),
+        prompt_interval=interval,
+        run_interval=interval,
+        prompt_payload="$ command",
+        output_mode="fake",
+        fake_output=fake_output,
+        timing="presentation",
+        output_span=retime_cast.OutputSpan(events=()),
+    )
+
+
+def test_fake_output_uses_terminal_line_endings() -> None:
+    scheduled: list[retime_cast.ScheduledEvent] = []
+
+    retime_cast.schedule_command_output(
+        scheduled=scheduled,
+        command=fake_presentation_command(fake_output="one\ntwo\n"),
+        output_start=1.0,
+        order=2.0,
+    )
+
+    assert scheduled[0].payload == "one\r\ntwo\r\n"
+
+
+def test_fake_output_preserves_existing_terminal_line_endings() -> None:
+    scheduled: list[retime_cast.ScheduledEvent] = []
+
+    retime_cast.schedule_command_output(
+        scheduled=scheduled,
+        command=fake_presentation_command(fake_output="one\r\ntwo\r\n"),
+        output_start=1.0,
+        order=2.0,
+    )
+
+    assert scheduled[0].payload == "one\r\ntwo\r\n"

@@ -36,8 +36,8 @@
           "gap_seconds": 0.3,
           "marker": "@wait:env_command+300ms@",
           "pause_seconds": 0.94,
-          "presentation_end": 14.603,
-          "presentation_start": 13.663,
+          "presentation_end": 14.602,
+          "presentation_start": 13.662,
           "target": "env_command",
           "text_offset": 210
         },
@@ -46,8 +46,8 @@
           "gap_seconds": 0.3,
           "marker": "@wait:install_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 16.503,
-          "presentation_start": 16.503,
+          "presentation_end": 16.502,
+          "presentation_start": 16.502,
           "target": "install_command",
           "text_offset": 234
         }
@@ -79,8 +79,8 @@
           "gap_seconds": 0.3,
           "marker": "@wait:bootstrap_run+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 27.711,
-          "presentation_start": 27.711,
+          "presentation_end": 27.71,
+          "presentation_start": 27.71,
           "target": "bootstrap_run",
           "text_offset": 112
         }
@@ -112,8 +112,8 @@
           "gap_seconds": 0.3,
           "marker": "@wait:build_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 44.351,
-          "presentation_start": 44.351,
+          "presentation_end": 44.35,
+          "presentation_start": 44.35,
           "target": "build_command",
           "text_offset": 139
         }
@@ -145,8 +145,8 @@
           "gap_seconds": 0.3,
           "marker": "@wait:watch_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 55.411,
-          "presentation_start": 55.411,
+          "presentation_end": 55.41,
+          "presentation_start": 55.41,
           "target": "watch_command",
           "text_offset": 195
         }
