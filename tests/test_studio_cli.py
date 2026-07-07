@@ -822,6 +822,209 @@ beat:
     assert spec["beats"][0]["id"] == "hello"
 
 
+def test_rec_from_tool_config_overrides_recording_spec(
+    tmp_path,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+capture:
+  headless: true
+  window_size: 80x20
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_spec_from_config(
+        {
+            "recording": "hello",
+            "studio": {"recording_dir": str(recordings_dir)},
+            "rec": {
+                "capture": {
+                    "headless": False,
+                    "window_size": "120x32",
+                },
+            },
+        },
+        recording_id=None,
+        overrides=("rec.capture.headless=false",),
+    )
+
+    assert spec["capture"]["headless"] is False
+    assert spec["capture"]["window_size"] == "120x32"
+
+
+def test_rec_overrides_are_applied_before_recording_interpolations(
+    tmp_path,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+outputs:
+  dir: site/videos
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_spec_from_config(
+        {
+            "recording": "hello",
+            "studio": {"recording_dir": str(recordings_dir)},
+            "rec": {"outputs": {"dir": "preview/videos"}},
+        },
+        recording_id=None,
+        overrides=("rec.outputs.dir=preview/videos",),
+    )
+
+    assert spec["outputs"]["dir"] == "preview/videos"
+    assert spec["outputs"]["asset_dir"] == "preview/videos/hello"
+    assert spec["outputs"]["cast"] == "preview/videos/hello/recording.cast"
+
+
+def test_rec_rejects_non_mapping(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    try:
+        recording_spec_from_config(
+            {
+                "recording": "hello",
+                "studio": {"recording_dir": str(recordings_dir)},
+                "rec": "capture.headless=false",
+            },
+            recording_id=None,
+            overrides=(),
+        )
+    except StudioConfigError as exc:
+        assert "rec must be a mapping" in str(exc)
+    else:
+        raise AssertionError("expected StudioConfigError")
+
+
+def test_rec_rejects_identity_and_generated_fields(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    try:
+        recording_spec_from_config(
+            {
+                "recording": "hello",
+                "studio": {"recording_dir": str(recordings_dir)},
+                "rec": {"id": "other", "script": "other/index.md"},
+            },
+            recording_id=None,
+            overrides=(),
+        )
+    except StudioConfigError as exc:
+        assert "rec cannot override recording identity/generated fields" in str(exc)
+        assert "id" in str(exc)
+        assert "script" in str(exc)
+    else:
+        raise AssertionError("expected StudioConfigError")
+
+
+def test_compose_accepts_nested_rec_overrides() -> None:
+    config = compose_studio_config(
+        "quickstart-demo",
+        overrides=("rec.capture.headless=false",),
+    )
+
+    assert config["recording"] == "quickstart-demo"
+    assert config["rec"]["capture"]["headless"] is False
+
+
+def test_cli_rec_overrides_are_normalized_for_hydra() -> None:
+    assert studio.normalize_cli_rec_overrides(
+        [
+            "omegaflow",
+            "recording=quickstart-demo",
+            "rec.capture.headless=false",
+            "+rec.audio.enabled=false",
+        ]
+    ) == [
+        "omegaflow",
+        "recording=quickstart-demo",
+        "+rec.capture.headless=false",
+        "+rec.audio.enabled=false",
+    ]
+
+
 def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()

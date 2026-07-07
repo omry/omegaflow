@@ -2307,12 +2307,19 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     raise StudioError(f"unknown omegaflow action: {action}")
 
 
+def normalize_cli_rec_overrides(argv: list[str]) -> list[str]:
+    return [
+        f"+{arg}" if arg.startswith("rec.") and "=" in arg else arg
+        for arg in argv
+    ]
+
+
 @hydra.main(
     version_base=None,
     config_path=str(CONFIG_DIR),
     config_name=STUDIO_CONFIG_NAME,
 )
-def main(cfg: DictConfig) -> None:
+def hydra_main(cfg: DictConfig) -> None:
     use_color = record.host_color_enabled(sys.stderr)
     try:
         raise SystemExit(run_tool_from_hydra_cfg(cfg))
@@ -2342,6 +2349,11 @@ def main(cfg: DictConfig) -> None:
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
+
+
+def main() -> None:
+    sys.argv[:] = normalize_cli_rec_overrides(sys.argv)
+    hydra_main()
 
 
 if __name__ == "__main__":

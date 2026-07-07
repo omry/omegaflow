@@ -15,6 +15,7 @@ OmegaFlow builds the final recording config in this order:
 1. Schema default values.
 2. `<recording-dir>/config.yaml`, the workspace defaults for recordings.
 3. The per-recording config block in `<recording-dir>/<id>/index.md` frontmatter.
+4. CLI `rec.*` overrides, such as `rec.capture.headless=false`.
 
 Later layers override earlier layers. `id` and `title` are recording identity
 fields; they belong in frontmatter and are rejected in workspace `config.yaml`.
@@ -22,6 +23,23 @@ fields; they belong in frontmatter and are rejected in workspace `config.yaml`.
 This page starts after OmegaFlow has selected the recording workspace. Tool-level
 settings such as which directory to use are documented in
 [OmegaFlow Configuration](../configuration.md).
+
+## Command Line Overrides
+
+Use `rec.*` CLI overrides for temporary changes to the resolved recording config:
+
+```bash
+omegaflow recording=hello rec.capture.headless=false
+omegaflow recording=hello rec.style.typing=false
+omegaflow recording=hello rec.audio.enabled=false
+```
+
+`rec.*` overrides are merged after frontmatter, so they can override values from
+both `config.yaml` and the recording header. They are best for scalar values and
+small config maps. For larger recording structure such as beats, commands, and
+narration, edit the recording Markdown file instead. Recording identity and
+generated fields such as `id`, `title`, and `script` cannot be overridden with
+`rec.*`.
 
 ## Composition And Interpolation
 

@@ -33,8 +33,8 @@ The local file is optional, but bootstrap creates it.
 
 ## Project Config File
 
-A project-owned OmegaFlow config is a small Hydra config fragment. Put only the
-fields your project wants to override:
+A project-owned OmegaFlow config should contain only the fields your project
+wants to override:
 
 ```yaml
 studio:
@@ -42,20 +42,15 @@ studio:
   data_dir: recordings/.omegaflow
 ```
 
-The bundled `base-config.yaml` owns the schema, Hydra logging defaults, Hydra
-run directory, and the search path that discovers the local file:
+OmegaFlow looks for `.omegaflow/config.yaml` in the current project. The file is
+optional, and `omegaflow action=bootstrap` creates it for new projects.
 
-```yaml
-defaults:
-  - studio_schema
-  - _self_
-  - optional /.omegaflow@_here_: config
-  - override hydra/job_logging: disabled
-  - override hydra/hydra_logging: disabled
+Use the file for project defaults that should be shared by everyone working in
+the repository. Use CLI overrides for one-off changes:
 
-hydra:
-  searchpath:
-    - file://.
+```bash
+omegaflow action=list studio.recording_dir=demos
+omegaflow recording=hello rec.capture.headless=false
 ```
 
 ## Common Fields
@@ -70,19 +65,8 @@ hydra:
 | `env_override` | Allows values from `env_file` to replace existing environment variables. |
 | `workspace` | Bootstrap-only destination for `action=bootstrap`; defaults to `studio.recording_dir`. |
 | `dry_run` | Preview without writing. For bootstrap, use `dry_run=true` to list generated files or `dry_run=diff` to show unified diffs. |
+| `rec` | Recording config overrides merged on top of the selected recording. CLI shorthand such as `rec.capture.headless=false` is supported. |
 
 Recording defaults such as capture style, audio generation, publish surfaces,
 beats, setup, and cleanup belong in the recording workspace. See
 [Recording Configuration](./recording-files/config.md).
-
-## How The Local File Is Found
-
-[Hydra](https://hydra.cc/) can only mark config group options as optional, so
-the base config adds the current directory to the search path, treats
-`.omegaflow/config.yaml` as the `config` option in the hidden
-`.omegaflow` group, and merges it back into the root package with
-`@_here_`.
-
-Relative `file://` search path entries are resolved from the current working
-directory, so `$PWD/.omegaflow/config.yaml` is the project-local OmegaFlow
-config.

@@ -224,6 +224,7 @@ class StudioConfig:
     workspace: str | None = None
     studio: StudioRuntimeConfig = field(default_factory=StudioRuntimeConfig)
     script_params: Any = field(default_factory=dict)
+    rec: Any = field(default_factory=dict)
     recording: str | None = None
 
 
@@ -416,6 +417,10 @@ class RecordingSpec(RecordingDefaults):
     script: str | None = None
 
 
+RECORDING_IDENTITY_FIELDS = {"id", "title"}
+RECORDING_GENERATED_FIELDS = {"script"}
+
+
 @dataclass
 class StudioDirectiveScene:
     title: str | None = None
@@ -496,6 +501,8 @@ def validate_recording_id(recording_id: str) -> str:
 
 
 def normalize_hydra_override(override: str) -> str:
+    if override.startswith("rec.") and "=" in override:
+        override = "+" + override
     if override.count("=") <= 1:
         return override
     key, value = override.split("=", 1)
@@ -680,7 +687,7 @@ def load_recording_defaults(script_dir: Path) -> dict[str, Any]:
         config_path.read_text(encoding="utf-8"),
         source=str(config_path),
     )
-    identity_keys = sorted({"id", "title"} & set(defaults))
+    identity_keys = sorted(RECORDING_IDENTITY_FIELDS & set(defaults))
     if identity_keys:
         raise StudioConfigError(
             f"{config_path} cannot define recording identity fields: "
@@ -1183,6 +1190,7 @@ def recording_script_path(
 def recording_from_script(
     recording_id: str,
     recording_dir: Path | None = None,
+    overrides: object = None,
 ) -> dict[str, Any]:
     workspace_dir = recording_dir or RECORDING_SCRIPT_DIR
     script_path = recording_script_path(recording_id, recording_dir=workspace_dir)
@@ -1215,6 +1223,11 @@ def recording_from_script(
         recording_id=recording_id,
         script_path=script_path,
         blocks=blocks,
+    )
+    spec = apply_recording_overrides(
+        spec,
+        overrides,
+        source=f"recording {recording_id} overrides",
     )
     spec = resolve_recording_spec_interpolations(spec)
     validate_recording_inline_run_lengths(spec)
@@ -1256,6 +1269,41 @@ def resolved_script_parameters(
     return merge_mapping(defaults, overrides)
 
 
+def apply_recording_overrides(
+    spec: dict[str, Any],
+    overrides: object,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    if overrides is None:
+        return spec
+    if not isinstance(overrides, dict):
+        raise StudioConfigError("rec must be a mapping")
+    if not overrides:
+        return spec
+    forbidden_keys = sorted(
+        (RECORDING_IDENTITY_FIELDS | RECORDING_GENERATED_FIELDS) & set(overrides)
+    )
+    if forbidden_keys:
+        raise StudioConfigError(
+            "rec cannot override recording identity/generated fields: "
+            + ", ".join(forbidden_keys)
+        )
+    try:
+        config = OmegaConf.merge(OmegaConf.create(spec), OmegaConf.create(overrides))
+        value = OmegaConf.to_container(config, resolve=False, enum_to_str=True)
+    except OmegaConfBaseException as exc:
+        raise StudioConfigError(f"invalid rec override: {exc}") from exc
+    if not isinstance(value, dict):
+        raise StudioConfigError("rec must merge to a mapping")
+    validate_config_keys(
+        {key: item for key, item in value.items() if not key.startswith("_")},
+        schema=RecordingSpec,
+        source=source,
+    )
+    return value
+
+
 def recording_spec_from_config(
     config: dict[str, Any],
     *,
@@ -1265,7 +1313,11 @@ def recording_spec_from_config(
 ) -> dict[str, Any]:
     resolved_recording_id = recording_id_from_config(config, recording_id)
     recording_dir = recording_script_dir_from_config(config)
-    spec = recording_from_script(resolved_recording_id, recording_dir=recording_dir)
+    spec = recording_from_script(
+        resolved_recording_id,
+        recording_dir=recording_dir,
+        overrides=config.get("rec", {}),
+    )
 
     validate_config_keys(
         {key: value for key, value in spec.items() if not key.startswith("_")},
