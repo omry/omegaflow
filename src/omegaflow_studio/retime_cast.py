@@ -2067,10 +2067,13 @@ def adjusted_audio_seconds(
     beat_start: float,
     beat_id: str,
     wait_windows: dict[str, dict[str, Any]] | None = None,
+    include_boundary_waits: bool = True,
 ) -> float:
     pause_seconds = 0.0
     for wait in timing.waits:
-        if wait.seconds > base_seconds:
+        if wait.seconds > base_seconds or (
+            not include_boundary_waits and wait.seconds >= base_seconds
+        ):
             continue
         target_end = command_end_by_id.get(wait.target)
         if target_end is None:
@@ -2204,6 +2207,7 @@ def schedule_presentation_beats(
                         beat_start=beat_start,
                         beat_id=beat.beat,
                         wait_windows=wait_windows,
+                        include_boundary_waits=False,
                     )
                 command_start = max(command_start, beat_start + anchor_seconds)
             command_text = str(command.prompt_interval.start_event.get("command", ""))
@@ -2557,10 +2561,12 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
             raise RetimeError("action must be 'retime' or 'check'")
         cast_override = config.get("cast")
         timeline_override = config.get("timeline")
+        audio_metadata_override = config.get("audio_metadata")
         output_override = config.get("output")
         for name, value in [
             ("cast", cast_override),
             ("timeline", timeline_override),
+            ("audio_metadata", audio_metadata_override),
             ("output", output_override),
         ]:
             if value is not None and not isinstance(value, str):
@@ -2580,7 +2586,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
             if output_override
             else output_path_from_manifest(spec, cast_path)
         )
-        audio_metadata_path = audio_metadata_path_from_manifest(spec)
+        audio_metadata_path = (
+            relative_path(audio_metadata_override)
+            if audio_metadata_override
+            else audio_metadata_path_from_manifest(spec)
+        )
         audio_timings = read_audio_segment_timings(audio_metadata_path)
         rules = timing_rules_from_manifest(spec)
         header, events = read_cast(cast_path)

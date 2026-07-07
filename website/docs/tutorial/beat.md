@@ -7,4 +7,4 @@ sidebar_label: Beat
 
 This chapter will introduce beats as the unit of explanation and playback.
 
-Recording: `recordings/tutorial/beat/omegaflow.md`
+Recording: `recordings/tutorial/beat/index.md`

@@ -7,10 +7,10 @@ slug: /recording-files
 # Recording Files
 
 By default, an OmegaFlow recording workspace is the `recordings/` directory. The
-file you edit most is `<recording-dir>/<id>/omegaflow.md`: it is the source for
+file you edit most is `<recording-dir>/<id>/index.md`: it is the source for
 one video. Recording ids can include nested directories, such as
 `tutorial/install`, which maps to
-`recordings/tutorial/install/omegaflow.md`. Projects that keep recordings
+`recordings/tutorial/install/index.md`. Projects that keep recordings
 somewhere else can set that in [OmegaFlow Configuration](../configuration.md).
 
 ```bash
@@ -18,15 +18,17 @@ omegaflow action=bootstrap  # Create the default quickstart recording
 ```
 
 ```yaml
+.omegaflow/:          # Project-local OmegaFlow tool config
+  config.yaml:        # Tool defaults such as studio.recording_dir
 recordings/:           # Recording workspace
   config.yaml:         # Workspace defaults for recordings
   quickstart/:         # Bootstrap-created video directory
-    omegaflow.md:      # Recording Markdown file for one video
+    index.md:          # Recording Markdown file for one video
     scripts/:          # Per-video support scripts
-      hello.sh:        # Shell script used by omegaflow.md
+      hello.sh:        # Shell script used by index.md
   tutorial/:           # Optional grouping directory
     install/:          # Nested video directory, selected as tutorial/install
-      omegaflow.md:    # Recording Markdown file for that video
+      index.md:        # Recording Markdown file for that video
   .omegaflow/:         # Default generated runtime state and local outputs
 ```
 
@@ -83,7 +85,7 @@ scene:
 
 | How often | File | Purpose |
 | --- | --- | --- |
-| Most often | `<recording-dir>/<id>/omegaflow.md` | The video source: recording configuration, scene, beats, narration, and commands. Nested ids such as `tutorial/install` are supported. |
+| Most often | `<recording-dir>/<id>/index.md` | The video source: recording configuration, scene, beats, narration, and commands. Nested ids such as `tutorial/install` are supported. |
 | Often | `<recording-dir>/<id>/scripts/` | Shell scripts and small support files for that recording. |
 | Occasionally | `<recording-dir>/config.yaml` | Workspace defaults, such as capture style, output directory, audio provider, or environment key. |
 | Rarely | `<studio.data_dir>/` | Generated runs, cache, and local outputs. Defaults to `<recording-dir>/.omegaflow/`; do not edit by hand. |

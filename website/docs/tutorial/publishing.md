@@ -11,4 +11,4 @@ This chapter will cover publish surfaces:
 - standalone HTML output
 - generated casts and runtime artifacts
 
-Recording: `recordings/tutorial/publishing/omegaflow.md`
+Recording: `recordings/tutorial/publishing/index.md`

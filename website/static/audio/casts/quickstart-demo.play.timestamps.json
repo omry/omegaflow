@@ -1,0 +1,158 @@
+{
+  "duration": 11.4,
+  "recording": "quickstart-demo",
+  "segment": "play",
+  "source_text": "Review the result without opening a browser. The play action replays the retimed asciinema cast directly in the terminal. The generated video is now ready to inspect or publish.",
+  "timestamp_granularities": [
+    "word"
+  ],
+  "transcript": "Review the result without opening a browser. The play action replays the retimed Asakinima cast directly in the terminal. The generated video is now ready to inspect or publish.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.46,
+      "start": 0.0,
+      "word": "Review"
+    },
+    {
+      "end": 0.74,
+      "start": 0.46,
+      "word": "the"
+    },
+    {
+      "end": 1.04,
+      "start": 0.74,
+      "word": "result"
+    },
+    {
+      "end": 1.54,
+      "start": 1.04,
+      "word": "without"
+    },
+    {
+      "end": 1.88,
+      "start": 1.54,
+      "word": "opening"
+    },
+    {
+      "end": 2.4,
+      "start": 1.88,
+      "word": "a"
+    },
+    {
+      "end": 2.4,
+      "start": 2.4,
+      "word": "browser"
+    },
+    {
+      "end": 2.94,
+      "start": 2.9,
+      "word": "The"
+    },
+    {
+      "end": 3.16,
+      "start": 2.94,
+      "word": "play"
+    },
+    {
+      "end": 3.56,
+      "start": 3.16,
+      "word": "action"
+    },
+    {
+      "end": 4.42,
+      "start": 3.56,
+      "word": "replays"
+    },
+    {
+      "end": 4.52,
+      "start": 4.42,
+      "word": "the"
+    },
+    {
+      "end": 5.06,
+      "start": 4.52,
+      "word": "retimed"
+    },
+    {
+      "end": 5.62,
+      "start": 5.06,
+      "word": "Asakinima"
+    },
+    {
+      "end": 6.0,
+      "start": 5.62,
+      "word": "cast"
+    },
+    {
+      "end": 6.62,
+      "start": 6.0,
+      "word": "directly"
+    },
+    {
+      "end": 6.88,
+      "start": 6.62,
+      "word": "in"
+    },
+    {
+      "end": 7.1,
+      "start": 6.88,
+      "word": "the"
+    },
+    {
+      "end": 7.26,
+      "start": 7.1,
+      "word": "terminal"
+    },
+    {
+      "end": 8.22,
+      "start": 8.04,
+      "word": "The"
+    },
+    {
+      "end": 8.6,
+      "start": 8.22,
+      "word": "generated"
+    },
+    {
+      "end": 8.9,
+      "start": 8.6,
+      "word": "video"
+    },
+    {
+      "end": 9.26,
+      "start": 8.9,
+      "word": "is"
+    },
+    {
+      "end": 9.64,
+      "start": 9.26,
+      "word": "now"
+    },
+    {
+      "end": 9.74,
+      "start": 9.64,
+      "word": "ready"
+    },
+    {
+      "end": 10.08,
+      "start": 9.74,
+      "word": "to"
+    },
+    {
+      "end": 10.36,
+      "start": 10.08,
+      "word": "inspect"
+    },
+    {
+      "end": 10.86,
+      "start": 10.36,
+      "word": "or"
+    },
+    {
+      "end": 11.18,
+      "start": 10.86,
+      "word": "publish"
+    }
+  ]
+}

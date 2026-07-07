@@ -71,7 +71,7 @@ CONFIG_DIR = PROJECT_LAYOUT.config_dir
 STUDIO_CONFIG_NAME = "base-config"
 RECORDING_SCRIPT_DIR = PROJECT_LAYOUT.recording_script_dir
 GENERATED_DIR = PROJECT_DATA_DIR / "generated"
-RECORDING_SOURCE_NAME = "omegaflow.md"
+RECORDING_SOURCE_NAME = "index.md"
 RECORDING_ID_COMPONENT_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
 MAX_INLINE_RUN_LINES = 10
 NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
@@ -211,8 +211,9 @@ class StudioConfig:
     output: str | None = None
     cast: str | None = None
     timeline: str | None = None
+    audio_metadata: str | None = None
     surface: str | None = None
-    dry_run: bool = False
+    dry_run: Any = False
     headed: bool = False
     force: bool = False
     timestamps: bool = True
@@ -895,6 +896,65 @@ def validate_recording_inline_run_lengths(spec: dict[str, Any]) -> None:
                 )
 
 
+def validate_recording_audio_timing_requirements(spec: dict[str, Any]) -> None:
+    audio_config = spec.get("audio")
+    audio_enabled = (
+        isinstance(audio_config, dict) and bool(audio_config.get("enabled", False))
+    )
+    if audio_enabled:
+        return
+
+    reasons: list[str] = []
+    narration = spec.get("narration")
+    narration_beats = narration.get("beats") if isinstance(narration, dict) else []
+    if isinstance(narration_beats, list):
+        for beat in narration_beats:
+            if not isinstance(beat, dict):
+                continue
+            waits = beat.get("waits")
+            if isinstance(waits, list) and waits:
+                beat_id = beat.get("id", "<unknown>")
+                reasons.append(f"narration wait markers in beat {beat_id!r}")
+
+    beats = spec.get("beats")
+    if isinstance(beats, list):
+        for beat in beats:
+            if not isinstance(beat, dict):
+                continue
+            beat_id = beat.get("id", "<unknown>")
+            actions = beat.get("actions")
+            if not isinstance(actions, list):
+                continue
+            for action_index, action in enumerate(actions, start=1):
+                if not isinstance(action, dict):
+                    continue
+                after = action.get("after")
+                if isinstance(after, str) and after:
+                    reasons.append(
+                        f"action {action_index} after anchor {after!r} "
+                        f"in beat {beat_id!r}"
+                    )
+                commands = action.get("commands")
+                if not isinstance(commands, list):
+                    continue
+                for command_index, command in enumerate(commands, start=1):
+                    if not isinstance(command, dict):
+                        continue
+                    after = command.get("after")
+                    if isinstance(after, str) and after:
+                        command_label = command.get("id") or f"#{command_index}"
+                        reasons.append(
+                            f"command {command_label!r} after anchor {after!r} "
+                            f"in beat {beat_id!r}"
+                        )
+
+    if reasons:
+        details = "; ".join(reasons)
+        raise StudioConfigError(
+            "audio timing markers require audio.enabled: true; found " + details
+        )
+
+
 def normalize_narration_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -1157,6 +1217,7 @@ def recording_from_script(
     )
     spec = resolve_recording_spec_interpolations(spec)
     validate_recording_inline_run_lengths(spec)
+    validate_recording_audio_timing_requirements(spec)
     return spec
 
 
@@ -1211,6 +1272,7 @@ def recording_spec_from_config(
         source=f"recording {resolved_recording_id}",
     )
     validate_recording_inline_run_lengths(spec)
+    validate_recording_audio_timing_requirements(spec)
 
     spec["parameters"] = resolved_script_parameters(
         spec,

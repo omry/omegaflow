@@ -1,0 +1,143 @@
+{
+  "duration": 11.76,
+  "recording": "quickstart-demo",
+  "segment": "build",
+  "source_text": "Now build the generated recording. The build command records the terminal cast. After recording, OmegaFlow retimes the cast, checks alignment, and writes the configured publish surface.",
+  "timestamp_granularities": [
+    "word"
+  ],
+  "transcript": "Now build the generated recording. The build command records the terminal cast. After recording, Omegaflow retons the cast, checks alignment, and writes the configured published surface.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.42,
+      "start": 0.0,
+      "word": "Now"
+    },
+    {
+      "end": 0.84,
+      "start": 0.42,
+      "word": "build"
+    },
+    {
+      "end": 1.14,
+      "start": 0.84,
+      "word": "the"
+    },
+    {
+      "end": 1.58,
+      "start": 1.14,
+      "word": "generated"
+    },
+    {
+      "end": 2.06,
+      "start": 1.58,
+      "word": "recording"
+    },
+    {
+      "end": 2.64,
+      "start": 2.54,
+      "word": "The"
+    },
+    {
+      "end": 2.88,
+      "start": 2.64,
+      "word": "build"
+    },
+    {
+      "end": 3.3,
+      "start": 2.88,
+      "word": "command"
+    },
+    {
+      "end": 3.76,
+      "start": 3.3,
+      "word": "records"
+    },
+    {
+      "end": 4.06,
+      "start": 3.76,
+      "word": "the"
+    },
+    {
+      "end": 4.32,
+      "start": 4.06,
+      "word": "terminal"
+    },
+    {
+      "end": 4.78,
+      "start": 4.32,
+      "word": "cast"
+    },
+    {
+      "end": 5.6,
+      "start": 5.44,
+      "word": "After"
+    },
+    {
+      "end": 6.12,
+      "start": 5.6,
+      "word": "recording"
+    },
+    {
+      "end": 7.06,
+      "start": 6.68,
+      "word": "Omegaflow"
+    },
+    {
+      "end": 7.52,
+      "start": 7.06,
+      "word": "retons"
+    },
+    {
+      "end": 8.08,
+      "start": 7.52,
+      "word": "the"
+    },
+    {
+      "end": 8.08,
+      "start": 8.08,
+      "word": "cast"
+    },
+    {
+      "end": 8.72,
+      "start": 8.72,
+      "word": "checks"
+    },
+    {
+      "end": 9.16,
+      "start": 8.72,
+      "word": "alignment"
+    },
+    {
+      "end": 9.78,
+      "start": 9.58,
+      "word": "and"
+    },
+    {
+      "end": 9.98,
+      "start": 9.78,
+      "word": "writes"
+    },
+    {
+      "end": 10.34,
+      "start": 9.98,
+      "word": "the"
+    },
+    {
+      "end": 10.64,
+      "start": 10.34,
+      "word": "configured"
+    },
+    {
+      "end": 11.14,
+      "start": 10.64,
+      "word": "published"
+    },
+    {
+      "end": 11.54,
+      "start": 11.14,
+      "word": "surface"
+    }
+  ]
+}

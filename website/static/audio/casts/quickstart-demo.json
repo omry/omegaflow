@@ -1,0 +1,189 @@
+{
+  "audio": "website/static/audio/casts/quickstart-demo.mp3",
+  "duration": 64.752,
+  "recording": "quickstart-demo",
+  "segments": [
+    {
+      "anchors": [
+        {
+          "id": "install",
+          "marker": "@install@",
+          "text_offset": 78
+        }
+      ],
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/install-b7db15a1c775f63b.mp3",
+      "duration": 14.208,
+      "guide": {
+        "commands": [
+          "python -m pip install omegaflow"
+        ],
+        "success_hint": "The install provides the omegaflow command."
+      },
+      "heading": "Install The CLI",
+      "id": "install",
+      "offset": 0.0,
+      "text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the omegaflow command used for the rest of the workflow.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.install.timestamps.json",
+      "waits": [
+        {
+          "audio_second": 14.208,
+          "gap_seconds": 0.3,
+          "marker": "@wait:install_command+300ms@",
+          "pause_seconds": 0.0,
+          "presentation_end": 14.255,
+          "presentation_start": 14.255,
+          "target": "install_command",
+          "text_offset": 211
+        }
+      ]
+    },
+    {
+      "anchors": [
+        {
+          "id": "bootstrap",
+          "marker": "@bootstrap@",
+          "text_offset": 50
+        },
+        {
+          "id": "list_files",
+          "marker": "@list_files@",
+          "text_offset": 151
+        },
+        {
+          "id": "show_script",
+          "marker": "@show_script@",
+          "text_offset": 209
+        }
+      ],
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/bootstrap-68711cb754a87531.mp3",
+      "duration": 13.32,
+      "guide": {
+        "commands": [
+          "omegaflow action=bootstrap",
+          "tree -a .",
+          "sed -n '1,85p' recordings/quickstart/index.md"
+        ],
+        "success_hint": "Bootstrap writes tool config, a recording directory, and a local support script."
+      },
+      "heading": "Bootstrap Quickstart",
+      "id": "bootstrap",
+      "offset": 14.208,
+      "text": "Bootstrap creates the default recording workspace. Run the bootstrap command. It writes shared config, a recording Markdown file, and a support script. List the generated files. Then open the recording script.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.bootstrap.timestamps.json",
+      "waits": [
+        {
+          "audio_second": 13.32,
+          "gap_seconds": 0.3,
+          "marker": "@wait:show_script+300ms@",
+          "pause_seconds": 1.96,
+          "presentation_end": 29.535,
+          "presentation_start": 27.575,
+          "target": "show_script",
+          "text_offset": 209
+        }
+      ]
+    },
+    {
+      "anchors": [
+        {
+          "id": "build",
+          "marker": "@build@",
+          "text_offset": 34
+        }
+      ],
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/build-955e338c86b5a43b.mp3",
+      "duration": 11.76,
+      "guide": {
+        "commands": [
+          "omegaflow recording=quickstart action=build"
+        ],
+        "success_hint": "The build writes a retimed cast and standalone HTML surface."
+      },
+      "heading": "Build The Video",
+      "id": "build",
+      "offset": 27.528,
+      "text": "Now build the generated recording. The build command records the terminal cast. After recording, OmegaFlow retimes the cast, checks alignment, and writes the configured publish surface.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.build.timestamps.json",
+      "waits": [
+        {
+          "audio_second": 11.76,
+          "gap_seconds": 0.3,
+          "marker": "@wait:build_command+300ms@",
+          "pause_seconds": 0.0,
+          "presentation_end": 41.596,
+          "presentation_start": 41.596,
+          "target": "build_command",
+          "text_offset": 185
+        }
+      ]
+    },
+    {
+      "anchors": [
+        {
+          "id": "play",
+          "marker": "@play@",
+          "text_offset": 44
+        }
+      ],
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/play-88541096c7acb7cb.mp3",
+      "duration": 11.4,
+      "guide": {
+        "commands": [
+          "omegaflow recording=quickstart action=play"
+        ],
+        "success_hint": "The terminal should replay the generated cast."
+      },
+      "heading": "Play It In The Terminal",
+      "id": "play",
+      "offset": 39.288,
+      "text": "Review the result without opening a browser. The play action replays the retimed asciinema cast directly in the terminal. The generated video is now ready to inspect or publish.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.play.timestamps.json",
+      "waits": [
+        {
+          "audio_second": 11.4,
+          "gap_seconds": 0.3,
+          "marker": "@wait:play_command+300ms@",
+          "pause_seconds": 0.0,
+          "presentation_end": 52.996,
+          "presentation_start": 52.996,
+          "target": "play_command",
+          "text_offset": 177
+        }
+      ]
+    },
+    {
+      "anchors": [
+        {
+          "id": "inspect",
+          "marker": "@inspect@",
+          "text_offset": 37
+        }
+      ],
+      "audio": "recordings/.omegaflow/cache/audio/quickstart-demo/publish-f767080e050efefd.mp3",
+      "duration": 14.064,
+      "guide": {
+        "commands": [
+          "omegaflow recording=quickstart action=build dry_run=true"
+        ],
+        "success_hint": "The dry run lists the configured publish surface."
+      },
+      "heading": "Inspect Publish Surfaces",
+      "id": "publish",
+      "offset": 50.688,
+      "text": "Finally, inspect the publish surface. A dry run shows the build plan without recording a new cast. The generated quickstart starts with standalone HTML, and other recordings can publish into docs pages.",
+      "timestamps": "website/static/audio/casts/quickstart-demo.publish.timestamps.json",
+      "waits": [
+        {
+          "audio_second": 14.064,
+          "gap_seconds": 0.3,
+          "marker": "@wait:inspect_command+300ms@",
+          "pause_seconds": 0.0,
+          "presentation_end": 67.06,
+          "presentation_start": 67.06,
+          "target": "inspect_command",
+          "text_offset": 202
+        }
+      ]
+    }
+  ]
+}

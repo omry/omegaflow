@@ -147,3 +147,64 @@ if (currentSeconds !== 75) {
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_player_does_not_make_first_audio_segment_intro_by_default() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+narrationSegments = [
+  {id: 'install', offset: 0, duration: 10, waits: [], pauseAfter: 0},
+];
+introSeconds = 10;
+if (selectedIntroSegmentIndex() !== -1) {
+  console.error(JSON.stringify({
+    selectedIntroSegmentIndex: selectedIntroSegmentIndex(),
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_starts_first_audio_segment_at_first_caption_by_default() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+narrationSegments = [
+  {
+    id: 'install',
+    offset: 0,
+    duration: 10,
+    waits: [],
+    pauseAfter: 0,
+    guide: null,
+    heading: 'Install',
+  },
+];
+introSeconds = 0;
+const presentationEvents = buildPresentationEvents([
+  {time: 0.1, data: 'before caption'},
+  {time: 0.2, data: '\\u001b[36;1m# Install\\n'},
+  {time: 1.0, data: 'python -m pip install omegaflow'},
+]);
+if (presentationEvents[0].time !== 0.1) {
+  console.error(JSON.stringify({firstEventTime: presentationEvents[0].time}));
+  process.exit(1);
+}
+if (
+  audioPlaybackSegments.length !== 1 ||
+  audioPlaybackSegments[0].id !== 'install' ||
+  audioPlaybackSegments[0].presentationStart !== 0.2
+) {
+  console.error(JSON.stringify({audioPlaybackSegments}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr

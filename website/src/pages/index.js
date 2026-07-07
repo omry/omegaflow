@@ -26,6 +26,8 @@ export default function Home() {
               <VideoPlayer
                 title="Quickstart Demo"
                 src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
+                audio="/audio/casts/quickstart-demo.mp3"
+                audioMeta="/audio/casts/quickstart-demo.json"
               />
             </div>
           </div>

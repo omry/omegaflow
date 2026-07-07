@@ -8,7 +8,7 @@ import VideoPlayer from "@site/src/components/VideoPlayer";
 # Build A Video
 
 This repository includes one short showcase recording at
-`recordings/quickstart-demo/omegaflow.md`. It demonstrates the basic loop:
+`recordings/quickstart-demo/index.md`. It demonstrates the basic loop:
 bootstrap the default `quickstart` recording, build it, play it, and inspect the
 publish surface.
 
@@ -16,6 +16,8 @@ publish surface.
 <VideoPlayer
   title="Quickstart Demo"
   src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
+  audio="/audio/casts/quickstart-demo.mp3"
+  audioMeta="/audio/casts/quickstart-demo.json"
 />
 <!-- studio:quickstart-demo:end -->
 

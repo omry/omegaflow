@@ -31,6 +31,6 @@ beat:
       display: bash scripts/show-shape.sh
       expect:
         output_contains:
-        - omegaflow.md
+        - index.md
         - scripts/
 ```

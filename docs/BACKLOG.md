@@ -21,6 +21,26 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
+- [ ] `P1` Document narration anchors, command `after`, and audio wait markers.
+      The Beat page only mentions `@anchor@`, `@wait:name+1s@`, and `after` in
+      field tables. Authors need a short explanation of how narration anchors
+      line up command starts, how waits pause narration until a command id
+      finishes, and why YAML values like `after: "@install@"` must be quoted.
+      Acceptance checks: add an authoring example with one anchor, one command
+      id, one `after`, and one wait; explain that markers are removed from
+      spoken narration; document supported wait units (`ms`, `s`); and note the
+      current YAML quoting requirement.
+
+- [ ] `P2` Explore a YAML-safe sync marker syntax.
+      The current `@anchor@` syntax is compact in narration, but problematic
+      when reused as a YAML scalar (`after: @install@` is invalid unless
+      quoted). Consider a clearer split: inline narration markers such as
+      `[cue:install]` and `[wait:install_command +300ms]`, plus plain YAML ids
+      such as `after: install`. Acceptance checks: compare readability against
+      current `@anchor@` syntax; decide whether `after` should accept bare ids;
+      define migration behavior for existing recordings; update docs and tests
+      only after the syntax decision is made.
+
 - [ ] `P2` Design a short hello-recording tutorial curriculum.
       The current `hello` recording is useful as a tiny fixture, but a separate
       tutorial track could use it to explain how OmegaFlow recordings are

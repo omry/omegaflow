@@ -71,7 +71,10 @@ def test_studio_paths_use_canonical_recordings_workspace() -> None:
 def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
-    (recordings_dir / "config.yaml").write_text("audio:\n  enabled: false\n", encoding="utf-8")
+    (recordings_dir / "config.yaml").write_text(
+        "audio:\n  enabled: false\n",
+        encoding="utf-8",
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OMEGAFLOW_STUDIO_PROJECT_ROOT", raising=False)
 
@@ -186,7 +189,7 @@ def test_studio_recording_dir_comes_from_config(tmp_path) -> None:
     recordings_dir = tmp_path / "docs" / "recordings"
     recordings_dir.mkdir(parents=True)
     (recordings_dir / "hello").mkdir()
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -220,14 +223,14 @@ beat:
 
     assert spec["id"] == "hello"
     assert spec["_recording_dir"] == str(recordings_dir.resolve())
-    assert spec["_manifest_path"] == str(recordings_dir / "hello" / "omegaflow.md")
+    assert spec["_manifest_path"] == str(recordings_dir / "hello" / "index.md")
 
 
 def test_nested_recording_directories_are_listed_and_loaded(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     recording_dir = recordings_dir / "tutorial" / "recording-file"
     recording_dir.mkdir(parents=True)
-    (recording_dir / "omegaflow.md").write_text(
+    (recording_dir / "index.md").write_text(
         """
 ---
 id: tutorial/recording-file
@@ -261,7 +264,7 @@ beat:
 
     assert list_recording_ids(recordings_dir) == ["tutorial/recording-file"]
     assert spec["id"] == "tutorial/recording-file"
-    assert spec["_manifest_path"] == str(recording_dir / "omegaflow.md")
+    assert spec["_manifest_path"] == str(recording_dir / "index.md")
 
 
 def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
@@ -274,6 +277,76 @@ def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
         assert "lowercase kebab-case path" in str(exc)
     else:
         raise AssertionError("expected path traversal recording id to be rejected")
+
+
+def test_narration_wait_marker_can_pause_before_more_spoken_text() -> None:
+    text, anchors, waits = studio_config_module.narration_text_and_anchors(
+        "Run the command. @install@ Then wait. "
+        "@wait:install_command+300ms@ Now explain output."
+    )
+
+    assert text == "Run the command. Then wait. Now explain output."
+    assert anchors == [
+        {
+            "id": "install",
+            "marker": "@install@",
+            "text_offset": len("Run the command."),
+        }
+    ]
+    assert waits == [
+        {
+            "target": "install_command",
+            "marker": "@wait:install_command+300ms@",
+            "text_offset": len("Run the command. Then wait."),
+            "gap_seconds": 0.3,
+        }
+    ]
+
+
+def test_audio_timing_markers_require_audio_enabled(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "demo"
+    recording_dir.mkdir(parents=True)
+    (recordings_dir / "config.yaml").write_text("audio:\n  enabled: false\n", encoding="utf-8")
+    (recording_dir / "index.md").write_text(
+        """\
+---
+id: demo
+title: Demo
+---
+
+```yaml studio-directive
+scene: Demo
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Hello
+  narration: Talk first. @run_demo@ Then wait. @wait:run_demo+300ms@ Continue.
+  actions:
+  - commands:
+    - id: run_demo
+      run: echo hello
+      after: "@run_demo@"
+```
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        recording_spec_from_config(
+            {"recording": "demo", "studio": {"recording_dir": str(recordings_dir)}},
+            recording_id=None,
+            overrides=(),
+        )
+    except StudioConfigError as exc:
+        message = str(exc)
+        assert "audio timing markers require audio.enabled: true" in message
+        assert "narration wait markers in beat 'hello'" in message
+        assert "command 'run_demo' after anchor '@run_demo@' in beat 'hello'" in message
+    else:
+        raise AssertionError("expected audio timing markers without audio to fail")
 
 
 def test_studio_run_dir_uses_safe_placeholder_for_invalid_recording_id() -> None:
@@ -307,7 +380,7 @@ title: Old Layout
     try:
         recording_from_script("hello")
     except StudioConfigError as exc:
-        assert "recordings/hello/omegaflow.md" in str(exc)
+        assert "recordings/hello/index.md" in str(exc)
     else:
         raise AssertionError("expected flat recording files to be unsupported")
 
@@ -412,6 +485,138 @@ def test_audio_env_file_is_recording_local_config(tmp_path, monkeypatch) -> None
     assert os.environ["OPENAI_RECORDING_KEY"] == "file-secret"
 
 
+def test_build_audio_generates_missing_segments_before_publish(monkeypatch) -> None:
+    cfg = OmegaConf.create({"output_format": "text", "verbose": False})
+    calls: list[tuple[str, bool, bool]] = []
+
+    monkeypatch.setattr(
+        studio,
+        "audio_segments_need_materialization",
+        lambda _cfg: True,
+    )
+    monkeypatch.setattr(studio, "build_audio_stats", lambda *args, **kwargs: None)
+
+    def fake_run_step(
+        label,
+        runner,
+        cfg,
+        step,
+        *,
+        quiet=False,
+        show_step=True,
+        config_overrides=None,
+    ):
+        calls.append((step, quiet, show_step))
+        return ""
+
+    monkeypatch.setattr(studio, "run_step", fake_run_step)
+
+    studio.run_build_audio_actions(
+        cfg,
+        generate_needed=False,
+        publish_needed=True,
+        output=Path("voiceover.mp3"),
+    )
+
+    assert calls == [
+        ("generate", False, False),
+        ("publish", False, False),
+    ]
+
+
+def test_retime_action_passes_audio_metadata_override(monkeypatch) -> None:
+    cfg = OmegaConf.create({"output_format": "text"})
+    calls: list[dict[str, object]] = []
+
+    def fake_run_step(
+        label,
+        runner,
+        cfg,
+        step,
+        *,
+        quiet=False,
+        show_step=True,
+        config_overrides=None,
+    ):
+        calls.append(config_overrides or {})
+        return ""
+
+    monkeypatch.setattr(studio, "run_step", fake_run_step)
+
+    studio.run_retime_action(
+        cfg,
+        "retime",
+        cast=Path("run.cast"),
+        timeline=Path("run.timeline.jsonl"),
+        audio_metadata=Path("run.json"),
+        output=Path("run.retimed.cast"),
+    )
+
+    assert calls == [
+        {
+            "cast": Path("run.cast"),
+            "timeline": Path("run.timeline.jsonl"),
+            "audio_metadata": Path("run.json"),
+            "output": Path("run.retimed.cast"),
+        }
+    ]
+
+
+def test_retime_tool_uses_audio_metadata_override(tmp_path, monkeypatch) -> None:
+    stale_metadata = tmp_path / "published.json"
+    run_metadata = tmp_path / "run.json"
+    output = tmp_path / "run.retimed.cast"
+    requested_metadata: list[Path | None] = []
+
+    monkeypatch.setattr(
+        retime_cast,
+        "load_recording_spec_from_hydra_cfg",
+        lambda _cfg: {
+            "_recording_id": "demo",
+            "outputs": {
+                "cast": str(tmp_path / "published.cast"),
+                "audio_metadata": str(stale_metadata),
+            },
+        },
+    )
+    monkeypatch.setattr(
+        retime_cast,
+        "read_audio_segment_timings",
+        lambda path: requested_metadata.append(path) or {},
+    )
+    monkeypatch.setattr(
+        retime_cast,
+        "read_cast",
+        lambda _path: ({"version": 3, "term": {"cols": 80, "rows": 24}}, ["event"]),
+    )
+    monkeypatch.setattr(retime_cast, "read_timeline", lambda _path: [])
+    monkeypatch.setattr(retime_cast, "retime_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        retime_cast,
+        "write_cast",
+        lambda path, _header, _events: path.write_text(
+            '{"version": 3}\n', encoding="utf-8"
+        ),
+    )
+    monkeypatch.setattr(retime_cast, "pass_line", lambda _message: None)
+
+    result = retime_cast.run_tool_from_hydra_cfg(
+        OmegaConf.create(
+            {
+                "action": "retime",
+                "cast": str(tmp_path / "run.cast"),
+                "timeline": str(tmp_path / "run.timeline.jsonl"),
+                "audio_metadata": str(run_metadata),
+                "output": str(output),
+            }
+        )
+    )
+
+    assert result == 0
+    assert requested_metadata == [run_metadata]
+    assert output.exists()
+
+
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
@@ -429,7 +634,7 @@ style:
 """.lstrip(),
         encoding="utf-8",
     )
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -479,7 +684,7 @@ def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> Non
         "title: Shared Title\n",
         encoding="utf-8",
     )
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -512,7 +717,7 @@ def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
     (recordings_dir / "hello").mkdir()
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -549,7 +754,7 @@ def test_recording_schema_validates_frontmatter_command_fields(
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
     (recordings_dir / "hello").mkdir()
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -591,7 +796,7 @@ def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
     (recordings_dir / "hello").mkdir()
-    (recordings_dir / "hello" / "omegaflow.md").write_text(
+    (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
 id: hello
@@ -713,7 +918,7 @@ def test_run_file_resolves_from_recording_script_dir(tmp_path) -> None:
     assert action_script in dependencies
 
 
-def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
+def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     workspace = tmp_path / "recordings"
 
     status = studio.run_bootstrap(
@@ -725,12 +930,22 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
     )
 
     assert status == 0
+    tool_config = (tmp_path / ".omegaflow" / "config.yaml").read_text(
+        encoding="utf-8"
+    )
     shared_config = (workspace / "config.yaml").read_text(encoding="utf-8")
-    recording = (workspace / "demo-recording" / "omegaflow.md").read_text(
+    recording = (workspace / "demo-recording" / "index.md").read_text(
         encoding="utf-8"
     )
     support_script = workspace / "demo-recording" / "scripts" / "hello.sh"
 
+    assert "studio:" in tool_config
+    assert "recording_dir: recordings" in tool_config
+    assert "data_dir: recordings/.omegaflow" in tool_config
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(None, ())
+    assert config["studio"]["recording_dir"] == "recordings"
+    assert config["studio"]["data_dir"] == "recordings/.omegaflow"
     assert "id:" not in shared_config
     assert "title:" not in shared_config
     assert "id: demo-recording" in recording
@@ -757,7 +972,7 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path) -> None:
     )
 
     assert status == 0
-    recording = (workspace / "quickstart" / "omegaflow.md").read_text(
+    recording = (workspace / "quickstart" / "index.md").read_text(
         encoding="utf-8"
     )
     support_script = workspace / "quickstart" / "scripts" / "hello.sh"
@@ -782,10 +997,83 @@ def test_bootstrap_dry_run_does_not_write(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "dry run" in output
-    assert "would create" in output
-    assert "recordings/quickstart/omegaflow.md" in output
+    assert "Bootstrap dry run: quickstart" in output
+    assert "Recording workspace:" in output
+    assert "Files:" in output
+    assert "create" in output
+    assert ".omegaflow/config.yaml" in output
+    assert "recordings/config.yaml" in output
+    assert "recordings/quickstart/index.md" in output
+    assert "recordings/quickstart/scripts/hello.sh" in output
+    assert "No files were written." in output
+    assert not (tmp_path / ".omegaflow").exists()
     assert not workspace.exists()
+
+
+def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
+    workspace = tmp_path / "recordings"
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "dry_run": "diff",
+            "force": False,
+        }
+    )
+
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert "Bootstrap dry run diff: quickstart" in output
+    assert "--- /dev/null" in output
+    assert f"+++ {tmp_path}/.omegaflow/config.yaml" in output
+    assert "+studio:" in output
+    assert "+  recording_dir: recordings" in output
+    assert "+  data_dir: recordings/.omegaflow" in output
+    assert "+id: quickstart" in output
+    assert "+    - run_file: scripts/hello.sh" in output
+    assert "No files were written." in output
+    assert not (tmp_path / ".omegaflow").exists()
+    assert not workspace.exists()
+
+
+def test_bootstrap_dry_run_diff_uses_color_when_enabled(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    workspace = tmp_path / "recordings"
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "dry_run": "diff",
+            "force": False,
+        }
+    )
+
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert "\033[33;1m+++ " in output
+    assert "\033[32;1m+studio:" in output
+    assert "\033[36;1m@@ " in output
+    assert not (tmp_path / ".omegaflow").exists()
+    assert not workspace.exists()
+
+
+def test_bootstrap_dry_run_rejects_unknown_mode(tmp_path) -> None:
+    try:
+        studio.run_bootstrap(
+            {
+                "workspace": str(tmp_path / "recordings"),
+                "dry_run": "verbose",
+            }
+        )
+    except studio.StudioError as exc:
+        assert "bootstrap dry_run must be true, false, or diff" in str(exc)
+    else:
+        raise AssertionError("expected unknown bootstrap dry_run mode to fail")
 
 
 def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
@@ -801,7 +1089,7 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
 
     assert status == 0
     recording = (
-        workspace / "tutorial" / "recording-file" / "omegaflow.md"
+        workspace / "tutorial" / "recording-file" / "index.md"
     ).read_text(encoding="utf-8")
     support_script = (
         workspace / "tutorial" / "recording-file" / "scripts" / "hello.sh"
@@ -912,7 +1200,7 @@ def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
         json.dumps(
             {
                 "dependencies": [
-                    {"path": "recordings/demo/omegaflow.md"},
+                    {"path": "recordings/demo/index.md"},
                     {"path": str(tmp_path / "absolute-input.txt")},
                 ]
             }
@@ -941,7 +1229,7 @@ def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
         target_cast.with_suffix(".recording.json").read_text(encoding="utf-8")
     )
     assert fingerprint["dependencies"] == [
-        {"path": "recordings/demo/omegaflow.md"}
+        {"path": "recordings/demo/index.md"}
     ]
     assert target_audio in written
     assert target_metadata in written
@@ -1102,3 +1390,77 @@ def test_require_fresh_retimed_cast_rejects_unmaterialized_waits(tmp_path) -> No
         assert "has not been materialized by retime" in str(exc)
     else:
         raise AssertionError("expected unmaterialized wait to fail freshness check")
+
+
+def test_adjusted_audio_seconds_pauses_inline_wait_until_command_finishes() -> None:
+    timing = retime_cast.AudioSegmentTiming(
+        segment_id="hello",
+        duration=8.0,
+        anchor_seconds={"@run_demo@": 2.0},
+        waits=(
+            retime_cast.AudioWaitTiming(
+                target="run_demo",
+                marker="@wait:run_demo+300ms@",
+                seconds=4.0,
+                gap_seconds=0.3,
+            ),
+        ),
+    )
+    wait_windows: dict[str, dict[str, object]] = {}
+
+    before_wait = retime_cast.adjusted_audio_seconds(
+        base_seconds=2.0,
+        timing=timing,
+        command_end_by_id={},
+        beat_start=10.0,
+        beat_id="hello",
+        wait_windows=wait_windows,
+    )
+    after_wait = retime_cast.adjusted_audio_seconds(
+        base_seconds=8.0,
+        timing=timing,
+        command_end_by_id={"run_demo": 18.0},
+        beat_start=10.0,
+        beat_id="hello",
+        wait_windows=wait_windows,
+    )
+
+    assert before_wait == 2.0
+    assert after_wait == 12.3
+    assert wait_windows["@wait:run_demo+300ms@"]["presentation_start"] == 14.0
+    assert wait_windows["@wait:run_demo+300ms@"]["presentation_end"] == 18.3
+
+
+def test_adjusted_audio_seconds_can_start_command_at_same_second_as_wait() -> None:
+    timing = retime_cast.AudioSegmentTiming(
+        segment_id="hello",
+        duration=8.0,
+        anchor_seconds={"@run_demo@": 2.0},
+        waits=(
+            retime_cast.AudioWaitTiming(
+                target="run_demo",
+                marker="@wait:run_demo+300ms@",
+                seconds=2.0,
+                gap_seconds=0.3,
+            ),
+        ),
+    )
+
+    command_start = retime_cast.adjusted_audio_seconds(
+        base_seconds=2.0,
+        timing=timing,
+        command_end_by_id={},
+        beat_start=10.0,
+        beat_id="hello",
+        include_boundary_waits=False,
+    )
+    after_wait = retime_cast.adjusted_audio_seconds(
+        base_seconds=8.0,
+        timing=timing,
+        command_end_by_id={"run_demo": 15.0},
+        beat_start=10.0,
+        beat_id="hello",
+    )
+
+    assert command_start == 2.0
+    assert after_wait == 11.3

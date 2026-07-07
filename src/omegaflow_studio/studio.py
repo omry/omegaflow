@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import html
 import http.server
@@ -206,9 +207,10 @@ def run_step(
     step: str,
     *,
     quiet: bool = False,
+    show_step: bool = True,
     config_overrides: dict[str, object] | None = None,
 ) -> str:
-    if text_output_enabled(cfg) and not quiet:
+    if text_output_enabled(cfg) and not quiet and show_step:
         step_line(label)
     captured = io.StringIO()
     try:
@@ -460,6 +462,10 @@ def run_build_audio_actions(
     publish_needed: bool,
     output: Path | None = None,
 ) -> None:
+    if publish_needed and not generate_needed and audio_segments_need_materialization(
+        cfg
+    ):
+        generate_needed = True
     if not generate_needed and not publish_needed:
         return
     config = container_from_hydra_cfg(cfg)
@@ -479,6 +485,26 @@ def run_build_audio_actions(
 
     if text_output_enabled(cfg):
         step_line("audio")
+    if text_output_enabled(cfg):
+        if generate_needed:
+            run_step(
+                "audio",
+                audio.run_tool_from_hydra_cfg,
+                cfg,
+                "generate",
+                show_step=False,
+            )
+        if publish_needed:
+            run_step(
+                "audio",
+                audio.run_tool_from_hydra_cfg,
+                cfg,
+                "publish",
+                show_step=False,
+                config_overrides={"output": output} if output is not None else None,
+            )
+        return
+
     stats = build_audio_stats(cfg, generate_needed=generate_needed)
     generate_output = ""
     publish_output = ""
@@ -538,6 +564,21 @@ def audio_generate_needs_work(cfg: DictConfig) -> bool:
             force=False,
         )
     )
+
+
+def audio_segments_need_materialization(cfg: DictConfig) -> bool:
+    config = container_from_hydra_cfg(cfg)
+    spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    try:
+        settings = audio.audio_settings(spec)
+        if not settings.enabled:
+            return False
+        segments = audio.load_narration_segments(spec)
+        recording_id = audio.require_string(spec, "_recording_id", field="recording")
+        plan = audio.plan_audio(recording_id, segments, settings)
+    except audio.AudioError:
+        return True
+    return any(not item.output_path.exists() for item in plan)
 
 
 def audio_publish_needs_work(cfg: DictConfig, *, output: Path | None = None) -> bool:
@@ -606,6 +647,7 @@ def run_retime_action(
     *,
     cast: Path | None = None,
     timeline: Path | None = None,
+    audio_metadata: Path | None = None,
     output: Path | None = None,
     quiet: bool = False,
 ) -> str:
@@ -614,6 +656,8 @@ def run_retime_action(
         config_overrides["cast"] = cast
     if timeline is not None:
         config_overrides["timeline"] = timeline
+    if audio_metadata is not None:
+        config_overrides["audio_metadata"] = audio_metadata
     if output is not None:
         config_overrides["output"] = output
     return run_step(
@@ -648,6 +692,22 @@ def bool_config(config: dict[str, Any], key: str, default: bool = False) -> bool
     if not isinstance(value, bool):
         raise StudioError(f"{key} must be a boolean")
     return value
+
+
+def bootstrap_dry_run_mode(value: object) -> str | None:
+    if value is False or value is None:
+        return None
+    if value is True:
+        return "files"
+    if isinstance(value, str):
+        normalized = value.lower()
+        if normalized in {"false", "0", "no"}:
+            return None
+        if normalized in {"true", "1", "yes"}:
+            return "files"
+        if normalized == "diff":
+            return "diff"
+    raise StudioError("bootstrap dry_run must be true, false, or diff")
 
 
 def action_help() -> str:
@@ -757,6 +817,28 @@ audio:
 """
 
 
+def bootstrap_project_root(workspace: Path) -> Path:
+    return workspace.parent
+
+
+def bootstrap_config_path_text(path: Path, *, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def bootstrap_tool_config_text(workspace: Path) -> str:
+    root = bootstrap_project_root(workspace)
+    recording_dir = bootstrap_config_path_text(workspace, root=root)
+    data_dir = bootstrap_config_path_text(workspace / ".omegaflow", root=root)
+    return f"""\
+studio:
+  recording_dir: {recording_dir}
+  data_dir: {data_dir}
+"""
+
+
 def bootstrap_recording_text(recording_id: str, title: str) -> str:
     return f"""\
 ---
@@ -842,6 +924,44 @@ def write_bootstrap_file(
     return "updated" if existed else "created"
 
 
+def bootstrap_file_diff(path: Path, text: str) -> str:
+    path_label = display_path(path)
+    before_label = path_label if path_label.startswith("/") else f"a/{path_label}"
+    after_label = path_label if path_label.startswith("/") else f"b/{path_label}"
+    if path.exists():
+        before = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    else:
+        before = []
+        before_label = "/dev/null"
+    after = text.splitlines(keepends=True)
+    return "".join(
+        difflib.unified_diff(
+            before,
+            after,
+            fromfile=before_label,
+            tofile=after_label,
+        )
+    )
+
+
+def colorize_unified_diff(diff: str, *, enabled: bool | None = None) -> str:
+    lines = diff.splitlines(keepends=True)
+    colored: list[str] = []
+    for line in lines:
+        if line.startswith(("--- ", "+++ ")):
+            color = ANSI_YELLOW_BOLD
+        elif line.startswith("@@"):
+            color = ANSI_CYAN_BOLD
+        elif line.startswith("+"):
+            color = ANSI_GREEN_BOLD
+        elif line.startswith("-"):
+            color = ANSI_RED_BOLD
+        else:
+            color = ""
+        colored.append(color_text(line, color, enabled=enabled) if color else line)
+    return "".join(colored)
+
+
 def run_bootstrap(config: dict[str, Any]) -> int:
     workspace = bootstrap_workspace_path(config)
     recording_id = recording_id_from_value(config.get("recording")) or "quickstart"
@@ -851,12 +971,17 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         )
     title = recording_id.rsplit("/", 1)[-1].replace("-", " ").title()
     force = bool_config(config, "force")
-    dry_run = bool_config(config, "dry_run")
+    dry_run_mode = bootstrap_dry_run_mode(config.get("dry_run", False))
 
     writes = [
+        (
+            bootstrap_project_root(workspace) / ".omegaflow" / "config.yaml",
+            bootstrap_tool_config_text(workspace),
+            False,
+        ),
         (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG, False),
         (
-            workspace / recording_id / "omegaflow.md",
+            workspace / recording_id / "index.md",
             bootstrap_recording_text(recording_id, title),
             False,
         ),
@@ -867,21 +992,43 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         ),
     ]
 
+    if dry_run_mode is not None:
+        if dry_run_mode == "diff":
+            print(f"Bootstrap dry run diff: {recording_id}")
+            print()
+            print(f"Recording workspace: {display_path(workspace)}")
+            print()
+            use_color = color_enabled()
+            for path, text, _executable in writes:
+                diff = bootstrap_file_diff(path, text)
+                if diff:
+                    diff = colorize_unified_diff(diff, enabled=use_color)
+                    print(diff, end="" if diff.endswith("\n") else "\n")
+            print()
+            print("No files were written.")
+            return 0
+
+        print(f"Bootstrap dry run: {recording_id}")
+        print()
+        print(f"Recording workspace: {display_path(workspace)}")
+        print()
+        print("Files:")
+        for path, _text, _executable in writes:
+            status = "update" if path.exists() else "create"
+            print(f"  {status:>6} {display_path(path)}")
+        print()
+        print("No files were written.")
+        return 0
+
     print(f"workspace {display_path(workspace)}")
-    if dry_run:
-        print("dry run")
     for path, text, executable in writes:
-        if dry_run:
-            status = "would update" if path.exists() else "would create"
-            print(f"{status:>12} {display_path(path)}")
-        else:
-            status = write_bootstrap_file(
-                path,
-                text,
-                executable=executable,
-                force=force,
-            )
-            print(f"{status:>7} {display_path(path)}")
+        status = write_bootstrap_file(
+            path,
+            text,
+            executable=executable,
+            force=force,
+        )
+        print(f"{status:>7} {display_path(path)}")
     print()
     print(f"next    omegaflow recording={recording_id} action=build")
     return 0
@@ -2034,6 +2181,7 @@ def run_build(cfg: DictConfig) -> int:
                 "retime cast",
                 cast=paths["cast"],
                 timeline=paths["timeline"],
+                audio_metadata=paths["audio_metadata"],
                 output=staged_retimed,
                 quiet=not verbose,
             )

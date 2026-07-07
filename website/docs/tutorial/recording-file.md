@@ -7,4 +7,4 @@ sidebar_label: Recording File
 
 This chapter will introduce the shape of a recording directory.
 
-Recording: `recordings/tutorial/recording-file/omegaflow.md`
+Recording: `recordings/tutorial/recording-file/index.md`

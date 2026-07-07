@@ -1,0 +1,178 @@
+{
+  "duration": 14.2,
+  "recording": "quickstart-demo",
+  "segment": "install",
+  "source_text": "OmegaFlow turns a Markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the omegaflow command used for the rest of the workflow.",
+  "timestamp_granularities": [
+    "word"
+  ],
+  "transcript": "Omegaflow turns a markdown recording script into a rebuildable terminal video. Start with the command line tool. Install the package. The install provides the Omegaflow command used for the rest of the workflow.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.78,
+      "start": 0.0,
+      "word": "Omegaflow"
+    },
+    {
+      "end": 1.48,
+      "start": 0.78,
+      "word": "turns"
+    },
+    {
+      "end": 1.78,
+      "start": 1.48,
+      "word": "a"
+    },
+    {
+      "end": 2.22,
+      "start": 1.78,
+      "word": "markdown"
+    },
+    {
+      "end": 2.76,
+      "start": 2.22,
+      "word": "recording"
+    },
+    {
+      "end": 3.08,
+      "start": 2.76,
+      "word": "script"
+    },
+    {
+      "end": 3.68,
+      "start": 3.08,
+      "word": "into"
+    },
+    {
+      "end": 4.12,
+      "start": 3.68,
+      "word": "a"
+    },
+    {
+      "end": 4.62,
+      "start": 4.12,
+      "word": "rebuildable"
+    },
+    {
+      "end": 5.0,
+      "start": 4.62,
+      "word": "terminal"
+    },
+    {
+      "end": 5.4,
+      "start": 5.0,
+      "word": "video"
+    },
+    {
+      "end": 6.28,
+      "start": 6.28,
+      "word": "Start"
+    },
+    {
+      "end": 6.5,
+      "start": 6.28,
+      "word": "with"
+    },
+    {
+      "end": 6.7,
+      "start": 6.5,
+      "word": "the"
+    },
+    {
+      "end": 6.96,
+      "start": 6.7,
+      "word": "command"
+    },
+    {
+      "end": 7.24,
+      "start": 6.96,
+      "word": "line"
+    },
+    {
+      "end": 7.54,
+      "start": 7.24,
+      "word": "tool"
+    },
+    {
+      "end": 8.62,
+      "start": 8.62,
+      "word": "Install"
+    },
+    {
+      "end": 8.84,
+      "start": 8.62,
+      "word": "the"
+    },
+    {
+      "end": 9.2,
+      "start": 8.84,
+      "word": "package"
+    },
+    {
+      "end": 10.14,
+      "start": 10.0,
+      "word": "The"
+    },
+    {
+      "end": 10.52,
+      "start": 10.14,
+      "word": "install"
+    },
+    {
+      "end": 11.0,
+      "start": 10.52,
+      "word": "provides"
+    },
+    {
+      "end": 11.36,
+      "start": 11.0,
+      "word": "the"
+    },
+    {
+      "end": 11.66,
+      "start": 11.36,
+      "word": "Omegaflow"
+    },
+    {
+      "end": 12.16,
+      "start": 11.66,
+      "word": "command"
+    },
+    {
+      "end": 12.86,
+      "start": 12.16,
+      "word": "used"
+    },
+    {
+      "end": 13.08,
+      "start": 12.86,
+      "word": "for"
+    },
+    {
+      "end": 13.32,
+      "start": 13.08,
+      "word": "the"
+    },
+    {
+      "end": 13.38,
+      "start": 13.32,
+      "word": "rest"
+    },
+    {
+      "end": 13.66,
+      "start": 13.38,
+      "word": "of"
+    },
+    {
+      "end": 13.78,
+      "start": 13.66,
+      "word": "the"
+    },
+    {
+      "end": 13.96,
+      "start": 13.78,
+      "word": "workflow"
+    }
+  ]
+}
