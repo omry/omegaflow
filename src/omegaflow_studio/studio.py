@@ -844,15 +844,15 @@ def write_bootstrap_file(
 
 def run_bootstrap(config: dict[str, Any]) -> int:
     workspace = bootstrap_workspace_path(config)
-    recording_id = recording_id_from_value(config.get("recording")) or "hello"
+    recording_id = recording_id_from_value(config.get("recording")) or "quickstart"
     if not is_valid_recording_id(recording_id):
         raise StudioError(
             "bootstrap recording id must be a lowercase kebab-case path"
         )
     title = recording_id.rsplit("/", 1)[-1].replace("-", " ").title()
     force = bool_config(config, "force")
+    dry_run = bool_config(config, "dry_run")
 
-    workspace.mkdir(parents=True, exist_ok=True)
     writes = [
         (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG, False),
         (
@@ -868,14 +868,20 @@ def run_bootstrap(config: dict[str, Any]) -> int:
     ]
 
     print(f"workspace {display_path(workspace)}")
+    if dry_run:
+        print("dry run")
     for path, text, executable in writes:
-        status = write_bootstrap_file(
-            path,
-            text,
-            executable=executable,
-            force=force,
-        )
-        print(f"{status:>7} {display_path(path)}")
+        if dry_run:
+            status = "would update" if path.exists() else "would create"
+            print(f"{status:>12} {display_path(path)}")
+        else:
+            status = write_bootstrap_file(
+                path,
+                text,
+                executable=executable,
+                force=force,
+            )
+            print(f"{status:>7} {display_path(path)}")
     print()
     print(f"next    studio recording={recording_id} action=build")
     return 0

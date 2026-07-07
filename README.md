@@ -4,8 +4,8 @@ OmegaFlow is a tool for scripted terminal and video flows. Operators
 author an OmegaFlow script, then build a website-ready video from that source.
 
 The project includes a Python package named `omegaflow`, a `studio` CLI,
-a Docusaurus website for `omegaflow.dev`, and a first getting-started recording
-under `recordings/`.
+a Docusaurus website for `omegaflow.dev`, a quickstart demo recording, and
+tutorial chapter scaffolding under `recordings/`.
 
 ## Development
 
@@ -13,7 +13,7 @@ under `recordings/`.
 python -m build
 pytest
 pnpm --dir website build
-studio recording=getting-started action=build
+studio recording=quickstart-demo action=build
 ```
 
 The current repository also preserves older OmegaFlow design work under

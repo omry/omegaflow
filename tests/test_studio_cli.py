@@ -214,17 +214,17 @@ beat:
 
 def test_nested_recording_directories_are_listed_and_loaded(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
-    recording_dir = recordings_dir / "tutorial" / "hello"
+    recording_dir = recordings_dir / "tutorial" / "recording-file"
     recording_dir.mkdir(parents=True)
     (recording_dir / "omegaflow.md").write_text(
         """
 ---
-id: tutorial/hello
-title: Tutorial Hello
+id: tutorial/recording-file
+title: Tutorial Recording File
 ---
 
 ```yaml studio-directive
-scene: Tutorial Hello
+scene: Tutorial Recording File
 ```
 
 ```yaml studio-directive
@@ -239,17 +239,17 @@ beat:
 
     spec = recording_spec_from_config(
         {
-            "recording": "tutorial/hello",
+            "recording": "tutorial/recording-file",
             "studio": {
                 "recording_dir": str(recordings_dir),
             },
         },
         recording_id=None,
-        overrides=("recording=tutorial/hello",),
+        overrides=("recording=tutorial/recording-file",),
     )
 
-    assert list_recording_ids(recordings_dir) == ["tutorial/hello"]
-    assert spec["id"] == "tutorial/hello"
+    assert list_recording_ids(recordings_dir) == ["tutorial/recording-file"]
+    assert spec["id"] == "tutorial/recording-file"
     assert spec["_manifest_path"] == str(recording_dir / "omegaflow.md")
 
 
@@ -322,7 +322,7 @@ def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
 
 def test_collect_run_jobs_handles_nested_recording_ids(tmp_path) -> None:
     data_dir = tmp_path / "media"
-    run_dir = data_dir / "runs" / "tutorial" / "hello" / "20260705-010203"
+    run_dir = data_dir / "runs" / "tutorial" / "recording-file" / "20260705-010203"
     run_dir.mkdir(parents=True)
     (run_dir / "recording.cast").write_text(
         '{"version": 2}\n[1.25, "o", "ok"]\n',
@@ -335,9 +335,9 @@ def test_collect_run_jobs_handles_nested_recording_ids(tmp_path) -> None:
     )
 
     assert [job["job_id"] for job in jobs] == ["20260705-010203"]
-    assert jobs[0]["type"] == "tutorial/hello"
+    assert jobs[0]["type"] == "tutorial/recording-file"
     assert record.find_latest_run_dir(
-        "tutorial/hello",
+        "tutorial/recording-file",
         artifact="success",
         data_dir=data_dir,
     ) == run_dir
@@ -735,26 +735,70 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
     assert support_script.stat().st_mode & 0o111
 
 
+def test_bootstrap_default_recording_is_quickstart(tmp_path) -> None:
+    workspace = tmp_path / "recordings"
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "force": False,
+        }
+    )
+
+    assert status == 0
+    recording = (workspace / "quickstart" / "omegaflow.md").read_text(
+        encoding="utf-8"
+    )
+    support_script = workspace / "quickstart" / "scripts" / "hello.sh"
+
+    assert "id: quickstart" in recording
+    assert "title: Quickstart" in recording
+    assert "- hello from quickstart" in recording
+    assert support_script.stat().st_mode & 0o111
+
+
+def test_bootstrap_dry_run_does_not_write(tmp_path, capsys) -> None:
+    workspace = tmp_path / "recordings"
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "dry_run": True,
+            "force": False,
+        }
+    )
+
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert "dry run" in output
+    assert "would create" in output
+    assert "recordings/quickstart/omegaflow.md" in output
+    assert not workspace.exists()
+
+
 def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
     workspace = tmp_path / "recordings"
 
     status = studio.run_bootstrap(
         {
             "workspace": str(workspace),
-            "recording": "tutorial/hello",
+            "recording": "tutorial/recording-file",
             "force": False,
         }
     )
 
     assert status == 0
-    recording = (workspace / "tutorial" / "hello" / "omegaflow.md").read_text(
-        encoding="utf-8"
+    recording = (
+        workspace / "tutorial" / "recording-file" / "omegaflow.md"
+    ).read_text(encoding="utf-8")
+    support_script = (
+        workspace / "tutorial" / "recording-file" / "scripts" / "hello.sh"
     )
-    support_script = workspace / "tutorial" / "hello" / "scripts" / "hello.sh"
 
-    assert "id: tutorial/hello" in recording
-    assert "title: Hello" in recording
-    assert "- hello from tutorial/hello" in recording
+    assert "id: tutorial/recording-file" in recording
+    assert "title: Recording File" in recording
+    assert "- hello from tutorial/recording-file" in recording
     assert support_script.stat().st_mode & 0o111
 
 

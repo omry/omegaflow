@@ -1,0 +1,24 @@
+{
+  "dependencies": [
+    {
+      "path": "recordings/quickstart-demo/omegaflow.md",
+      "sha256": "5447767e3872072f1d2d4e69bb009562150e7f4512e57b48a1499404de28fb16"
+    },
+    {
+      "path": "src/omegaflow_studio/record.py",
+      "sha256": "da888a801850708840c68624adfefd7aee2384c65536adf6842a607b747f5a9c"
+    },
+    {
+      "path": "src/omegaflow_studio/studio.py",
+      "sha256": "d29de0fea8120071a45e067b6030ca66ffc9d458adc227fb59f76ed2274a1470"
+    },
+    {
+      "path": "src/omegaflow_studio/studio_config.py",
+      "sha256": "09ba5dac8b3213d38d218e1ba5b6b6862642bbe3306612209a26a2abf4db5c83"
+    }
+  ],
+  "fingerprint": "8bc4d505d4be20f63f03be2486befe0300000d91dc53b418b00178f7dd254679",
+  "recording": "quickstart-demo",
+  "spec_sha256": "637c9de169233b136b2eb2646f9647161fac0998413a4c3dfc57aeffbcfaeaf1",
+  "version": 2
+}

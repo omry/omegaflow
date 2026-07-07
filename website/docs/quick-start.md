@@ -7,26 +7,24 @@ import VideoPlayer from "@site/src/components/VideoPlayer";
 
 # Build A Video
 
-This repository includes one starter recording at
-`recordings/getting-started/omegaflow.md`. It demonstrates the basic loop:
-write an OmegaFlow script, build the terminal recording, and embed the generated
-video in the website.
+This repository includes one short showcase recording at
+`recordings/quickstart-demo/omegaflow.md`. It demonstrates the basic loop:
+bootstrap the default `quickstart` recording, build it, play it, and inspect the
+publish surface.
 
-<!-- studio:getting-started:start -->
+<!-- studio:quickstart-demo:start -->
 <VideoPlayer
-  title="Getting Started With OmegaFlow"
-  src="/omegaflow-videos/getting-started/getting-started.retimed.cast"
-  audio="/audio/casts/getting-started.mp3"
-  audioMeta="/audio/casts/getting-started.json"
+  title="Quickstart Demo"
+  src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
 />
-<!-- studio:getting-started:end -->
+<!-- studio:quickstart-demo:end -->
 
 ## Build the sample
 
 From the repository root:
 
 ```bash
-studio recording=getting-started action=build
+studio recording=quickstart-demo action=build
 ```
 
 The build records the scripted terminal actions, retimes the cast, publishes the
@@ -37,9 +35,9 @@ line up with the script.
 
 ```bash
 studio action=list
-studio recording=getting-started action=inspect
-studio recording=getting-started action=watch
-studio recording=getting-started action=check
+studio recording=quickstart-demo action=inspect
+studio recording=quickstart-demo action=watch
+studio recording=quickstart-demo action=check
 ```
 
 Use `action=watch` while editing a recording and `action=check` before

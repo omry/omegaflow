@@ -79,6 +79,11 @@ Step fields:
 Command entries also accept `id`, `follow_along`, `show_prompt_after`,
 `retime`, and pre/post command pause fields.
 
+`output: fake` still runs the command. OmegaFlow hides the real stdout/stderr in
+the recording and displays `output.text` instead. Use a support script or
+controlled environment when the displayed command should be safe and
+reproducible during recording.
+
 ## Guide
 
 `guide` adds guided-mode prompts to the player:

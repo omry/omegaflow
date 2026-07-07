@@ -14,13 +14,13 @@ one video. Recording ids can include nested directories, such as
 somewhere else can set that in [OmegaFlow Configuration](../configuration.md).
 
 ```bash
-studio recording=hello action=bootstrap  # Create the default recording workspace
+studio action=bootstrap  # Create the default quickstart recording
 ```
 
 ```yaml
 recordings/:           # Recording workspace
   config.yaml:         # Workspace defaults for recordings
-  hello/:              # Video directory
+  quickstart/:         # Bootstrap-created video directory
     omegaflow.md:      # Recording Markdown file for one video
     scripts/:          # Per-video support scripts
       hello.sh:        # Shell script used by omegaflow.md
@@ -42,14 +42,14 @@ A recording Markdown file has three main parts:
 
 ````md
 ---
-id: hello
-title: Hello Video
+id: quickstart
+title: Quickstart
 ---
 
-# Hello Video
+# Quickstart
 
 ```yaml studio-directive
-scene: Hello Video
+scene: Quickstart
 ```
 
 ```yaml studio-directive
@@ -69,14 +69,14 @@ beat:
 Every recording defines one scene. The scene names the video:
 
 ```yaml
-scene: Hello Video
+scene: Quickstart
 ```
 
 It can also be a mapping:
 
 ```yaml
 scene:
-  title: Hello Video
+  title: Quickstart
 ```
 
 ## What You Touch

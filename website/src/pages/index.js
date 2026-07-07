@@ -17,15 +17,15 @@ export default function Home() {
                 Write the terminal flow once, then rebuild the video whenever the docs change.
               </p>
               <div className="homeHero__actions">
-                <Link className="button button--primary button--lg" to="/quick-start">
-                  Build a video
+                <Link className="button button--primary button--lg" to="/tutorial/quickstart">
+                  Start the tutorial
                 </Link>
               </div>
             </div>
             <div className="homeHero__video" aria-label="Quick start video">
               <VideoPlayer
-                title="Getting Started With OmegaFlow"
-                src="/omegaflow-videos/getting-started/getting-started.retimed.cast"
+                title="Quickstart Demo"
+                src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
               />
             </div>
           </div>

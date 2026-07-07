@@ -2,6 +2,20 @@ module.exports = {
   docs: [
     'intro',
     'quick-start',
+    {
+      type: 'category',
+      label: 'Tutorial',
+      link: {
+        type: 'doc',
+        id: 'tutorial/overview',
+      },
+      items: [
+        'tutorial/quickstart',
+        'tutorial/recording-file',
+        'tutorial/beat',
+        'tutorial/publishing',
+      ],
+    },
     'configuration',
     {
       type: 'category',
