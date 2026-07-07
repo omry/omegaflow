@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frontend CLI for OmegaFlow Studio."""
+"""Frontend CLI for OmegaFlow."""
 
 from __future__ import annotations
 
@@ -772,20 +772,37 @@ publish:
 
 # {title}
 
+This Markdown file is the source for one generated terminal video.
+
+The YAML header names the recording, chooses output paths, and declares where
+the finished video can be published. The prose explains the walkthrough for
+readers and future maintainers. The fenced `studio-directive` blocks tell
+OmegaFlow what to record.
+
 ```yaml studio-directive
 scene: {title}
 ```
+
+The scene is the title shown by the player. Beats are the steps in the video.
+This beat runs a small shell script kept in this video's `scripts/` directory.
 
 ```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
-  narration: Print one line in the terminal.
+  narration: Run the support script and verify the terminal output.
+  caption: A one-command terminal recording.
   actions:
   - commands:
-    - run_file: {recording_id}/hello.sh
-      display: bash {recording_id}/hello.sh
+    - run_file: scripts/hello.sh
+      display: bash scripts/hello.sh
+      expect:
+        output_contains:
+        - hello from {recording_id}
 ```
+
+Publish surfaces in the header let the same recording write a standalone HTML
+page. Add a docs surface when you want the build to update a documentation page.
 """
 
 
@@ -836,9 +853,13 @@ def run_bootstrap(config: dict[str, Any]) -> int:
     workspace.mkdir(parents=True, exist_ok=True)
     writes = [
         (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG, False),
-        (workspace / f"{recording_id}.md", bootstrap_recording_text(recording_id, title), False),
         (
-            workspace / recording_id / "hello.sh",
+            workspace / recording_id / "omegaflow.md",
+            bootstrap_recording_text(recording_id, title),
+            False,
+        ),
+        (
+            workspace / recording_id / "scripts" / "hello.sh",
             bootstrap_support_script_text(recording_id),
             True,
         ),

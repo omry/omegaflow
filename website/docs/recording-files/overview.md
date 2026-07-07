@@ -6,10 +6,10 @@ slug: /recording-files
 
 # Recording Files
 
-By default, a Studio recording workspace is the `recordings/` directory. The
-file you edit most is `<recording-dir>/<id>.md`: it is the script for one
-video. Projects that keep recordings somewhere else can set that in
-[Studio Configuration](../studio-configuration.md).
+By default, an OmegaFlow recording workspace is the `recordings/` directory. The
+file you edit most is `<recording-dir>/<id>/omegaflow.md`: it is the source for
+one video. Projects that keep recordings somewhere else can set that in
+[OmegaFlow Configuration](../configuration.md).
 
 ```bash
 studio recording=hello action=bootstrap  # Create the default recording workspace
@@ -18,9 +18,10 @@ studio recording=hello action=bootstrap  # Create the default recording workspac
 ```yaml
 recordings/:           # Recording workspace
   config.yaml:         # Workspace defaults for recordings
-  hello.md:            # Recording Markdown file for one video
-  hello/:              # Per-recording support files
-    hello.sh:          # Shell script used by hello.md
+  hello/:              # Video directory
+    omegaflow.md:      # Recording Markdown file for one video
+    scripts/:          # Per-video support scripts
+      hello.sh:        # Shell script used by omegaflow.md
   .omegaflow/:         # Default generated runtime state and local outputs
 ```
 
@@ -32,7 +33,7 @@ A recording Markdown file has three main parts:
 | --- | --- | --- |
 | Recording configuration | YAML frontmatter at the top of the file. Defines `id`, `title`, and per-video config overrides. | [Recording Configuration](./config.md) |
 | Markdown prose | Human-readable notes and headings for the authored walkthrough. | This page |
-| `studio-directive` blocks | Machine-readable scene and beat blocks that Studio records, retimes, checks, and publishes. | [Beat](./beat.md) |
+| `studio-directive` blocks | Machine-readable scene and beat blocks that OmegaFlow records, retimes, checks, and publishes. | [Beat](./beat.md) |
 
 ````md
 ---
@@ -53,8 +54,8 @@ beat:
   narration: Print one line in the terminal.
   actions:
   - commands:
-    - run_file: hello/hello.sh
-      display: bash hello/hello.sh
+    - run_file: scripts/hello.sh
+      display: bash scripts/hello.sh
 ```
 ````
 
@@ -77,8 +78,8 @@ scene:
 
 | How often | File | Purpose |
 | --- | --- | --- |
-| Most often | `<recording-dir>/<id>.md` | The video script: recording configuration, scene, beats, narration, and commands. |
-| Often | `<recording-dir>/<id>/` | Shell scripts and small support files for that recording. |
+| Most often | `<recording-dir>/<id>/omegaflow.md` | The video source: recording configuration, scene, beats, narration, and commands. |
+| Often | `<recording-dir>/<id>/scripts/` | Shell scripts and small support files for that recording. |
 | Occasionally | `<recording-dir>/config.yaml` | Workspace defaults, such as capture style, output directory, audio provider, or environment key. |
 | Rarely | `<studio.data_dir>/` | Generated runs, cache, and local outputs. Defaults to `<recording-dir>/.omegaflow/`; do not edit by hand. |
 
@@ -87,4 +88,4 @@ scene:
 - [Recording Configuration](./config.md): schema defaults, workspace defaults, and frontmatter overrides.
 - [Beat](./beat.md): beat structure, actions, checks, commands, and guide prompts.
 - [Publishing And Runtime Output](./publishing-runtime.md): publish surfaces and generated files.
-- [Studio Configuration](../studio-configuration.md): tool defaults such as the recording directory and runtime state directory.
+- [OmegaFlow Configuration](../configuration.md): tool defaults such as the recording directory and runtime state directory.

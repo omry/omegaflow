@@ -1,10 +1,9 @@
-# OmegaFlow Studio
+# OmegaFlow
 
-OmegaFlow Studio is a tool for scripted terminal and video flows. Operators
-author an OmegaFlow Studio script, then build a website-ready OmegaFlow Video
-from that source.
+OmegaFlow is a tool for scripted terminal and video flows. Operators
+author an OmegaFlow script, then build a website-ready video from that source.
 
-The project includes a Python package named `omegaflow-studio`, a `studio` CLI,
+The project includes a Python package named `omegaflow`, a `studio` CLI,
 a Docusaurus website for `omegaflow.dev`, and a first getting-started recording
 under `recordings/`.
 

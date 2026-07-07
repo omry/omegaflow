@@ -1,7 +1,7 @@
 // @ts-check
 
 const config = {
-  title: 'OmegaFlow Studio',
+  title: 'OmegaFlow',
   tagline: 'Scripted terminal walkthroughs you can rebuild',
   url: 'https://omegaflow.dev',
   baseUrl: '/',
@@ -40,7 +40,7 @@ const config = {
       additionalLanguages: ['bash', 'yaml'],
     },
     navbar: {
-      title: 'OmegaFlow Studio',
+      title: 'OmegaFlow',
       items: [
         {
           href: 'https://github.com/omry/omegaflow',
@@ -69,17 +69,17 @@ const config = {
           title: 'Reference',
           items: [
             {
-              label: 'OmegaFlow Studio',
-              to: '/omegaflow-studio',
+              label: 'OmegaFlow',
+              to: '/omegaflow',
             },
             {
-              label: 'OmegaFlow Video',
-              to: '/omegaflow-video',
+              label: 'Video Output',
+              to: '/video-output',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} OmegaFlow Studio.`,
+      copyright: `Copyright © ${new Date().getFullYear()} OmegaFlow.`,
     },
   },
 };

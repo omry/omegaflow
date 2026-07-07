@@ -6,7 +6,7 @@ sidebar_label: Publishing And Runtime
 # Publishing And Runtime Output
 
 Publishing config names the places a build can write. Runtime output is the
-local state Studio creates while recording, retiming, generating audio, and
+local state OmegaFlow creates while recording, retiming, generating audio, and
 publishing.
 
 ## Publish Surfaces
@@ -24,7 +24,7 @@ publish:
       type: docusaurus_mdx
       file: docs/hello.md
       placeholder: hello-video
-      component: OmegaFlowVideo
+      component: VideoPlayer
     html:
       type: standalone_html
       file: ${outputs.dir}/${id}.html
@@ -35,9 +35,9 @@ writes a complete HTML page containing the cast player.
 
 ## Runtime Output
 
-By default, Studio runtime files are generated under `recordings/.omegaflow/`.
+By default, OmegaFlow runtime files are generated under `recordings/.omegaflow/`.
 Projects can change this with `studio.data_dir` in
-[Studio Configuration](../studio-configuration.md).
+[OmegaFlow Configuration](../configuration.md).
 
 ```text
 recordings/.omegaflow/

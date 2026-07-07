@@ -2,7 +2,7 @@ module.exports = {
   docs: [
     'intro',
     'quick-start',
-    'studio-configuration',
+    'configuration',
     {
       type: 'category',
       label: 'Recording Files',
@@ -16,7 +16,7 @@ module.exports = {
         'recording-files/publishing-runtime',
       ],
     },
-    'omegaflow-studio',
-    'omegaflow-video',
+    'omegaflow',
+    'video-output',
   ],
 };

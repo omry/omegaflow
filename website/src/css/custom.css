@@ -69,15 +69,6 @@ html[data-theme='light'] {
   max-width: 540px;
 }
 
-.homeHero__eyebrow {
-  color: #66d9c8;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-}
-
 .homeHero h1 {
   font-size: 3rem;
   line-height: 1.04;
@@ -101,7 +92,7 @@ html[data-theme='light'] {
   min-width: 0;
 }
 
-.omegaflow-video {
+.video-player {
   background: #0b0f13;
   border: 1px solid #2a3540;
   border-radius: 8px;
@@ -109,14 +100,14 @@ html[data-theme='light'] {
   overflow: hidden;
 }
 
-.omegaflow-video cast-player-embed,
-.omegaflow-video iframe {
+.video-player cast-player-embed,
+.video-player iframe {
   aspect-ratio: 16 / 10;
   display: block;
   width: 100%;
 }
 
-.omegaflow-video iframe {
+.video-player iframe {
   border: 0;
 }
 

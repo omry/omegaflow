@@ -1,8 +1,8 @@
-# OmegaFlow Video Output Contract
+# Video Output Contract
 
 Status: initial migration contract.
 
-An OmegaFlow Video is currently published as a set of website assets:
+Video output is currently published as a set of website assets:
 
 - baseline cast: `website/static/omegaflow-videos/<id>/<id>.cast`
 - retimed cast: `website/static/omegaflow-videos/<id>/<id>.retimed.cast`
@@ -18,4 +18,4 @@ The initial player assets are owned by the Python package under
 assets plus generated video assets. Website-published video assets are
 committed; non-website generated videos are ignored by default.
 
-The final OmegaFlow Video file format is intentionally not locked yet.
+The final video output format is intentionally not locked yet.

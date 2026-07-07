@@ -1,4 +1,4 @@
-"""Structured progress events shared by OmegaFlow Studio tools."""
+"""Structured progress events shared by OmegaFlow tools."""
 
 from __future__ import annotations
 

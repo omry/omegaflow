@@ -10,22 +10,22 @@ shared workspace defaults and for the per-recording frontmatter block.
 
 ## Override Order
 
-Studio builds the final recording config in this order:
+OmegaFlow builds the final recording config in this order:
 
 1. Schema default values.
 2. `<recording-dir>/config.yaml`, the workspace defaults for recordings.
-3. The per-recording config block in `<recording-dir>/<id>.md` frontmatter.
+3. The per-recording config block in `<recording-dir>/<id>/omegaflow.md` frontmatter.
 
 Later layers override earlier layers. `id` and `title` are recording identity
 fields; they belong in frontmatter and are rejected in workspace `config.yaml`.
 
-This page starts after Studio has selected the recording workspace. Tool-level
+This page starts after OmegaFlow has selected the recording workspace. Tool-level
 settings such as which directory to use are documented in
-[Studio Configuration](../studio-configuration.md).
+[OmegaFlow Configuration](../configuration.md).
 
 ## Composition And Interpolation
 
-Studio uses OmegaConf syntax for interpolations:
+OmegaFlow uses OmegaConf syntax for interpolations:
 
 ```yaml
 outputs:
@@ -72,7 +72,7 @@ audio:
 
 ## Recording Frontmatter
 
-Each `*.md` recording starts with YAML frontmatter:
+Each `<id>/omegaflow.md` recording starts with YAML frontmatter:
 
 ```yaml
 ---

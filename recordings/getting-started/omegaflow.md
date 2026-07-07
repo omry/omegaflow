@@ -1,6 +1,6 @@
 ---
 id: getting-started
-title: Getting Started With OmegaFlow Studio
+title: Getting Started With OmegaFlow
 capture:
   window_size: 90x24
   headless: true
@@ -24,7 +24,7 @@ publish:
       type: docusaurus_mdx
       file: website/docs/quick-start.md
       placeholder: getting-started
-      component: OmegaFlowVideo
+      component: VideoPlayer
     standalone_html:
       type: standalone_html
       file: website/static/omegaflow-videos/getting-started/index.html
@@ -50,17 +50,17 @@ audio:
   format: mp3
 ---
 
-# Getting Started With OmegaFlow Studio
+# Getting Started With OmegaFlow
 
 ```yaml studio-directive
-scene: Getting Started With OmegaFlow Studio
+scene: Getting Started With OmegaFlow
 ```
 
-Purpose: show a new user the first real loop: install the Studio CLI, create a
+Purpose: show a new user the first real loop: install the OmegaFlow CLI, create a
 tiny recording, build it, play it in the terminal, and inspect the publish
 surfaces.
 
-Audience: someone evaluating OmegaFlow Studio for technical walkthroughs,
+Audience: someone evaluating OmegaFlow for technical walkthroughs,
 interactive docs, or reproducible terminal demos.
 
 ```yaml studio-directive
@@ -68,21 +68,21 @@ beat:
   id: install
   heading: Install The CLI
   narration: >-
-    Start with the Studio command line tool. Install the package, then use the
+    Start with the OmegaFlow command line tool. Install the package, then use the
     studio command to create and build recordings from Markdown scripts.
   marker: install
-  caption: Install the Studio CLI.
+  caption: Install the OmegaFlow CLI.
   actions:
   - commands:
-    - run: python -m pip install omegaflow-studio
-      display: python -m pip install omegaflow-studio
+    - run: python -m pip install omegaflow
+      display: python -m pip install omegaflow
       output:
         mode: fake
         text: |
-          Successfully installed omegaflow-studio
+          Successfully installed omegaflow
   guide:
     commands:
-    - python -m pip install omegaflow-studio
+    - python -m pip install omegaflow
     success_hint: The install provides the studio command.
 ```
 
@@ -91,19 +91,20 @@ beat:
   id: create
   heading: Create A Small Recording
   narration: >-
-    A recording is just Markdown with studio directive blocks. This tiny
-    example records one command and declares two publish surfaces.
+    A recording is Markdown with a YAML header, explanatory prose, and studio
+    directive blocks. This small example records one support script and declares
+    two publish surfaces.
   marker: create
-  caption: Create a one-command Studio recording.
+  caption: Create a tiny but complete recording.
   actions:
   - commands:
-    - run: bash recordings/getting-started/create-demo-project.sh
+    - run: bash recordings/getting-started/scripts/create-demo-project.sh
       display: |-
         python - <<'PY'
         from pathlib import Path
 
         root = Path("/tmp/omegaflow-hello")
-        (root / "recordings/hello").mkdir(parents=True, exist_ok=True)
+        (root / "recordings/hello/scripts").mkdir(parents=True, exist_ok=True)
         (root / "docs").mkdir(parents=True, exist_ok=True)
         (root / "recordings/config.yaml").write_text("""capture:
           window_size: 72x14
@@ -118,15 +119,15 @@ beat:
           format: mp3
         """)
         (root / "docs/hello.md").write_text("# Hello Video\n\n<!-- studio:hello-video:start -->\n<!-- studio:hello-video:end -->\n")
-        (root / "recordings/hello/hello.sh").write_text("""#!/usr/bin/env bash
+        (root / "recordings/hello/scripts/hello.sh").write_text("""#!/usr/bin/env bash
         set -euo pipefail
 
         printf 'hello from OmegaFlow\\n'
         """)
-        (root / "recordings/hello/hello.sh").chmod(0o755)
+        (root / "recordings/hello/scripts/hello.sh").chmod(0o755)
 
         fence = "`" * 3
-        (root / "recordings/hello.md").write_text(f"""---
+        (root / "recordings/hello/omegaflow.md").write_text(f"""---
         id: hello
         title: Hello Video
         outputs:
@@ -141,54 +142,69 @@ beat:
               type: docusaurus_mdx
               file: docs/hello.md
               placeholder: hello-video
-              component: OmegaFlowVideo
+              component: VideoPlayer
             html:
               type: standalone_html
               file: site/videos/hello.html
-        audio:
-          enabled: false
         ---
 
         # Hello Video
+
+        This Markdown file is the source for one generated terminal video.
+
+        The YAML header names the recording, chooses output paths, and declares where
+        the finished video can be published. The prose explains the walkthrough for
+        readers and future maintainers. The fenced `studio-directive` blocks tell
+        OmegaFlow what to record.
 
         {fence}yaml studio-directive
         scene: Hello Video
         {fence}
 
+        The scene is the title shown by the player. Beats are the steps in the video.
+        This beat runs a small shell script kept in this video's `scripts/` directory.
+
         {fence}yaml studio-directive
         beat:
           id: hello
           heading: Say Hello
-          narration: Print one line in the terminal.
+          narration: Run the support script and verify the terminal output.
+          caption: A one-command terminal recording.
           actions:
           - commands:
-            - run_file: hello/hello.sh
-              display: bash hello/hello.sh
+            - run_file: scripts/hello.sh
+              display: bash scripts/hello.sh
+              expect:
+                output_contains:
+                - hello from OmegaFlow
         {fence}
+
+        Publish surfaces in the header let the same recording update docs or write a
+        standalone HTML page.
         """)
         PY
       output:
         mode: fake
         text: |
           Wrote /tmp/omegaflow-hello/recordings/config.yaml
-          Wrote /tmp/omegaflow-hello/recordings/hello.md
-          Wrote /tmp/omegaflow-hello/recordings/hello/hello.sh
+          Wrote /tmp/omegaflow-hello/recordings/hello/omegaflow.md
+          Wrote /tmp/omegaflow-hello/recordings/hello/scripts/hello.sh
           Wrote /tmp/omegaflow-hello/docs/hello.md
-    - run: find /tmp/omegaflow-hello -maxdepth 3 -type f | sort
-      display: find /tmp/omegaflow-hello -maxdepth 3 -type f | sort
+    - run: find /tmp/omegaflow-hello -maxdepth 4 -type f | sort
+      display: find /tmp/omegaflow-hello -maxdepth 4 -type f | sort
       output:
         mode: fake
         text: |
           /tmp/omegaflow-hello/docs/hello.md
           /tmp/omegaflow-hello/recordings/config.yaml
-          /tmp/omegaflow-hello/recordings/hello.md
-          /tmp/omegaflow-hello/recordings/hello/hello.sh
-    - run: sed -n '1,70p' /tmp/omegaflow-hello/recordings/hello.md
-      display: sed -n '1,70p' /tmp/omegaflow-hello/recordings/hello.md
+          /tmp/omegaflow-hello/recordings/hello/omegaflow.md
+          /tmp/omegaflow-hello/recordings/hello/scripts/hello.sh
+    - run: sed -n '1,95p' /tmp/omegaflow-hello/recordings/hello/omegaflow.md
+      display: sed -n '1,95p' /tmp/omegaflow-hello/recordings/hello/omegaflow.md
   guide:
     commands:
-    - sed -n '1,70p' /tmp/omegaflow-hello/recordings/hello.md
-    success_hint: The script defines one beat and publish surfaces.
+    - sed -n '1,95p' /tmp/omegaflow-hello/recordings/hello/omegaflow.md
+    success_hint: The file shows config, prose, directives, and publish surfaces.
 ```
 
 ```yaml studio-directive
@@ -196,13 +212,13 @@ beat:
   id: record
   heading: Record The Video
   narration: >-
-    Now build the recording. Studio records a baseline cast, retimes it for
+    Now build the recording. OmegaFlow records a baseline cast, retimes it for
     viewing, checks alignment, and writes the selected publish surface.
   marker: record
   caption: Build the tiny video from the script.
   actions:
   - commands:
-    - run: bash recordings/getting-started/build-demo-project.sh
+    - run: bash recordings/getting-started/scripts/build-demo-project.sh
       display: studio recording=hello action=build
       output:
         mode: fake
@@ -233,7 +249,7 @@ beat:
   caption: Play the generated cast in the terminal.
   actions:
   - commands:
-    - run: bash recordings/getting-started/play-demo-project.sh
+    - run: bash recordings/getting-started/scripts/play-demo-project.sh
       display: studio recording=hello action=play
       output:
         mode: fake
@@ -260,7 +276,7 @@ beat:
   caption: Inspect the configured publish surfaces.
   actions:
   - commands:
-    - run: bash recordings/getting-started/inspect-demo-project.sh
+    - run: bash recordings/getting-started/scripts/inspect-demo-project.sh
       display: studio recording=hello action=build dry_run=true
       expect:
         output_contains:

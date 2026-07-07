@@ -1,16 +1,15 @@
 ---
 sidebar_position: 1
-sidebar_label: Start Here
+sidebar_label: Overview
 ---
 
-# OmegaFlow Studio
+# OmegaFlow
 
-OmegaFlow Studio turns scripted terminal workflows into website-ready
-OmegaFlow Videos.
+OmegaFlow turns scripted terminal workflows into website-ready videos.
 
-The project is for demos, quick starts, and technical walkthroughs where the
+The project is for demos, guides, and technical walkthroughs where the
 recording should be tied to source control instead of trapped inside a one-off
-screen capture. A Studio recording script describes the story, terminal
+screen capture. An OmegaFlow script describes the story, terminal
 commands, visible captions, optional narration, expected outputs, and publish
 targets. The `studio` CLI uses [Hydra](https://hydra.cc/) for configuration and
 builds the generated media from that source.
@@ -18,7 +17,7 @@ builds the generated media from that source.
 ## Built for changing demos
 
 Terminal demos age quickly. Commands change, setup steps move, and screenshots
-stop matching the product. OmegaFlow Studio treats a walkthrough as a compiled
+stop matching the product. OmegaFlow treats a walkthrough as a compiled
 artifact: keep the script in the repository, rebuild the video when the workflow
 changes, and publish the resulting assets with the documentation.
 

@@ -1,1 +1,1 @@
-"""Packaged OmegaFlow Video player assets."""
+"""Packaged OmegaFlow player assets."""

@@ -3,9 +3,9 @@ requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "omegaflow-studio"
+name = "omegaflow"
 version = "0.1.0"
-description = "Scripted terminal and video flow authoring for OmegaFlow Studio"
+description = "Scripted terminal and video flow authoring for OmegaFlow"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

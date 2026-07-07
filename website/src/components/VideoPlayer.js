@@ -1,7 +1,7 @@
 import React, {useEffect} from 'react';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
-export default function OmegaFlowVideo({
+export default function VideoPlayer({
   src,
   title,
   audio,
@@ -27,7 +27,7 @@ export default function OmegaFlowVideo({
   }, [embedScriptSrc]);
 
   return (
-    <div className="omegaflow-video">
+    <div className="video-player">
       <cast-player-embed
         title={title}
         src={castSrc}

@@ -1,4 +1,4 @@
-# Studio Graph Playback Direction
+# OmegaFlow Graph Playback Direction
 
 ## Status
 
@@ -7,7 +7,7 @@ rename plan.
 
 ## Context
 
-The current OmegaFlow Studio is a linear authoring and build surface for
+The current OmegaFlow is a linear authoring and build surface for
 terminal recordings. A recording script defines setup, narrated beats, commands,
 expectations, generated audio, retiming, publish surfaces, and alignment checks.
 
@@ -15,17 +15,17 @@ There is a related older pre-incubation idea called OmegaFlow that explored a
 general OmegaConf-backed workflow graph with nodes, transitions, decision
 points, runtime state, and reusable subgraphs. Those ideas are useful seed
 material, but the name is likely to be confused with OmegaConf and should not
-drive the current Studio naming.
+drive the current OmegaFlow naming.
 
 ## Direction
 
-Studio can evolve toward non-linear playback without requiring asciinema itself
+OmegaFlow can evolve toward non-linear playback without requiring asciinema itself
 to become non-linear.
 
 The useful split is:
 
 - asciinema remains the linear terminal media format
-- Studio owns the graph, choices, contracts, narration, artifacts, and routing
+- OmegaFlow owns the graph, choices, contracts, narration, artifacts, and routing
 - each playable segment is linear and has explicit start and end invariants
 - junctions choose among segments whose preconditions are satisfied
 
@@ -50,7 +50,7 @@ The key validity rule is:
 > An edge is valid when the upstream segment's postconditions satisfy the
 > downstream segment's preconditions.
 
-Studio already has the beginning of this model in recording `expect` checks.
+OmegaFlow already has the beginning of this model in recording `expect` checks.
 The next step is to make those checks part of a first-class segment contract and
 add matching preconditions.
 
@@ -104,5 +104,5 @@ runtime:
 
 The older OmegaFlow prototype can remain as reference material for future graph
 runtime ideas, especially node transitions, decision nodes, runtime/session
-state, and subgraph composition. Studio should only absorb those ideas when they
+state, and subgraph composition. OmegaFlow should only absorb those ideas when they
 serve the media workflow directly.

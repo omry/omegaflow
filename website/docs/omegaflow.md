@@ -1,14 +1,14 @@
 ---
 sidebar_position: 3
-sidebar_label: Studio CLI
+sidebar_label: CLI
 ---
 
-# OmegaFlow Studio
+# OmegaFlow CLI
 
-OmegaFlow Studio is the authoring tool and CLI for scripted terminal and video
+OmegaFlow is the authoring tool and CLI for scripted terminal and video
 flows.
 
-The current package is `omegaflow-studio`, and it installs a `studio` command.
+The current package is `omegaflow`, and it installs a `studio` command.
 The CLI composes recording configuration with Hydra, runs scripted terminal
 actions, stores per-run artifacts, retimes casts for human playback, manages
 optional narration audio, and publishes website-ready outputs.

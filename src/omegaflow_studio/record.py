@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record OmegaFlow Studio casts from Hydra-composed configs."""
+"""Record OmegaFlow casts from Hydra-composed configs."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from .studio_config import (
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
     recording_script_dir_from_config,
+    recording_script_path,
     studio_data_dir_from_config,
 )
 from .terminal_style import (
@@ -730,7 +731,7 @@ def recording_was_interrupted(returncode: int) -> bool:
 
 def postmortem_entrypoint_text(*, run_dir: str, workdir: str, venv: str) -> str:
     run_id = Path(run_dir).name
-    prompt_name = f"omegaflow-studio:{run_id}"
+    prompt_name = f"omegaflow:{run_id}"
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -748,7 +749,7 @@ def postmortem_entrypoint_text(*, run_dir: str, workdir: str, venv: str) -> str:
         'elif [[ -n "$venv" ]]; then',
         "  printf 'warning: venv activate script not found: %s\\n' \"$venv/bin/activate\" >&2",
         "fi",
-        "printf 'OmegaFlow Studio postmortem shell\\n'",
+        "printf 'OmegaFlow postmortem shell\\n'",
         "printf '  run dir: %s\\n' \"$run_dir\"",
         "printf '  workdir: %s\\n' \"$workdir\"",
         'if [[ -n "$venv" ]]; then',
@@ -1540,9 +1541,9 @@ def has_recording_config(spec: dict[str, Any]) -> bool:
     recording_dir = spec.get("_recording_dir")
     if isinstance(recording_dir, str) and recording_dir:
         recording_id = require_string(spec, "id")
-        return (Path(recording_dir) / f"{recording_id}.md").exists()
+        return recording_script_path(recording_id, Path(recording_dir)).exists()
     recording_id = require_string(spec, "id")
-    return (RECORDING_SCRIPT_DIR / f"{recording_id}.md").exists()
+    return recording_script_path(recording_id, RECORDING_SCRIPT_DIR).exists()
 
 
 def render_session_script(spec: dict[str, Any]) -> str:
@@ -1691,7 +1692,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "venv = sys.argv[3]",
             "run_dir = sys.argv[4]",
             "run_id = Path(run_dir).name",
-            "prompt_name = f'omegaflow-studio:{run_id}'",
+            "prompt_name = f'omegaflow:{run_id}'",
             "lines = [",
             "    '#!/usr/bin/env bash',",
             "    'set -euo pipefail',",
@@ -1709,7 +1710,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    'elif [[ -n \"$venv\" ]]; then',",
             '    "  printf \'warning: venv activate script not found: %s\\\\n\' \\"$venv/bin/activate\\" >&2",',
             "    'fi',",
-            "    \"printf 'OmegaFlow Studio postmortem shell\\\\n'\",",
+            "    \"printf 'OmegaFlow postmortem shell\\\\n'\",",
             '    "printf \'  run dir: %s\\\\n\' \\"$run_dir\\"",',
             '    "printf \'  workdir: %s\\\\n\' \\"$workdir\\"",',
             "    'if [[ -n \"$venv\" ]]; then',",

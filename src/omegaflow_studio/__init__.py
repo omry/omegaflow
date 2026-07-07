@@ -1,4 +1,4 @@
-"""OmegaFlow Studio package."""
+"""OmegaFlow package."""
 
 __all__ = ["__version__"]
 

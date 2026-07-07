@@ -1,148 +1,147 @@
 {
-  "duration": 11.95,
+  "duration": 11.3,
   "recording": "getting-started",
   "segment": "publish",
   "source_text": "Publish surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for docs and write standalone HTML for a direct browser page.",
   "timestamp_granularities": [
-    "word",
-    "segment"
+    "word"
   ],
-  "transcript": "Published surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for Docs and write standalone HTML for a direct browser page.",
+  "transcript": "Hublish surfaces describe where the finished recording is embedded. The same recording can update Docusaurus MDX for docs and write standalone HTML for a direct browser page.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.56,
+      "end": 0.52,
       "start": 0.0,
-      "word": "Published"
+      "word": "Hublish"
     },
     {
-      "end": 1.1,
-      "start": 0.56,
+      "end": 1.04,
+      "start": 0.52,
       "word": "surfaces"
     },
     {
       "end": 1.66,
-      "start": 1.1,
+      "start": 1.04,
       "word": "describe"
     },
     {
-      "end": 1.88,
+      "end": 2.02,
       "start": 1.66,
       "word": "where"
     },
     {
-      "end": 2.14,
-      "start": 1.88,
+      "end": 2.28,
+      "start": 2.02,
       "word": "the"
     },
     {
-      "end": 2.44,
-      "start": 2.14,
+      "end": 2.52,
+      "start": 2.28,
       "word": "finished"
     },
     {
-      "end": 2.86,
-      "start": 2.44,
+      "end": 2.9,
+      "start": 2.52,
       "word": "recording"
     },
     {
-      "end": 3.26,
-      "start": 2.86,
+      "end": 3.18,
+      "start": 2.9,
       "word": "is"
     },
     {
-      "end": 3.54,
-      "start": 3.26,
+      "end": 3.4,
+      "start": 3.18,
       "word": "embedded"
     },
     {
-      "end": 4.64,
-      "start": 4.56,
+      "end": 4.22,
+      "start": 4.14,
       "word": "The"
     },
     {
-      "end": 4.96,
-      "start": 4.64,
+      "end": 4.5,
+      "start": 4.22,
       "word": "same"
     },
     {
-      "end": 5.32,
-      "start": 4.96,
+      "end": 4.82,
+      "start": 4.5,
       "word": "recording"
     },
     {
-      "end": 5.66,
-      "start": 5.32,
+      "end": 5.34,
+      "start": 4.82,
       "word": "can"
     },
     {
-      "end": 6.04,
-      "start": 5.66,
+      "end": 5.72,
+      "start": 5.34,
       "word": "update"
     },
     {
-      "end": 6.76,
-      "start": 6.04,
+      "end": 6.4,
+      "start": 5.72,
       "word": "Docusaurus"
     },
     {
-      "end": 7.38,
-      "start": 6.76,
+      "end": 6.98,
+      "start": 6.4,
       "word": "MDX"
     },
     {
-      "end": 7.88,
-      "start": 7.38,
+      "end": 7.24,
+      "start": 6.98,
       "word": "for"
     },
     {
-      "end": 8.02,
-      "start": 7.88,
-      "word": "Docs"
+      "end": 7.54,
+      "start": 7.24,
+      "word": "docs"
     },
     {
-      "end": 8.62,
-      "start": 8.02,
+      "end": 8.12,
+      "start": 7.54,
       "word": "and"
     },
     {
-      "end": 8.94,
-      "start": 8.62,
+      "end": 8.38,
+      "start": 8.12,
       "word": "write"
     },
     {
-      "end": 9.46,
-      "start": 8.94,
+      "end": 8.86,
+      "start": 8.38,
       "word": "standalone"
     },
     {
-      "end": 10.04,
-      "start": 9.46,
+      "end": 9.34,
+      "start": 8.86,
       "word": "HTML"
     },
     {
-      "end": 10.42,
-      "start": 10.04,
+      "end": 9.7,
+      "start": 9.34,
       "word": "for"
     },
     {
-      "end": 10.62,
-      "start": 10.42,
+      "end": 9.88,
+      "start": 9.7,
       "word": "a"
     },
     {
-      "end": 10.96,
-      "start": 10.62,
+      "end": 10.18,
+      "start": 9.88,
       "word": "direct"
     },
     {
-      "end": 11.3,
-      "start": 10.96,
+      "end": 10.48,
+      "start": 10.18,
       "word": "browser"
     },
     {
-      "end": 11.7,
-      "start": 11.3,
+      "end": 10.84,
+      "start": 10.48,
       "word": "page"
     }
   ]

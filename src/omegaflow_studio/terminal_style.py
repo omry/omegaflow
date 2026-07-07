@@ -1,4 +1,4 @@
-"""Shared terminal color helpers for OmegaFlow Studio tools."""
+"""Shared terminal color helpers for OmegaFlow tools."""
 
 from __future__ import annotations
 

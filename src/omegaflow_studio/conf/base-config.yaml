@@ -1,7 +1,7 @@
 defaults:
   - studio_schema
   - _self_
-  - optional /.omegaflow-studio@_here_: config
+  - optional /.omegaflow@_here_: config
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled
 

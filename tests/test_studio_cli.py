@@ -21,6 +21,7 @@ from omegaflow_studio.studio_config import (
     StudioConfigError,
     compose_studio_config,
     discover_project_layout,
+    list_recording_ids,
     recording_from_script,
     recording_spec_from_config,
     studio_directive_blocks,
@@ -124,7 +125,7 @@ def test_studio_run_dir_routes_missing_recording_to_scratch() -> None:
 
 
 def test_studio_config_loads_cwd_local_config(tmp_path, monkeypatch) -> None:
-    local_config_dir = tmp_path / ".omegaflow-studio"
+    local_config_dir = tmp_path / ".omegaflow"
     local_config_dir.mkdir()
     (local_config_dir / "config.yaml").write_text(
         """
@@ -145,7 +146,7 @@ env_file: .env.studio
 
 
 def test_runs_action_uses_config_data_dir(tmp_path, monkeypatch, capsys) -> None:
-    local_config_dir = tmp_path / ".omegaflow-studio"
+    local_config_dir = tmp_path / ".omegaflow"
     local_config_dir.mkdir()
     (local_config_dir / "config.yaml").write_text(
         """
@@ -173,7 +174,8 @@ studio:
 def test_studio_recording_dir_comes_from_config(tmp_path) -> None:
     recordings_dir = tmp_path / "docs" / "recordings"
     recordings_dir.mkdir(parents=True)
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -207,7 +209,30 @@ beat:
 
     assert spec["id"] == "hello"
     assert spec["_recording_dir"] == str(recordings_dir.resolve())
-    assert spec["_manifest_path"] == str(recordings_dir / "hello.md")
+    assert spec["_manifest_path"] == str(recordings_dir / "hello" / "omegaflow.md")
+
+
+def test_flat_recording_file_is_not_supported(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello.md").write_text(
+        """
+---
+id: hello
+title: Old Layout
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    assert list_recording_ids(recordings_dir) == []
+    try:
+        recording_from_script("hello")
+    except StudioConfigError as exc:
+        assert "recordings/hello/omegaflow.md" in str(exc)
+    else:
+        raise AssertionError("expected flat recording files to be unsupported")
 
 
 def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
@@ -286,6 +311,7 @@ def test_audio_env_file_is_recording_local_config(tmp_path, monkeypatch) -> None
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
+    (recordings_dir / "hello").mkdir()
     (recordings_dir / "config.yaml").write_text(
         """
 audio:
@@ -299,7 +325,7 @@ style:
 """.lstrip(),
         encoding="utf-8",
     )
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -344,11 +370,12 @@ beat:
 def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
+    (recordings_dir / "hello").mkdir()
     (recordings_dir / "config.yaml").write_text(
         "title: Shared Title\n",
         encoding="utf-8",
     )
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -380,7 +407,8 @@ beat:
 def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -416,7 +444,8 @@ def test_recording_schema_validates_frontmatter_command_fields(
 ) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -457,7 +486,8 @@ beat:
 def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
-    (recordings_dir / "hello.md").write_text(
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "omegaflow.md").write_text(
         """
 ---
 id: hello
@@ -592,8 +622,10 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
 
     assert status == 0
     shared_config = (workspace / "config.yaml").read_text(encoding="utf-8")
-    recording = (workspace / "demo-recording.md").read_text(encoding="utf-8")
-    support_script = workspace / "demo-recording" / "hello.sh"
+    recording = (workspace / "demo-recording" / "omegaflow.md").read_text(
+        encoding="utf-8"
+    )
+    support_script = workspace / "demo-recording" / "scripts" / "hello.sh"
 
     assert "id:" not in shared_config
     assert "title:" not in shared_config
@@ -601,7 +633,11 @@ def test_bootstrap_creates_recording_workspace(tmp_path) -> None:
     assert "type: standalone_html" in recording
     assert "cast:" not in recording
     assert "file: ${outputs.dir}/${id}.html" in recording
-    assert "run_file: demo-recording/hello.sh" in recording
+    assert "This Markdown file is the source for one generated terminal video." in recording
+    assert "fenced `studio-directive` blocks tell" in recording
+    assert "run_file: scripts/hello.sh" in recording
+    assert "output_contains:" in recording
+    assert "- hello from demo-recording" in recording
     assert support_script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash")
     assert support_script.stat().st_mode & 0o111
 
@@ -705,7 +741,7 @@ def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
         json.dumps(
             {
                 "dependencies": [
-                    {"path": "recordings/demo.md"},
+                    {"path": "recordings/demo/omegaflow.md"},
                     {"path": str(tmp_path / "absolute-input.txt")},
                 ]
             }
@@ -734,7 +770,7 @@ def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
         target_cast.with_suffix(".recording.json").read_text(encoding="utf-8")
     )
     assert fingerprint["dependencies"] == [
-        {"path": "recordings/demo.md"}
+        {"path": "recordings/demo/omegaflow.md"}
     ]
     assert target_audio in written
     assert target_metadata in written

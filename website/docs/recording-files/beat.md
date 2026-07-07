@@ -39,12 +39,12 @@ actions:
   display: printf 'hello\n'
 ```
 
-Or a script file, resolved relative to the recording file directory:
+Or a script file, resolved relative to the video directory:
 
 ```yaml
 actions:
-- run_file: hello/hello.sh
-  display: bash hello/hello.sh
+- run_file: scripts/hello.sh
+  display: bash scripts/hello.sh
 ```
 
 For multi-command actions, use `commands`:
@@ -52,12 +52,12 @@ For multi-command actions, use `commands`:
 ```yaml
 actions:
 - commands:
-  - run: python -m pip install omegaflow-studio
-    display: python -m pip install omegaflow-studio
+  - run: python -m pip install omegaflow
+    display: python -m pip install omegaflow
     output:
       mode: fake
       text: |
-        Successfully installed omegaflow-studio
+        Successfully installed omegaflow
   expect:
     exit_code: 0
 ```

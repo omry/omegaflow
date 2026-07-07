@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose OmegaFlow Studio configuration with Hydra."""
+"""Compose OmegaFlow configuration with Hydra."""
 
 from __future__ import annotations
 
@@ -71,6 +71,7 @@ CONFIG_DIR = PROJECT_LAYOUT.config_dir
 STUDIO_CONFIG_NAME = "base-config"
 RECORDING_SCRIPT_DIR = PROJECT_LAYOUT.recording_script_dir
 GENERATED_DIR = PROJECT_DATA_DIR / "generated"
+RECORDING_SOURCE_NAME = "omegaflow.md"
 MAX_INLINE_RUN_LINES = 10
 NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
 NARRATION_MARKER_RE = re.compile(
@@ -460,7 +461,11 @@ def list_recording_ids(recording_dir: Path | None = None) -> list[str]:
     script_dir = recording_dir or RECORDING_SCRIPT_DIR
     if not script_dir.exists():
         return []
-    return sorted(path.stem for path in script_dir.glob("*.md"))
+    return sorted(
+        path.name
+        for path in script_dir.iterdir()
+        if path.is_dir() and (path / RECORDING_SOURCE_NAME).is_file()
+    )
 
 
 def normalize_hydra_override(override: str) -> str:
@@ -1086,14 +1091,15 @@ def recording_script_path(
     recording_dir: Path | None = None,
 ) -> Path:
     script_dir = recording_dir or RECORDING_SCRIPT_DIR
-    return script_dir / f"{recording_id}.md"
+    return script_dir / recording_id / RECORDING_SOURCE_NAME
 
 
 def recording_from_script(
     recording_id: str,
     recording_dir: Path | None = None,
 ) -> dict[str, Any]:
-    script_path = recording_script_path(recording_id, recording_dir=recording_dir)
+    workspace_dir = recording_dir or RECORDING_SCRIPT_DIR
+    script_path = recording_script_path(recording_id, recording_dir=workspace_dir)
     if not script_path.exists():
         raise StudioConfigError(f"recording script not found: {script_path}")
     script_text = script_path.read_text(encoding="utf-8")
@@ -1108,7 +1114,7 @@ def recording_from_script(
         raise StudioConfigError(
             f"recording script must contain frontmatter config: {script_path}"
         )
-    defaults = load_recording_defaults(script_path.parent)
+    defaults = load_recording_defaults(workspace_dir)
     spec = merge_mapping(defaults, frontmatter)
     spec.setdefault("id", recording_id)
     spec["script"] = display_path(script_path)

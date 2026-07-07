@@ -1,20 +1,20 @@
 ---
 sidebar_position: 2
-sidebar_label: Quick Start
+sidebar_label: Build A Video
 ---
 
-import OmegaFlowVideo from "@site/src/components/OmegaFlowVideo";
+import VideoPlayer from "@site/src/components/VideoPlayer";
 
-# Quick Start
+# Build A Video
 
 This repository includes one starter recording at
-`recordings/getting-started.md`. It demonstrates the basic loop:
-write a Studio script, build the terminal recording, and embed the generated
-OmegaFlow Video in the website.
+`recordings/getting-started/omegaflow.md`. It demonstrates the basic loop:
+write an OmegaFlow script, build the terminal recording, and embed the generated
+video in the website.
 
 <!-- studio:getting-started:start -->
-<OmegaFlowVideo
-  title="Getting Started With OmegaFlow Studio"
+<VideoPlayer
+  title="Getting Started With OmegaFlow"
   src="/omegaflow-videos/getting-started/getting-started.retimed.cast"
   audio="/audio/casts/getting-started.mp3"
   audioMeta="/audio/casts/getting-started.json"

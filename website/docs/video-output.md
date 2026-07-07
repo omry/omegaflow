@@ -3,18 +3,18 @@ sidebar_position: 4
 sidebar_label: Video
 ---
 
-# OmegaFlow Video
+# Video Output
 
-An OmegaFlow Video is the generated, website-ready output built from an
-OmegaFlow Studio script.
+Video output is the generated, website-ready media built from an OmegaFlow
+script.
 
 The first supported video format is an asciinema cast plus a small browser
-player. Studio records a fast baseline cast, then writes a retimed cast that is
+player. OmegaFlow records a fast baseline cast, then writes a retimed cast that is
 comfortable to watch in documentation.
 
 ## Asset contract
 
-A published OmegaFlow Video normally includes:
+A published video normally includes:
 
 - a retimed `.cast` file
 - the original baseline `.cast` and timeline sidecar
@@ -25,8 +25,8 @@ A published OmegaFlow Video normally includes:
 The Docusaurus component embeds those assets with:
 
 ```mdx
-<OmegaFlowVideo
-  title="Getting Started With OmegaFlow Studio"
+<VideoPlayer
+  title="Getting Started With OmegaFlow"
   src="/omegaflow-videos/getting-started/getting-started.retimed.cast"
 />
 ```

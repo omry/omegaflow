@@ -1,13 +1,12 @@
 {
-  "duration": 8.95,
+  "duration": 11.35,
   "recording": "getting-started",
   "segment": "create",
-  "source_text": "A recording is just Markdown with studio directive blocks. This tiny example records one command and declares two publish surfaces.",
+  "source_text": "A recording is Markdown with a YAML header, explanatory prose, and studio directive blocks. This small example records one support script and declares two publish surfaces.",
   "timestamp_granularities": [
-    "word",
-    "segment"
+    "word"
   ],
-  "transcript": "A recording is just markdown with Studio Directive blocks. This tiny example records one command and declares two published surfaces.",
+  "transcript": "A recording is marked down with a YAML header, explanatory prose, and studio directive blocks. This small example records one support script and declares two publish surfaces.",
   "transcription_model": "whisper-1",
   "words": [
     {
@@ -16,98 +15,133 @@
       "word": "A"
     },
     {
-      "end": 0.58,
+      "end": 0.62,
       "start": 0.26,
       "word": "recording"
     },
     {
-      "end": 0.92,
-      "start": 0.58,
+      "end": 0.96,
+      "start": 0.62,
       "word": "is"
     },
     {
-      "end": 1.28,
-      "start": 0.92,
-      "word": "just"
+      "end": 1.18,
+      "start": 0.96,
+      "word": "marked"
     },
     {
-      "end": 1.68,
-      "start": 1.28,
-      "word": "markdown"
+      "end": 1.46,
+      "start": 1.18,
+      "word": "down"
     },
     {
-      "end": 2.14,
-      "start": 1.68,
+      "end": 1.6,
+      "start": 1.46,
       "word": "with"
     },
     {
-      "end": 2.58,
-      "start": 2.14,
-      "word": "Studio"
+      "end": 1.84,
+      "start": 1.6,
+      "word": "a"
     },
     {
-      "end": 3.06,
-      "start": 2.58,
-      "word": "Directive"
+      "end": 2.04,
+      "start": 1.84,
+      "word": "YAML"
     },
     {
-      "end": 3.4,
-      "start": 3.06,
-      "word": "blocks"
+      "end": 2.3,
+      "start": 2.04,
+      "word": "header"
     },
     {
-      "end": 4.22,
-      "start": 4.08,
-      "word": "This"
+      "end": 3.42,
+      "start": 3.12,
+      "word": "explanatory"
     },
     {
-      "end": 4.6,
-      "start": 4.22,
-      "word": "tiny"
+      "end": 3.88,
+      "start": 3.42,
+      "word": "prose"
     },
     {
-      "end": 5.08,
-      "start": 4.6,
-      "word": "example"
-    },
-    {
-      "end": 5.72,
-      "start": 5.08,
-      "word": "records"
-    },
-    {
-      "end": 6.06,
-      "start": 5.72,
-      "word": "one"
-    },
-    {
-      "end": 6.34,
-      "start": 6.06,
-      "word": "command"
-    },
-    {
-      "end": 6.62,
-      "start": 6.34,
+      "end": 4.56,
+      "start": 4.28,
       "word": "and"
     },
     {
-      "end": 6.88,
-      "start": 6.62,
+      "end": 4.86,
+      "start": 4.56,
+      "word": "studio"
+    },
+    {
+      "end": 5.3,
+      "start": 4.86,
+      "word": "directive"
+    },
+    {
+      "end": 5.74,
+      "start": 5.3,
+      "word": "blocks"
+    },
+    {
+      "end": 6.56,
+      "start": 6.34,
+      "word": "This"
+    },
+    {
+      "end": 6.92,
+      "start": 6.56,
+      "word": "small"
+    },
+    {
+      "end": 7.38,
+      "start": 6.92,
+      "word": "example"
+    },
+    {
+      "end": 7.98,
+      "start": 7.38,
+      "word": "records"
+    },
+    {
+      "end": 8.36,
+      "start": 7.98,
+      "word": "one"
+    },
+    {
+      "end": 8.7,
+      "start": 8.36,
+      "word": "support"
+    },
+    {
+      "end": 9.0,
+      "start": 8.7,
+      "word": "script"
+    },
+    {
+      "end": 9.5,
+      "start": 9.0,
+      "word": "and"
+    },
+    {
+      "end": 9.78,
+      "start": 9.5,
       "word": "declares"
     },
     {
-      "end": 7.34,
-      "start": 6.88,
+      "end": 10.28,
+      "start": 9.78,
       "word": "two"
     },
     {
-      "end": 7.64,
-      "start": 7.34,
-      "word": "published"
+      "end": 10.58,
+      "start": 10.28,
+      "word": "publish"
     },
     {
-      "end": 8.06,
-      "start": 7.64,
+      "end": 11.04,
+      "start": 10.58,
       "word": "surfaces"
     }
   ]

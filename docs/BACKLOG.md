@@ -1,27 +1,27 @@
-# Studio Backlog
+# OmegaFlow Backlog
 
 ## Agent instructions
 
-When helping with Studio backlog work, treat this file as the active planning
+When helping with OmegaFlow backlog work, treat this file as the active planning
 surface for media recording, retiming, audio, playback, and publishing tooling.
 Keep items concrete and operator-facing. Prefer small fixes that improve the
 authoring or viewing workflow over broad rewrites.
 
-Use this backlog for Studio-specific work. Use the main Arbiter backlog for
+Use this backlog for OmegaFlow-specific work. Use the main Arbiter backlog for
 server, client, plugin, deployment, and product-security work.
 
 ## How to use this file
 
 - Keep each item small enough for one focused change.
-- Put only the most urgent Studio items in `Now`.
+- Put only the most urgent OmegaFlow items in `Now`.
 - Include brief context and concrete acceptance checks.
 - Move completed items out instead of keeping a long archive.
-- After each focused phase, run the relevant Studio tests and, when the player
+- After each focused phase, run the relevant OmegaFlow tests and, when the player
   or generated artifacts are affected, rebuild or check the affected recording.
 
 ## Now
 
-- [ ] `P1` Add a generic prompt system for Studio recordings.
+- [ ] `P1` Add a generic prompt system for OmegaFlow recordings.
       The recorder currently treats `$` as the canonical prompt, with a small
       virtualenv-prefix special case. Recordings should be able to declare the
       prompt they want, and the recorder, retimer, alignment checks, and player
