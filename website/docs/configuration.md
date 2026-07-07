@@ -5,7 +5,7 @@ sidebar_label: OmegaFlow Configuration
 
 # OmegaFlow Configuration
 
-OmegaFlow configuration controls the `studio` tool itself: where recording files
+OmegaFlow configuration controls the `omegaflow` tool itself: where recording files
 live, where generated run state is written, which action runs by default, and
 how the process loads its `.env` file. It is separate from recording
 configuration, which lives in the recording workspace and describes individual
@@ -22,7 +22,7 @@ OmegaFlow composes tool config in this order:
 1. Schema default values.
 2. The bundled `base-config.yaml`.
 3. `$PWD/.omegaflow/config.yaml`, when it exists.
-4. CLI overrides such as `studio action=list studio.recording_dir=demos`.
+4. CLI overrides such as `omegaflow action=list studio.recording_dir=demos`.
 
 The local file is optional.
 

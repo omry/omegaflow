@@ -24,7 +24,7 @@ publish surface.
 From the repository root:
 
 ```bash
-studio recording=quickstart-demo action=build
+omegaflow recording=quickstart-demo action=build
 ```
 
 The build records the scripted terminal actions, retimes the cast, publishes the
@@ -34,10 +34,10 @@ line up with the script.
 ## Useful commands
 
 ```bash
-studio action=list
-studio recording=quickstart-demo action=inspect
-studio recording=quickstart-demo action=watch
-studio recording=quickstart-demo action=check
+omegaflow action=list
+omegaflow recording=quickstart-demo action=inspect
+omegaflow recording=quickstart-demo action=watch
+omegaflow recording=quickstart-demo action=check
 ```
 
 Use `action=watch` while editing a recording and `action=check` before

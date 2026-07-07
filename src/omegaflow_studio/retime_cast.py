@@ -271,7 +271,7 @@ def require_fresh_retimed_cast(
             audio_metadata_path,
         ),
         artifact_name="retimed cast",
-        rerun_hint="run studio step=retime",
+        rerun_hint="run omegaflow step=retime",
     )
     require_materialized_audio_waits(audio_metadata_path)
 
@@ -317,7 +317,7 @@ def require_materialized_audio_waits(metadata_path: Path | None) -> None:
                 marker = wait.get("marker")
                 raise RetimeError(
                     f"audio wait {marker} in segment {segment_id!r} "
-                    "has not been materialized by retime; run studio step=retime"
+                    "has not been materialized by retime; run omegaflow step=retime"
                 )
 
 

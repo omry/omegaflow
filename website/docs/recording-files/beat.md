@@ -12,7 +12,7 @@ is seeing, run terminal actions, run checks, and provide guided-mode prompts.
 beat:
   id: install
   heading: Install The CLI
-  narration: Install the package and confirm the studio command is available.
+  narration: Install the package and confirm the omegaflow command is available.
 ```
 
 ## Fields
@@ -91,7 +91,7 @@ reproducible during recording.
 ```yaml
 guide:
   commands:
-  - studio recording=hello action=build
+  - omegaflow recording=hello action=build
   success_hint: The build writes a retimed cast and publish surfaces.
 ```
 

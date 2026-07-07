@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/omegaflow-studio
+      url: https://pypi.org/p/omegaflow
     permissions:
       id-token: write
     steps:

@@ -101,7 +101,7 @@ The frontmatter header is the right place for recording-specific config:
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `id` | string | Required per recording. Used by `studio recording=<id>`. Nested ids such as `tutorial/install` are supported. Frontmatter only. |
+| `id` | string | Required per recording. Used by `omegaflow recording=<id>`. Nested ids such as `tutorial/install` are supported. Frontmatter only. |
 | `title` | string | Human-readable title for players and publish surfaces. Frontmatter only. |
 | `parameters` | mapping | Script parameters and defaults for `script_params`. |
 | `requirements` | mapping | Required shell commands and tools. |

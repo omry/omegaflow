@@ -11,7 +11,7 @@ The project is for demos, guides, and technical walkthroughs where the
 recording should be tied to source control instead of trapped inside a one-off
 screen capture. An OmegaFlow script describes the story, terminal
 commands, visible captions, optional narration, expected outputs, and publish
-targets. The `studio` CLI uses [Hydra](https://hydra.cc/) for configuration and
+targets. The `omegaflow` CLI uses [Hydra](https://hydra.cc/) for configuration and
 builds the generated media from that source.
 
 ## Built for changing demos

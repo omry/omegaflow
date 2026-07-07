@@ -14,7 +14,7 @@ one video. Recording ids can include nested directories, such as
 somewhere else can set that in [OmegaFlow Configuration](../configuration.md).
 
 ```bash
-studio action=bootstrap  # Create the default quickstart recording
+omegaflow action=bootstrap  # Create the default quickstart recording
 ```
 
 ```yaml

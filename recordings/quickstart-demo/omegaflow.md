@@ -59,7 +59,7 @@ beat:
   heading: Install The CLI
   narration: >-
     Start with the OmegaFlow command line tool. Install the package, then use
-    the studio command to create and build recordings.
+    the omegaflow command to create and build recordings.
   marker: install
   caption: Install the OmegaFlow CLI.
   actions:
@@ -73,7 +73,7 @@ beat:
   guide:
     commands:
     - python -m pip install omegaflow
-    success_hint: The install provides the studio command.
+    success_hint: The install provides the omegaflow command.
 ```
 
 ```yaml studio-directive
@@ -91,7 +91,7 @@ beat:
       display: |-
         mkdir -p /tmp/omegaflow-quickstart-demo
         cd /tmp/omegaflow-quickstart-demo
-        studio action=bootstrap
+        omegaflow action=bootstrap
       output:
         mode: fake
         text: |
@@ -100,7 +100,7 @@ beat:
           created recordings/quickstart/omegaflow.md
           created recordings/quickstart/scripts/hello.sh
 
-          next    studio recording=quickstart action=build
+          next    omegaflow recording=quickstart action=build
       expect:
         file_exists:
         - /tmp/omegaflow-quickstart-demo/recordings/config.yaml
@@ -118,7 +118,7 @@ beat:
       display: sed -n '1,85p' recordings/quickstart/omegaflow.md
   guide:
     commands:
-    - studio action=bootstrap
+    - omegaflow action=bootstrap
     - sed -n '1,85p' recordings/quickstart/omegaflow.md
     success_hint: Bootstrap writes config, Markdown, and a local support script.
 ```
@@ -135,7 +135,7 @@ beat:
   actions:
   - commands:
     - run: bash recordings/quickstart-demo/scripts/build-demo-project.sh
-      display: studio recording=quickstart action=build
+      display: omegaflow recording=quickstart action=build
       output:
         mode: fake
         text: |
@@ -147,7 +147,7 @@ beat:
         - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart.html
   guide:
     commands:
-    - studio recording=quickstart action=build
+    - omegaflow recording=quickstart action=build
     success_hint: The build writes a retimed cast and standalone HTML surface.
 ```
 
@@ -163,7 +163,7 @@ beat:
   actions:
   - commands:
     - run: bash recordings/quickstart-demo/scripts/play-demo-project.sh
-      display: studio recording=quickstart action=play
+      display: omegaflow recording=quickstart action=play
       output:
         mode: fake
         text: |
@@ -173,7 +173,7 @@ beat:
         - hello from quickstart
   guide:
     commands:
-    - studio recording=quickstart action=play
+    - omegaflow recording=quickstart action=play
     success_hint: The terminal should replay the generated cast.
 ```
 
@@ -189,13 +189,13 @@ beat:
   actions:
   - commands:
     - run: bash recordings/quickstart-demo/scripts/inspect-demo-project.sh
-      display: studio recording=quickstart action=build dry_run=true
+      display: omegaflow recording=quickstart action=build dry_run=true
       expect:
         output_contains:
         - "Publish surfaces:"
         - "type: standalone_html"
   guide:
     commands:
-    - studio recording=quickstart action=build dry_run=true
+    - omegaflow recording=quickstart action=build dry_run=true
     success_hint: The dry run lists the configured publish surface.
 ```

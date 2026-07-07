@@ -733,7 +733,7 @@ def print_available_recording_scripts(
             print(f"  {recording_id}")
         if selected_required:
             print()
-            print(f"Run with: studio recording={recording_ids[0]}")
+            print(f"Run with: omegaflow recording={recording_ids[0]}")
     else:
         print(f"No recording scripts found in {recording_dir}.")
     return 1 if selected_required else 0
@@ -883,7 +883,7 @@ def run_bootstrap(config: dict[str, Any]) -> int:
             )
             print(f"{status:>7} {display_path(path)}")
     print()
-    print(f"next    studio recording={recording_id} action=build")
+    print(f"next    omegaflow recording={recording_id} action=build")
     return 0
 
 
@@ -1760,13 +1760,13 @@ def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
     paths = latest_run_artifact_paths(spec)
     if paths is None:
         raise StudioError(
-            "no successful recording run found; run studio action=build first"
+            "no successful recording run found; run omegaflow action=build first"
         )
     cast_path = paths["retimed_cast"]
     if not cast_path.exists():
         raise StudioError(
             f"retimed cast not found: {display_path(cast_path)}; "
-            "run studio action=build first"
+            "run omegaflow action=build first"
         )
     if text_output_enabled(cfg):
         step_line(f"play retimed cast: {display_path(cast_path)}")
@@ -1793,7 +1793,7 @@ def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
     paths = latest_run_artifact_paths(spec)
     if paths is None:
         raise StudioError(
-            "no successful recording run found; run studio action=build first"
+            "no successful recording run found; run omegaflow action=build first"
         )
     required = {
         "cast": paths["retimed_cast"],
@@ -1806,7 +1806,7 @@ def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
         formatted = ", ".join(path for path in missing if path is not None)
         raise StudioError(
             f"watch artifacts not found: {formatted}; "
-            "run studio action=build first"
+            "run omegaflow action=build first"
         )
 
     artifacts: dict[str, Path] = {}
@@ -1950,7 +1950,7 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
 
 
 def studio_tool_command(recording_id: str, *overrides: str) -> str:
-    parts = ["studio", f"recording={recording_id}", *overrides]
+    parts = ["omegaflow", f"recording={recording_id}", *overrides]
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -2157,7 +2157,7 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         run_record_action(cfg, RECORD_ACTIONS[action], str(action).replace("_", " "))
         return 0
 
-    raise StudioError(f"unknown studio action: {action}")
+    raise StudioError(f"unknown omegaflow action: {action}")
 
 
 @hydra.main(
@@ -2182,7 +2182,7 @@ def main(cfg: DictConfig) -> None:
     except KeyboardInterrupt:
         print(
             color_text(
-                "interrupted: studio run cancelled by user",
+                "interrupted: omegaflow run cancelled by user",
                 ANSI_YELLOW_BOLD,
                 enabled=use_color,
             ),

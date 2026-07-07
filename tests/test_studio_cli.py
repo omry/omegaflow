@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tomllib
 from datetime import datetime
 from pathlib import Path
 
@@ -30,7 +31,17 @@ from omegaflow_studio.studio_config import (
 
 
 def test_version_is_available() -> None:
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.2.0"
+
+
+def test_package_installs_omegaflow_command() -> None:
+    root = Path(__file__).resolve().parents[1]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["name"] == "omegaflow"
+    assert pyproject["project"]["scripts"] == {
+        "omegaflow": "omegaflow_studio.studio:main"
+    }
 
 
 def test_recording_schema_docs_are_generated() -> None:
