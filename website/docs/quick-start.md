@@ -15,9 +15,9 @@ and publish it with the docs.
 <!-- studio:quickstart-demo:start -->
 <VideoPlayer
   title="Quickstart Demo"
-  src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
-  audio="/audio/casts/quickstart-demo.mp3"
-  audioMeta="/audio/casts/quickstart-demo.json"
+  src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
+  audio="/omegaflow-videos/quickstart-demo/audio.mp3"
+  audioMeta="/omegaflow-videos/quickstart-demo/audio.json"
 />
 <!-- studio:quickstart-demo:end -->
 
@@ -43,4 +43,5 @@ omegaflow recording=quickstart-demo action=check
 
 Use `action=watch` while editing a recording and `action=check` before
 publishing. OmegaFlow currently supports plain HTML and Docusaurus publish
-surfaces. The generated website assets live under `website/static/`.
+surfaces. The generated website assets for this demo live under
+`website/static/omegaflow-videos/quickstart-demo/`.

@@ -265,6 +265,23 @@ beat:
     assert list_recording_ids(recordings_dir) == ["tutorial/recording-file"]
     assert spec["id"] == "tutorial/recording-file"
     assert spec["_manifest_path"] == str(recording_dir / "index.md")
+    assert (
+        spec["outputs"]["asset_dir"]
+        == "recordings/.omegaflow/videos/tutorial/recording-file"
+    )
+    output_dir = (
+        Path.cwd()
+        / "recordings"
+        / ".omegaflow"
+        / "videos"
+        / "tutorial"
+        / "recording-file"
+    )
+    paths = studio.artifact_paths(spec)
+    assert paths["cast"] == output_dir / "recording.cast"
+    assert paths["retimed_cast"] == output_dir / "recording.retimed.cast"
+    assert paths["audio"] == output_dir / "audio.mp3"
+    assert paths["audio_metadata"] == output_dir / "audio.json"
 
 
 def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
@@ -617,6 +634,132 @@ def test_retime_tool_uses_audio_metadata_override(tmp_path, monkeypatch) -> None
     assert output.exists()
 
 
+def test_audio_dry_run_output_override_uses_run_local_metadata(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    run_audio = tmp_path / "runs" / "demo" / "audio" / "demo.mp3"
+    public_audio = tmp_path / "public" / "demo" / "audio.mp3"
+    public_metadata = tmp_path / "public" / "demo" / "audio.json"
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "outputs": {
+            "dir": str(tmp_path / "public"),
+            "asset_dir": str(tmp_path / "public" / "demo"),
+            "cast": str(tmp_path / "public" / "demo" / "recording.cast"),
+            "audio": str(public_audio),
+            "audio_metadata": str(public_metadata),
+        },
+        "audio": {
+            "enabled": True,
+            "provider": "openai",
+            "env": "OPENAI_API_KEY",
+            "model": "gpt-4o-mini-tts",
+            "voice": "marin",
+            "format": "mp3",
+            "cache_dir": str(tmp_path / "cache" / "audio"),
+        },
+        "narration": {
+            "beats": [
+                {
+                    "id": "intro",
+                    "heading": "Intro",
+                    "text": "Say hello.",
+                }
+            ]
+        },
+    }
+    monkeypatch.setattr(audio, "load_recording_spec_from_hydra_cfg", lambda _cfg: spec)
+
+    status = audio.run_tool_from_hydra_cfg(
+        OmegaConf.create(
+            {
+                "action": "dry_run",
+                "output": str(run_audio),
+                "output_format": "json",
+                "timestamps": True,
+                "force": False,
+                "verbose": False,
+                "load_env_file": False,
+            }
+        )
+    )
+
+    assert status == 0
+    payloads = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.strip().startswith("{")
+    ]
+    assert payloads[-1]["published_audio"] == str(run_audio)
+    assert payloads[-1]["published_audio_metadata"] == str(run_audio.with_suffix(".json"))
+    assert payloads[-1]["published_audio_metadata"] != str(public_metadata)
+
+
+def test_audio_publish_needs_work_output_override_checks_run_local_metadata(
+    tmp_path, monkeypatch
+) -> None:
+    run_audio = tmp_path / "runs" / "demo" / "audio" / "demo.mp3"
+    public_metadata = tmp_path / "public" / "demo" / "audio.json"
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "outputs": {
+            "dir": str(tmp_path / "public"),
+            "asset_dir": str(tmp_path / "public" / "demo"),
+            "cast": str(tmp_path / "public" / "demo" / "recording.cast"),
+            "audio": str(tmp_path / "public" / "demo" / "audio.mp3"),
+            "audio_metadata": str(public_metadata),
+        },
+        "audio": {
+            "enabled": True,
+            "provider": "openai",
+            "env": "OPENAI_API_KEY",
+            "model": "gpt-4o-mini-tts",
+            "voice": "marin",
+            "format": "mp3",
+            "cache_dir": str(tmp_path / "cache" / "audio"),
+        },
+        "narration": {
+            "beats": [
+                {
+                    "id": "intro",
+                    "heading": "Intro",
+                    "text": "Say hello.",
+                }
+            ]
+        },
+    }
+    captured: dict[str, Path] = {}
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id, overrides: spec,
+    )
+
+    def fake_published_audio_is_fresh(
+        _plan,
+        output_path,
+        metadata_path,
+        **_kwargs,
+    ):
+        captured["audio"] = output_path
+        captured["metadata"] = metadata_path
+        return True
+
+    monkeypatch.setattr(audio, "published_audio_is_fresh", fake_published_audio_is_fresh)
+
+    needs_work = studio.audio_publish_needs_work(
+        OmegaConf.create({"force": False}),
+        output=run_audio,
+    )
+
+    assert needs_work is False
+    assert captured["audio"] == run_audio
+    assert captured["metadata"] == run_audio.with_suffix(".json")
+    assert captured["metadata"] != public_metadata
+
+
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
@@ -671,7 +814,10 @@ beat:
     assert spec["audio"]["provider"] == "openai"
     assert spec["audio"]["env"] == "SHARED_KEY"
     assert spec["outputs"]["dir"] == "site/videos"
-    assert spec["outputs"]["cast"] == "site/videos/hello.cast"
+    assert spec["outputs"]["asset_dir"] == "site/videos/hello"
+    assert spec["outputs"]["cast"] == "site/videos/hello/recording.cast"
+    assert spec["outputs"]["audio"] == "site/videos/hello/audio.mp3"
+    assert spec["outputs"]["audio_metadata"] == "site/videos/hello/audio.json"
     assert spec["style"]["color"] is False
     assert spec["beats"][0]["id"] == "hello"
 
@@ -711,6 +857,62 @@ beat:
         assert "cannot define recording identity fields: title" in str(exc)
     else:
         raise AssertionError("expected shared recording config identity to fail")
+
+
+def test_shared_output_dir_derives_per_recording_asset_dirs(
+    tmp_path, monkeypatch
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "config.yaml").write_text(
+        """
+outputs:
+  dir: site/videos
+audio:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+    for recording_id in ("alpha", "beta"):
+        recording_dir = recordings_dir / recording_id
+        recording_dir.mkdir()
+        (recording_dir / "index.md").write_text(
+            f"""
+---
+id: {recording_id}
+title: {recording_id.title()}
+---
+
+```yaml studio-directive
+scene: {recording_id.title()}
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    alpha = recording_from_script("alpha")
+    beta = recording_from_script("beta")
+    alpha["_recording_id"] = "alpha"
+    beta["_recording_id"] = "beta"
+
+    assert alpha["outputs"]["asset_dir"] == "site/videos/alpha"
+    assert beta["outputs"]["asset_dir"] == "site/videos/beta"
+    assert studio.artifact_paths(alpha)["cast"] == Path.cwd() / (
+        "site/videos/alpha/recording.cast"
+    )
+    assert studio.artifact_paths(beta)["cast"] == Path.cwd() / (
+        "site/videos/beta/recording.cast"
+    )
+    assert studio.artifact_paths(alpha)["cast"] != studio.artifact_paths(beta)["cast"]
+    assert studio.artifact_paths(alpha)["audio"] != studio.artifact_paths(beta)["audio"]
 
 
 def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -> None:
@@ -1015,7 +1217,7 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert "id: demo-recording" in recording
     assert "type: standalone_html" in recording
     assert "cast:" not in recording
-    assert "file: ${outputs.dir}/${id}.html" in recording
+    assert "file: ${outputs.asset_dir}/index.html" in recording
     assert "This Markdown file is the source for one generated terminal video." in recording
     assert "fenced `studio-directive` blocks tell" in recording
     assert "run_file: scripts/hello.sh" in recording
@@ -1176,6 +1378,22 @@ def test_interrupted_recording_message_is_terse(tmp_path) -> None:
     assert "removed staged recording artifacts" not in message
 
 
+def test_success_followups_show_user_facing_actions(capsys) -> None:
+    cfg = OmegaConf.create(
+        {
+            "recording": "quickstart-demo",
+            "output_format": "text",
+        }
+    )
+
+    studio.print_success_followups(cfg)
+
+    output = capsys.readouterr().out
+    assert "omegaflow recording=quickstart-demo action=play" in output
+    assert "omegaflow recording=quickstart-demo action=watch" in output
+    assert "action=inspect" not in output
+
+
 def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str, object]:
     config: dict[str, object] = {}
     if data_dir is not None:
@@ -1298,6 +1516,7 @@ def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
     assert target_audio.read_bytes() == b"mp3"
     metadata = json.loads(target_metadata.read_text(encoding="utf-8"))
     assert metadata["audio"] == str(target_audio)
+    assert "audio" not in metadata["segments"][0]
     assert metadata["segments"][0]["timestamps"] == str(target_timestamp)
     assert target_timestamp.read_text(encoding="utf-8") == '{"words": []}\n'
     fingerprint = json.loads(

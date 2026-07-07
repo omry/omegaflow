@@ -1,0 +1,223 @@
+{
+  "duration": 15.81,
+  "recording": "quickstart-demo",
+  "segment": "bootstrap",
+  "source_text": "From your repository root, run bootstrap once. This is the first-time setup for recording videos in the project. Bootstrap creates normal project files: commit them with your repo, then take a look at the demo recording as a simple video example.",
+  "timestamp_granularities": [
+    "word"
+  ],
+  "transcript": "From your repository root, run Bootstrap once. This is the first time setup for recording videos in the project. Bootstrap creates normal project files. Commit them with your repo. Then take a look at the demo recording as a simple video example.",
+  "transcription_model": "whisper-1",
+  "words": [
+    {
+      "end": 0.26,
+      "start": 0.0,
+      "word": "From"
+    },
+    {
+      "end": 0.58,
+      "start": 0.26,
+      "word": "your"
+    },
+    {
+      "end": 1.12,
+      "start": 0.58,
+      "word": "repository"
+    },
+    {
+      "end": 1.52,
+      "start": 1.12,
+      "word": "root"
+    },
+    {
+      "end": 2.4,
+      "start": 2.18,
+      "word": "run"
+    },
+    {
+      "end": 2.94,
+      "start": 2.4,
+      "word": "Bootstrap"
+    },
+    {
+      "end": 3.46,
+      "start": 2.94,
+      "word": "once"
+    },
+    {
+      "end": 4.1,
+      "start": 4.04,
+      "word": "This"
+    },
+    {
+      "end": 4.24,
+      "start": 4.1,
+      "word": "is"
+    },
+    {
+      "end": 4.42,
+      "start": 4.24,
+      "word": "the"
+    },
+    {
+      "end": 4.68,
+      "start": 4.42,
+      "word": "first"
+    },
+    {
+      "end": 4.98,
+      "start": 4.68,
+      "word": "time"
+    },
+    {
+      "end": 5.26,
+      "start": 4.98,
+      "word": "setup"
+    },
+    {
+      "end": 5.62,
+      "start": 5.26,
+      "word": "for"
+    },
+    {
+      "end": 5.96,
+      "start": 5.62,
+      "word": "recording"
+    },
+    {
+      "end": 6.32,
+      "start": 5.96,
+      "word": "videos"
+    },
+    {
+      "end": 6.68,
+      "start": 6.32,
+      "word": "in"
+    },
+    {
+      "end": 6.82,
+      "start": 6.68,
+      "word": "the"
+    },
+    {
+      "end": 7.22,
+      "start": 6.82,
+      "word": "project"
+    },
+    {
+      "end": 8.26,
+      "start": 8.08,
+      "word": "Bootstrap"
+    },
+    {
+      "end": 8.7,
+      "start": 8.26,
+      "word": "creates"
+    },
+    {
+      "end": 9.12,
+      "start": 8.7,
+      "word": "normal"
+    },
+    {
+      "end": 9.52,
+      "start": 9.12,
+      "word": "project"
+    },
+    {
+      "end": 9.86,
+      "start": 9.52,
+      "word": "files"
+    },
+    {
+      "end": 10.58,
+      "start": 10.56,
+      "word": "Commit"
+    },
+    {
+      "end": 10.74,
+      "start": 10.58,
+      "word": "them"
+    },
+    {
+      "end": 10.9,
+      "start": 10.74,
+      "word": "with"
+    },
+    {
+      "end": 11.14,
+      "start": 10.9,
+      "word": "your"
+    },
+    {
+      "end": 11.34,
+      "start": 11.14,
+      "word": "repo"
+    },
+    {
+      "end": 12.06,
+      "start": 11.84,
+      "word": "Then"
+    },
+    {
+      "end": 12.26,
+      "start": 12.06,
+      "word": "take"
+    },
+    {
+      "end": 12.48,
+      "start": 12.26,
+      "word": "a"
+    },
+    {
+      "end": 12.5,
+      "start": 12.48,
+      "word": "look"
+    },
+    {
+      "end": 12.7,
+      "start": 12.5,
+      "word": "at"
+    },
+    {
+      "end": 12.94,
+      "start": 12.7,
+      "word": "the"
+    },
+    {
+      "end": 13.12,
+      "start": 12.94,
+      "word": "demo"
+    },
+    {
+      "end": 13.52,
+      "start": 13.12,
+      "word": "recording"
+    },
+    {
+      "end": 13.84,
+      "start": 13.52,
+      "word": "as"
+    },
+    {
+      "end": 14.12,
+      "start": 13.84,
+      "word": "a"
+    },
+    {
+      "end": 14.34,
+      "start": 14.12,
+      "word": "simple"
+    },
+    {
+      "end": 14.7,
+      "start": 14.34,
+      "word": "video"
+    },
+    {
+      "end": 15.02,
+      "start": 14.7,
+      "word": "example"
+    }
+  ]
+}

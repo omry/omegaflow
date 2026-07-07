@@ -37,6 +37,42 @@ html[data-theme='light'] {
   border-color: #26313c;
 }
 
+.navbar {
+  border-bottom: 1px solid #26313c;
+  min-height: 68px;
+  padding: 0 1.1rem;
+}
+
+.navbar__inner {
+  gap: 1.1rem;
+}
+
+.navbar__brand {
+  color: #f2f5f7;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-right: 0.8rem;
+}
+
+.navbar__title {
+  letter-spacing: 0;
+}
+
+.navbar__items {
+  gap: 0.65rem;
+}
+
+.navbar__link {
+  color: #d6dce2;
+  font-size: 1.08rem;
+  font-weight: 750;
+}
+
+.navbar__link:hover,
+.navbar__link--active {
+  color: #ffffff;
+}
+
 .button {
   border-radius: 6px;
 }

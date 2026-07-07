@@ -43,9 +43,24 @@ const config = {
       title: 'OmegaFlow',
       items: [
         {
+          to: '/intro',
+          label: 'Docs',
+          position: 'left',
+        },
+        {
+          to: '/tutorial',
+          label: 'Tutorial',
+          position: 'left',
+        },
+        {
+          to: '/omegaflow',
+          label: 'CLI',
+          position: 'left',
+        },
+        {
           href: 'https://github.com/omry/omegaflow',
-          label: 'Repo',
-          position: 'right',
+          label: 'OmegaFlow@GitHub',
+          position: 'left',
         },
       ],
     },

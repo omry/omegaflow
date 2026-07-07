@@ -844,14 +844,10 @@ def output_audio_path(
     outputs = as_mapping(spec.get("outputs"), field="outputs")
     configured = outputs.get("audio")
     if configured is None:
-        return (
-            REPO_ROOT
-            / "website"
-            / "static"
-            / "audio"
-            / "casts"
-            / (f"{recording_id}.{settings.format}")
-        )
+        asset_dir = outputs.get("asset_dir")
+        if not isinstance(asset_dir, str) or not asset_dir:
+            raise AudioError("outputs.asset_dir must be a non-empty string")
+        return relative_path(asset_dir) / f"audio.{settings.format}"
     if not isinstance(configured, str) or not configured:
         raise AudioError("outputs.audio must be a non-empty string")
     return relative_path(configured)
@@ -1884,7 +1880,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
                 if output_override
                 else output_audio_path(spec, recording_id, settings)
             )
-            published_metadata = output_audio_metadata_path(spec, published_audio)
+            published_metadata = (
+                published_audio.with_suffix(".json")
+                if output_override
+                else output_audio_metadata_path(spec, published_audio)
+            )
             if action == "dry_run":
                 print_plan(
                     plan,

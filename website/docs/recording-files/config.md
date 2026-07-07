@@ -30,7 +30,8 @@ OmegaFlow uses OmegaConf syntax for interpolations:
 ```yaml
 outputs:
   dir: recordings/.omegaflow/videos
-  cast: ${outputs.dir}/${id}.cast
+  asset_dir: ${outputs.dir}/${id}
+  cast: ${outputs.asset_dir}/recording.cast
 ```
 
 Interpolations are evaluated lazily when the composed config is accessed, not
@@ -83,7 +84,7 @@ publish:
   surfaces:
     html:
       type: standalone_html
-      file: ${outputs.dir}/${id}.html
+      file: ${outputs.asset_dir}/index.html
 audio:
   enabled: false
 ---
@@ -107,7 +108,7 @@ The frontmatter header is the right place for recording-specific config:
 | `requirements` | mapping | Required shell commands and tools. |
 | `capture` | mapping | Terminal recording settings such as `window_size`, `headless`, and `baseline_compressed`. |
 | `style` | mapping | Rendering behavior such as color and typing simulation. |
-| `outputs` | mapping | Output paths for cast, audio, and related generated files. |
+| `outputs` | mapping | Output paths for the per-video asset directory, cast, audio, and related generated files. |
 | `timing` | mapping | Presentation timing and playback controls. |
 | `environment` | mapping | Working directory, environment values, and `path_prepend`. |
 | `audio` | mapping | Narration audio configuration. |
@@ -155,10 +156,11 @@ class RecordingStyleConfig:
 @dataclass
 class RecordingOutputsConfig:
     dir: str = "recordings/.omegaflow/videos"
-    cast: str = "${outputs.dir}/${id}.cast"
+    asset_dir: str = "${outputs.dir}/${id}"
+    cast: str = "${outputs.asset_dir}/recording.cast"
     retimed_cast: str | None = None
-    audio: str | None = None
-    audio_metadata: str | None = None
+    audio: str | None = "${outputs.asset_dir}/audio.${audio.format}"
+    audio_metadata: str | None = "${outputs.asset_dir}/audio.json"
 
 
 @dataclass

@@ -15,7 +15,7 @@ style:
   typing_newline_delay: 0.12
   typing_seed: 5
 outputs:
-  cast: website/static/omegaflow-videos/quickstart-demo/quickstart-demo.cast
+  dir: website/static/omegaflow-videos
 publish:
   default: docusaurus
   surfaces:
@@ -57,13 +57,12 @@ beat:
   id: install
   heading: Install The CLI
   narration: >-
-    OmegaFlow turns a Markdown recording script into a rebuildable terminal video
-    with generated voiceover. It is a Python tool, and it can record any
-    terminal workflow. If your project does not already have a Python
-    environment, @python_env@ create one now.
-    @wait:env_command+300ms@ Then @install@ install OmegaFlow.
-    @wait:install_command+300ms@ The omegaflow command is now ready for the
-    rest of the workflow.
+    OmegaFlow is a Python CLI for rebuildable terminal videos with generated
+    voiceover. It can record any terminal workflow. Start in your project's
+    Python environment. If you do not have one yet, @python_env@ create one
+    first. @wait:env_command+300ms@ Then @install@ install OmegaFlow.
+    @wait:install_command+300ms@ The omegaflow command is ready for the rest of
+    the workflow.
   marker: install
   caption: Install OmegaFlow in a Python environment.
   actions:
@@ -98,10 +97,11 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    From your repository root, @bootstrap@ run bootstrap. It prepares the
-    project for recording videos and creates a small demo recording script.
-    @wait:bootstrap_run+300ms@ You can inspect that script later, when you are
-    ready to customize it.
+    From your repository root, @bootstrap@ run bootstrap once. This is the
+    first-time setup for recording videos in the project.
+    @wait:bootstrap_run+300ms@ Bootstrap creates normal project files: commit
+    them with your repo, then take a look at the demo recording as a simple
+    video example.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -130,7 +130,7 @@ beat:
   guide:
     commands:
     - omegaflow action=bootstrap
-    success_hint: Look at the generated recording script later when you are ready to customize it.
+    success_hint: Commit the generated files, then inspect the demo recording as a small example.
 ```
 
 ```yaml studio-directive
@@ -152,8 +152,8 @@ beat:
       timing: realtime
       expect:
         file_exists:
-        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart.retimed.cast
-        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart.html
+        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart/recording.retimed.cast
+        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart/index.html
   guide:
     commands:
     - omegaflow recording=quickstart action=build
@@ -166,11 +166,11 @@ beat:
   heading: View And Publish
   narration: >-
     To review the result, @watch@ run action equals watch. OmegaFlow starts a
-    local server and opens the recording in your browser when a graphical
-    browser is available. If it cannot open the browser, it prints the URL
-    instead. @wait:watch_command+300ms@ For publishing, OmegaFlow currently
-    supports plain HTML and Docusaurus documentation pages. To learn more, start
-    the tutorial or read the docs.
+    local web server and opens the recording in your browser, so you can check
+    the generated video the same way a reader will see it.
+    @wait:watch_command+300ms@ When the video is ready for others, publish it
+    with the docs. OmegaFlow currently supports plain HTML files and Docusaurus
+    documentation pages. To learn more, start the tutorial or read the docs.
   marker: view-and-publish
   caption: Watch in a browser, then publish to docs.
   actions:

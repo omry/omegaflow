@@ -29,9 +29,9 @@ export default function Home() {
             <div className="homeHero__video" aria-label="Quick start video">
               <VideoPlayer
                 title="Quickstart Demo"
-                src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
-                audio="/audio/casts/quickstart-demo.mp3"
-                audioMeta="/audio/casts/quickstart-demo.json"
+                src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
+                audio="/omegaflow-videos/quickstart-demo/audio.mp3"
+                audioMeta="/omegaflow-videos/quickstart-demo/audio.json"
               />
             </div>
           </div>

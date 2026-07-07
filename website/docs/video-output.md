@@ -27,7 +27,7 @@ The Docusaurus component embeds those assets with:
 ```mdx
 <VideoPlayer
   title="Quickstart Demo"
-  src="/omegaflow-videos/quickstart-demo/quickstart-demo.retimed.cast"
+  src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
 />
 ```
 

@@ -27,7 +27,7 @@ publish:
       component: VideoPlayer
     html:
       type: standalone_html
-      file: ${outputs.dir}/${id}.html
+      file: ${outputs.asset_dir}/index.html
 ```
 
 `docusaurus_mdx` replaces a placeholder block in an MDX file. `standalone_html`
@@ -44,6 +44,7 @@ recordings/.omegaflow/
   runs/
   cache/
   videos/
+    hello/
 ```
 
 Do not edit those files by hand. Commit the authored recording files and public

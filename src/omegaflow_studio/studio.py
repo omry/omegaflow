@@ -602,7 +602,11 @@ def audio_publish_needs_work(cfg: DictConfig, *, output: Path | None = None) -> 
         published_audio = output or audio.output_audio_path(
             spec, recording_id, settings
         )
-        published_metadata = audio.output_audio_metadata_path(spec, published_audio)
+        published_metadata = (
+            published_audio.with_suffix(".json")
+            if output is not None
+            else audio.output_audio_metadata_path(spec, published_audio)
+        )
     except audio.AudioError:
         return True
     return not audio.published_audio_is_fresh(
@@ -849,7 +853,7 @@ publish:
   surfaces:
     html:
       type: standalone_html
-      file: ${{outputs.dir}}/${{id}}.html
+      file: ${{outputs.asset_dir}}/index.html
 ---
 
 # {title}
@@ -1781,6 +1785,7 @@ def publish_artifacts_from_run(
             for segment in segments:
                 if not isinstance(segment, dict):
                     continue
+                segment.pop("audio", None)
                 timestamp = segment.get("timestamps")
                 if not isinstance(timestamp, str) or not timestamp:
                     continue
@@ -2121,12 +2126,6 @@ def print_success_followups(cfg: DictConfig) -> None:
         + color_text("watch  ", ANSI_GREEN_BOLD)
         + " "
         + studio_tool_command(recording_id, "action=watch")
-    )
-    print(
-        "  "
-        + color_text("inspect", ANSI_GREEN_BOLD)
-        + " "
-        + studio_tool_command(recording_id, "action=inspect")
     )
 
 

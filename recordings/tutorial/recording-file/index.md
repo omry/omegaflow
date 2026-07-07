@@ -6,7 +6,7 @@ publish:
   surfaces:
     html:
       type: standalone_html
-      file: ${outputs.dir}/${id}.html
+      file: ${outputs.asset_dir}/index.html
 audio:
   enabled: false
 ---

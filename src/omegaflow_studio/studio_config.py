@@ -250,10 +250,11 @@ class RecordingStyleConfig:
 @dataclass
 class RecordingOutputsConfig:
     dir: str = "recordings/.omegaflow/videos"
-    cast: str = "${outputs.dir}/${id}.cast"
+    asset_dir: str = "${outputs.dir}/${id}"
+    cast: str = "${outputs.asset_dir}/recording.cast"
     retimed_cast: str | None = None
-    audio: str | None = None
-    audio_metadata: str | None = None
+    audio: str | None = "${outputs.asset_dir}/audio.${audio.format}"
+    audio_metadata: str | None = "${outputs.asset_dir}/audio.json"
 
 
 @dataclass

@@ -81,7 +81,16 @@ server, client, plugin, deployment, and product-security work.
       embedded video/HTML, choose the best fallback such as a thumbnail link,
       GIF, SVG/terminal cast preview, or docs-site link.
 
-- [ ] `P1` Organize publishing output into one asset directory per video.
+- [ ] `P2` Create an OmegaFlow logo and mascot direction.
+      The website currently relies on text-only branding, which makes the
+      navbar and public package surfaces feel unfinished. Acceptance checks:
+      propose a small set of logo/mascot concepts that fit rebuildable terminal
+      demos and generated voiceover; choose one direction; create source assets
+      for the website navbar, docs favicon/social preview, and README/PyPI
+      surfaces; verify the mark works on dark backgrounds and at small sizes;
+      and document basic usage so future pages stay visually consistent.
+
+- [x] `P1` Organize publishing output into one asset directory per video.
       Published surfaces should not scatter a video's cast, audio, player data,
       HTML, and support assets across unrelated paths. Acceptance checks: define
       a canonical output directory for each recording/video id; write all
@@ -101,6 +110,20 @@ server, client, plugin, deployment, and product-security work.
       dependencies such as browser capture or ffmpeg; and add a smoke test or
       fixture-level validation that proves the export path produces a playable
       media file.
+
+- [ ] `P2` Evaluate browser recording support with Playwright.
+      OmegaFlow may eventually support browser demos alongside terminal demos.
+      The design should preserve the core value of generated narration,
+      synchronization markers, and rebuildable scripts. Acceptance checks:
+      evaluate whether Playwright's video, trace, screenshots, or a custom
+      event timeline is the right capture layer; sketch a browser-action schema
+      for navigation, clicks, typing, keyboard shortcuts, waits, and assertions;
+      define how narration anchors and waits synchronize with browser actions;
+      explore realistic mouse movement and keyboard pacing instead of terminal
+      typing animation; identify requirements for deterministic viewport,
+      network, assets, auth, and secrets handling; and recommend whether this
+      should share the existing player/publish surfaces or use a dedicated
+      browser-demo rendering path.
 
 - [ ] `P2` Add support for selecting a thumbnail frame.
       Published videos need a stable preview image for docs, GitHub fallbacks,
