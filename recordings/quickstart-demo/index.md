@@ -24,7 +24,7 @@ publish:
       file: website/docs/quick-start.md
       placeholder: quickstart-demo
       component: VideoPlayer
-retime:
+timing:
   typing_char_delay: 0.03
   typing_space_delay: 0.02
   typing_punctuation_delay: 0.04
@@ -58,13 +58,25 @@ beat:
   heading: Install The CLI
   narration: >-
     OmegaFlow turns a Markdown recording script into a rebuildable terminal video.
-    @install@ Start with the command line tool. Install the package.
-    The install provides the omegaflow command used for the rest of the
-    workflow. @wait:install_command+300ms@
+    It is a Python tool, but the demos it records can be anything you drive in a
+    terminal. If your project already has a Python environment, use that. If it
+    does not, @python_env@ create a local virtual environment first.
+    @wait:env_command+300ms@ Then @install@ install OmegaFlow into that
+    environment. @wait:install_command+300ms@ Once it is installed, the
+    omegaflow command is available for the rest of the workflow.
   marker: install
   caption: Install the OmegaFlow CLI.
   actions:
   - commands:
+    - id: env_command
+      run: ":"
+      display: |-
+        python -m venv .venv
+        source .venv/bin/activate
+      after: "@python_env@"
+      output:
+        mode: fake
+        text: ""
     - id: install_command
       run: python -m pip install omegaflow
       display: python -m pip install omegaflow
@@ -75,8 +87,10 @@ beat:
           Successfully installed omegaflow-0.2.0
   guide:
     commands:
+    - python -m venv .venv
+    - source .venv/bin/activate
     - python -m pip install omegaflow
-    success_hint: The install provides the omegaflow command.
+    success_hint: Use an existing Python environment when your project already has one.
 ```
 
 ```yaml studio-directive
@@ -84,20 +98,25 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    Bootstrap creates the default recording workspace. @bootstrap@ Run the
-    bootstrap command. It writes shared config, a recording Markdown file, and
-    a support script. @list_files@ List the generated files. Then open the
-    recording script. @show_script@ @wait:show_script+300ms@
+    Bootstrap prepares the project for OmegaFlow. @bootstrap@ Run the bootstrap
+    command. It prepares your environment for recording videos and creates a
+    small demo recording script. @wait:bootstrap_run+300ms@ Look at the
+    recording script later, when you are ready to customize it.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
   - commands:
     - id: bootstrap_command
-      run: bash recordings/quickstart-demo/scripts/create-demo-project.sh
-      display: |-
-        # From your repository root
-        omegaflow action=bootstrap
+      run: ":"
+      display: "# From your repository root"
       after: "@bootstrap@"
+      post_command_pause: 0.45
+      output:
+        mode: fake
+        text: ""
+    - id: bootstrap_run
+      run: bash recordings/quickstart-demo/scripts/create-demo-project.sh
+      display: omegaflow action=bootstrap
       output:
         mode: fake
         text: |
@@ -114,32 +133,10 @@ beat:
         - /tmp/omegaflow-quickstart-demo/recordings/config.yaml
         - /tmp/omegaflow-quickstart-demo/recordings/quickstart/index.md
         - /tmp/omegaflow-quickstart-demo/recordings/quickstart/scripts/hello.sh
-    - id: list_files
-      run: tree /tmp/omegaflow-quickstart-demo -a --noreport
-      display: tree -a .
-      after: "@list_files@"
-      output:
-        mode: fake
-        text: |
-          .
-          ├── .omegaflow
-          │   └── config.yaml
-          └── recordings
-              ├── config.yaml
-              └── quickstart
-                  ├── index.md
-                  └── scripts
-                      └── hello.sh
-    - id: show_script
-      run: sed -n '1,85p' /tmp/omegaflow-quickstart-demo/recordings/quickstart/index.md
-      display: sed -n '1,85p' recordings/quickstart/index.md
-      after: "@show_script@"
   guide:
     commands:
     - omegaflow action=bootstrap
-    - tree -a .
-    - sed -n '1,85p' recordings/quickstart/index.md
-    success_hint: Bootstrap writes tool config, a recording directory, and a local support script.
+    success_hint: Look at the generated recording script later when you are ready to customize it.
 ```
 
 ```yaml studio-directive
@@ -147,9 +144,8 @@ beat:
   id: build
   heading: Build The Video
   narration: >-
-    Now build the generated recording. @build@ The build command records the
-    terminal cast. After recording, OmegaFlow retimes the cast, checks
-    alignment, and writes the configured publish surface.
+    Now build the generated recording. @build@ Run the build command.
+    OmegaFlow records the terminal and turns it into a video.
     @wait:build_command+300ms@
   marker: build
   caption: Build the generated quickstart recording.
@@ -159,11 +155,7 @@ beat:
       run: bash recordings/quickstart-demo/scripts/build-demo-project.sh
       display: omegaflow recording=quickstart action=build
       after: "@build@"
-      output:
-        mode: fake
-        text: |
-          pass wrote retimed cast: recordings/.omegaflow/videos/quickstart.retimed.cast
-          pass wrote publish surface: recordings/.omegaflow/videos/quickstart.html
+      timing: realtime
       expect:
         file_exists:
         - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart.retimed.cast
@@ -171,7 +163,7 @@ beat:
   guide:
     commands:
     - omegaflow recording=quickstart action=build
-    success_hint: The build writes a retimed cast and standalone HTML surface.
+    success_hint: The generated video is ready to play.
 ```
 
 ```yaml studio-directive
@@ -209,9 +201,9 @@ beat:
   id: publish
   heading: Inspect Publish Surfaces
   narration: >-
-    Finally, inspect the publish surface. @inspect@ A dry run shows the build
-    plan without recording a new cast. The generated quickstart starts with
-    standalone HTML, and other recordings can publish into docs pages.
+    Finally, inspect the publish surface. @inspect@ A dry run shows where the
+    finished video can go without recording it again. The generated quickstart
+    starts with standalone HTML, and other recordings can publish into docs pages.
     @wait:inspect_command+300ms@
   marker: publish
   caption: Inspect the configured publish surface.
@@ -221,6 +213,13 @@ beat:
       run: bash recordings/quickstart-demo/scripts/inspect-demo-project.sh
       display: omegaflow recording=quickstart action=build dry_run=true
       after: "@inspect@"
+      output:
+        mode: fake
+        text: |
+          Publish surfaces:
+            html:
+              type: standalone_html
+              file: recordings/.omegaflow/videos/quickstart.html
       expect:
         output_contains:
         - "Publish surfaces:"

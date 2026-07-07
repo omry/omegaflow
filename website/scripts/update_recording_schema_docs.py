@@ -15,7 +15,7 @@ SCHEMA_GROUPS = {
         "RecordingCaptureConfig",
         "RecordingStyleConfig",
         "RecordingOutputsConfig",
-        "RecordingRetimeConfig",
+        "RecordingTimingConfig",
         "RecordingEnvironmentConfig",
         "RecordingAudioBillingConfig",
         "RecordingAudioTranscriptionConfig",

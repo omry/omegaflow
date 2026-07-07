@@ -748,6 +748,36 @@ beat:
         raise AssertionError("expected unknown nested recording config to fail")
 
 
+def test_recording_schema_rejects_old_top_level_retime_config(
+    tmp_path, monkeypatch
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "index.md").write_text(
+        """
+---
+id: hello
+retime:
+  post_command_pause: 0.1
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    try:
+        recording_from_script("hello")
+    except StudioConfigError as exc:
+        assert "retime" in str(exc)
+    else:
+        raise AssertionError("expected old top-level retime config to fail")
+
+
 def test_recording_schema_validates_frontmatter_command_fields(
     tmp_path, monkeypatch
 ) -> None:
@@ -767,6 +797,7 @@ beats:
     - id: say-hello
       run: printf 'hello\\n'
       display: echo hello
+      timing: realtime
 ---
 
 ```yaml studio-directive
@@ -790,6 +821,7 @@ beat:
     command = configured["actions"][0]["commands"][0]
     assert command["run"] == "printf 'hello\\n'"
     assert command["display"] == "echo hello"
+    assert command["timing"] == "realtime"
 
 
 def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -> None:
@@ -820,6 +852,38 @@ beats:
         assert "disaply" in str(exc)
     else:
         raise AssertionError("expected unknown command field to fail")
+
+
+def test_recording_schema_rejects_old_command_retime_field(
+    tmp_path, monkeypatch
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    (recordings_dir / "hello").mkdir()
+    (recordings_dir / "hello" / "index.md").write_text(
+        """
+---
+id: hello
+beats:
+- id: hello
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+  - commands:
+    - run: printf 'hello\\n'
+      retime: realtime
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    try:
+        recording_from_script("hello")
+    except StudioConfigError as exc:
+        assert "retime" in str(exc)
+    else:
+        raise AssertionError("expected old command retime field to fail")
 
 
 def test_studio_directive_schema_rejects_unknown_top_level_key() -> None:
@@ -1099,6 +1163,17 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
     assert "title: Recording File" in recording
     assert "- hello from tutorial/recording-file" in recording
     assert support_script.stat().st_mode & 0o111
+
+
+def test_interrupted_recording_message_is_terse(tmp_path) -> None:
+    message = record.format_interrupted_recording(
+        tmp_path / "recording.cast",
+        [tmp_path / ".recording.cast.recording-123.cast"],
+    )
+
+    assert message == "recording cancelled by user\noutput was not updated."
+    assert str(tmp_path) not in message
+    assert "removed staged recording artifacts" not in message
 
 
 def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str, object]:

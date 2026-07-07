@@ -292,11 +292,16 @@ def command_output_config(
     return {"mode": mode, "text": text or ""}
 
 
-def command_retime_mode(command: dict[str, Any], *, field: str) -> str:
-    raw_retime = command.get("retime", "normal")
-    if not isinstance(raw_retime, str) or raw_retime not in {"normal", "realtime"}:
-        raise RecordingError(f"{field}.retime must be one of: normal, realtime")
-    return raw_retime
+def command_timing_mode(command: dict[str, Any], *, field: str) -> str:
+    raw_timing = command.get("timing", "presentation")
+    if not isinstance(raw_timing, str) or raw_timing not in {
+        "presentation",
+        "realtime",
+    }:
+        raise RecordingError(
+            f"{field}.timing must be one of: presentation, realtime"
+        )
+    return raw_timing
 
 
 def action_command_entries(
@@ -369,7 +374,7 @@ def action_command_entries(
             raw_command,
             field=f"{field}.{index}.commands.{command_index}",
         )
-        retime = command_retime_mode(
+        timing = command_timing_mode(
             raw_command,
             field=f"{field}.{index}.commands.{command_index}",
         )
@@ -398,7 +403,7 @@ def action_command_entries(
                 "follow_along": follow_along,
                 "show_prompt_after": show_prompt_after,
                 "output": output,
-                "retime": retime,
+                "timing": timing,
                 "pre_command_pause": pre_command_pause,
                 "pre_enter_pause": pre_enter_pause,
                 "post_enter_pause": post_enter_pause,
@@ -717,13 +722,7 @@ def preserve_failed_run_artifacts(
 
 
 def format_interrupted_recording(cast_path: Path, removed: list[Path]) -> str:
-    lines = ["recording cancelled by user", f"output was not updated: {cast_path}"]
-    if removed:
-        lines.append("removed staged recording artifacts:")
-        lines.extend(f"- {path}" for path in removed)
-    else:
-        lines.append("no staged recording artifacts were present")
-    return "\n".join(lines)
+    return "recording cancelled by user\noutput was not updated."
 
 
 def recording_was_interrupted(returncode: int) -> bool:
@@ -2199,7 +2198,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '  local chunk_id="$4"',
             '  local output_mode="${5:-real}"',
             '  local fake_output="${6:-}"',
-            '  local retime="${7:-normal}"',
+            '  local timing="${7:-presentation}"',
             '  if [[ "$output_mode" == suppress || "$output_mode" == fake ]]; then',
             '    eval "$command_chunk" >>"$recording_stdout_path" 2>>"$recording_stderr_path" </dev/null',
             "    local status=$?",
@@ -2213,13 +2212,13 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '  local stderr_pipe="$recording_tmp/${action_id}.${chunk_id}.stderr.pipe"',
             '  rm -f "$stdout_pipe" "$stderr_pipe"',
             '  mkfifo "$stdout_pipe" "$stderr_pipe"',
-            '  "$recording_python" - "$stdout_pipe" "$stderr_pipe" "$recording_stdout_path" "$recording_stderr_path" "$retime" <<\'PY\' &',
+            '  "$recording_python" - "$stdout_pipe" "$stderr_pipe" "$recording_stdout_path" "$recording_stderr_path" "$timing" <<\'PY\' &',
             "import os",
             "import re",
             "import sys",
             "import threading",
             "",
-            "stdout_pipe, stderr_pipe, stdout_path, stderr_path, retime = sys.argv[1:]",
+            "stdout_pipe, stderr_pipe, stdout_path, stderr_path, timing = sys.argv[1:]",
             "skip_patterns = (",
             "    re.compile(rb'^Installing collected packages:'),",
             "    re.compile(rb'^Successfully installed '),",
@@ -2252,7 +2251,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "                display.buffer.write(line)",
             "                display.buffer.flush()",
             "",
-            "pump = pump_stream if retime == 'realtime' else pump_lines",
+            "pump = pump_stream if timing == 'realtime' else pump_lines",
             "threads = [",
             "    threading.Thread(target=pump, args=(stdout_pipe, stdout_path, sys.stdout)),",
             "    threading.Thread(target=pump, args=(stderr_pipe, stderr_path, sys.stderr)),",
@@ -2482,7 +2481,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    local command_id",
             "    local output_mode",
             "    local fake_output",
-            "    local retime",
+            "    local timing",
             "    local pre_command_pause",
             "    local pre_enter_pause",
             "    local post_enter_pause",
@@ -2495,15 +2494,15 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '    show_prompt_after="$(command_json_field "$commands_json" "$index" show_prompt_after)"',
             '    output_mode="$(command_json_field "$commands_json" "$index" output.mode)"',
             '    fake_output="$(command_json_field "$commands_json" "$index" output.text)"',
-            '    retime="$(command_json_field "$commands_json" "$index" retime)"',
+            '    timing="$(command_json_field "$commands_json" "$index" timing)"',
             '    pre_command_pause="$(command_json_field "$commands_json" "$index" pre_command_pause)"',
             '    pre_enter_pause="$(command_json_field "$commands_json" "$index" pre_enter_pause)"',
             '    post_enter_pause="$(command_json_field "$commands_json" "$index" post_enter_pause)"',
             '    post_command_pause="$(command_json_field "$commands_json" "$index" post_command_pause)"',
-            '    timeline_event command_prompt_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$display_command" prompt "$(recording_prompt_text)" color "$recording_color" follow_along "$follow_along" show_prompt_after "$show_prompt_after" after "$after_anchor" retime "$retime" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
+            '    timeline_event command_prompt_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$display_command" prompt "$(recording_prompt_text)" color "$recording_color" follow_along "$follow_along" show_prompt_after "$show_prompt_after" after "$after_anchor" timing "$timing" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
             '    timeline_event command_prompt_end "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$display_command" prompt "$(recording_prompt_text)" color "$recording_color" follow_along "$follow_along" show_prompt_after "$show_prompt_after" after "$after_anchor" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
-            '    timeline_event command_run_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$command" display "$display_command" progress "${progress_labels[$index]:-}" follow_along "$follow_along" output_mode "$output_mode" fake_output "$fake_output" after "$after_anchor" retime "$retime" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
-            '    run_visible_command_chunk "$action_id" "$marker" "$command" "$index" "$output_mode" "$fake_output" "$retime"',
+            '    timeline_event command_run_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$command" display "$display_command" progress "${progress_labels[$index]:-}" follow_along "$follow_along" output_mode "$output_mode" fake_output "$fake_output" after "$after_anchor" timing "$timing" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
+            '    run_visible_command_chunk "$action_id" "$marker" "$command" "$index" "$output_mode" "$fake_output" "$timing"',
             "    status=$?",
             '    timeline_event command_run_end "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" status "$status" follow_along "$follow_along" after "$after_anchor"',
             '    [[ "$status" -eq 0 ]] || break',

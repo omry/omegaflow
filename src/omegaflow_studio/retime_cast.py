@@ -98,7 +98,7 @@ class PresentationCommand:
     prompt_payload: str
     output_mode: str
     fake_output: str
-    retime: str
+    timing: str
     output_span: OutputSpan
 
 
@@ -769,33 +769,33 @@ def normalize_audio_timings(
 def require_number(mapping: dict[str, Any], key: str, default: float) -> float:
     value = mapping.get(key, default)
     if not isinstance(value, (int, float)) or value < 0:
-        raise RetimeError(f"retime.{key} must be a non-negative number")
+        raise RetimeError(f"timing.{key} must be a non-negative number")
     return float(value)
 
 
 def timing_rules_from_manifest(spec: dict[str, Any]) -> TimingRules:
-    retime = as_mapping(spec.get("retime"))
+    timing = as_mapping(spec.get("timing"))
     return TimingRules(
         typing_char_delay=require_number(
-            retime, "typing_char_delay", TimingRules.typing_char_delay
+            timing, "typing_char_delay", TimingRules.typing_char_delay
         ),
         typing_space_delay=require_number(
-            retime, "typing_space_delay", TimingRules.typing_space_delay
+            timing, "typing_space_delay", TimingRules.typing_space_delay
         ),
         typing_punctuation_delay=require_number(
-            retime, "typing_punctuation_delay", TimingRules.typing_punctuation_delay
+            timing, "typing_punctuation_delay", TimingRules.typing_punctuation_delay
         ),
         typing_newline_delay=require_number(
-            retime, "typing_newline_delay", TimingRules.typing_newline_delay
+            timing, "typing_newline_delay", TimingRules.typing_newline_delay
         ),
         post_enter_pause=require_number(
-            retime, "post_enter_pause", TimingRules.post_enter_pause
+            timing, "post_enter_pause", TimingRules.post_enter_pause
         ),
         post_command_pause=require_number(
-            retime, "post_command_pause", TimingRules.post_command_pause
+            timing, "post_command_pause", TimingRules.post_command_pause
         ),
         minimum_section_spacing=require_number(
-            retime,
+            timing,
             "minimum_section_spacing",
             TimingRules.minimum_section_spacing,
         ),
@@ -1494,12 +1494,12 @@ def command_output_mode(interval: TimelineInterval | None) -> tuple[str, str]:
     return mode, fake_output
 
 
-def command_retime_mode(interval: TimelineInterval | None) -> str:
+def command_timing_mode(interval: TimelineInterval | None) -> str:
     if interval is None:
-        return "normal"
-    mode = interval.start_event.get("retime", "normal")
-    if not isinstance(mode, str) or mode not in {"normal", "realtime"}:
-        return "normal"
+        return "presentation"
+    mode = interval.start_event.get("timing", "presentation")
+    if not isinstance(mode, str) or mode not in {"presentation", "realtime"}:
+        return "presentation"
     return mode
 
 
@@ -1640,7 +1640,7 @@ def build_presentation_commands(
         key = interval_key(prompt_interval.start_event)
         run_interval = run_by_key.get(key)
         output_mode, fake_output = command_output_mode(run_interval)
-        retime = command_retime_mode(run_interval)
+        timing = command_timing_mode(run_interval)
         commands.append(
             PresentationCommand(
                 key=key,
@@ -1649,7 +1649,7 @@ def build_presentation_commands(
                 prompt_payload=prompt_payload_by_key.get(key, ""),
                 output_mode=output_mode,
                 fake_output=fake_output,
-                retime=retime,
+                timing=timing,
                 output_span=output_span_for_command(
                     events=events,
                     prompt_intervals=prompt_intervals,
@@ -2025,7 +2025,7 @@ def schedule_command_output(
         return output_start
     if not command.output_span.events:
         return output_start
-    if command.retime == "realtime" and command.run_interval is not None:
+    if command.timing == "realtime" and command.run_interval is not None:
         source_start = command.run_interval.start
     else:
         source_start = command.output_span.events[0].absolute_time

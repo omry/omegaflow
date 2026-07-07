@@ -257,7 +257,7 @@ class RecordingOutputsConfig:
 
 
 @dataclass
-class RecordingRetimeConfig:
+class RecordingTimingConfig:
     typing_char_delay: float = 0.035
     typing_space_delay: float = 0.02
     typing_punctuation_delay: float = 0.05
@@ -346,7 +346,7 @@ class RecordingCommandConfig:
     show_prompt_after: bool = True
     output: Any = None
     expect: dict[str, Any] = field(default_factory=dict)
-    retime: str = "normal"
+    timing: str = "presentation"
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
@@ -393,7 +393,7 @@ class RecordingDefaults:
     capture: RecordingCaptureConfig = field(default_factory=RecordingCaptureConfig)
     style: RecordingStyleConfig = field(default_factory=RecordingStyleConfig)
     outputs: RecordingOutputsConfig = field(default_factory=RecordingOutputsConfig)
-    retime: RecordingRetimeConfig = field(default_factory=RecordingRetimeConfig)
+    timing: RecordingTimingConfig = field(default_factory=RecordingTimingConfig)
     environment: RecordingEnvironmentConfig = field(
         default_factory=RecordingEnvironmentConfig
     )

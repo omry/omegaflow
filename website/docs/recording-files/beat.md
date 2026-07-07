@@ -77,7 +77,7 @@ Step fields:
 | `commands` | list | Command entries for one action. |
 
 Command entries also accept `id`, `follow_along`, `show_prompt_after`,
-`retime`, and pre/post command pause fields.
+`timing`, and pre/post command pause fields.
 
 `output: fake` still runs the command. OmegaFlow hides the real stdout/stderr in
 the recording and displays `output.text` instead. Use a support script or
@@ -117,7 +117,7 @@ class RecordingCommandConfig:
     show_prompt_after: bool = True
     output: Any = None
     expect: dict[str, Any] = field(default_factory=dict)
-    retime: str = "normal"
+    timing: str = "presentation"
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
