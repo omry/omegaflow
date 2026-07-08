@@ -21,14 +21,13 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-- [ ] `P1` Rename the Python module from `omegaflow_studio` to `omegaflow`.
-      The public tool and package are moving to OmegaFlow, but the importable
-      module still carries the old Studio name. Acceptance checks: rename
-      `src/omegaflow_studio` to the canonical `omegaflow` module; update entry
-      points, imports, tests, generated schema/docs paths, and packaging
-      metadata; search the repository for remaining `omegaflow_studio`
-      references; and either remove or deliberately explain any leftover
-      compatibility surface.
+- [x] `P1` Rename the Python module to `omegaflow`.
+      The public tool, package, and importable module now share the canonical
+      OmegaFlow name. Acceptance checks: the source package lives under
+      `src/omegaflow`; entry points, imports, tests, generated schema/docs
+      paths, and packaging metadata point at the canonical module; old Studio
+      package references were removed instead of preserved as a compatibility
+      surface.
 
 - [ ] `P1` Publish Linux and macOS wheels with a bundled recorder.
       OmegaFlow should not require most Linux and macOS users to install

@@ -19,7 +19,7 @@ class CustomBuildHook(BuildHookInterface):
         if self.target_name != "wheel" or version != "standard":
             return
 
-        bin_dir = Path(self.root) / "src" / "omegaflow_studio" / "bin"
+        bin_dir = Path(self.root) / "src" / "omegaflow" / "bin"
         bundled_recorder = bin_dir / "asciinema"
         if not bundled_recorder.is_file():
             return
@@ -27,7 +27,7 @@ class CustomBuildHook(BuildHookInterface):
         platform_file = bin_dir / "asciinema.platform"
         if not platform_file.is_file():
             raise RuntimeError(
-                "bundled asciinema is missing src/omegaflow_studio/bin/"
+                "bundled asciinema is missing src/omegaflow/bin/"
                 "asciinema.platform; run tools/vendor_asciinema.py before "
                 "building a platform wheel"
             )

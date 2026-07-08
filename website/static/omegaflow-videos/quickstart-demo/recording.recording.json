@@ -13,19 +13,19 @@
       "sha256": "0e66bbd20dd35cf3d9defefbb67f1334c59e36bcf5cd4748a93c06b85afaf557"
     },
     {
-      "path": "src/omegaflow_studio/record.py",
-      "sha256": "c0c74847c795b294bcf3cdfed75a01dc9a25f32a65907f7140759dc93346eb4b"
+      "path": "src/omegaflow/record.py",
+      "sha256": "e322f634702300b547457db72428b52971271402f51eddd5195dcf489874adb4"
     },
     {
-      "path": "src/omegaflow_studio/studio.py",
+      "path": "src/omegaflow/studio.py",
       "sha256": "7821ac7712d2d0aa3eca4cf312b6b5d751b2b2f379e1b15bb868fbd2c6ec6eee"
     },
     {
-      "path": "src/omegaflow_studio/studio_config.py",
-      "sha256": "d590e89afa2342e73193ae8382c2d9d203b6e5aa93440071cdf347a435510988"
+      "path": "src/omegaflow/studio_config.py",
+      "sha256": "53818814c5d8f4bacd86a750f02bd732a944a86170df62fdf0c5a523ff76ee90"
     }
   ],
-  "fingerprint": "6fd3199ab1b874be7494c13d28667427c1f77e509433580ae04539ade9557bfd",
+  "fingerprint": "b7345dec64a9b2b5fb7a771884c68d321c34656cdcdc8b83f4bf4b275dd1a399",
   "recording": "quickstart-demo",
   "spec_sha256": "a50091dfb3a68e7f3e16dae27968e51ed4f92d013f8467a2cb28fa9a3bbfcf4e",
   "version": 2

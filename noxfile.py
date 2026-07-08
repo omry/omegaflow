@@ -17,8 +17,8 @@ RELEASE_PLATFORMS = (
     "macos-aarch64",
 )
 VENDORED_RECORDER_PATHS = (
-    Path("src/omegaflow_studio/bin/asciinema"),
-    Path("src/omegaflow_studio/bin/asciinema.platform"),
+    Path("src/omegaflow/bin/asciinema"),
+    Path("src/omegaflow/bin/asciinema.platform"),
 )
 
 

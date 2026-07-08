@@ -20,7 +20,7 @@ def run_player_script(script_body: str) -> subprocess.CompletedProcess[str]:
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
-const html = fs.readFileSync('src/omegaflow_studio/player/static/cast-player.html', 'utf8');
+const html = fs.readFileSync('src/omegaflow/player/static/cast-player.html', 'utf8');
 const scripts = [...html.matchAll(/<script(?:\s+src="([^"]+)")?\s*>([\s\S]*?)<\/script>/g)];
 const elements = new Map();
 
@@ -110,7 +110,7 @@ context.window.document = context.document;
 vm.createContext(context);
 for (const script of scripts) {
   const source = script[1]
-    ? fs.readFileSync(path.join('src/omegaflow_studio/player/static', script[1]), 'utf8')
+    ? fs.readFileSync(path.join('src/omegaflow/player/static', script[1]), 'utf8')
     : script[2];
   vm.runInContext(source, context);
 }

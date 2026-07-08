@@ -777,11 +777,11 @@ def postmortem_entrypoint_text(*, run_dir: str, workdir: str, venv: str) -> str:
         f"run_dir={shlex.quote(run_dir)}",
         f"workdir={shlex.quote(workdir)}",
         f"venv={shlex.quote(venv)}",
-        f"export OMEGAFLOW_STUDIO_RUN_ID={shlex.quote(run_id)}",
-        "export OMEGAFLOW_STUDIO_POSTMORTEM=1",
-        'export OMEGAFLOW_STUDIO_RUN_DIR="$run_dir"',
-        'export OMEGAFLOW_STUDIO_WORKDIR="$workdir"',
-        'export OMEGAFLOW_STUDIO_VENV="$venv"',
+        f"export OMEGAFLOW_RUN_ID={shlex.quote(run_id)}",
+        "export OMEGAFLOW_POSTMORTEM=1",
+        'export OMEGAFLOW_RUN_DIR="$run_dir"',
+        'export OMEGAFLOW_WORKDIR="$workdir"',
+        'export OMEGAFLOW_VENV="$venv"',
         'cd "$workdir"',
         'if [[ -n "$venv" && -f "$venv/bin/activate" ]]; then',
         '  . "$venv/bin/activate"',
@@ -1040,7 +1040,7 @@ def failure_run_identity(report: dict[str, Any]) -> tuple[str | None, str | None
 def recording_tool_command(
     *, recording_id: str | None = None, action: str, run_id: str
 ) -> str:
-    parts = ["python -m omegaflow_studio.record"]
+    parts = ["python -m omegaflow.record"]
     if recording_id:
         parts.append(f"recording={recording_id}")
     parts.extend([f"action={action}", f"run_id={run_id}"])
@@ -1553,7 +1553,7 @@ def validate_session_overrides(overrides: list[str]) -> None:
     command = [
         sys.executable,
         "-m",
-        "omegaflow_studio.record",
+        "omegaflow.record",
         *overrides,
         "--cfg",
         "job",
@@ -1654,7 +1654,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             f"recording_typing_punctuation_delay={shell_quote(typing_punctuation_delay)}",
             f"recording_typing_newline_delay={shell_quote(typing_newline_delay)}",
             f"recording_typing_seed={shell_quote(typing_seed)}",
-            f"export OMEGAFLOW_STUDIO_FAILURE_SUMMARY={shell_quote(json.dumps(failure_summary, separators=(',', ':')))}",
+            f"export OMEGAFLOW_FAILURE_SUMMARY={shell_quote(json.dumps(failure_summary, separators=(',', ':')))}",
             'if [[ "$recording_color" == 1 ]]; then',
             "  export CLICOLOR_FORCE=1",
             "  export FORCE_COLOR=1",
@@ -1670,9 +1670,9 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "export recording_typing_punctuation_delay",
             "export recording_typing_newline_delay",
             "export recording_typing_seed",
-            'recording_timeline_path="${OMEGAFLOW_STUDIO_TIMELINE:-}"',
+            'recording_timeline_path="${OMEGAFLOW_TIMELINE:-}"',
             f'recording_progress_pipe_path="${{{PROGRESS_PIPE_ENV}:-}}"',
-            'recording_failure_path="${OMEGAFLOW_STUDIO_FAILURE:-}"',
+            'recording_failure_path="${OMEGAFLOW_FAILURE:-}"',
             'recording_start_epoch="$("$recording_python" - <<\'PY\'',
             "import time",
             "print(time.time())",
@@ -1738,11 +1738,11 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    f'run_dir={shlex.quote(run_dir)}',",
             "    f'workdir={shlex.quote(workdir)}',",
             "    f'venv={shlex.quote(venv)}',",
-            "    f'export OMEGAFLOW_STUDIO_RUN_ID={shlex.quote(run_id)}',",
-            "    'export OMEGAFLOW_STUDIO_POSTMORTEM=1',",
-            "    'export OMEGAFLOW_STUDIO_RUN_DIR=\"$run_dir\"',",
-            "    'export OMEGAFLOW_STUDIO_WORKDIR=\"$workdir\"',",
-            "    'export OMEGAFLOW_STUDIO_VENV=\"$venv\"',",
+            "    f'export OMEGAFLOW_RUN_ID={shlex.quote(run_id)}',",
+            "    'export OMEGAFLOW_POSTMORTEM=1',",
+            "    'export OMEGAFLOW_RUN_DIR=\"$run_dir\"',",
+            "    'export OMEGAFLOW_WORKDIR=\"$workdir\"',",
+            "    'export OMEGAFLOW_VENV=\"$venv\"',",
             "    'cd \"$workdir\"',",
             '    \'if [[ -n "$venv" && -f "$venv/bin/activate" ]]; then\',',
             "    '  . \"$venv/bin/activate\"',",
@@ -1920,7 +1920,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    'postmortem_path': postmortem_path,",
             "    'recording_id': recording_id,",
             "    'run_id': run_id,",
-            "    'failure_summary': json.loads(os.environ.get('OMEGAFLOW_STUDIO_FAILURE_SUMMARY', '{}')),",
+            "    'failure_summary': json.loads(os.environ.get('OMEGAFLOW_FAILURE_SUMMARY', '{}')),",
             "}",
             "for report_path in [sidecar_path, run_failure_path]:",
             "    if not report_path:",
@@ -2858,15 +2858,15 @@ def record(
     session_args = [
         shlex.quote(str(session_python)),
         "-m",
-        "omegaflow_studio.record",
+        "omegaflow.record",
     ]
     session_args.extend(shlex.quote(override) for override in session_overrides)
     runner_command = " ".join(
         [
             "env",
-            "OMEGAFLOW_STUDIO_TIMELINE=" + shlex.quote(str(staged_timeline_path)),
+            "OMEGAFLOW_TIMELINE=" + shlex.quote(str(staged_timeline_path)),
             f"{PROGRESS_PIPE_ENV}=" + shlex.quote(str(staged_progress_pipe_path)),
-            "OMEGAFLOW_STUDIO_FAILURE=" + shlex.quote(str(staged_failure_path)),
+            "OMEGAFLOW_FAILURE=" + shlex.quote(str(staged_failure_path)),
             *session_args,
         ]
     )

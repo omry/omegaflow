@@ -29,7 +29,7 @@ class ProjectLayout:
 
 def discover_project_layout() -> ProjectLayout:
     bundled_config_dir = Path(__file__).resolve().parent / "conf"
-    configured = os.environ.get("OMEGAFLOW_STUDIO_PROJECT_ROOT")
+    configured = os.environ.get("OMEGAFLOW_PROJECT_ROOT")
     if configured:
         root = Path(configured).expanduser().resolve()
     else:

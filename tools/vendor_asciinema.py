@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("src/omegaflow_studio/bin/asciinema"),
+        default=Path("src/omegaflow/bin/asciinema"),
         help="where to write the packaged recorder binary",
     )
     args = parser.parse_args(argv)

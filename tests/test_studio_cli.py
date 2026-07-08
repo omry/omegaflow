@@ -9,14 +9,14 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from omegaflow_studio import __version__
-from omegaflow_studio import audio
-from omegaflow_studio import record
-from omegaflow_studio import retime_cast
-from omegaflow_studio import studio
-from omegaflow_studio import studio_config as studio_config_module
-from omegaflow_studio.record import collect_run_jobs
-from omegaflow_studio.studio_config import (
+from omegaflow import __version__
+from omegaflow import audio
+from omegaflow import record
+from omegaflow import retime_cast
+from omegaflow import studio
+from omegaflow import studio_config as studio_config_module
+from omegaflow.record import collect_run_jobs
+from omegaflow.studio_config import (
     CONFIG_DIR,
     RECORDING_SCRIPT_DIR,
     STUDIO_CONFIG_NAME,
@@ -53,14 +53,14 @@ def test_package_installs_omegaflow_command() -> None:
 
     assert pyproject["project"]["name"] == "omegaflow"
     assert pyproject["project"]["scripts"] == {
-        "omegaflow": "omegaflow_studio.studio:main"
+        "omegaflow": "omegaflow.studio:main"
     }
     assert pyproject["tool"]["hatch"]["build"]["hooks"]["custom"] == {
         "path": "hatch_build.py"
     }
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["artifacts"] == [
-        "/src/omegaflow_studio/bin/asciinema",
-        "/src/omegaflow_studio/bin/asciinema.platform",
+        "/src/omegaflow/bin/asciinema",
+        "/src/omegaflow/bin/asciinema.platform",
     ]
 
 
@@ -146,7 +146,7 @@ def test_build_hook_marks_bundled_recorder_wheel_as_platform_specific(
     tmp_path,
 ) -> None:
     custom_build_hook = load_custom_build_hook()
-    bundled = tmp_path / "src" / "omegaflow_studio" / "bin" / "asciinema"
+    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
     bundled.parent.mkdir(parents=True)
     bundled.write_text("fake recorder", encoding="utf-8")
     bundled.with_suffix(".platform").write_text("linux-x86_64\n", encoding="utf-8")
@@ -168,7 +168,7 @@ def test_build_hook_requires_bundled_recorder_platform_metadata(
     tmp_path,
 ) -> None:
     custom_build_hook = load_custom_build_hook()
-    bundled = tmp_path / "src" / "omegaflow_studio" / "bin" / "asciinema"
+    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
     bundled.parent.mkdir(parents=True)
     bundled.write_text("fake recorder", encoding="utf-8")
 
@@ -203,7 +203,7 @@ def test_recording_schema_docs_are_generated() -> None:
 
 
 def test_studio_paths_use_canonical_recordings_workspace() -> None:
-    assert CONFIG_DIR.parts[-2:] == ("omegaflow_studio", "conf")
+    assert CONFIG_DIR.parts[-2:] == ("omegaflow", "conf")
     assert STUDIO_CONFIG_NAME == "base-config"
     assert RECORDING_SCRIPT_DIR.parts[-1:] == ("recordings",)
 
@@ -216,25 +216,25 @@ def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_PROJECT_ROOT", raising=False)
+    monkeypatch.delenv("OMEGAFLOW_PROJECT_ROOT", raising=False)
 
     layout = discover_project_layout()
 
     assert layout.root == tmp_path
     assert layout.config_dir.name == "conf"
-    assert layout.config_dir.parent.name == "omegaflow_studio"
+    assert layout.config_dir.parent.name == "omegaflow"
     assert layout.recording_script_dir == recordings_dir
 
 
 def test_empty_workspace_uses_bundled_config(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("OMEGAFLOW_STUDIO_PROJECT_ROOT", raising=False)
+    monkeypatch.delenv("OMEGAFLOW_PROJECT_ROOT", raising=False)
 
     layout = discover_project_layout()
 
     assert layout.root == tmp_path
     assert layout.config_dir.name == "conf"
-    assert layout.config_dir.parent.name == "omegaflow_studio"
+    assert layout.config_dir.parent.name == "omegaflow"
     assert layout.data_dir == tmp_path / "recordings" / ".omegaflow"
     assert layout.recording_script_dir == tmp_path / "recordings"
 

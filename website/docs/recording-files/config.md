@@ -140,7 +140,7 @@ Publishing surface details are covered in
 
 ## Config Schema
 
-This schema block is generated from `src/omegaflow_studio/studio_config.py`
+This schema block is generated from `src/omegaflow/studio_config.py`
 during the website build. Beat, command, and publish detail types are documented
 on the [Beat](./beat.md) and
 [Publishing And Runtime](./publishing-runtime.md) pages.

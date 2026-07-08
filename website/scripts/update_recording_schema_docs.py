@@ -114,7 +114,7 @@ def replace_schema_block(
 
 def update_document(*, check: bool) -> int:
     root = repo_root()
-    source_path = root / "src" / "omegaflow_studio" / "studio_config.py"
+    source_path = root / "src" / "omegaflow" / "studio_config.py"
     changed = False
     diffs: list[str] = []
 

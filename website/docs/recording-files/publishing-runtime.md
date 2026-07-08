@@ -53,7 +53,7 @@ explicitly targets a tracked path.
 
 ## Schema
 
-This schema block is generated from `src/omegaflow_studio/studio_config.py`
+This schema block is generated from `src/omegaflow/studio_config.py`
 during the website build.
 
 <details>

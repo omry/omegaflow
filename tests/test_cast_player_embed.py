@@ -78,7 +78,7 @@ const context = {
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  fs.readFileSync('src/omegaflow_studio/player/static/cast-player-embed.js', 'utf8'),
+  fs.readFileSync('src/omegaflow/player/static/cast-player-embed.js', 'utf8'),
   context,
 );
 """

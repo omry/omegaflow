@@ -14,7 +14,7 @@ Video output is currently published as a set of website assets:
   `website/static/omegaflow-videos/<id>/<id>.<beat>.timestamps.json`
 
 The initial player assets are owned by the Python package under
-`omegaflow_studio/player/static/`. A website target may receive copied player
+`omegaflow/player/static/`. A website target may receive copied player
 assets plus generated video assets. Website-published video assets are
 committed; non-website generated videos are ignored by default.
 
