@@ -14,7 +14,7 @@ nox -s tests
 nox -s schema_docs
 nox -s package
 pnpm --dir website build
-omegaflow recording=quickstart-demo action=build
+omegaflow recording=quickstart-demo
 ```
 
 The current repository also preserves older OmegaFlow design work under

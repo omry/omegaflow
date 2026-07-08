@@ -10,7 +10,7 @@ Markdown file, one shell script, and one expected line of output.
 
 ```bash
 omegaflow action=bootstrap
-omegaflow recording=quickstart action=build
+omegaflow recording=quickstart
 ```
 
 The `quickstart` recording is not checked into this repository as source. It is

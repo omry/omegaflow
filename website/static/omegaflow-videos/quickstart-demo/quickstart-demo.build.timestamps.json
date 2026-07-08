@@ -1,12 +1,12 @@
 {
-  "duration": 8.9,
+  "duration": 21.81,
   "recording": "quickstart-demo",
   "segment": "build",
-  "source_text": "Run the OmegaFlow build command to generate the recording. OmegaFlow records the script, retimes the cast, and packages the browser player.",
+  "source_text": "Run the OmegaFlow build command to generate the recording. The quickstart demo uses the default publish surface: a standalone HTML page. OmegaFlow records the terminal session, makes it comfortable to watch, and writes that page next to the generated video assets. The build output shows the generated publish surface when it is ready.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Run the omegaflow build command to generate the recording. Omegaflow records the script, retimes the cast, and packages the browser player.",
+  "transcript": "Run the omegaflow build command to generate the recording. The Quickstart demo uses the default publish surface, a standalone HTML page. Omegaflow records the terminal session, makes it comfortable to watch, and writes that page next to the generated video assets. The build output shows the generated publish surface when it is ready.",
   "transcription_model": "whisper-1",
   "words": [
     {
@@ -15,104 +15,264 @@
       "word": "Run"
     },
     {
-      "end": 0.76,
+      "end": 0.82,
       "start": 0.4,
       "word": "the"
     },
     {
-      "end": 1.2,
-      "start": 0.76,
+      "end": 1.3,
+      "start": 0.82,
       "word": "omegaflow"
     },
     {
-      "end": 1.54,
-      "start": 1.2,
+      "end": 1.68,
+      "start": 1.3,
       "word": "build"
     },
     {
-      "end": 1.94,
-      "start": 1.54,
+      "end": 2.06,
+      "start": 1.68,
       "word": "command"
     },
     {
-      "end": 2.4,
-      "start": 1.94,
+      "end": 2.56,
+      "start": 2.06,
       "word": "to"
     },
     {
-      "end": 2.7,
-      "start": 2.4,
+      "end": 2.84,
+      "start": 2.56,
       "word": "generate"
     },
     {
-      "end": 2.92,
-      "start": 2.7,
+      "end": 3.1,
+      "start": 2.84,
       "word": "the"
     },
     {
-      "end": 3.28,
-      "start": 2.92,
+      "end": 3.46,
+      "start": 3.1,
       "word": "recording"
     },
     {
-      "end": 4.46,
-      "start": 4.14,
-      "word": "Omegaflow"
+      "end": 4.32,
+      "start": 4.18,
+      "word": "The"
     },
     {
-      "end": 4.92,
-      "start": 4.46,
-      "word": "records"
+      "end": 4.66,
+      "start": 4.32,
+      "word": "Quickstart"
     },
     {
-      "end": 5.46,
-      "start": 4.92,
+      "end": 4.98,
+      "start": 4.66,
+      "word": "demo"
+    },
+    {
+      "end": 5.3,
+      "start": 4.98,
+      "word": "uses"
+    },
+    {
+      "end": 5.6,
+      "start": 5.3,
       "word": "the"
     },
     {
-      "end": 5.46,
-      "start": 5.46,
-      "word": "script"
+      "end": 5.9,
+      "start": 5.6,
+      "word": "default"
     },
     {
-      "end": 6.3,
-      "start": 6.04,
-      "word": "retimes"
+      "end": 6.34,
+      "start": 5.9,
+      "word": "publish"
     },
     {
-      "end": 6.48,
-      "start": 6.3,
-      "word": "the"
-    },
-    {
-      "end": 6.84,
-      "start": 6.48,
-      "word": "cast"
+      "end": 6.74,
+      "start": 6.34,
+      "word": "surface"
     },
     {
       "end": 7.56,
-      "start": 7.26,
-      "word": "and"
+      "start": 7.24,
+      "word": "a"
     },
     {
-      "end": 7.76,
+      "end": 7.94,
       "start": 7.56,
-      "word": "packages"
+      "word": "standalone"
     },
     {
-      "end": 8.08,
-      "start": 7.76,
+      "end": 8.6,
+      "start": 7.94,
+      "word": "HTML"
+    },
+    {
+      "end": 9.08,
+      "start": 8.6,
+      "word": "page"
+    },
+    {
+      "end": 10.54,
+      "start": 10.3,
+      "word": "Omegaflow"
+    },
+    {
+      "end": 11.08,
+      "start": 10.54,
+      "word": "records"
+    },
+    {
+      "end": 11.42,
+      "start": 11.08,
       "word": "the"
     },
     {
-      "end": 8.34,
-      "start": 8.08,
-      "word": "browser"
+      "end": 11.64,
+      "start": 11.42,
+      "word": "terminal"
     },
     {
-      "end": 8.68,
-      "start": 8.34,
-      "word": "player"
+      "end": 12.08,
+      "start": 11.64,
+      "word": "session"
+    },
+    {
+      "end": 12.82,
+      "start": 12.82,
+      "word": "makes"
+    },
+    {
+      "end": 13.06,
+      "start": 12.82,
+      "word": "it"
+    },
+    {
+      "end": 13.36,
+      "start": 13.06,
+      "word": "comfortable"
+    },
+    {
+      "end": 13.98,
+      "start": 13.36,
+      "word": "to"
+    },
+    {
+      "end": 13.98,
+      "start": 13.98,
+      "word": "watch"
+    },
+    {
+      "end": 14.68,
+      "start": 14.18,
+      "word": "and"
+    },
+    {
+      "end": 14.9,
+      "start": 14.68,
+      "word": "writes"
+    },
+    {
+      "end": 15.2,
+      "start": 14.9,
+      "word": "that"
+    },
+    {
+      "end": 15.44,
+      "start": 15.2,
+      "word": "page"
+    },
+    {
+      "end": 15.76,
+      "start": 15.44,
+      "word": "next"
+    },
+    {
+      "end": 15.96,
+      "start": 15.76,
+      "word": "to"
+    },
+    {
+      "end": 16.18,
+      "start": 15.96,
+      "word": "the"
+    },
+    {
+      "end": 16.5,
+      "start": 16.18,
+      "word": "generated"
+    },
+    {
+      "end": 16.94,
+      "start": 16.5,
+      "word": "video"
+    },
+    {
+      "end": 17.34,
+      "start": 16.94,
+      "word": "assets"
+    },
+    {
+      "end": 18.22,
+      "start": 17.94,
+      "word": "The"
+    },
+    {
+      "end": 18.5,
+      "start": 18.22,
+      "word": "build"
+    },
+    {
+      "end": 18.9,
+      "start": 18.5,
+      "word": "output"
+    },
+    {
+      "end": 19.24,
+      "start": 18.9,
+      "word": "shows"
+    },
+    {
+      "end": 19.56,
+      "start": 19.24,
+      "word": "the"
+    },
+    {
+      "end": 19.9,
+      "start": 19.56,
+      "word": "generated"
+    },
+    {
+      "end": 20.36,
+      "start": 19.9,
+      "word": "publish"
+    },
+    {
+      "end": 20.74,
+      "start": 20.36,
+      "word": "surface"
+    },
+    {
+      "end": 21.22,
+      "start": 20.74,
+      "word": "when"
+    },
+    {
+      "end": 21.3,
+      "start": 21.22,
+      "word": "it"
+    },
+    {
+      "end": 21.54,
+      "start": 21.3,
+      "word": "is"
+    },
+    {
+      "end": 21.68,
+      "start": 21.54,
+      "word": "ready"
     }
   ]
 }

@@ -61,14 +61,14 @@ scene: Quickstart Demo
 ```yaml studio-directive
 beat:
   id: install
-  heading: Install The CLI
+  heading: Install OmegaFlow
   narration: >-
-    OmegaFlow is a Python CLI for rebuildable terminal videos with generated
-    voiceover. It can record any terminal workflow. Start in your project's
-    Python environment. If you do not have one yet, @python_env@ create one
-    first. @wait:env_command+300ms@ Then @install@ install OmegaFlow.
-    @wait:install_command+300ms@ The omegaflow command is ready for the rest of
-    the workflow.
+    OmegaFlow is a Python tool for rebuildable terminal videos with generated
+    voiceover. It can drive any terminal workflow. Use your project's Python
+    environment. If you do not have one yet, @python_env@ create a virtual
+    environment first. @wait:env_command+300ms@ Then @install@ install
+    OmegaFlow into it. @wait:install_command+300ms@ Once installed, the
+    omegaflow command is available from that environment.
   marker: install
   caption: Install OmegaFlow in a Python environment.
   actions:
@@ -105,9 +105,9 @@ beat:
   narration: >-
     From your repository root, @bootstrap@ run bootstrap once. This is the
     first-time setup for recording videos in the project.
-    @wait:bootstrap_run+300ms@ Bootstrap creates normal project files: commit
-    them with your repo, then take a look at the demo recording as a simple
-    video example.
+    @wait:bootstrap_run+300ms@ Feel free to commit the files created by
+    bootstrap. Then take a look at the demo recording as a simple video
+    example.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -135,15 +135,18 @@ beat:
   heading: Build The Video
   narration: >-
     @build@ Run the OmegaFlow build command to generate the recording.
-    OmegaFlow records the script, retimes the cast, and packages the browser
-    player. @wait:build_command+300ms@
+    The quickstart demo uses the default publish surface: a standalone HTML
+    page. OmegaFlow records the terminal session, makes it comfortable to
+    watch, and writes that page next to the generated video assets.
+    @wait:build_command+300ms@ The build output shows the generated publish
+    surface when it is ready.
   marker: build
   caption: Build the generated quickstart recording.
   actions:
   - commands:
     - id: build_command
       run_file: scripts/build-demo-project.sh
-      display: omegaflow recording=quickstart action=build
+      display: omegaflow recording=quickstart
       after: "@build@"
       timing: realtime
       expect:
@@ -152,7 +155,7 @@ beat:
         - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart/index.html
   guide:
     commands:
-    - omegaflow recording=quickstart action=build
+    - omegaflow recording=quickstart
     success_hint: The generated video is ready to play.
 ```
 

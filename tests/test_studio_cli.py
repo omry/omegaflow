@@ -1570,7 +1570,7 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert support_script.stat().st_mode & 0o111
 
 
-def test_bootstrap_default_recording_is_quickstart(tmp_path) -> None:
+def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
     workspace = tmp_path / "recordings"
 
     status = studio.run_bootstrap(
@@ -1579,8 +1579,11 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path) -> None:
             "force": False,
         }
     )
+    output = capsys.readouterr().out
 
     assert status == 0
+    assert "next    omegaflow recording=quickstart\n" in output
+    assert "action=build" not in output
     recording = (workspace / "quickstart" / "index.md").read_text(
         encoding="utf-8"
     )

@@ -26,12 +26,12 @@ and publish it with the docs.
 From the repository root:
 
 ```bash
-omegaflow recording=quickstart-demo action=build
+omegaflow recording=quickstart-demo
 ```
 
-The build records the scripted terminal actions, retimes the cast, publishes the
-configured website surface, and checks that visible captions and commands still
-line up with the script.
+The build records the scripted terminal actions, makes the result comfortable
+to watch, publishes the configured website surface, and checks that visible
+captions and commands still line up with the script.
 
 ## Useful commands
 

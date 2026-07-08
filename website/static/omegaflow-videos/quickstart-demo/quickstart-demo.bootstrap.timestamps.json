@@ -1,22 +1,22 @@
 {
-  "duration": 15.81,
+  "duration": 13.32,
   "recording": "quickstart-demo",
   "segment": "bootstrap",
-  "source_text": "From your repository root, run bootstrap once. This is the first-time setup for recording videos in the project. Bootstrap creates normal project files: commit them with your repo, then take a look at the demo recording as a simple video example.",
+  "source_text": "From your repository root, run bootstrap once. This is the first-time setup for recording videos in the project. Feel free to commit the files created by bootstrap. Then take a look at the demo recording as a simple video example.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "From your repository root, run Bootstrap once. This is the first time setup for recording videos in the project. Bootstrap creates normal project files. Commit them with your repo. Then take a look at the demo recording as a simple video example.",
+  "transcript": "From your repository root, run Bootstrap once. This is the first time setup for recording videos in the project. Feel free to commit the files created by Bootstrap. Then take a look at the demo recording as a simple video example.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.26,
+      "end": 0.32,
       "start": 0.0,
       "word": "From"
     },
     {
       "end": 0.58,
-      "start": 0.26,
+      "start": 0.32,
       "word": "your"
     },
     {
@@ -30,193 +30,188 @@
       "word": "root"
     },
     {
-      "end": 2.4,
-      "start": 2.18,
+      "end": 2.06,
+      "start": 1.9,
       "word": "run"
     },
     {
-      "end": 2.94,
-      "start": 2.4,
+      "end": 2.54,
+      "start": 2.06,
       "word": "Bootstrap"
     },
     {
-      "end": 3.46,
-      "start": 2.94,
+      "end": 2.96,
+      "start": 2.54,
       "word": "once"
     },
     {
-      "end": 4.1,
-      "start": 4.04,
+      "end": 3.54,
+      "start": 3.46,
       "word": "This"
     },
     {
-      "end": 4.24,
-      "start": 4.1,
+      "end": 3.7,
+      "start": 3.54,
       "word": "is"
     },
     {
-      "end": 4.42,
-      "start": 4.24,
+      "end": 3.86,
+      "start": 3.7,
       "word": "the"
     },
     {
-      "end": 4.68,
-      "start": 4.42,
+      "end": 4.1,
+      "start": 3.86,
       "word": "first"
     },
     {
-      "end": 4.98,
-      "start": 4.68,
+      "end": 4.36,
+      "start": 4.1,
       "word": "time"
     },
     {
-      "end": 5.26,
-      "start": 4.98,
+      "end": 4.62,
+      "start": 4.36,
       "word": "setup"
+    },
+    {
+      "end": 4.92,
+      "start": 4.62,
+      "word": "for"
+    },
+    {
+      "end": 5.26,
+      "start": 4.92,
+      "word": "recording"
     },
     {
       "end": 5.62,
       "start": 5.26,
-      "word": "for"
-    },
-    {
-      "end": 5.96,
-      "start": 5.62,
-      "word": "recording"
-    },
-    {
-      "end": 6.32,
-      "start": 5.96,
       "word": "videos"
     },
     {
-      "end": 6.68,
-      "start": 6.32,
+      "end": 5.82,
+      "start": 5.62,
       "word": "in"
     },
     {
-      "end": 6.82,
-      "start": 6.68,
+      "end": 5.96,
+      "start": 5.82,
       "word": "the"
     },
     {
-      "end": 7.22,
-      "start": 6.82,
+      "end": 6.34,
+      "start": 5.96,
       "word": "project"
     },
     {
-      "end": 8.26,
-      "start": 8.08,
-      "word": "Bootstrap"
+      "end": 7.18,
+      "start": 7.12,
+      "word": "Feel"
     },
     {
-      "end": 8.7,
-      "start": 8.26,
-      "word": "creates"
+      "end": 7.34,
+      "start": 7.18,
+      "word": "free"
     },
     {
-      "end": 9.12,
-      "start": 8.7,
-      "word": "normal"
+      "end": 7.58,
+      "start": 7.34,
+      "word": "to"
     },
     {
-      "end": 9.52,
-      "start": 9.12,
-      "word": "project"
+      "end": 7.72,
+      "start": 7.58,
+      "word": "commit"
     },
     {
-      "end": 9.86,
-      "start": 9.52,
+      "end": 8.2,
+      "start": 7.72,
+      "word": "the"
+    },
+    {
+      "end": 8.2,
+      "start": 8.2,
       "word": "files"
     },
     {
-      "end": 10.58,
-      "start": 10.56,
-      "word": "Commit"
+      "end": 8.56,
+      "start": 8.2,
+      "word": "created"
     },
     {
-      "end": 10.74,
-      "start": 10.58,
-      "word": "them"
+      "end": 8.86,
+      "start": 8.56,
+      "word": "by"
     },
     {
-      "end": 10.9,
-      "start": 10.74,
-      "word": "with"
+      "end": 9.26,
+      "start": 8.86,
+      "word": "Bootstrap"
     },
     {
-      "end": 11.14,
-      "start": 10.9,
-      "word": "your"
-    },
-    {
-      "end": 11.34,
-      "start": 11.14,
-      "word": "repo"
-    },
-    {
-      "end": 12.06,
-      "start": 11.84,
+      "end": 10.14,
+      "start": 9.74,
       "word": "Then"
     },
     {
-      "end": 12.26,
-      "start": 12.06,
+      "end": 10.4,
+      "start": 10.14,
       "word": "take"
     },
     {
-      "end": 12.48,
-      "start": 12.26,
+      "end": 10.62,
+      "start": 10.4,
       "word": "a"
     },
     {
-      "end": 12.5,
-      "start": 12.48,
+      "end": 10.64,
+      "start": 10.62,
       "word": "look"
     },
     {
-      "end": 12.7,
-      "start": 12.5,
+      "end": 10.76,
+      "start": 10.64,
       "word": "at"
     },
     {
-      "end": 12.94,
-      "start": 12.7,
+      "end": 10.98,
+      "start": 10.76,
       "word": "the"
     },
     {
-      "end": 13.12,
-      "start": 12.94,
+      "end": 11.18,
+      "start": 10.98,
       "word": "demo"
     },
     {
-      "end": 13.52,
-      "start": 13.12,
+      "end": 11.56,
+      "start": 11.18,
       "word": "recording"
     },
     {
-      "end": 13.84,
-      "start": 13.52,
+      "end": 11.82,
+      "start": 11.56,
       "word": "as"
     },
     {
-      "end": 14.12,
-      "start": 13.84,
+      "end": 12.04,
+      "start": 11.82,
       "word": "a"
     },
     {
-      "end": 14.34,
-      "start": 14.12,
+      "end": 12.28,
+      "start": 12.04,
       "word": "simple"
     },
     {
-      "end": 14.7,
-      "start": 14.34,
+      "end": 12.66,
+      "start": 12.28,
       "word": "video"
     },
     {
-      "end": 15.02,
-      "start": 14.7,
+      "end": 13.0,
+      "start": 12.66,
       "word": "example"
     }
   ]

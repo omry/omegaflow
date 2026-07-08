@@ -11,7 +11,7 @@ is seeing, run terminal actions, run checks, and provide guided-mode prompts.
 ```yaml
 beat:
   id: install
-  heading: Install The CLI
+  heading: Install OmegaFlow
   narration: Install the package and confirm the omegaflow command is available.
 ```
 
@@ -91,8 +91,8 @@ reproducible during recording.
 ```yaml
 guide:
   commands:
-  - omegaflow recording=hello action=build
-  success_hint: The build writes a retimed cast and publish surfaces.
+  - omegaflow recording=hello
+  success_hint: The build writes video assets and publish surfaces.
 ```
 
 ## Schema
