@@ -89,6 +89,67 @@ jobs:
             echo "- Job status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  integration:
+    name: Recording integration
+    runs-on: ubuntu-latest
+    env:
+      ASCIINEMA_VERSION: v3.2.1
+      ASCIINEMA_SHA256: 1b405bbda565b33c3c4718de67fedc3535580603c0694b1ff3fb04f363430a20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package
+        run: python -m pip install -e .
+
+      - name: Install asciinema 3.x
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL \
+            "https://github.com/asciinema/asciinema/releases/download/${ASCIINEMA_VERSION}/asciinema-x86_64-unknown-linux-gnu" \
+            -o "$HOME/.local/bin/asciinema"
+          echo "${ASCIINEMA_SHA256}  $HOME/.local/bin/asciinema" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/asciinema"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/asciinema" --version
+
+      - name: Build generated quickstart recording
+        run: |
+          project="$RUNNER_TEMP/omegaflow-integration"
+          mkdir -p "$project"
+          cd "$project"
+          omegaflow action=bootstrap
+          omegaflow recording=quickstart action=build force=true
+          test -s recordings/.omegaflow/videos/quickstart/recording.retimed.cast
+          test -s recordings/.omegaflow/videos/quickstart/index.html
+
+      - name: Upload recording artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-recording-integration-artifacts
+          path: ${{ runner.temp }}/omegaflow-integration/recordings/.omegaflow/
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Recording integration"
+            echo ""
+            echo "- Installed asciinema ${ASCIINEMA_VERSION} from the upstream release binary."
+            echo "- Bootstrapped a clean OmegaFlow project."
+            echo "- Built the generated quickstart recording."
+            echo "- Job status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   docs:
     name: Website docs
     runs-on: ubuntu-latest

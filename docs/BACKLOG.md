@@ -30,14 +30,6 @@ server, client, plugin, deployment, and product-security work.
       references; and either remove or deliberately explain any leftover
       compatibility surface.
 
-- [ ] `P1` Add a proper CI action.
-      The project needs a first GitHub Actions workflow that protects the
-      package and docs surfaces before the first public PyPI release.
-      Acceptance checks: run the Python test suite, schema/documentation
-      generation checks, and package build checks on pull requests and pushes;
-      cache dependencies where useful; keep secrets out of normal CI; and make
-      failures easy to diagnose from the Actions summary.
-
 - [ ] `P1` Improve handling for missing `asciinema`.
       Recording and terminal playback currently fail with a clear but bare
       requirement error when `asciinema` 3.x is unavailable. First-run users
@@ -48,6 +40,17 @@ server, client, plugin, deployment, and product-security work.
       compatible `asciinema` binary/package as the preferred path; make the
       tradeoff explicit if vendoring is not practical; and add tests for missing
       command, old version, and happy-path version detection.
+
+- [ ] `post-release` Explore Reploy-backed recording environments without
+      replacing local mode. Reploy can give OmegaFlow a reproducible recording
+      environment with `asciinema` and other demo dependencies, but it also
+      brings a Docker-backed workflow that may be too heavy for many projects.
+      Acceptance checks: design an optional Reploy blueprint or environment
+      path for managed recording dependencies; keep the current lightweight
+      local mode fully supported; make mode selection explicit in tool config
+      and CLI output; document when to use managed versus local recording; and
+      ensure missing-dependency errors remain clear when users stay in local
+      mode.
 
 - [ ] `P1` Add automatic garbage collection for old recording runs.
       `recordings/.omegaflow/runs` can accumulate stale successful and failed
@@ -100,7 +103,7 @@ server, client, plugin, deployment, and product-security work.
       need is identified; and add tests that prove two videos do not overwrite
       or share generated assets accidentally.
 
-- [ ] `P1` Export recordings to a standard video file.
+- [ ] `post-release` Export recordings to a standard video file.
       OmegaFlow should be able to produce a shareable video artifact in addition
       to the interactive terminal player surfaces. Acceptance checks: define a
       first supported format, likely H.264 MP4 for broad compatibility; include
