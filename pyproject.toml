@@ -21,22 +21,34 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
+  "hatchling>=1.26",
+  "nox>=2025.5.1",
   "pytest>=8.0",
 ]
 
 [project.scripts]
 omegaflow = "omegaflow_studio.studio:main"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/omegaflow_studio"]
+artifacts = [
+  "/src/omegaflow_studio/bin/asciinema",
+  "/src/omegaflow_studio/bin/asciinema.platform",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
   "/LICENSE",
   "/README.md",
+  "/hatch_build.py",
+  "/noxfile.py",
   "/pyproject.toml",
   "/src",
   "/tests",
+  "/tools",
 ]
 
 [tool.pytest.ini_options]

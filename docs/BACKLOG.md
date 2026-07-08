@@ -30,16 +30,14 @@ server, client, plugin, deployment, and product-security work.
       references; and either remove or deliberately explain any leftover
       compatibility surface.
 
-- [ ] `P1` Improve handling for missing `asciinema`.
-      Recording and terminal playback currently fail with a clear but bare
-      requirement error when `asciinema` 3.x is unavailable. First-run users
-      need a better path forward. Acceptance checks: report the missing or
-      incompatible `asciinema` version with an actionable install command for
-      common environments; document the dependency in quickstart and install
-      docs; consider whether OmegaFlow can vendor, bundle, or install a known
-      compatible `asciinema` binary/package as the preferred path; make the
-      tradeoff explicit if vendoring is not practical; and add tests for missing
-      command, old version, and happy-path version detection.
+- [ ] `P1` Publish Linux and macOS wheels with a bundled recorder.
+      OmegaFlow should not require most Linux and macOS users to install
+      `asciinema` separately. Acceptance checks: vendor a checked asciinema 3.x
+      release binary into platform-specific wheels for Linux and macOS; make the
+      runtime prefer an explicit `studio.asciinema_path`, then the bundled
+      binary, then `PATH`; keep Windows unsupported until its PTY story is
+      proven; document the wheel build path; and add tests for configured,
+      bundled, missing-command, old-version, and happy-path version detection.
 
 - [ ] `post-release` Explore Reploy-backed recording environments without
       replacing local mode. Reploy can give OmegaFlow a reproducible recording
@@ -51,6 +49,18 @@ server, client, plugin, deployment, and product-security work.
       and CLI output; document when to use managed versus local recording; and
       ensure missing-dependency errors remain clear when users stay in local
       mode.
+
+- [ ] `post-release` Decide the Windows support shape.
+      Native Windows cannot currently record terminal sessions through
+      asciinema, but OmegaFlow can still have useful artifact-processing
+      workflows there, such as watching existing recordings, updating audio,
+      retiming existing casts, and publishing surfaces. Acceptance checks:
+      inventory which commands work without a recorder; define the official
+      Windows support tiers for native Windows, WSL, and Linux/macOS; evaluate
+      whether replacing or supplementing asciinema with a cross-platform
+      recorder is practical, especially if the effort is small; make
+      recorder-free commands explicit and discoverable; and document the
+      recommended Windows path without weakening the local Linux/macOS mode.
 
 - [ ] `P1` Add automatic garbage collection for old recording runs.
       `recordings/.omegaflow/runs` can accumulate stale successful and failed

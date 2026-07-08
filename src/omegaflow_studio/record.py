@@ -72,6 +72,41 @@ class RecordingInterrupted(RuntimeError):
     pass
 
 
+def configured_asciinema_path(source: dict[str, Any] | None) -> str | None:
+    if not isinstance(source, dict):
+        return None
+    config = source.get("_studio_config", source)
+    if not isinstance(config, dict):
+        return None
+    studio = config.get("studio", {})
+    if not isinstance(studio, dict):
+        return None
+    value = studio.get("asciinema_path")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = Path(value.strip()).expanduser()
+    if path.is_absolute():
+        return str(path)
+    return str(relative_path(str(path)))
+
+
+def bundled_asciinema_path() -> str | None:
+    candidate = Path(__file__).resolve().parent / "bin" / "asciinema"
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
+def asciinema_command(source: dict[str, Any] | None = None) -> str:
+    configured = configured_asciinema_path(source)
+    if configured is not None:
+        return configured
+    bundled = bundled_asciinema_path()
+    if bundled is not None:
+        return bundled
+    return "asciinema"
+
+
 class RecordingSuspendGuard:
     def __init__(self) -> None:
         self.signal_number = getattr(signal, "SIGTSTP", None)
@@ -431,18 +466,22 @@ def cleanup_command_text(
     return step_command_text(step, index, field="cleanup", spec=spec)
 
 
-def check_asciinema() -> str:
+def check_asciinema(source: dict[str, Any] | None = None) -> str:
+    command = asciinema_command(source)
     try:
         result = subprocess.run(
-            ["asciinema", "--version"],
+            [command, "--version"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
+        detail = f"configured at {command}" if command != "asciinema" else "on PATH"
         raise RecordingError(
-            "asciinema 3.x is required and was not found on PATH"
+            "asciinema 3.x is required and was not found "
+            f"{detail}; install asciinema 3.x or use a platform-specific "
+            "OmegaFlow wheel with a bundled recorder"
         ) from exc
     version = result.stdout.strip()
     match = re.search(r"\b(\d+)\.", version)
@@ -2772,7 +2811,8 @@ def record(
     use_color = host_color_enabled(sys.stderr)
     validate_manifest(spec)
     check_required_commands(spec)
-    asciinema_version = check_asciinema()
+    asciinema_command_path = asciinema_command(spec)
+    asciinema_version = check_asciinema(spec)
     session_overrides = session_overrides_from_spec(spec)
     if has_recording_config(spec):
         validate_session_overrides(session_overrides)
@@ -2831,7 +2871,7 @@ def record(
         ]
     )
     command = [
-        "asciinema",
+        asciinema_command_path,
         "record",
         "--quiet",
         "--overwrite",
@@ -3461,9 +3501,10 @@ def play_recording(
             raise RecordingError(f"no preserved cast found in run: {run_dir}")
     if not cast_path.exists():
         raise RecordingError(f"cast not found: {cast_path}")
-    check_asciinema()
+    asciinema_command_path = asciinema_command(spec)
+    check_asciinema(spec)
     return subprocess.run(
-        ["asciinema", "play", str(cast_path)],
+        [asciinema_command_path, "play", str(cast_path)],
         cwd=REPO_ROOT,
         check=False,
     ).returncode

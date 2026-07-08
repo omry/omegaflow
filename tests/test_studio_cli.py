@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 import subprocess
 import sys
@@ -30,6 +31,18 @@ from omegaflow_studio.studio_config import (
 )
 
 
+def load_custom_build_hook():
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "omegaflow_hatch_build", root / "hatch_build.py"
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load hatch_build.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.CustomBuildHook
+
+
 def test_version_is_available() -> None:
     assert __version__ == "0.3.0"
 
@@ -42,6 +55,133 @@ def test_package_installs_omegaflow_command() -> None:
     assert pyproject["project"]["scripts"] == {
         "omegaflow": "omegaflow_studio.studio:main"
     }
+    assert pyproject["tool"]["hatch"]["build"]["hooks"]["custom"] == {
+        "path": "hatch_build.py"
+    }
+    assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["artifacts"] == [
+        "/src/omegaflow_studio/bin/asciinema",
+        "/src/omegaflow_studio/bin/asciinema.platform",
+    ]
+
+
+def test_asciinema_command_prefers_configured_path(tmp_path) -> None:
+    configured = tmp_path / "asciinema"
+
+    assert (
+        record.asciinema_command(
+            {"studio": {"asciinema_path": str(configured)}}
+        )
+        == str(configured)
+    )
+
+
+def test_asciinema_command_expands_configured_user_path(monkeypatch) -> None:
+    monkeypatch.setenv("HOME", "/home/test-user")
+
+    assert (
+        record.asciinema_command({"studio": {"asciinema_path": "~/bin/asciinema"}})
+        == "/home/test-user/bin/asciinema"
+    )
+
+
+def test_asciinema_command_prefers_bundled_path(monkeypatch) -> None:
+    monkeypatch.setattr(record, "bundled_asciinema_path", lambda: "/bundle/asciinema")
+
+    assert record.asciinema_command({"studio": {}}) == "/bundle/asciinema"
+
+
+def test_check_asciinema_reports_missing_command(monkeypatch) -> None:
+    def fake_run(*_args, **_kwargs):
+        raise FileNotFoundError("missing")
+
+    monkeypatch.setattr(record.subprocess, "run", fake_run)
+
+    try:
+        record.check_asciinema({"studio": {"asciinema_path": "/missing/asciinema"}})
+    except record.RecordingError as exc:
+        assert "asciinema 3.x is required" in str(exc)
+        assert "configured at /missing/asciinema" in str(exc)
+    else:
+        raise AssertionError("expected missing asciinema to fail")
+
+
+def test_check_asciinema_rejects_old_version(monkeypatch) -> None:
+    def fake_run(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=["asciinema", "--version"],
+            returncode=0,
+            stdout="asciinema 2.4.0\n",
+        )
+
+    monkeypatch.setattr(record.subprocess, "run", fake_run)
+
+    try:
+        record.check_asciinema()
+    except record.RecordingError as exc:
+        assert "asciinema 3.x is required, found: asciinema 2.4.0" in str(exc)
+    else:
+        raise AssertionError("expected old asciinema to fail")
+
+
+def test_check_asciinema_accepts_version_3(monkeypatch) -> None:
+    captured = {}
+
+    def fake_run(args, **_kwargs):
+        captured["args"] = args
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="asciinema 3.2.1\n",
+        )
+
+    monkeypatch.setattr(record.subprocess, "run", fake_run)
+
+    assert record.check_asciinema({"studio": {"asciinema_path": "/opt/asciinema"}}) == (
+        "asciinema 3.2.1"
+    )
+    assert captured["args"] == ["/opt/asciinema", "--version"]
+
+
+def test_build_hook_marks_bundled_recorder_wheel_as_platform_specific(
+    tmp_path,
+) -> None:
+    custom_build_hook = load_custom_build_hook()
+    bundled = tmp_path / "src" / "omegaflow_studio" / "bin" / "asciinema"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("fake recorder", encoding="utf-8")
+    bundled.with_suffix(".platform").write_text("linux-x86_64\n", encoding="utf-8")
+    build_data = {"tag": "py3-none-any", "pure_python": True}
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    custom_build_hook.initialize(Hook(), "standard", build_data)
+
+    assert build_data == {
+        "tag": "py3-none-manylinux_2_35_x86_64",
+        "pure_python": False,
+    }
+
+
+def test_build_hook_requires_bundled_recorder_platform_metadata(
+    tmp_path,
+) -> None:
+    custom_build_hook = load_custom_build_hook()
+    bundled = tmp_path / "src" / "omegaflow_studio" / "bin" / "asciinema"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("fake recorder", encoding="utf-8")
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    try:
+        custom_build_hook.initialize(Hook(), "standard", {})
+    except RuntimeError as exc:
+        assert "asciinema.platform" in str(exc)
+    else:
+        raise AssertionError("expected missing platform metadata to fail")
 
 
 def test_recording_schema_docs_are_generated() -> None:

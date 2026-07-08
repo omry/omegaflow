@@ -10,8 +10,9 @@ tutorial chapter scaffolding under `recordings/`.
 ## Development
 
 ```bash
-python -m build
-pytest
+nox -s tests
+nox -s schema_docs
+nox -s package
 pnpm --dir website build
 omegaflow recording=quickstart-demo action=build
 ```

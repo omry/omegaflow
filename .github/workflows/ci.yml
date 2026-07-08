@@ -60,14 +60,14 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install build tooling
-        run: python -m pip install build
+        run: python -m pip install build hatchling nox
 
       - name: Build distributions
-        run: python -m build
+        run: nox -s package
 
-      - name: Smoke install wheel
+      - name: Smoke install Linux wheel
         run: |
-          python -m pip install dist/*.whl
+          python -m pip install dist/*manylinux_2_35_x86_64.whl
           python -m pip check
           omegaflow --help
 

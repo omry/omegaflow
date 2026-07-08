@@ -1922,9 +1922,10 @@ def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
         )
     if text_output_enabled(cfg):
         step_line(f"play retimed cast: {display_path(cast_path)}")
-    record.check_asciinema()
+    asciinema_command = record.asciinema_command(config)
+    record.check_asciinema(config)
     return subprocess.run(
-        ["asciinema", "play", str(cast_path)],
+        [asciinema_command, "play", str(cast_path)],
         cwd=retime_cast.REPO_ROOT,
         check=False,
     ).returncode

@@ -75,6 +75,15 @@ omegaflow action=list studio.recording_dir=demos
 omegaflow recording=hello rec.capture.headless=false
 ```
 
+Most installations use OmegaFlow's bundled recorder, falling back to
+`asciinema` on `PATH`. Set `studio.asciinema_path` only when a project needs a
+specific asciinema 3.x binary:
+
+```yaml
+studio:
+  asciinema_path: /opt/asciinema/bin/asciinema
+```
+
 ### Config fields
 
 Common tool fields:
@@ -85,6 +94,7 @@ Common tool fields:
 | `action` | Tool function to run. Defaults to `build`. |
 | `studio.recording_dir` | Workspace containing `config.yaml` and one directory per recording. |
 | `studio.data_dir` | Generated run state, caches, and local outputs. |
+| `studio.asciinema_path` | Optional explicit asciinema 3.x binary path. OmegaFlow otherwise uses its bundled recorder when present, then `PATH`. |
 | `load_env_file` / `env_file` | Load process-level environment values before running actions. |
 | `rec` | Temporary recording config overrides merged after recording frontmatter. |
 | `script_params` | Values for parameters declared by a recording. |

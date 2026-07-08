@@ -197,6 +197,7 @@ class StudioRuntimeConfig:
     recording_dir: str = "recordings"
     data_dir: str = "recordings/.omegaflow"
     keep_output_dir: bool = True
+    asciinema_path: str | None = None
 
 
 @dataclass
