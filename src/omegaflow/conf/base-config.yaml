@@ -12,4 +12,5 @@ hydra:
   run:
     dir: ${studio_run_dir:${studio.data_dir},${action},${step},${dry_run},${recording},${now:%Y%m%d-%H%M%S}}
   job:
+    name: omegaflow
     chdir: false

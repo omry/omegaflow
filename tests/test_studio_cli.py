@@ -32,6 +32,10 @@ from omegaflow.studio_config import (
 
 
 def load_custom_build_hook():
+    return load_hatch_build_module().CustomBuildHook
+
+
+def load_hatch_build_module():
     root = Path(__file__).resolve().parents[1]
     spec = importlib.util.spec_from_file_location(
         "omegaflow_hatch_build", root / "hatch_build.py"
@@ -40,11 +44,11 @@ def load_custom_build_hook():
         raise AssertionError("could not load hatch_build.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.CustomBuildHook
+    return module
 
 
 def test_version_is_available() -> None:
-    assert __version__ == "0.4.0.dev1"
+    assert __version__ == "0.4.0"
 
 
 def test_package_installs_omegaflow_command() -> None:
@@ -164,6 +168,84 @@ def test_build_hook_marks_bundled_recorder_wheel_as_platform_specific(
     }
 
 
+def test_build_hook_vendors_recorder_for_supported_source_wheel(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    build_data = {"tag": "py3-none-any", "pure_python": True}
+
+    def fake_vendor_asciinema(root, platform, *, output) -> None:
+        assert root == tmp_path
+        assert platform == "linux-x86_64"
+        output.parent.mkdir(parents=True)
+        output.write_text("fake recorder", encoding="utf-8")
+        output.with_suffix(".platform").write_text(platform + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(hatch_build, "current_build_platform", lambda: "linux-x86_64")
+    monkeypatch.setattr(hatch_build, "vendor_asciinema", fake_vendor_asciinema)
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    hatch_build.CustomBuildHook.initialize(Hook(), "standard", build_data)
+
+    assert build_data == {
+        "tag": "py3-none-manylinux_2_35_x86_64",
+        "pure_python": False,
+    }
+
+
+def test_build_hook_keeps_unsupported_source_wheel_pure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    build_data = {"tag": "py3-none-any", "pure_python": True}
+    monkeypatch.setattr(hatch_build, "current_build_platform", lambda: None)
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    hatch_build.CustomBuildHook.initialize(Hook(), "standard", build_data)
+
+    assert build_data == {"tag": "py3-none-any", "pure_python": True}
+
+
+def test_build_hook_loads_dataclass_vendor_script(tmp_path) -> None:
+    hatch_build = load_hatch_build_module()
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+    (tools_dir / "vendor_asciinema.py").write_text(
+        "\n".join(
+            [
+                "from dataclasses import dataclass",
+                "",
+                "@dataclass",
+                "class Asset:",
+                "    name: str",
+                "",
+                "def vendor(platform, *, output):",
+                "    Asset(platform)",
+                "    output.parent.mkdir(parents=True)",
+                "    output.write_text('fake recorder')",
+                "    output.with_suffix('.platform').write_text(platform + '\\n')",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
+    hatch_build.vendor_asciinema(tmp_path, "linux-x86_64", output=output)
+
+    assert output.read_text(encoding="utf-8") == "fake recorder"
+    assert output.with_suffix(".platform").read_text(encoding="utf-8") == (
+        "linux-x86_64\n"
+    )
+
+
 def test_build_hook_requires_bundled_recorder_platform_metadata(
     tmp_path,
 ) -> None:
@@ -182,6 +264,22 @@ def test_build_hook_requires_bundled_recorder_platform_metadata(
         assert "asciinema.platform" in str(exc)
     else:
         raise AssertionError("expected missing platform metadata to fail")
+
+
+def test_omegaflow_help_uses_product_name() -> None:
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "omegaflow.studio", "--help"],
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "omegaflow is powered by Hydra." in result.stdout
+    assert "studio is powered by Hydra." not in result.stdout
 
 
 def test_recording_schema_docs_are_generated() -> None:
@@ -2136,6 +2234,62 @@ def test_adjusted_audio_seconds_can_start_command_at_same_second_as_wait() -> No
 
     assert command_start == 2.0
     assert after_wait == 11.3
+
+
+def test_wait_marker_between_words_resumes_from_previous_word_end() -> None:
+    text = "Create a virtual environment first. Then install OmegaFlow."
+    spans = retime_cast.timestamp_word_spans(
+        text=text,
+        words=[
+            {"word": "Create", "start": 0.0, "end": 0.3},
+            {"word": "a", "start": 0.36, "end": 0.42},
+            {"word": "virtual", "start": 0.5, "end": 0.86},
+            {"word": "environment", "start": 0.92, "end": 1.4},
+            {"word": "first", "start": 1.5, "end": 1.78},
+            {"word": "Then", "start": 2.2, "end": 2.42},
+            {"word": "install", "start": 2.44, "end": 2.8},
+            {"word": "OmegaFlow", "start": 2.84, "end": 3.3},
+        ],
+        timestamp_path=Path("timestamps.json"),
+    )
+    marker_offset = len("Create a virtual environment first.")
+
+    wait_seconds = retime_cast.marker_seconds_from_offset(
+        marker="@wait:env_command+300ms@",
+        text_offset=marker_offset,
+        spans=spans,
+        segment_duration=4.0,
+        text=text,
+        segment_id="install",
+        prefer_previous_word_end=True,
+    )
+    anchor_seconds = retime_cast.marker_seconds_from_offset(
+        marker="@install@",
+        text_offset=marker_offset,
+        spans=spans,
+        segment_duration=4.0,
+        text=text,
+        segment_id="install",
+    )
+
+    assert wait_seconds == 1.78
+    assert anchor_seconds == 2.2
+
+
+def test_timestamp_word_spans_tolerates_missing_word_end() -> None:
+    spans = retime_cast.timestamp_word_spans(
+        text="Hello world.",
+        words=[
+            {"word": "Hello", "start": 0.0},
+            {"word": "world", "start": 0.4},
+        ],
+        timestamp_path=Path("timestamps.json"),
+    )
+
+    assert spans == [
+        (0, 5, 0.0, 0.0),
+        (6, 11, 0.4, 0.4),
+    ]
 
 
 def fake_presentation_command(*, fake_output: str) -> retime_cast.PresentationCommand:

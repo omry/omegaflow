@@ -43,7 +43,7 @@ const config = {
     navbar: {
       title: 'OmegaFlow',
       logo: {
-        alt: 'OmegaFlow mascot',
+        alt: 'OmegaFlow mark',
         src: 'img/omegaflow-mascot.svg',
       },
       items: [

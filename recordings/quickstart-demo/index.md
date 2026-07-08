@@ -89,7 +89,7 @@ beat:
       output:
         mode: fake
         text: |
-          Successfully installed omegaflow-0.3.0
+          Successfully installed omegaflow-0.4.0
   guide:
     commands:
     - python -m venv .venv

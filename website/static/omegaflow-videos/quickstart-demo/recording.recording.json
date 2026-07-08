@@ -2,7 +2,7 @@
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "c1cc39dd506497165425ab91cf15952c3303f909d40ea83009c9f02127e09f4f"
+      "sha256": "4c5184b97e5e7d9a1ddba4281a6b0c62b56d6d97672941fdce15a31643649979"
     },
     {
       "path": "recordings/quickstart-demo/scripts/build-demo-project.sh",
@@ -25,8 +25,8 @@
       "sha256": "53818814c5d8f4bacd86a750f02bd732a944a86170df62fdf0c5a523ff76ee90"
     }
   ],
-  "fingerprint": "b7345dec64a9b2b5fb7a771884c68d321c34656cdcdc8b83f4bf4b275dd1a399",
+  "fingerprint": "57a9d1713de3d302e5e4f8198471452efa4955472a3fa2c10669f2e2e5712646",
   "recording": "quickstart-demo",
-  "spec_sha256": "a50091dfb3a68e7f3e16dae27968e51ed4f92d013f8467a2cb28fa9a3bbfcf4e",
+  "spec_sha256": "0742843db9b9a45601ce1c20e5eb85b6d39f210a9a3dfd698876f2e425271655",
   "version": 2
 }

@@ -148,6 +148,7 @@ class TranscriptTimestampWord:
     raw: str
     normalized: str
     start_seconds: float
+    end_seconds: float
     index: int
 
 
@@ -405,6 +406,9 @@ def transcript_timestamp_words(
             or not isinstance(start, (int, float))
         ):
             continue
+        end = word.get("end", start)
+        if not isinstance(end, (int, float)):
+            end = start
         normalized = normalized_timestamp_word(raw_word)
         if not normalized:
             continue
@@ -413,6 +417,7 @@ def transcript_timestamp_words(
                 raw=raw_word,
                 normalized=normalized,
                 start_seconds=float(start),
+                end_seconds=float(end),
                 index=index,
             )
         )
@@ -509,7 +514,7 @@ def timestamp_alignment_is_reliable(
 
 def timestamp_word_spans(
     *, text: str, words: list[dict[str, Any]], timestamp_path: Path
-) -> list[tuple[int, int, float]]:
+) -> list[tuple[int, int, float, float]]:
     source_words = source_timestamp_words(text)
     transcript_words = transcript_timestamp_words(words)
     aligned = align_timestamp_words(source_words, transcript_words)
@@ -519,7 +524,7 @@ def timestamp_word_spans(
         transcript_word_count=len(transcript_words),
     ):
         raise RetimeError(f"could not align audio timestamps in {timestamp_path}")
-    spans: list[tuple[int, int, float]] = []
+    spans: list[tuple[int, int, float, float]] = []
     for source_word, transcript_word in aligned:
         if (
             timestamp_alignment_score(
@@ -530,7 +535,12 @@ def timestamp_word_spans(
         ):
             continue
         spans.append(
-            (source_word.start, source_word.end, transcript_word.start_seconds)
+            (
+                source_word.start,
+                source_word.end,
+                transcript_word.start_seconds,
+                transcript_word.end_seconds,
+            )
         )
     return spans
 
@@ -539,16 +549,25 @@ def marker_seconds_from_offset(
     *,
     marker: str,
     text_offset: int,
-    spans: list[tuple[int, int, float]],
+    spans: list[tuple[int, int, float, float]],
     segment_duration: float | None,
     text: str,
     segment_id: str,
+    prefer_previous_word_end: bool = False,
 ) -> float:
     if segment_duration is not None and text_offset >= len(text.rstrip()):
         return segment_duration
-    for start_index, end_index, start_seconds in spans:
+    previous_end_seconds: float | None = None
+    for start_index, end_index, start_seconds, end_seconds in spans:
         if start_index >= text_offset or end_index > text_offset:
+            if (
+                prefer_previous_word_end
+                and start_index >= text_offset
+                and previous_end_seconds is not None
+            ):
+                return previous_end_seconds
             return start_seconds
+        previous_end_seconds = end_seconds
     raise RetimeError(
         f"could not resolve audio marker {marker!r} in segment {segment_id!r}"
     )
@@ -556,7 +575,7 @@ def marker_seconds_from_offset(
 
 def timestamp_word_spans_for_segment(
     *, segment: dict[str, Any], metadata_path: Path, reason: str
-) -> tuple[str, float | None, list[tuple[int, int, float]]]:
+) -> tuple[str, float | None, list[tuple[int, int, float, float]]]:
     timestamp_reference = segment.get("timestamps")
     if not isinstance(timestamp_reference, str) or not timestamp_reference:
         segment_id = segment.get("id", "<unknown>")
@@ -649,6 +668,7 @@ def wait_timings_from_segment(
                     segment_duration=segment_duration,
                     text=text,
                     segment_id=segment_id,
+                    prefer_previous_word_end=True,
                 ),
                 gap_seconds=float(gap_seconds),
             )

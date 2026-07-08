@@ -1,277 +1,262 @@
 {
-  "duration": 21.81,
+  "duration": 18.91,
   "recording": "quickstart-demo",
   "segment": "install",
   "source_text": "OmegaFlow is a Python tool for rebuildable terminal videos with generated voiceover. It can drive any terminal workflow. Use your project's Python environment. If you do not have one yet, create a virtual environment first. Then install OmegaFlow into it. Once installed, the omegaflow command is available from that environment.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Omega Flow is a Python tool for rebuildable terminal videos with generated voiceover. It can drive any terminal workflow. Use your project's Python environment. If you do not have one yet, create a virtual environment first. Then, install Omega Flow into it. Once installed, the Omega Flow command is available from that environment.",
+  "transcript": "Omegaflow is a Python tool for rebuildable terminal videos with generated voiceover. It can drive any terminal workflow. Use your project's Python environment. If you do not have one yet, create a virtual environment first. Then install Omegaflow into it. Once installed, the Omegaflow command is available from that environment.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.64,
+      "end": 0.54,
       "start": 0.0,
-      "word": "Omega"
+      "word": "Omegaflow"
     },
     {
-      "end": 0.76,
-      "start": 0.64,
-      "word": "Flow"
-    },
-    {
-      "end": 1.1,
-      "start": 0.76,
+      "end": 0.84,
+      "start": 0.54,
       "word": "is"
+    },
+    {
+      "end": 1.06,
+      "start": 0.84,
+      "word": "a"
     },
     {
       "end": 1.34,
-      "start": 1.1,
-      "word": "a"
-    },
-    {
-      "end": 1.66,
-      "start": 1.34,
+      "start": 1.06,
       "word": "Python"
     },
     {
-      "end": 1.96,
-      "start": 1.66,
+      "end": 1.6,
+      "start": 1.34,
       "word": "tool"
     },
     {
-      "end": 2.3,
-      "start": 1.96,
+      "end": 1.86,
+      "start": 1.6,
       "word": "for"
     },
     {
-      "end": 2.94,
-      "start": 2.3,
+      "end": 2.48,
+      "start": 1.86,
       "word": "rebuildable"
     },
     {
-      "end": 3.26,
-      "start": 2.94,
+      "end": 2.78,
+      "start": 2.48,
       "word": "terminal"
     },
     {
-      "end": 3.64,
-      "start": 3.26,
+      "end": 3.16,
+      "start": 2.78,
       "word": "videos"
     },
     {
-      "end": 4.0,
-      "start": 3.64,
+      "end": 3.44,
+      "start": 3.16,
       "word": "with"
     },
     {
-      "end": 4.5,
-      "start": 4.0,
+      "end": 3.84,
+      "start": 3.44,
       "word": "generated"
     },
     {
-      "end": 5.0,
-      "start": 4.5,
+      "end": 4.34,
+      "start": 3.84,
       "word": "voiceover"
     },
     {
-      "end": 5.74,
-      "start": 5.66,
+      "end": 4.9,
+      "start": 4.86,
       "word": "It"
     },
     {
-      "end": 5.92,
-      "start": 5.74,
+      "end": 5.06,
+      "start": 4.9,
       "word": "can"
     },
     {
-      "end": 6.16,
-      "start": 5.92,
+      "end": 5.3,
+      "start": 5.06,
       "word": "drive"
     },
     {
-      "end": 6.68,
-      "start": 6.16,
+      "end": 5.74,
+      "start": 5.3,
       "word": "any"
     },
     {
-      "end": 6.96,
-      "start": 6.68,
+      "end": 6.02,
+      "start": 5.74,
       "word": "terminal"
     },
     {
-      "end": 7.38,
-      "start": 6.96,
+      "end": 6.46,
+      "start": 6.02,
       "word": "workflow"
     },
     {
-      "end": 8.32,
-      "start": 8.32,
+      "end": 7.2,
+      "start": 7.2,
       "word": "Use"
     },
     {
-      "end": 8.52,
-      "start": 8.32,
+      "end": 7.36,
+      "start": 7.2,
       "word": "your"
     },
     {
-      "end": 9.36,
-      "start": 8.52,
+      "end": 8.14,
+      "start": 7.36,
       "word": "project's"
     },
     {
-      "end": 9.36,
-      "start": 9.36,
+      "end": 8.14,
+      "start": 8.14,
       "word": "Python"
     },
     {
-      "end": 9.84,
-      "start": 9.36,
+      "end": 8.62,
+      "start": 8.14,
       "word": "environment"
     },
     {
-      "end": 10.52,
-      "start": 10.4,
+      "end": 9.24,
+      "start": 9.12,
       "word": "If"
     },
     {
-      "end": 10.64,
-      "start": 10.52,
+      "end": 9.36,
+      "start": 9.24,
       "word": "you"
     },
     {
-      "end": 10.8,
-      "start": 10.64,
+      "end": 9.5,
+      "start": 9.36,
       "word": "do"
     },
     {
-      "end": 10.92,
-      "start": 10.8,
+      "end": 9.64,
+      "start": 9.5,
       "word": "not"
     },
     {
-      "end": 11.16,
-      "start": 10.92,
+      "end": 9.9,
+      "start": 9.64,
       "word": "have"
     },
     {
-      "end": 11.34,
-      "start": 11.16,
+      "end": 10.08,
+      "start": 9.9,
       "word": "one"
     },
     {
-      "end": 11.56,
-      "start": 11.34,
+      "end": 10.28,
+      "start": 10.08,
       "word": "yet"
     },
     {
-      "end": 12.14,
-      "start": 12.14,
+      "end": 10.82,
+      "start": 10.82,
       "word": "create"
     },
     {
-      "end": 12.4,
-      "start": 12.14,
+      "end": 11.06,
+      "start": 10.82,
       "word": "a"
     },
     {
-      "end": 12.7,
-      "start": 12.4,
+      "end": 11.32,
+      "start": 11.06,
       "word": "virtual"
     },
     {
-      "end": 13.08,
-      "start": 12.7,
+      "end": 11.7,
+      "start": 11.32,
       "word": "environment"
     },
     {
-      "end": 13.6,
-      "start": 13.08,
+      "end": 12.18,
+      "start": 11.7,
       "word": "first"
     },
     {
-      "end": 14.62,
-      "start": 14.16,
+      "end": 12.8,
+      "start": 12.58,
       "word": "Then"
     },
     {
-      "end": 15.32,
-      "start": 15.28,
+      "end": 13.18,
+      "start": 12.8,
       "word": "install"
     },
     {
-      "end": 15.74,
-      "start": 15.32,
-      "word": "Omega"
+      "end": 13.76,
+      "start": 13.18,
+      "word": "Omegaflow"
     },
     {
-      "end": 15.92,
-      "start": 15.74,
-      "word": "Flow"
-    },
-    {
-      "end": 16.26,
-      "start": 15.92,
+      "end": 14.26,
+      "start": 13.76,
       "word": "into"
     },
     {
-      "end": 16.5,
-      "start": 16.26,
+      "end": 14.44,
+      "start": 14.26,
       "word": "it"
     },
     {
-      "end": 17.32,
-      "start": 17.16,
+      "end": 15.1,
+      "start": 14.96,
       "word": "Once"
     },
     {
-      "end": 17.76,
-      "start": 17.32,
+      "end": 15.56,
+      "start": 15.1,
       "word": "installed"
     },
     {
-      "end": 18.34,
-      "start": 18.2,
+      "end": 16.12,
+      "start": 15.86,
       "word": "the"
     },
     {
-      "end": 18.66,
-      "start": 18.34,
-      "word": "Omega"
+      "end": 16.48,
+      "start": 16.12,
+      "word": "Omegaflow"
     },
     {
-      "end": 18.84,
-      "start": 18.66,
-      "word": "Flow"
-    },
-    {
-      "end": 19.2,
-      "start": 18.84,
+      "end": 16.86,
+      "start": 16.48,
       "word": "command"
     },
     {
-      "end": 19.44,
-      "start": 19.2,
+      "end": 17.12,
+      "start": 16.86,
       "word": "is"
     },
     {
-      "end": 19.78,
-      "start": 19.44,
+      "end": 17.4,
+      "start": 17.12,
       "word": "available"
     },
     {
-      "end": 20.14,
-      "start": 19.78,
+      "end": 17.66,
+      "start": 17.4,
       "word": "from"
     },
     {
-      "end": 20.44,
-      "start": 20.14,
+      "end": 18.12,
+      "start": 17.66,
       "word": "that"
     },
     {
-      "end": 20.8,
-      "start": 20.44,
+      "end": 18.2,
+      "start": 18.12,
       "word": "environment"
     }
   ]

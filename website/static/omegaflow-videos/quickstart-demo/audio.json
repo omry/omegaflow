@@ -1,6 +1,6 @@
 {
   "audio": "website/static/omegaflow-videos/quickstart-demo/audio.mp3",
-  "duration": 80.16,
+  "duration": 76.752,
   "recording": "quickstart-demo",
   "segments": [
     {
@@ -16,7 +16,7 @@
           "text_offset": 228
         }
       ],
-      "duration": 21.816,
+      "duration": 18.912,
       "guide": {
         "commands": [
           "python -m venv .venv",
@@ -32,22 +32,22 @@
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.install.timestamps.json",
       "waits": [
         {
-          "audio_second": 14.16,
+          "audio_second": 12.18,
           "gap_seconds": 0.3,
           "marker": "@wait:env_command+300ms@",
-          "pause_seconds": 0.0,
-          "presentation_end": 14.245,
-          "presentation_start": 14.245,
+          "pause_seconds": 0.62,
+          "presentation_end": 12.876,
+          "presentation_start": 12.256,
           "target": "env_command",
           "text_offset": 223
         },
         {
-          "audio_second": 17.16,
+          "audio_second": 14.44,
           "gap_seconds": 0.3,
           "marker": "@wait:install_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 17.245,
-          "presentation_start": 17.245,
+          "presentation_end": 15.136,
+          "presentation_start": 15.136,
           "target": "install_command",
           "text_offset": 255
         }
@@ -61,7 +61,7 @@
           "text_offset": 26
         }
       ],
-      "duration": 13.32,
+      "duration": 14.064,
       "guide": {
         "commands": [
           "omegaflow action=bootstrap"
@@ -70,17 +70,17 @@
       },
       "heading": "Bootstrap Quickstart",
       "id": "bootstrap",
-      "offset": 21.816,
+      "offset": 18.912,
       "text": "From your repository root, run bootstrap once. This is the first-time setup for recording videos in the project. Feel free to commit the files created by bootstrap. Then take a look at the demo recording as a simple video example.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.bootstrap.timestamps.json",
       "waits": [
         {
-          "audio_second": 7.12,
+          "audio_second": 6.52,
           "gap_seconds": 0.3,
           "marker": "@wait:bootstrap_run+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 29.021,
-          "presentation_start": 29.021,
+          "presentation_end": 26.128,
+          "presentation_start": 26.128,
           "target": "bootstrap_run",
           "text_offset": 112
         }
@@ -94,7 +94,7 @@
           "text_offset": 0
         }
       ],
-      "duration": 21.816,
+      "duration": 20.568,
       "guide": {
         "commands": [
           "omegaflow recording=quickstart"
@@ -103,17 +103,17 @@
       },
       "heading": "Build The Video",
       "id": "build",
-      "offset": 35.136,
+      "offset": 32.976,
       "text": "Run the OmegaFlow build command to generate the recording. The quickstart demo uses the default publish surface: a standalone HTML page. OmegaFlow records the terminal session, makes it comfortable to watch, and writes that page next to the generated video assets. The build output shows the generated publish surface when it is ready.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.build.timestamps.json",
       "waits": [
         {
-          "audio_second": 17.94,
+          "audio_second": 16.06,
           "gap_seconds": 0.3,
           "marker": "@wait:build_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 53.161,
-          "presentation_start": 53.161,
+          "presentation_end": 49.732,
+          "presentation_start": 49.732,
           "target": "build_command",
           "text_offset": 264
         }
@@ -136,17 +136,17 @@
       },
       "heading": "View And Publish",
       "id": "view-and-publish",
-      "offset": 56.952,
+      "offset": 53.544,
       "text": "To review the result, run action equals watch. OmegaFlow starts a local web server and opens the recording in your browser, so you can check the generated video the same way a reader will see it. When the video is ready for others, publish it with the docs. OmegaFlow currently supports plain HTML files and Docusaurus documentation pages. To learn more, start the tutorial or read the docs.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.view-and-publish.timestamps.json",
       "waits": [
         {
-          "audio_second": 11.06,
+          "audio_second": 10.62,
           "gap_seconds": 0.3,
           "marker": "@wait:watch_command+300ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 68.097,
-          "presentation_start": 68.097,
+          "presentation_end": 64.86,
+          "presentation_start": 64.86,
           "target": "watch_command",
           "text_offset": 195
         }

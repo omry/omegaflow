@@ -6,347 +6,347 @@
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "To review the result, run action equals watch. Omegaflow starts a local web server and opens the recording in your browser, so you can check the generated video the same way a reader will see it. When the video is ready for others, publish it with the docs. Omegaflow currently supports plain HTML files and Docusaurus documentation pages. To learn more, start the tutorial, or read the docs.",
+  "transcript": "To review the result, run action equals watch. Omegaflow starts a local web server and opens the recording in your browser, so you can check the generated video the same way a reader will see it. When the video is ready for others, publish it with the docs. Omegaflow currently supports plain HTML files and Docusaurus documentation pages. To learn more, start the tutorial or read the docs.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.6,
+      "end": 0.2,
       "start": 0.0,
       "word": "To"
     },
     {
-      "end": 0.86,
-      "start": 0.6,
+      "end": 0.42,
+      "start": 0.2,
       "word": "review"
     },
     {
-      "end": 1.12,
-      "start": 0.86,
+      "end": 0.68,
+      "start": 0.42,
       "word": "the"
     },
     {
-      "end": 1.42,
-      "start": 1.12,
+      "end": 0.98,
+      "start": 0.68,
       "word": "result"
     },
     {
-      "end": 1.96,
-      "start": 1.92,
+      "end": 1.52,
+      "start": 1.4,
       "word": "run"
     },
     {
-      "end": 2.32,
-      "start": 1.96,
+      "end": 1.96,
+      "start": 1.52,
       "word": "action"
     },
     {
-      "end": 2.66,
-      "start": 2.32,
+      "end": 2.44,
+      "start": 1.96,
       "word": "equals"
     },
     {
-      "end": 3.04,
-      "start": 2.66,
+      "end": 2.84,
+      "start": 2.44,
       "word": "watch"
     },
     {
-      "end": 3.86,
-      "start": 3.76,
+      "end": 3.82,
+      "start": 3.7,
       "word": "Omegaflow"
     },
     {
-      "end": 4.22,
-      "start": 3.86,
+      "end": 4.24,
+      "start": 3.82,
       "word": "starts"
     },
     {
-      "end": 4.44,
-      "start": 4.22,
+      "end": 4.48,
+      "start": 4.24,
       "word": "a"
     },
     {
-      "end": 4.64,
-      "start": 4.44,
+      "end": 4.7,
+      "start": 4.48,
       "word": "local"
     },
     {
-      "end": 4.94,
-      "start": 4.64,
+      "end": 5.0,
+      "start": 4.7,
       "word": "web"
     },
     {
-      "end": 5.1,
-      "start": 4.94,
+      "end": 5.18,
+      "start": 5.0,
       "word": "server"
     },
     {
-      "end": 5.46,
-      "start": 5.1,
+      "end": 5.6,
+      "start": 5.18,
       "word": "and"
     },
     {
-      "end": 5.68,
-      "start": 5.46,
+      "end": 5.82,
+      "start": 5.6,
       "word": "opens"
     },
     {
-      "end": 5.92,
-      "start": 5.68,
+      "end": 6.06,
+      "start": 5.82,
       "word": "the"
     },
     {
-      "end": 6.2,
-      "start": 5.92,
+      "end": 6.34,
+      "start": 6.06,
       "word": "recording"
     },
     {
-      "end": 6.4,
-      "start": 6.2,
+      "end": 6.56,
+      "start": 6.34,
       "word": "in"
     },
     {
-      "end": 6.52,
-      "start": 6.4,
+      "end": 6.74,
+      "start": 6.56,
       "word": "your"
     },
     {
-      "end": 6.8,
-      "start": 6.52,
+      "end": 7.02,
+      "start": 6.74,
       "word": "browser"
     },
     {
-      "end": 7.36,
-      "start": 7.14,
+      "end": 7.56,
+      "start": 7.22,
       "word": "so"
     },
     {
-      "end": 7.48,
-      "start": 7.36,
+      "end": 7.7,
+      "start": 7.56,
       "word": "you"
     },
     {
-      "end": 7.74,
-      "start": 7.48,
+      "end": 7.94,
+      "start": 7.7,
       "word": "can"
     },
     {
-      "end": 7.86,
-      "start": 7.74,
+      "end": 8.08,
+      "start": 7.94,
       "word": "check"
     },
     {
-      "end": 8.14,
-      "start": 7.86,
+      "end": 8.36,
+      "start": 8.08,
       "word": "the"
     },
     {
-      "end": 8.44,
-      "start": 8.14,
+      "end": 8.62,
+      "start": 8.36,
       "word": "generated"
     },
     {
-      "end": 8.78,
-      "start": 8.44,
+      "end": 8.96,
+      "start": 8.62,
       "word": "video"
     },
     {
-      "end": 9.04,
-      "start": 8.78,
+      "end": 9.26,
+      "start": 8.96,
       "word": "the"
-    },
-    {
-      "end": 9.3,
-      "start": 9.04,
-      "word": "same"
     },
     {
       "end": 9.5,
-      "start": 9.3,
+      "start": 9.26,
+      "word": "same"
+    },
+    {
+      "end": 9.68,
+      "start": 9.5,
       "word": "way"
     },
     {
-      "end": 9.88,
-      "start": 9.5,
+      "end": 10.06,
+      "start": 9.68,
       "word": "a"
     },
     {
-      "end": 9.88,
-      "start": 9.88,
+      "end": 10.06,
+      "start": 10.06,
       "word": "reader"
     },
     {
-      "end": 10.12,
-      "start": 9.88,
+      "end": 10.3,
+      "start": 10.06,
       "word": "will"
     },
     {
-      "end": 10.24,
-      "start": 10.12,
+      "end": 10.42,
+      "start": 10.3,
       "word": "see"
     },
     {
-      "end": 10.52,
-      "start": 10.24,
+      "end": 10.62,
+      "start": 10.42,
       "word": "it"
     },
     {
-      "end": 11.18,
-      "start": 11.06,
+      "end": 11.38,
+      "start": 11.28,
       "word": "When"
     },
     {
-      "end": 11.52,
-      "start": 11.18,
+      "end": 11.72,
+      "start": 11.38,
       "word": "the"
     },
     {
-      "end": 11.52,
-      "start": 11.52,
+      "end": 11.72,
+      "start": 11.72,
       "word": "video"
     },
     {
-      "end": 11.76,
-      "start": 11.52,
+      "end": 12.02,
+      "start": 11.72,
       "word": "is"
     },
     {
-      "end": 11.92,
-      "start": 11.76,
+      "end": 12.16,
+      "start": 12.02,
       "word": "ready"
     },
     {
-      "end": 12.46,
-      "start": 11.92,
+      "end": 12.7,
+      "start": 12.16,
       "word": "for"
     },
     {
-      "end": 12.46,
-      "start": 12.46,
+      "end": 12.7,
+      "start": 12.7,
       "word": "others"
     },
     {
-      "end": 13.1,
-      "start": 13.1,
+      "end": 13.32,
+      "start": 13.32,
       "word": "publish"
     },
     {
-      "end": 13.3,
-      "start": 13.1,
+      "end": 13.56,
+      "start": 13.32,
       "word": "it"
     },
     {
-      "end": 13.44,
-      "start": 13.3,
+      "end": 13.74,
+      "start": 13.56,
       "word": "with"
     },
     {
-      "end": 13.78,
-      "start": 13.44,
+      "end": 14.1,
+      "start": 13.74,
       "word": "the"
     },
     {
-      "end": 13.78,
-      "start": 13.78,
+      "end": 14.1,
+      "start": 14.1,
       "word": "docs"
     },
     {
-      "end": 14.94,
-      "start": 14.5,
+      "end": 15.26,
+      "start": 14.84,
       "word": "Omegaflow"
     },
     {
-      "end": 15.4,
-      "start": 14.94,
+      "end": 15.72,
+      "start": 15.26,
       "word": "currently"
     },
     {
-      "end": 15.74,
-      "start": 15.4,
+      "end": 16.12,
+      "start": 15.72,
       "word": "supports"
     },
     {
-      "end": 16.18,
-      "start": 15.74,
+      "end": 16.52,
+      "start": 16.12,
       "word": "plain"
     },
     {
-      "end": 16.66,
-      "start": 16.18,
+      "end": 17.0,
+      "start": 16.52,
       "word": "HTML"
     },
     {
-      "end": 17.08,
-      "start": 16.66,
+      "end": 17.4,
+      "start": 17.0,
       "word": "files"
     },
     {
-      "end": 17.64,
-      "start": 17.08,
+      "end": 18.04,
+      "start": 17.44,
       "word": "and"
     },
     {
-      "end": 18.2,
-      "start": 17.64,
+      "end": 18.6,
+      "start": 18.04,
       "word": "Docusaurus"
     },
     {
-      "end": 18.88,
-      "start": 18.2,
+      "end": 19.28,
+      "start": 18.6,
       "word": "documentation"
     },
     {
-      "end": 19.26,
-      "start": 18.88,
+      "end": 19.66,
+      "start": 19.28,
       "word": "pages"
     },
     {
-      "end": 20.0,
-      "start": 19.86,
+      "end": 20.36,
+      "start": 20.22,
       "word": "To"
     },
     {
-      "end": 20.2,
-      "start": 20.0,
+      "end": 20.54,
+      "start": 20.36,
       "word": "learn"
     },
     {
-      "end": 20.46,
-      "start": 20.2,
+      "end": 20.84,
+      "start": 20.54,
       "word": "more"
     },
     {
-      "end": 21.02,
-      "start": 21.0,
+      "end": 21.34,
+      "start": 21.3,
       "word": "start"
     },
     {
-      "end": 21.22,
-      "start": 21.02,
+      "end": 21.58,
+      "start": 21.34,
       "word": "the"
     },
     {
-      "end": 21.54,
-      "start": 21.22,
+      "end": 21.88,
+      "start": 21.58,
       "word": "tutorial"
     },
     {
-      "end": 22.2,
-      "start": 21.98,
+      "end": 22.5,
+      "start": 21.88,
       "word": "or"
     },
     {
-      "end": 22.28,
-      "start": 22.2,
+      "end": 22.62,
+      "start": 22.5,
       "word": "read"
     },
     {
-      "end": 22.74,
-      "start": 22.28,
+      "end": 23.08,
+      "start": 22.62,
       "word": "the"
     },
     {
-      "end": 22.74,
-      "start": 22.74,
+      "end": 23.08,
+      "start": 23.08,
       "word": "docs"
     }
   ]
