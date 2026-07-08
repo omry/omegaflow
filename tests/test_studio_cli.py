@@ -44,7 +44,7 @@ def load_custom_build_hook():
 
 
 def test_version_is_available() -> None:
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0.dev1"
 
 
 def test_package_installs_omegaflow_command() -> None:

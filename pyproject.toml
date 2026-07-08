@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omegaflow"
-version = "0.3.0"
+version = "0.4.0.dev1"
 description = "Scripted terminal and video flow authoring for OmegaFlow"
 readme = "README.md"
 requires-python = ">=3.11"
