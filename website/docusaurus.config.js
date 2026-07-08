@@ -3,6 +3,7 @@
 const config = {
   title: 'OmegaFlow',
   tagline: 'Scripted terminal walkthroughs you can rebuild',
+  favicon: 'img/favicon.svg',
   url: 'https://omegaflow.dev',
   baseUrl: '/',
   organizationName: 'omry',
@@ -41,6 +42,10 @@ const config = {
     },
     navbar: {
       title: 'OmegaFlow',
+      logo: {
+        alt: 'OmegaFlow mascot',
+        src: 'img/omegaflow-mascot.svg',
+      },
       items: [
         {
           to: '/intro',

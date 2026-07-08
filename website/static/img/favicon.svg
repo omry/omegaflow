@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">OmegaFlow</title>
+  <rect x="5" y="7" width="54" height="50" rx="12" fill="#101418" stroke="#4fb7a8" stroke-width="4"/>
+  <path d="M14 23l9 8-9 8" fill="none" stroke="#66d9c8" stroke-linecap="round" stroke-linejoin="round" stroke-width="5.5"/>
+  <path d="M29 25h14" stroke="#d8e0e8" stroke-linecap="round" stroke-width="5"/>
+  <path d="M29 36h8" stroke="#7f8b96" stroke-linecap="round" stroke-width="4.5"/>
+  <path d="M45 25l8 5-8 5z" fill="#6eb6ff"/>
+  <path d="M14 48h28" stroke="#66d9c8" stroke-linecap="round" stroke-width="5"/>
+  <path d="M42 48h8" stroke="#2c3944" stroke-linecap="round" stroke-width="5"/>
+  <circle cx="43" cy="48" r="4" fill="#e8edf2"/>
+</svg>

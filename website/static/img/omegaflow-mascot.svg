@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">OmegaFlow terminal video mark</title>
+  <desc id="desc">A terminal window with video playback controls and a flowing timeline.</desc>
+  <defs>
+    <linearGradient id="panel" x1="44" x2="212" y1="46" y2="206" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#202a34"/>
+      <stop offset="1" stop-color="#101418"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="73" x2="196" y1="139" y2="139" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#66d9c8"/>
+      <stop offset="1" stop-color="#6eb6ff"/>
+    </linearGradient>
+    <filter id="shadow" x="24" y="28" width="208" height="204" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" flood-color="#000000" flood-opacity=".32" stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="42" y="44" width="172" height="166" rx="24" fill="url(#panel)" stroke="#4fb7a8" stroke-width="8"/>
+    <path d="M62 82h132" stroke="#30404c" stroke-linecap="round" stroke-width="8"/>
+    <circle cx="72" cy="64" r="5.5" fill="#66d9c8"/>
+    <circle cx="92" cy="64" r="5.5" fill="#6eb6ff"/>
+    <circle cx="112" cy="64" r="5.5" fill="#ffd166"/>
+
+    <path d="M74 112l18 15-18 15" fill="none" stroke="#66d9c8" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+    <path d="M107 113h54" stroke="#d8e0e8" stroke-linecap="round" stroke-width="9"/>
+    <path d="M107 138h35" stroke="#7f8b96" stroke-linecap="round" stroke-width="8"/>
+    <path d="M107 160h48" stroke="#7f8b96" stroke-linecap="round" stroke-width="8"/>
+
+    <path d="M169 112l31 18-31 18z" fill="#6eb6ff"/>
+    <rect x="158" y="101" width="46" height="58" rx="11" fill="none" stroke="#6eb6ff" stroke-width="5" opacity=".78"/>
+
+    <path d="M67 184h122" stroke="#2c3944" stroke-linecap="round" stroke-width="10"/>
+    <path d="M67 184h77" stroke="url(#flow)" stroke-linecap="round" stroke-width="10"/>
+    <circle cx="144" cy="184" r="9" fill="#e8edf2"/>
+    <circle cx="191" cy="184" r="6" fill="#6eb6ff"/>
+  </g>
+
+  <path d="M52 224h152" stroke="#1f2933" stroke-linecap="round" stroke-width="8" opacity=".8"/>
+</svg>
