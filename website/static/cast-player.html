@@ -1642,6 +1642,9 @@
       function previewSeek(seconds) {
         currentSeconds = Math.max(0, Math.min(seconds, totalSeconds));
         const clamped = Math.min(currentSeconds, totalSeconds);
+        if (audioReady && audio) {
+          audio.currentTime = audioTimeForPresentation(clamped);
+        }
         const percent = totalSeconds
           ? Math.min(100, (clamped / totalSeconds) * 100)
           : 0;

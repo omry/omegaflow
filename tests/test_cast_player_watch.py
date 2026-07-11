@@ -149,6 +149,36 @@ if (currentSeconds !== 75) {
     assert result.returncode == 0, result.stderr
 
 
+def test_scrubbing_seeks_audio_to_selected_time_before_release() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+totalSeconds = 100;
+events = [{time: 100, data: 'done'}];
+audioReady = true;
+audio = new Audio('/audio.mp3');
+audio.duration = 100;
+playing = true;
+startedAt = 0;
+beginScrub();
+progress.value = '750';
+previewSeek(progressValueSeconds());
+if (audio.currentTime !== 75) {
+  console.error(JSON.stringify({phase: 'preview', audioTime: audio.currentTime}));
+  process.exit(1);
+}
+commitProgressSeek();
+if (!playing || currentSeconds !== 75 || audio.currentTime !== 75) {
+  console.error(JSON.stringify({playing, currentSeconds, audioTime: audio.currentTime}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_player_does_not_make_first_audio_segment_intro_by_default() -> None:
     result = run_player_script(
         r"""
