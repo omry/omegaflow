@@ -2,7 +2,7 @@
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "4c5184b97e5e7d9a1ddba4281a6b0c62b56d6d97672941fdce15a31643649979"
+      "sha256": "3763ae93c582387943ae14a6cdf4456eeb1db6f34f34c154059d5ff1a1631cf7"
     },
     {
       "path": "recordings/quickstart-demo/scripts/build-demo-project.sh",
@@ -14,19 +14,19 @@
     },
     {
       "path": "src/omegaflow/record.py",
-      "sha256": "e322f634702300b547457db72428b52971271402f51eddd5195dcf489874adb4"
+      "sha256": "6c00d3cf616a63142bca173094be90cfe4da16371a174feb5eff6b10759c18e9"
     },
     {
       "path": "src/omegaflow/studio.py",
-      "sha256": "7821ac7712d2d0aa3eca4cf312b6b5d751b2b2f379e1b15bb868fbd2c6ec6eee"
+      "sha256": "f4b88e72a7c9ecaa6edf310494e0022a8712cd56b569120932d2aa95d916f391"
     },
     {
       "path": "src/omegaflow/studio_config.py",
-      "sha256": "53818814c5d8f4bacd86a750f02bd732a944a86170df62fdf0c5a523ff76ee90"
+      "sha256": "8dadc067b6fac52ea585eb557d84bc6b21189785b7ef4b3a59f3e41562332915"
     }
   ],
-  "fingerprint": "57a9d1713de3d302e5e4f8198471452efa4955472a3fa2c10669f2e2e5712646",
+  "fingerprint": "abf94d18d763a0dede9fbabde00eeb897b9729a09ce617c7c619b31f846d2164",
   "recording": "quickstart-demo",
-  "spec_sha256": "0742843db9b9a45601ce1c20e5eb85b6d39f210a9a3dfd698876f2e425271655",
+  "spec_sha256": "ce59c7d64aed38f4dd247a69ae581b3969bfdbc99b98bf42fc67c5c8bff4a32f",
   "version": 2
 }

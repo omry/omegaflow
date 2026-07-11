@@ -63,25 +63,14 @@ beat:
   id: install
   heading: Install OmegaFlow
   narration: >-
-    OmegaFlow is a Python tool for rebuildable terminal videos with generated
-    voiceover. It can drive any terminal workflow. Use your project's Python
-    environment. If you do not have one yet, @python_env@ create a virtual
-    environment first. @wait:env_command+300ms@ Then @install@ install
-    OmegaFlow into it. @wait:install_command+300ms@ Once installed, the
-    omegaflow command is available from that environment.
+    OmegaFlow turns scripted terminal workflows into rebuildable videos with
+    generated voiceover. @install@ Install it in your project's Python
+    environment. @wait:install_command+200ms@ The omegaflow command is now
+    ready.
   marker: install
   caption: Install OmegaFlow in a Python environment.
   actions:
   - commands:
-    - id: env_command
-      run: ":"
-      display: |-
-        python -m venv .venv
-        source .venv/bin/activate
-      after: "@python_env@"
-      output:
-        mode: fake
-        text: ""
     - id: install_command
       run: python -m pip install omegaflow
       display: python -m pip install omegaflow
@@ -89,13 +78,11 @@ beat:
       output:
         mode: fake
         text: |
-          Successfully installed omegaflow-0.4.0
+          Successfully installed omegaflow
   guide:
     commands:
-    - python -m venv .venv
-    - source .venv/bin/activate
     - python -m pip install omegaflow
-    success_hint: Use an existing Python environment when your project already has one.
+    success_hint: Install OmegaFlow in your project's Python environment.
 ```
 
 ```yaml studio-directive
@@ -103,11 +90,9 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    From your repository root, @bootstrap@ run bootstrap once. This is the
-    first-time setup for recording videos in the project.
-    @wait:bootstrap_run+300ms@ Feel free to commit the files created by
-    bootstrap. Then take a look at the demo recording as a simple video
-    example.
+    From your repository root, @bootstrap@ run bootstrap once.
+    @wait:bootstrap_run+200ms@ It creates the recording workspace and a small
+    quickstart example you can keep with your code.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -126,7 +111,7 @@ beat:
   guide:
     commands:
     - omegaflow action=bootstrap
-    success_hint: Commit the generated files, then inspect the demo recording as a small example.
+    success_hint: Inspect and commit the generated recording workspace.
 ```
 
 ```yaml studio-directive
@@ -134,12 +119,9 @@ beat:
   id: build
   heading: Build The Video
   narration: >-
-    @build@ Run the OmegaFlow build command to generate the recording.
-    The quickstart demo uses the default publish surface: a standalone HTML
-    page. OmegaFlow records the terminal session, makes it comfortable to
-    watch, and writes that page next to the generated video assets.
-    @wait:build_command+300ms@ The build output shows the generated publish
-    surface when it is ready.
+    @build@ Build the quickstart recording. OmegaFlow runs the scripted
+    workflow, synchronizes it with the narration, and writes a ready-to-watch
+    video. @wait:build_command+200ms@ The output shows where it was published.
   marker: build
   caption: Build the generated quickstart recording.
   actions:
@@ -162,16 +144,14 @@ beat:
 ```yaml studio-directive
 beat:
   id: view-and-publish
-  heading: View And Publish
+  heading: Watch The Result
   narration: >-
-    To review the result, @watch@ run action equals watch. OmegaFlow starts a
-    local web server and opens the recording in your browser, so you can check
-    the generated video the same way a reader will see it.
-    @wait:watch_command+300ms@ When the video is ready for others, publish it
-    with the docs. OmegaFlow currently supports plain HTML files and Docusaurus
-    documentation pages. To learn more, start the tutorial or read the docs.
+    To review the result, @watch@ run the watch command. OmegaFlow opens the
+    recording in your browser exactly as viewers will see it.
+    @wait:watch_command+200ms@ Keep the script with your code, rebuild it when
+    the workflow changes, and publish the video with your docs.
   marker: view-and-publish
-  caption: Watch in a browser, then publish to docs.
+  caption: Watch the generated video in your browser.
   actions:
   - commands:
     - id: watch_command
@@ -181,11 +161,9 @@ beat:
       output:
         mode: fake
         text: |
-          step  watch recording
-          pass  serving local watch server: http://127.0.0.1:51234/cast-player.html?...
-          info  opened browser; press Ctrl-C to stop
+          pass  opened quickstart recording in browser
   guide:
     commands:
     - omegaflow recording=quickstart action=watch
-    success_hint: Use publish surfaces when the video should live with docs.
+    success_hint: Publish the generated video alongside your documentation.
 ```

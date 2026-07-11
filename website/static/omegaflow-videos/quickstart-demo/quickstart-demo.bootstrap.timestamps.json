@@ -1,218 +1,128 @@
 {
-  "duration": 14.06,
+  "duration": 8.16,
   "recording": "quickstart-demo",
   "segment": "bootstrap",
-  "source_text": "From your repository root, run bootstrap once. This is the first-time setup for recording videos in the project. Feel free to commit the files created by bootstrap. Then take a look at the demo recording as a simple video example.",
+  "source_text": "From your repository root, run bootstrap once. It creates the recording workspace and a small quickstart example you can keep with your code.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "From your repository root, run Bootstrap once. This is the first time setup for recording videos in the project. Feel free to commit the files created by Bootstrap. Then take a look at the demo recording as a simple video example.",
+  "transcript": "From your repository root, run bootstrap once. It creates the recording workspace and a small quickstart example you can keep with your code.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.34,
+      "end": 0.32,
       "start": 0.0,
       "word": "From"
     },
     {
-      "end": 0.6,
-      "start": 0.34,
+      "end": 0.54,
+      "start": 0.32,
       "word": "your"
     },
     {
-      "end": 1.16,
-      "start": 0.6,
+      "end": 1.04,
+      "start": 0.54,
       "word": "repository"
     },
     {
-      "end": 1.54,
-      "start": 1.16,
+      "end": 1.44,
+      "start": 1.04,
       "word": "root"
     },
     {
-      "end": 2.12,
+      "end": 2.1,
       "start": 1.98,
       "word": "run"
     },
     {
-      "end": 2.66,
-      "start": 2.12,
-      "word": "Bootstrap"
+      "end": 2.62,
+      "start": 2.1,
+      "word": "bootstrap"
     },
     {
-      "end": 3.06,
-      "start": 2.66,
+      "end": 3.0,
+      "start": 2.62,
       "word": "once"
     },
     {
-      "end": 3.7,
-      "start": 3.6,
-      "word": "This"
+      "end": 3.56,
+      "start": 3.52,
+      "word": "It"
     },
     {
-      "end": 3.86,
-      "start": 3.7,
-      "word": "is"
+      "end": 3.88,
+      "start": 3.56,
+      "word": "creates"
     },
     {
-      "end": 4.02,
-      "start": 3.86,
+      "end": 4.1,
+      "start": 3.88,
       "word": "the"
     },
     {
-      "end": 4.26,
-      "start": 4.02,
-      "word": "first"
-    },
-    {
-      "end": 4.54,
-      "start": 4.26,
-      "word": "time"
-    },
-    {
-      "end": 4.78,
-      "start": 4.54,
-      "word": "setup"
-    },
-    {
-      "end": 5.06,
-      "start": 4.78,
-      "word": "for"
-    },
-    {
-      "end": 5.4,
-      "start": 5.06,
+      "end": 4.5,
+      "start": 4.1,
       "word": "recording"
     },
     {
-      "end": 5.8,
-      "start": 5.4,
-      "word": "videos"
+      "end": 5.04,
+      "start": 4.5,
+      "word": "workspace"
     },
     {
-      "end": 5.98,
-      "start": 5.8,
-      "word": "in"
+      "end": 5.5,
+      "start": 5.04,
+      "word": "and"
     },
     {
-      "end": 6.1,
-      "start": 5.98,
-      "word": "the"
-    },
-    {
-      "end": 6.52,
-      "start": 6.1,
-      "word": "project"
-    },
-    {
-      "end": 7.38,
-      "start": 7.34,
-      "word": "Feel"
-    },
-    {
-      "end": 7.6,
-      "start": 7.38,
-      "word": "free"
-    },
-    {
-      "end": 7.88,
-      "start": 7.6,
-      "word": "to"
-    },
-    {
-      "end": 8.06,
-      "start": 7.88,
-      "word": "commit"
-    },
-    {
-      "end": 8.56,
-      "start": 8.06,
-      "word": "the"
-    },
-    {
-      "end": 8.56,
-      "start": 8.56,
-      "word": "files"
-    },
-    {
-      "end": 9.0,
-      "start": 8.56,
-      "word": "created"
-    },
-    {
-      "end": 9.3,
-      "start": 9.0,
-      "word": "by"
-    },
-    {
-      "end": 9.76,
-      "start": 9.3,
-      "word": "Bootstrap"
-    },
-    {
-      "end": 10.64,
-      "start": 10.36,
-      "word": "Then"
-    },
-    {
-      "end": 10.86,
-      "start": 10.64,
-      "word": "take"
-    },
-    {
-      "end": 11.08,
-      "start": 10.86,
+      "end": 5.7,
+      "start": 5.5,
       "word": "a"
     },
     {
-      "end": 11.1,
-      "start": 11.08,
-      "word": "look"
+      "end": 5.96,
+      "start": 5.7,
+      "word": "small"
     },
     {
-      "end": 11.22,
-      "start": 11.1,
-      "word": "at"
+      "end": 6.34,
+      "start": 5.96,
+      "word": "quickstart"
     },
     {
-      "end": 11.44,
-      "start": 11.22,
-      "word": "the"
-    },
-    {
-      "end": 11.64,
-      "start": 11.44,
-      "word": "demo"
-    },
-    {
-      "end": 12.06,
-      "start": 11.64,
-      "word": "recording"
-    },
-    {
-      "end": 12.32,
-      "start": 12.06,
-      "word": "as"
-    },
-    {
-      "end": 12.54,
-      "start": 12.32,
-      "word": "a"
-    },
-    {
-      "end": 12.8,
-      "start": 12.54,
-      "word": "simple"
-    },
-    {
-      "end": 13.18,
-      "start": 12.8,
-      "word": "video"
-    },
-    {
-      "end": 13.56,
-      "start": 13.18,
+      "end": 6.7,
+      "start": 6.34,
       "word": "example"
+    },
+    {
+      "end": 6.92,
+      "start": 6.7,
+      "word": "you"
+    },
+    {
+      "end": 7.12,
+      "start": 6.92,
+      "word": "can"
+    },
+    {
+      "end": 7.32,
+      "start": 7.12,
+      "word": "keep"
+    },
+    {
+      "end": 7.52,
+      "start": 7.32,
+      "word": "with"
+    },
+    {
+      "end": 7.66,
+      "start": 7.52,
+      "word": "your"
+    },
+    {
+      "end": 7.92,
+      "start": 7.66,
+      "word": "code"
     }
   ]
 }

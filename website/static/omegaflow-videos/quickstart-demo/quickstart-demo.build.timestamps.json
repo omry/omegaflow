@@ -1,283 +1,163 @@
 {
-  "duration": 20.56,
+  "duration": 10.8,
   "recording": "quickstart-demo",
   "segment": "build",
-  "source_text": "Run the OmegaFlow build command to generate the recording. The quickstart demo uses the default publish surface: a standalone HTML page. OmegaFlow records the terminal session, makes it comfortable to watch, and writes that page next to the generated video assets. The build output shows the generated publish surface when it is ready.",
+  "source_text": "Build the quickstart recording. OmegaFlow runs the scripted workflow, synchronizes it with the narration, and writes a ready-to-watch video. The output shows where it was published.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Run the omegaflow build command to generate the recording. The quick start demo uses the default publish surface, a standalone HTML page. Omegaflow records the terminal session, makes it comfortable to watch, and writes that page next to the generated video assets. The build output shows the generated publish surface when it is ready.",
+  "transcript": "Build the quick start recording. Omega Flow runs the scripted workflow, synchronizes it with the narration, and writes a ready-to-watch video. The output shows where it was published.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.36,
+      "end": 0.46,
       "start": 0.0,
-      "word": "Run"
+      "word": "Build"
     },
     {
-      "end": 0.74,
-      "start": 0.36,
+      "end": 0.68,
+      "start": 0.46,
       "word": "the"
     },
     {
-      "end": 1.14,
-      "start": 0.74,
-      "word": "omegaflow"
-    },
-    {
-      "end": 1.5,
-      "start": 1.14,
-      "word": "build"
-    },
-    {
-      "end": 1.96,
-      "start": 1.5,
-      "word": "command"
-    },
-    {
-      "end": 2.48,
-      "start": 1.96,
-      "word": "to"
-    },
-    {
-      "end": 2.72,
-      "start": 2.48,
-      "word": "generate"
-    },
-    {
-      "end": 2.96,
-      "start": 2.72,
-      "word": "the"
-    },
-    {
-      "end": 3.3,
-      "start": 2.96,
-      "word": "recording"
-    },
-    {
-      "end": 4.02,
-      "start": 3.9,
-      "word": "The"
-    },
-    {
-      "end": 4.28,
-      "start": 4.02,
+      "end": 1.02,
+      "start": 0.68,
       "word": "quick"
     },
     {
-      "end": 4.46,
-      "start": 4.28,
+      "end": 1.18,
+      "start": 1.02,
       "word": "start"
     },
     {
-      "end": 4.82,
-      "start": 4.46,
-      "word": "demo"
+      "end": 1.7,
+      "start": 1.18,
+      "word": "recording"
     },
     {
-      "end": 5.14,
-      "start": 4.82,
-      "word": "uses"
+      "end": 2.54,
+      "start": 2.3,
+      "word": "Omega"
     },
     {
-      "end": 5.38,
-      "start": 5.14,
+      "end": 2.74,
+      "start": 2.54,
+      "word": "Flow"
+    },
+    {
+      "end": 3.12,
+      "start": 2.74,
+      "word": "runs"
+    },
+    {
+      "end": 3.4,
+      "start": 3.12,
       "word": "the"
     },
     {
-      "end": 5.7,
-      "start": 5.38,
-      "word": "default"
+      "end": 3.82,
+      "start": 3.4,
+      "word": "scripted"
     },
     {
-      "end": 6.08,
-      "start": 5.7,
-      "word": "publish"
+      "end": 4.12,
+      "start": 3.82,
+      "word": "workflow"
     },
     {
-      "end": 6.48,
-      "start": 6.08,
-      "word": "surface"
+      "end": 5.24,
+      "start": 4.92,
+      "word": "synchronizes"
     },
     {
-      "end": 7.2,
+      "end": 5.4,
+      "start": 5.24,
+      "word": "it"
+    },
+    {
+      "end": 5.54,
+      "start": 5.4,
+      "word": "with"
+    },
+    {
+      "end": 6.02,
+      "start": 5.54,
+      "word": "the"
+    },
+    {
+      "end": 6.02,
+      "start": 6.02,
+      "word": "narration"
+    },
+    {
+      "end": 6.74,
+      "start": 6.52,
+      "word": "and"
+    },
+    {
+      "end": 6.92,
+      "start": 6.74,
+      "word": "writes"
+    },
+    {
+      "end": 7.26,
       "start": 6.92,
       "word": "a"
     },
     {
-      "end": 7.52,
-      "start": 7.2,
-      "word": "standalone"
+      "end": 7.44,
+      "start": 7.26,
+      "word": "ready"
     },
     {
-      "end": 8.06,
-      "start": 7.52,
-      "word": "HTML"
-    },
-    {
-      "end": 8.54,
-      "start": 8.06,
-      "word": "page"
-    },
-    {
-      "end": 9.66,
-      "start": 9.48,
-      "word": "Omegaflow"
-    },
-    {
-      "end": 10.2,
-      "start": 9.66,
-      "word": "records"
-    },
-    {
-      "end": 10.5,
-      "start": 10.2,
-      "word": "the"
-    },
-    {
-      "end": 10.68,
-      "start": 10.5,
-      "word": "terminal"
-    },
-    {
-      "end": 11.1,
-      "start": 10.68,
-      "word": "session"
-    },
-    {
-      "end": 11.7,
-      "start": 11.7,
-      "word": "makes"
-    },
-    {
-      "end": 11.98,
-      "start": 11.7,
-      "word": "it"
-    },
-    {
-      "end": 12.24,
-      "start": 11.98,
-      "word": "comfortable"
-    },
-    {
-      "end": 12.82,
-      "start": 12.24,
+      "end": 7.56,
+      "start": 7.44,
       "word": "to"
     },
     {
-      "end": 12.82,
-      "start": 12.82,
+      "end": 7.84,
+      "start": 7.56,
       "word": "watch"
     },
     {
-      "end": 13.48,
-      "start": 13.06,
-      "word": "and"
-    },
-    {
-      "end": 13.68,
-      "start": 13.48,
-      "word": "writes"
-    },
-    {
-      "end": 13.98,
-      "start": 13.68,
-      "word": "that"
-    },
-    {
-      "end": 14.26,
-      "start": 13.98,
-      "word": "page"
-    },
-    {
-      "end": 14.5,
-      "start": 14.26,
-      "word": "next"
-    },
-    {
-      "end": 14.68,
-      "start": 14.5,
-      "word": "to"
-    },
-    {
-      "end": 14.88,
-      "start": 14.68,
-      "word": "the"
-    },
-    {
-      "end": 15.22,
-      "start": 14.88,
-      "word": "generated"
-    },
-    {
-      "end": 15.66,
-      "start": 15.22,
+      "end": 8.18,
+      "start": 7.84,
       "word": "video"
     },
     {
-      "end": 16.06,
-      "start": 15.66,
-      "word": "assets"
-    },
-    {
-      "end": 16.92,
-      "start": 16.76,
+      "end": 8.92,
+      "start": 8.74,
       "word": "The"
     },
     {
-      "end": 17.22,
-      "start": 16.92,
-      "word": "build"
-    },
-    {
-      "end": 17.58,
-      "start": 17.22,
+      "end": 9.18,
+      "start": 8.92,
       "word": "output"
     },
     {
-      "end": 17.92,
-      "start": 17.58,
+      "end": 9.58,
+      "start": 9.18,
       "word": "shows"
     },
     {
-      "end": 18.28,
-      "start": 17.92,
-      "word": "the"
+      "end": 9.88,
+      "start": 9.58,
+      "word": "where"
     },
     {
-      "end": 18.54,
-      "start": 18.28,
-      "word": "generated"
-    },
-    {
-      "end": 18.96,
-      "start": 18.54,
-      "word": "publish"
-    },
-    {
-      "end": 19.38,
-      "start": 18.96,
-      "word": "surface"
-    },
-    {
-      "end": 19.96,
-      "start": 19.38,
-      "word": "when"
-    },
-    {
-      "end": 20.06,
-      "start": 19.96,
+      "end": 9.96,
+      "start": 9.88,
       "word": "it"
     },
     {
-      "end": 20.3,
-      "start": 20.06,
-      "word": "is"
+      "end": 10.2,
+      "start": 9.96,
+      "word": "was"
     },
     {
-      "end": 20.42,
-      "start": 20.3,
-      "word": "ready"
+      "end": 10.48,
+      "start": 10.2,
+      "word": "published"
     }
   ]
 }

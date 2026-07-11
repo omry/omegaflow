@@ -1,352 +1,212 @@
 {
-  "duration": 23.2,
+  "duration": 13.1,
   "recording": "quickstart-demo",
   "segment": "view-and-publish",
-  "source_text": "To review the result, run action equals watch. OmegaFlow starts a local web server and opens the recording in your browser, so you can check the generated video the same way a reader will see it. When the video is ready for others, publish it with the docs. OmegaFlow currently supports plain HTML files and Docusaurus documentation pages. To learn more, start the tutorial or read the docs.",
+  "source_text": "To review the result, run the watch command. OmegaFlow opens the recording in your browser exactly as viewers will see it. Keep the script with your code, rebuild it when the workflow changes, and publish the video with your docs.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "To review the result, run action equals watch. Omegaflow starts a local web server and opens the recording in your browser, so you can check the generated video the same way a reader will see it. When the video is ready for others, publish it with the docs. Omegaflow currently supports plain HTML files and Docusaurus documentation pages. To learn more, start the tutorial or read the docs.",
+  "transcript": "To review the result, run the watch command. Omegaflow opens the recording in your browser exactly as viewers will see it. Keep the script with your code, rebuild it when the workflow changes, and publish the video with your docs.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.2,
+      "end": 0.38,
       "start": 0.0,
       "word": "To"
     },
     {
-      "end": 0.42,
-      "start": 0.2,
+      "end": 0.68,
+      "start": 0.38,
       "word": "review"
     },
     {
-      "end": 0.68,
-      "start": 0.42,
+      "end": 0.94,
+      "start": 0.68,
       "word": "the"
     },
     {
-      "end": 0.98,
-      "start": 0.68,
+      "end": 1.24,
+      "start": 0.94,
       "word": "result"
     },
     {
-      "end": 1.52,
-      "start": 1.4,
+      "end": 1.62,
+      "start": 1.58,
       "word": "run"
     },
     {
-      "end": 1.96,
-      "start": 1.52,
-      "word": "action"
+      "end": 1.82,
+      "start": 1.62,
+      "word": "the"
     },
     {
-      "end": 2.44,
-      "start": 1.96,
-      "word": "equals"
-    },
-    {
-      "end": 2.84,
-      "start": 2.44,
+      "end": 2.06,
+      "start": 1.82,
       "word": "watch"
     },
     {
-      "end": 3.82,
-      "start": 3.7,
+      "end": 2.48,
+      "start": 2.06,
+      "word": "command"
+    },
+    {
+      "end": 3.5,
+      "start": 3.2,
       "word": "Omegaflow"
     },
     {
-      "end": 4.24,
-      "start": 3.82,
-      "word": "starts"
-    },
-    {
-      "end": 4.48,
-      "start": 4.24,
-      "word": "a"
-    },
-    {
-      "end": 4.7,
-      "start": 4.48,
-      "word": "local"
-    },
-    {
-      "end": 5.0,
-      "start": 4.7,
-      "word": "web"
-    },
-    {
-      "end": 5.18,
-      "start": 5.0,
-      "word": "server"
-    },
-    {
-      "end": 5.6,
-      "start": 5.18,
-      "word": "and"
-    },
-    {
-      "end": 5.82,
-      "start": 5.6,
+      "end": 3.88,
+      "start": 3.5,
       "word": "opens"
     },
     {
-      "end": 6.06,
-      "start": 5.82,
+      "end": 4.1,
+      "start": 3.88,
       "word": "the"
     },
     {
-      "end": 6.34,
-      "start": 6.06,
+      "end": 4.42,
+      "start": 4.1,
       "word": "recording"
     },
     {
-      "end": 6.56,
-      "start": 6.34,
+      "end": 4.66,
+      "start": 4.42,
       "word": "in"
     },
     {
-      "end": 6.74,
-      "start": 6.56,
+      "end": 4.82,
+      "start": 4.66,
       "word": "your"
     },
     {
-      "end": 7.02,
-      "start": 6.74,
+      "end": 5.18,
+      "start": 4.82,
       "word": "browser"
     },
     {
-      "end": 7.56,
-      "start": 7.22,
-      "word": "so"
+      "end": 5.88,
+      "start": 5.18,
+      "word": "exactly"
     },
     {
-      "end": 7.7,
-      "start": 7.56,
-      "word": "you"
+      "end": 6.2,
+      "start": 5.88,
+      "word": "as"
     },
     {
-      "end": 7.94,
-      "start": 7.7,
-      "word": "can"
+      "end": 6.38,
+      "start": 6.2,
+      "word": "viewers"
     },
     {
-      "end": 8.08,
-      "start": 7.94,
-      "word": "check"
-    },
-    {
-      "end": 8.36,
-      "start": 8.08,
-      "word": "the"
-    },
-    {
-      "end": 8.62,
-      "start": 8.36,
-      "word": "generated"
-    },
-    {
-      "end": 8.96,
-      "start": 8.62,
-      "word": "video"
-    },
-    {
-      "end": 9.26,
-      "start": 8.96,
-      "word": "the"
-    },
-    {
-      "end": 9.5,
-      "start": 9.26,
-      "word": "same"
-    },
-    {
-      "end": 9.68,
-      "start": 9.5,
-      "word": "way"
-    },
-    {
-      "end": 10.06,
-      "start": 9.68,
-      "word": "a"
-    },
-    {
-      "end": 10.06,
-      "start": 10.06,
-      "word": "reader"
-    },
-    {
-      "end": 10.3,
-      "start": 10.06,
+      "end": 6.66,
+      "start": 6.38,
       "word": "will"
     },
     {
-      "end": 10.42,
-      "start": 10.3,
+      "end": 6.76,
+      "start": 6.66,
       "word": "see"
     },
     {
-      "end": 10.62,
-      "start": 10.42,
+      "end": 7.06,
+      "start": 6.76,
       "word": "it"
     },
     {
-      "end": 11.38,
-      "start": 11.28,
-      "word": "When"
+      "end": 7.66,
+      "start": 7.64,
+      "word": "Keep"
     },
     {
-      "end": 11.72,
-      "start": 11.38,
+      "end": 8.08,
+      "start": 7.66,
       "word": "the"
     },
     {
-      "end": 11.72,
-      "start": 11.72,
-      "word": "video"
+      "end": 8.08,
+      "start": 8.08,
+      "word": "script"
     },
     {
-      "end": 12.02,
-      "start": 11.72,
-      "word": "is"
-    },
-    {
-      "end": 12.16,
-      "start": 12.02,
-      "word": "ready"
-    },
-    {
-      "end": 12.7,
-      "start": 12.16,
-      "word": "for"
-    },
-    {
-      "end": 12.7,
-      "start": 12.7,
-      "word": "others"
-    },
-    {
-      "end": 13.32,
-      "start": 13.32,
-      "word": "publish"
-    },
-    {
-      "end": 13.56,
-      "start": 13.32,
-      "word": "it"
-    },
-    {
-      "end": 13.74,
-      "start": 13.56,
+      "end": 8.32,
+      "start": 8.08,
       "word": "with"
     },
     {
-      "end": 14.1,
-      "start": 13.74,
+      "end": 8.5,
+      "start": 8.32,
+      "word": "your"
+    },
+    {
+      "end": 8.78,
+      "start": 8.5,
+      "word": "code"
+    },
+    {
+      "end": 9.52,
+      "start": 9.52,
+      "word": "rebuild"
+    },
+    {
+      "end": 9.68,
+      "start": 9.52,
+      "word": "it"
+    },
+    {
+      "end": 9.8,
+      "start": 9.68,
+      "word": "when"
+    },
+    {
+      "end": 10.06,
+      "start": 9.8,
       "word": "the"
     },
     {
-      "end": 14.1,
-      "start": 14.1,
-      "word": "docs"
+      "end": 10.22,
+      "start": 10.06,
+      "word": "workflow"
     },
     {
-      "end": 15.26,
-      "start": 14.84,
-      "word": "Omegaflow"
+      "end": 10.68,
+      "start": 10.22,
+      "word": "changes"
     },
     {
-      "end": 15.72,
-      "start": 15.26,
-      "word": "currently"
-    },
-    {
-      "end": 16.12,
-      "start": 15.72,
-      "word": "supports"
-    },
-    {
-      "end": 16.52,
-      "start": 16.12,
-      "word": "plain"
-    },
-    {
-      "end": 17.0,
-      "start": 16.52,
-      "word": "HTML"
-    },
-    {
-      "end": 17.4,
-      "start": 17.0,
-      "word": "files"
-    },
-    {
-      "end": 18.04,
-      "start": 17.44,
+      "end": 11.34,
+      "start": 11.1,
       "word": "and"
     },
     {
-      "end": 18.6,
-      "start": 18.04,
-      "word": "Docusaurus"
+      "end": 11.56,
+      "start": 11.34,
+      "word": "publish"
     },
     {
-      "end": 19.28,
-      "start": 18.6,
-      "word": "documentation"
-    },
-    {
-      "end": 19.66,
-      "start": 19.28,
-      "word": "pages"
-    },
-    {
-      "end": 20.36,
-      "start": 20.22,
-      "word": "To"
-    },
-    {
-      "end": 20.54,
-      "start": 20.36,
-      "word": "learn"
-    },
-    {
-      "end": 20.84,
-      "start": 20.54,
-      "word": "more"
-    },
-    {
-      "end": 21.34,
-      "start": 21.3,
-      "word": "start"
-    },
-    {
-      "end": 21.58,
-      "start": 21.34,
+      "end": 12.0,
+      "start": 11.56,
       "word": "the"
     },
     {
-      "end": 21.88,
-      "start": 21.58,
-      "word": "tutorial"
+      "end": 12.0,
+      "start": 12.0,
+      "word": "video"
     },
     {
-      "end": 22.5,
-      "start": 21.88,
-      "word": "or"
+      "end": 12.26,
+      "start": 12.0,
+      "word": "with"
     },
     {
-      "end": 22.62,
-      "start": 22.5,
-      "word": "read"
+      "end": 12.4,
+      "start": 12.26,
+      "word": "your"
     },
     {
-      "end": 23.08,
-      "start": 22.62,
-      "word": "the"
-    },
-    {
-      "end": 23.08,
-      "start": 23.08,
+      "end": 12.76,
+      "start": 12.4,
       "word": "docs"
     }
   ]

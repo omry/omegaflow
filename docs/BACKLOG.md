@@ -72,7 +72,7 @@ server, client, plugin, deployment, and product-security work.
       removed; document the defaults; and add tests that cover successful runs,
       failed runs, current-run protection, and disabled GC.
 
-- [ ] `P1` Polish the generated recording viewing experience.
+- [x] `P1` Polish the generated recording viewing experience.
       The current videos are pretty, but the pacing and terminal surface can
       feel messy: some waits are too long, some command output is not useful to
       viewers, and status/progress text can compete with the teaching content.

@@ -1,263 +1,133 @@
 {
-  "duration": 18.91,
+  "duration": 11.16,
   "recording": "quickstart-demo",
   "segment": "install",
-  "source_text": "OmegaFlow is a Python tool for rebuildable terminal videos with generated voiceover. It can drive any terminal workflow. Use your project's Python environment. If you do not have one yet, create a virtual environment first. Then install OmegaFlow into it. Once installed, the omegaflow command is available from that environment.",
+  "source_text": "OmegaFlow turns scripted terminal workflows into rebuildable videos with generated voiceover. Install it in your project's Python environment. The omegaflow command is now ready.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "Omegaflow is a Python tool for rebuildable terminal videos with generated voiceover. It can drive any terminal workflow. Use your project's Python environment. If you do not have one yet, create a virtual environment first. Then install Omegaflow into it. Once installed, the Omegaflow command is available from that environment.",
+  "transcript": "Omegaflow turns scripted terminal workflows into rebuildable videos with generated voiceover. Install it in your project's Python environment. The Omegaflow command is now ready.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.54,
+      "end": 0.92,
       "start": 0.0,
       "word": "Omegaflow"
     },
     {
-      "end": 0.84,
-      "start": 0.54,
-      "word": "is"
+      "end": 1.42,
+      "start": 0.92,
+      "word": "turns"
     },
     {
-      "end": 1.06,
-      "start": 0.84,
-      "word": "a"
+      "end": 2.08,
+      "start": 1.42,
+      "word": "scripted"
     },
     {
-      "end": 1.34,
-      "start": 1.06,
-      "word": "Python"
+      "end": 2.4,
+      "start": 2.08,
+      "word": "terminal"
     },
     {
-      "end": 1.6,
-      "start": 1.34,
-      "word": "tool"
+      "end": 2.88,
+      "start": 2.4,
+      "word": "workflows"
     },
     {
-      "end": 1.86,
-      "start": 1.6,
-      "word": "for"
+      "end": 3.28,
+      "start": 2.88,
+      "word": "into"
     },
     {
-      "end": 2.48,
-      "start": 1.86,
+      "end": 3.92,
+      "start": 3.28,
       "word": "rebuildable"
     },
     {
-      "end": 2.78,
-      "start": 2.48,
-      "word": "terminal"
-    },
-    {
-      "end": 3.16,
-      "start": 2.78,
+      "end": 4.26,
+      "start": 3.92,
       "word": "videos"
     },
     {
-      "end": 3.44,
-      "start": 3.16,
+      "end": 4.6,
+      "start": 4.26,
       "word": "with"
     },
     {
-      "end": 3.84,
-      "start": 3.44,
+      "end": 5.04,
+      "start": 4.6,
       "word": "generated"
     },
     {
-      "end": 4.34,
-      "start": 3.84,
+      "end": 5.64,
+      "start": 5.04,
       "word": "voiceover"
     },
     {
-      "end": 4.9,
-      "start": 4.86,
-      "word": "It"
+      "end": 6.62,
+      "start": 6.62,
+      "word": "Install"
     },
     {
-      "end": 5.06,
-      "start": 4.9,
-      "word": "can"
+      "end": 6.8,
+      "start": 6.62,
+      "word": "it"
     },
     {
-      "end": 5.3,
-      "start": 5.06,
-      "word": "drive"
+      "end": 6.94,
+      "start": 6.8,
+      "word": "in"
     },
     {
-      "end": 5.74,
-      "start": 5.3,
-      "word": "any"
-    },
-    {
-      "end": 6.02,
-      "start": 5.74,
-      "word": "terminal"
-    },
-    {
-      "end": 6.46,
-      "start": 6.02,
-      "word": "workflow"
-    },
-    {
-      "end": 7.2,
-      "start": 7.2,
-      "word": "Use"
-    },
-    {
-      "end": 7.36,
-      "start": 7.2,
+      "end": 7.06,
+      "start": 6.94,
       "word": "your"
     },
     {
-      "end": 8.14,
-      "start": 7.36,
+      "end": 7.88,
+      "start": 7.06,
       "word": "project's"
     },
     {
-      "end": 8.14,
-      "start": 8.14,
+      "end": 7.9,
+      "start": 7.88,
       "word": "Python"
     },
     {
-      "end": 8.62,
-      "start": 8.14,
+      "end": 8.42,
+      "start": 7.9,
       "word": "environment"
     },
     {
       "end": 9.24,
-      "start": 9.12,
-      "word": "If"
+      "start": 9.04,
+      "word": "The"
     },
     {
-      "end": 9.36,
+      "end": 9.7,
       "start": 9.24,
-      "word": "you"
-    },
-    {
-      "end": 9.5,
-      "start": 9.36,
-      "word": "do"
-    },
-    {
-      "end": 9.64,
-      "start": 9.5,
-      "word": "not"
-    },
-    {
-      "end": 9.9,
-      "start": 9.64,
-      "word": "have"
+      "word": "Omegaflow"
     },
     {
       "end": 10.08,
-      "start": 9.9,
-      "word": "one"
-    },
-    {
-      "end": 10.28,
-      "start": 10.08,
-      "word": "yet"
-    },
-    {
-      "end": 10.82,
-      "start": 10.82,
-      "word": "create"
-    },
-    {
-      "end": 11.06,
-      "start": 10.82,
-      "word": "a"
-    },
-    {
-      "end": 11.32,
-      "start": 11.06,
-      "word": "virtual"
-    },
-    {
-      "end": 11.7,
-      "start": 11.32,
-      "word": "environment"
-    },
-    {
-      "end": 12.18,
-      "start": 11.7,
-      "word": "first"
-    },
-    {
-      "end": 12.8,
-      "start": 12.58,
-      "word": "Then"
-    },
-    {
-      "end": 13.18,
-      "start": 12.8,
-      "word": "install"
-    },
-    {
-      "end": 13.76,
-      "start": 13.18,
-      "word": "Omegaflow"
-    },
-    {
-      "end": 14.26,
-      "start": 13.76,
-      "word": "into"
-    },
-    {
-      "end": 14.44,
-      "start": 14.26,
-      "word": "it"
-    },
-    {
-      "end": 15.1,
-      "start": 14.96,
-      "word": "Once"
-    },
-    {
-      "end": 15.56,
-      "start": 15.1,
-      "word": "installed"
-    },
-    {
-      "end": 16.12,
-      "start": 15.86,
-      "word": "the"
-    },
-    {
-      "end": 16.48,
-      "start": 16.12,
-      "word": "Omegaflow"
-    },
-    {
-      "end": 16.86,
-      "start": 16.48,
+      "start": 9.7,
       "word": "command"
     },
     {
-      "end": 17.12,
-      "start": 16.86,
+      "end": 10.38,
+      "start": 10.08,
       "word": "is"
     },
     {
-      "end": 17.4,
-      "start": 17.12,
-      "word": "available"
+      "end": 10.8,
+      "start": 10.38,
+      "word": "now"
     },
     {
-      "end": 17.66,
-      "start": 17.4,
-      "word": "from"
-    },
-    {
-      "end": 18.12,
-      "start": 17.66,
-      "word": "that"
-    },
-    {
-      "end": 18.2,
-      "start": 18.12,
-      "word": "environment"
+      "end": 10.9,
+      "start": 10.8,
+      "word": "ready"
     }
   ]
 }
