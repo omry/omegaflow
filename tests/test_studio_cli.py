@@ -1,12 +1,14 @@
 import json
 import importlib.util
 import os
+import shlex
 import subprocess
 import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from omegaconf import OmegaConf
 
 from omegaflow import __version__
@@ -2207,6 +2209,259 @@ def test_session_cleanup_failure_fails_run(tmp_path) -> None:
     assert failure["name"] == "Cleanup fails"
     assert failure["message"] == "exited 7, expected 0"
     assert "cleanup failed" in failure["stderr"]
+
+
+def test_session_uses_persistent_shell_without_replacing_omegaflow_cleanup(
+    tmp_path,
+) -> None:
+    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
+    child_dir = tmp_path / "child"
+    child_dir.mkdir()
+    spec = {
+        "id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "_keep_hydra_output_dir": True,
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"color": False, "typing": False},
+        "capture": {"baseline_compressed": True},
+        "cleanup": [
+            {
+                "name": "prove controller cleanup ran",
+                "run": f"touch {tmp_path / 'controller-cleanup'}",
+            }
+        ],
+        "beats": [
+            {
+                "id": "hello",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": """
+cd child
+export DEMO_STATE=ready
+demo_function() { printf 'function-ok\\n'; }
+shopt -s expand_aliases
+shopt -s extglob
+alias demo_alias="printf 'alias-ok\\n'"
+set -f
+trap 'printf user-trap > user-trap.txt' EXIT
+""".strip(),
+                                "display": "cd child",
+                                "timing": "realtime",
+                            },
+                            {
+                                "run": """
+printf '%s %s\\n' "$PWD" "$DEMO_STATE"
+demo_function
+demo_alias
+[[ $- == *f* ]]
+shopt -q expand_aliases
+[[ foobar == +(foo|bar) ]]
+""".strip(),
+                                "display": "echo state",
+                                "timing": "realtime",
+                            }
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    script_path = tmp_path / "session.sh"
+    script = record.render_session_script(spec)
+    script_path.write_text(script, encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", str(script_path)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert "local -n" not in script
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stderr == ""
+    output = (run_dir / "stdout").read_text(encoding="utf-8")
+    assert f"{child_dir} ready" in output
+    assert "function-ok" in output
+    assert "alias-ok" in output
+    assert (child_dir / "user-trap.txt").read_text(encoding="utf-8") == "user-trap"
+    assert (tmp_path / "controller-cleanup").is_file()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "exit 7",
+        "if then",
+        "set -e; false; printf should-not-run",
+    ],
+)
+def test_persistent_shell_failure_is_bounded_and_preserves_errexit(
+    tmp_path, command
+) -> None:
+    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
+    spec = {
+        "id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "_keep_hydra_output_dir": True,
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"color": False, "typing": False},
+        "capture": {"baseline_compressed": True},
+        "beats": [
+            {
+                "id": "failure",
+                "actions": [
+                    {"commands": [{"run": command, "timing": "realtime"}]}
+                ],
+            }
+        ],
+    }
+    script_path = tmp_path / "session.sh"
+    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", str(script_path)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode != 0
+    assert "should-not-run" not in (run_dir / "stdout").read_text(encoding="utf-8")
+    failure = json.loads((run_dir / "failure.json").read_text(encoding="utf-8"))
+    if command == "exit 7":
+        assert failure["message"] == "exited 7, expected 0"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "nohup sleep 10 >/dev/null 2>&1 & echo $! > background.pid",
+        "trap 'sleep 10' EXIT",
+    ],
+)
+def test_persistent_shell_background_and_exit_trap_cleanup_is_bounded(
+    tmp_path, command
+) -> None:
+    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
+    spec = {
+        "id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "_keep_hydra_output_dir": True,
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"color": False, "typing": False},
+        "capture": {"baseline_compressed": True},
+        "beats": [
+            {
+                "id": "bounded",
+                "actions": [
+                    {"commands": [{"run": command, "timing": "realtime"}]}
+                ],
+            }
+        ],
+    }
+    script_path = tmp_path / "session.sh"
+    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", str(script_path)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=3,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    if "background.pid" in command:
+        background_pid = int((tmp_path / "background.pid").read_text().strip())
+        assert subprocess.run(
+            ["kill", "-0", str(background_pid)],
+            capture_output=True,
+            check=False,
+        ).returncode != 0
+
+
+def test_new_and_nested_bash_shells_clear_parent_shell_local_state(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
+    child_dir = tmp_path / "child"
+    child_dir.mkdir()
+    fresh_shell_assertions = """
+[[ -z ${DEMO_LOCAL+x} ]]
+[[ $DEMO_EXPORTED == exported ]]
+[[ $PWD == */child ]]
+! declare -F demo_function >/dev/null
+! alias demo_alias >/dev/null 2>&1
+! shopt -q extglob
+[[ -z $(trap -p EXIT) ]]
+""".strip()
+    nested_command = (
+        "/bin/bash --noprofile --norc -c "
+        + shlex.quote(fresh_shell_assertions + "\nprintf nested-shell-ok\\n")
+    )
+    new_shell_command = (
+        fresh_shell_assertions
+        + "\n"
+        + nested_command
+        + "\nprintf new-shell-ok\\n"
+    )
+    spec = {
+        "id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "_keep_hydra_output_dir": True,
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"color": False, "typing": False},
+        "capture": {"baseline_compressed": True},
+        "beats": [
+            {
+                "id": "shells",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": """
+cd child
+DEMO_LOCAL=parent
+export DEMO_EXPORTED=exported
+demo_function() { :; }
+alias demo_alias=:
+shopt -s extglob
+trap : EXIT
+""".strip(),
+                                "timing": "realtime",
+                            },
+                            {
+                                "run": "/bin/bash --noprofile --norc -c "
+                                + shlex.quote(new_shell_command),
+                                "timing": "realtime",
+                            },
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    script_path = tmp_path / "session.sh"
+    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", str(script_path)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = (run_dir / "stdout").read_text(encoding="utf-8")
+    assert "new-shell-ok" in output
+    assert "nested-shell-ok" in output
 
 
 def test_environment_path_prepend_takes_precedence(tmp_path) -> None:
