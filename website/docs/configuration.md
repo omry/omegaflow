@@ -60,6 +60,9 @@ omegaflow recording=hello rec.capture.headless=false
 | `studio.recording_dir` | Directory containing `config.yaml` plus one directory per video. Each video directory contains `index.md`. |
 | `studio.data_dir` | Directory for generated run state, scratch output, caches, and generated artifacts. Defaults to `recordings/.omegaflow`. |
 | `studio.keep_output_dir` | Keeps Hydra's output directory metadata when a run is created. |
+| `studio.run_gc.enabled` | Removes old recording runs after a successful build. Defaults to `true`. |
+| `studio.run_gc.max_age_days` | Retains successful, failed, and incomplete runs modified within this many days. Defaults to `30`. |
+| `studio.run_gc.dry_run` | Reports runs that retention would remove without deleting them. Defaults to `false`. |
 | `load_env_file` | Enables loading a process-level `.env` file before running actions. |
 | `env_file` | Path to the process-level `.env` file, resolved from the project root. |
 | `env_override` | Allows values from `env_file` to replace existing environment variables. |

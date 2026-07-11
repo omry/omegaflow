@@ -193,11 +193,21 @@ class StudioStep(str, Enum):
 
 
 @dataclass
+class RunGarbageCollectionConfig:
+    enabled: bool = True
+    max_age_days: int = 30
+    dry_run: bool = False
+
+
+@dataclass
 class StudioRuntimeConfig:
     recording_dir: str = "recordings"
     data_dir: str = "recordings/.omegaflow"
     keep_output_dir: bool = True
     asciinema_path: str | None = None
+    run_gc: RunGarbageCollectionConfig = field(
+        default_factory=RunGarbageCollectionConfig
+    )
 
 
 @dataclass

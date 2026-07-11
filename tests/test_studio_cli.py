@@ -1653,6 +1653,11 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     config = compose_studio_config(None, ())
     assert config["studio"]["recording_dir"] == "recordings"
     assert config["studio"]["data_dir"] == "recordings/.omegaflow"
+    assert config["studio"]["run_gc"] == {
+        "enabled": True,
+        "max_age_days": 30,
+        "dry_run": False,
+    }
     assert "id:" not in shared_config
     assert "title:" not in shared_config
     assert "id: demo-recording" in recording
@@ -1857,6 +1862,111 @@ def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str
             "format": "mp3",
         },
     }
+
+
+def test_run_gc_removes_runs_older_than_max_age_and_protects_current(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    data_dir = tmp_path / "media"
+    runs_dir = data_dir / "runs" / "demo"
+    run_dirs = [runs_dir / f"20260705-01020{index}" for index in range(6)]
+    for run_dir in run_dirs:
+        run_dir.mkdir(parents=True)
+    now = 2_000_000_000.0
+    monkeypatch.setattr(studio.time, "time", lambda: now)
+    for index, run_dir in enumerate(run_dirs):
+        artifact = "recording.cast" if index < 3 else "failure.json"
+        (run_dir / artifact).write_text("{}\n", encoding="utf-8")
+        age_days = 31 if index in {0, 1, 3} else 29
+        os.utime(run_dir, (now - age_days * 86400,) * 2)
+    current = run_dirs[0]
+    spec = minimal_recording_spec(current, data_dir=data_dir)
+
+    removed = studio.garbage_collect_recording_runs(spec, current_run_dir=current)
+
+    assert removed == [run_dirs[1], run_dirs[3]]
+    assert current.is_dir()
+    assert run_dirs[2].is_dir()
+    assert run_dirs[4].is_dir()
+    assert run_dirs[5].is_dir()
+    assert "run gc: removed 2 old run(s)" in capsys.readouterr().out
+
+
+def test_run_gc_dry_run_reports_without_removing(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "media"
+    runs_dir = data_dir / "runs" / "demo"
+    old_run = runs_dir / "20260705-010201"
+    current = runs_dir / "20260705-010202"
+    for run_dir in [old_run, current]:
+        run_dir.mkdir(parents=True)
+        (run_dir / "recording.cast").write_text("{}\n", encoding="utf-8")
+    now = 2_000_000_000.0
+    monkeypatch.setattr(studio.time, "time", lambda: now)
+    os.utime(old_run, (now - 31 * 86400,) * 2)
+    spec = minimal_recording_spec(current, data_dir=data_dir)
+    spec["_studio_config"]["studio"]["run_gc"] = {"dry_run": True}
+
+    assert studio.garbage_collect_recording_runs(spec, current_run_dir=current) == [
+        old_run
+    ]
+    assert old_run.is_dir()
+    assert "would remove 1 old run(s) (dry run)" in capsys.readouterr().out
+
+
+def test_run_gc_can_be_disabled(tmp_path) -> None:
+    data_dir = tmp_path / "media"
+    old_run = data_dir / "runs" / "demo" / "20260705-010201"
+    old_run.mkdir(parents=True)
+    spec = minimal_recording_spec(old_run, data_dir=data_dir)
+    spec["_studio_config"]["studio"]["run_gc"] = {"enabled": False}
+
+    assert studio.garbage_collect_recording_runs(spec, current_run_dir=old_run) == []
+    assert old_run.is_dir()
+
+
+def test_run_gc_can_suppress_reporting(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "media"
+    old_run = data_dir / "runs" / "demo" / "20260705-010201"
+    current = data_dir / "runs" / "demo" / "20260705-010202"
+    for run_dir in [old_run, current]:
+        run_dir.mkdir(parents=True)
+    now = 2_000_000_000.0
+    monkeypatch.setattr(studio.time, "time", lambda: now)
+    os.utime(old_run, (now - 31 * 86400,) * 2)
+    spec = minimal_recording_spec(current, data_dir=data_dir)
+
+    studio.garbage_collect_recording_runs(
+        spec, current_run_dir=current, report=False
+    )
+
+    assert not old_run.exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_run_gc_deletion_failure_is_non_fatal(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "media"
+    old_run = data_dir / "runs" / "demo" / "20260705-010201"
+    current = data_dir / "runs" / "demo" / "20260705-010202"
+    for run_dir in [old_run, current]:
+        run_dir.mkdir(parents=True)
+    now = 2_000_000_000.0
+    monkeypatch.setattr(studio.time, "time", lambda: now)
+    monkeypatch.setattr(
+        studio.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    os.utime(old_run, (now - 31 * 86400,) * 2)
+    spec = minimal_recording_spec(current, data_dir=data_dir)
+
+    studio.garbage_collect_recording_runs(spec, current_run_dir=current)
+
+    assert old_run.is_dir()
+    captured = capsys.readouterr()
+    assert "could not remove" in captured.err
+    assert "removed 0 old run(s)" in captured.out
 
 
 def test_recording_skip_reason_uses_latest_successful_run(tmp_path) -> None:

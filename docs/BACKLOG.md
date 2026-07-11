@@ -29,7 +29,7 @@ server, client, plugin, deployment, and product-security work.
       package references were removed instead of preserved as a compatibility
       surface.
 
-- [ ] `P1` Publish Linux and macOS wheels with a bundled recorder.
+- [x] `P1` Publish Linux and macOS wheels with a bundled recorder.
       OmegaFlow should not require most Linux and macOS users to install
       `asciinema` separately. Acceptance checks: vendor a checked asciinema 3.x
       release binary into platform-specific wheels for Linux and macOS; make the
@@ -61,7 +61,7 @@ server, client, plugin, deployment, and product-security work.
       recorder-free commands explicit and discoverable; and document the
       recommended Windows path without weakening the local Linux/macOS mode.
 
-- [ ] `P1` Add automatic garbage collection for old recording runs.
+- [x] `P1` Add automatic garbage collection for old recording runs.
       `recordings/.omegaflow/runs` can accumulate stale successful and failed
       runs quickly. Run retention should be controlled by the Studio/tool
       configuration, not by each recording script. Acceptance checks: add

@@ -840,6 +840,10 @@ def bootstrap_tool_config_text(workspace: Path) -> str:
 studio:
   recording_dir: {recording_dir}
   data_dir: {data_dir}
+  run_gc:
+    enabled: true
+    max_age_days: 30
+    dry_run: false
 """
 
 
@@ -1114,6 +1118,73 @@ def remove_unused_empty_run_dir(spec: dict[str, Any], *, used_run_dir: Path) -> 
         return
     except OSError:
         return
+
+
+def garbage_collect_recording_runs(
+    spec: dict[str, Any],
+    *,
+    current_run_dir: Path,
+    report: bool = True,
+) -> list[Path]:
+    config = spec.get("_studio_config", {})
+    if not isinstance(config, dict):
+        raise StudioError("_studio_config must be a mapping")
+    studio_config = config.get("studio", {})
+    if not isinstance(studio_config, dict):
+        raise StudioError("studio must be a mapping")
+    run_gc = studio_config.get("run_gc", {})
+    if not isinstance(run_gc, dict):
+        raise StudioError("studio.run_gc must be a mapping")
+    enabled = run_gc.get("enabled", True)
+    dry_run = run_gc.get("dry_run", False)
+    if not isinstance(enabled, bool):
+        raise StudioError("studio.run_gc.enabled must be a boolean")
+    if not isinstance(dry_run, bool):
+        raise StudioError("studio.run_gc.dry_run must be a boolean")
+    if not enabled:
+        return []
+
+    max_age_days = run_gc.get("max_age_days", 30)
+    if (
+        isinstance(max_age_days, bool)
+        or not isinstance(max_age_days, int)
+        or max_age_days < 1
+    ):
+        raise StudioError("studio.run_gc.max_age_days must be a positive integer")
+    runs_dir = record.recording_runs_dir(spec)
+    if not runs_dir.is_dir():
+        return []
+    protected = current_run_dir.resolve()
+    cutoff = time.time() - (max_age_days * 24 * 60 * 60)
+    candidates: list[Path] = []
+    for run_dir in runs_dir.iterdir():
+        if not run_dir.is_dir() or run_dir.resolve() == protected:
+            continue
+        if run_dir.stat().st_mtime < cutoff:
+            candidates.append(run_dir)
+    candidates.sort()
+
+    action = "would remove" if dry_run else "removed"
+    removed_count = 0
+    for run_dir in candidates:
+        if not dry_run:
+            try:
+                shutil.rmtree(run_dir)
+            except OSError as exc:
+                if report:
+                    print(
+                        f"run gc warning: could not remove {display_path(run_dir)}: "
+                        f"{exc}",
+                        file=sys.stderr,
+                    )
+                continue
+        removed_count += 1
+        if report:
+            print(f"run gc {action}: {display_path(run_dir)}")
+    if report and candidates:
+        suffix = " (dry run)" if dry_run else ""
+        print(f"run gc: {action} {removed_count} old run(s){suffix}")
+    return candidates
 
 
 def recording_fingerprint_path(cast_path: Path) -> Path:
@@ -2211,6 +2282,11 @@ def run_build(cfg: DictConfig) -> int:
         if text_output_enabled(cfg) and bool_config(config, "verbose"):
             pass_line(f"wrote recording fingerprint: {display_path(fingerprint_path)}")
         remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
+        garbage_collect_recording_runs(
+            spec,
+            current_run_dir=run_dir,
+            report=text_output_enabled(cfg),
+        )
         success = True
     finally:
         if staged_retimed is not None and staged_retimed.exists():
