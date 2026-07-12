@@ -73,16 +73,15 @@ beat:
   - commands:
     # The homepage video is built from the current checkout, which may be an
     # unreleased version that cannot yet be installed from PyPI. The PATH
-    # wrapper verifies that this checkout imports, while the fake output shows
-    # the public installation command users should run after release. It does
-    # not claim to validate the published package.
+    # wrapper verifies that this checkout imports, while replacement output
+    # shows the public installation result users should expect after release.
+    # It does not claim to validate the published package.
     - id: install_command
       run: python -m pip install omegaflow
       display: python -m pip install omegaflow
       after: "@install@"
       output:
-        mode: fake
-        text: |
+        replace: |
           Successfully installed omegaflow
   guide:
     commands:
@@ -168,8 +167,7 @@ beat:
       display: omegaflow recording=quickstart action=watch
       after: "@watch@"
       output:
-        mode: fake
-        text: |
+        replace: |
           pass  opened quickstart recording in browser
   guide:
     commands:

@@ -71,16 +71,6 @@ server, client, plugin, deployment, and product-security work.
       MP4; document the tradeoffs clearly; and add a sample publish surface that
       can be validated without requiring secrets in normal tests.
 
-- [ ] `P1` Document narration anchors, command `after`, and audio wait markers.
-      The Beat page only mentions `@anchor@`, `@wait:name+1s@`, and `after` in
-      field tables. Authors need a short explanation of how narration anchors
-      line up command starts, how waits pause narration until a command id
-      finishes, and why YAML values like `after: "@install@"` must be quoted.
-      Acceptance checks: add an authoring example with one anchor, one command
-      id, one `after`, and one wait; explain that markers are removed from
-      spoken narration; document supported wait units (`ms`, `s`); and note the
-      current YAML quoting requirement.
-
 - [ ] `P2` Explore a YAML-safe sync marker syntax.
       The current `@anchor@` syntax is compact in narration, but problematic
       when reused as a YAML scalar (`after: @install@` is invalid unless
@@ -157,6 +147,11 @@ server, client, plugin, deployment, and product-security work.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Document narration anchors, command `after`, and audio wait markers.
+      Completed: `2026-07-12`. Added a complete synchronization example and
+      documented anchor timing, command ids, waits, supported units, marker
+      removal, audio requirements, and YAML quoting.
 
 - [x] `P2` Bolster the README for the public OmegaFlow package.
       Completed: `2026-07-12`. Added a public-facing product description,

@@ -299,32 +299,21 @@ def command_output_config(
         mode = "real"
         text = None
     elif isinstance(raw_output, str):
-        if raw_output not in {"real", "suppress", "fake"}:
-            raise RecordingError(f"{field}.output must be one of: real, suppress, fake")
+        if raw_output not in {"real", "suppress"}:
+            raise RecordingError(f"{field}.output must be one of: real, suppress")
         mode = raw_output
         text = None
     elif isinstance(raw_output, dict):
-        mode_value = raw_output.get("mode", "real")
-        if not isinstance(mode_value, str) or mode_value not in {
-            "real",
-            "suppress",
-            "fake",
-        }:
-            raise RecordingError(
-                f"{field}.output.mode must be one of: real, suppress, fake"
-            )
-        mode = mode_value
-        text = raw_output.get("text")
+        if set(raw_output) != {"replace"}:
+            raise RecordingError(f"{field}.output mapping must contain only: replace")
+        mode = "replace"
+        text = raw_output.get("replace")
     else:
         raise RecordingError(f"{field}.output must be a string or mapping")
-    if mode == "fake":
+    if mode == "replace":
         if not isinstance(text, str):
-            raise RecordingError(
-                f"{field}.output.text must be a string for fake output"
-            )
-    elif text is not None and not isinstance(text, str):
-        raise RecordingError(f"{field}.output.text must be a string")
-    return {"mode": mode, "text": text or ""}
+            raise RecordingError(f"{field}.output.replace must be a string")
+    return {"mode": mode, "replace": text or ""}
 
 
 def command_timing_mode(command: dict[str, Any], *, field: str) -> str:
@@ -2346,16 +2335,16 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '  local command_chunk="$3"',
             '  local chunk_id="$4"',
             '  local output_mode="${5:-real}"',
-            '  local fake_output="${6:-}"',
+            '  local replacement_output="${6:-}"',
             '  local timing="${7:-presentation}"',
             '  local status_pipe="$recording_tmp/${action_id}.${chunk_id}.status.pipe"',
-            '  if [[ "$output_mode" == suppress || "$output_mode" == fake ]]; then',
+            '  if [[ "$output_mode" == suppress || "$output_mode" == replace ]]; then',
             "    local status=0",
             '    run_user_shell_command "$command_chunk" "$recording_stdout_path" "$recording_stderr_path" append "$status_pipe"',
             "    status=$?",
-            '    if [[ "$output_mode" == fake && -n "$fake_output" ]]; then',
-            '      printf "%s" "$fake_output"',
-            '      [[ "$fake_output" == *$\'\\n\' ]] || printf "\\n"',
+            '    if [[ "$output_mode" == replace && -n "$replacement_output" ]]; then',
+            '      printf "%s" "$replacement_output"',
+            '      [[ "$replacement_output" == *$\'\\n\' ]] || printf "\\n"',
             "    fi",
             '    return "$status"',
             "  fi",
@@ -2645,7 +2634,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    local after_anchor",
             "    local command_id",
             "    local output_mode",
-            "    local fake_output",
+            "    local replacement_output",
             "    local timing",
             "    local pre_command_pause",
             "    local pre_enter_pause",
@@ -2658,7 +2647,7 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '    follow_along="$(command_json_field "$commands_json" "$index" follow_along)"',
             '    show_prompt_after="$(command_json_field "$commands_json" "$index" show_prompt_after)"',
             '    output_mode="$(command_json_field "$commands_json" "$index" output.mode)"',
-            '    fake_output="$(command_json_field "$commands_json" "$index" output.text)"',
+            '    replacement_output="$(command_json_field "$commands_json" "$index" output.replace)"',
             '    timing="$(command_json_field "$commands_json" "$index" timing)"',
             '    pre_command_pause="$(command_json_field "$commands_json" "$index" pre_command_pause)"',
             '    pre_enter_pause="$(command_json_field "$commands_json" "$index" pre_enter_pause)"',
@@ -2666,8 +2655,8 @@ def render_session_script(spec: dict[str, Any]) -> str:
             '    post_command_pause="$(command_json_field "$commands_json" "$index" post_command_pause)"',
             '    timeline_event command_prompt_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$display_command" prompt "$(recording_prompt_text)" color "$recording_color" follow_along "$follow_along" show_prompt_after "$show_prompt_after" after "$after_anchor" timing "$timing" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
             '    timeline_event command_prompt_end "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$display_command" prompt "$(recording_prompt_text)" color "$recording_color" follow_along "$follow_along" show_prompt_after "$show_prompt_after" after "$after_anchor" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
-            '    timeline_event command_run_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$command" display "$display_command" progress "${progress_labels[$index]:-}" follow_along "$follow_along" output_mode "$output_mode" fake_output "$fake_output" after "$after_anchor" timing "$timing" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
-            '    run_visible_command_chunk "$action_id" "$marker" "$command" "$index" "$output_mode" "$fake_output" "$timing"',
+            '    timeline_event command_run_start "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" command "$command" display "$display_command" progress "${progress_labels[$index]:-}" follow_along "$follow_along" output_mode "$output_mode" replacement_output "$replacement_output" after "$after_anchor" timing "$timing" pre_command_pause "$pre_command_pause" pre_enter_pause "$pre_enter_pause" post_enter_pause "$post_enter_pause" post_command_pause "$post_command_pause"',
+            '    run_visible_command_chunk "$action_id" "$marker" "$command" "$index" "$output_mode" "$replacement_output" "$timing"',
             "    status=$?",
             '    timeline_event command_run_end "$beat_id" "" "" action_id "$action_id" command_id "$command_id" chunk_index "$index" status "$status" follow_along "$follow_along" after "$after_anchor"',
             '    [[ "$status" -eq 0 ]] || break',

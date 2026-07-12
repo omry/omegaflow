@@ -29,8 +29,8 @@
           "gap_seconds": 0.2,
           "marker": "@wait:install_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 8.742,
-          "presentation_start": 8.742,
+          "presentation_end": 8.737,
+          "presentation_start": 8.737,
           "target": "install_command",
           "text_offset": 142
         }
@@ -61,9 +61,9 @@
           "audio_second": 3.0,
           "gap_seconds": 0.2,
           "marker": "@wait:bootstrap_run+200ms@",
-          "pause_seconds": 0.681,
-          "presentation_end": 15.163,
-          "presentation_start": 14.482,
+          "pause_seconds": 0.68,
+          "presentation_end": 15.157,
+          "presentation_start": 14.477,
           "target": "bootstrap_run",
           "text_offset": 46
         }
@@ -95,8 +95,8 @@
           "gap_seconds": 0.2,
           "marker": "@wait:build_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 28.503,
-          "presentation_start": 28.503,
+          "presentation_end": 28.497,
+          "presentation_start": 28.497,
           "target": "build_command",
           "text_offset": 140
         }
@@ -128,8 +128,8 @@
           "gap_seconds": 0.2,
           "marker": "@wait:watch_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 38.183,
-          "presentation_start": 38.183,
+          "presentation_end": 38.177,
+          "presentation_start": 38.177,
           "target": "watch_command",
           "text_offset": 122
         }

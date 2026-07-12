@@ -1291,6 +1291,7 @@ def published_audio_metadata_mismatch(
     anchors_by_segment_id: dict[str, list[dict[str, Any]]] | None = None,
     waits_by_segment_id: dict[str, list[dict[str, Any]]] | None = None,
     pause_after_by_segment_id: dict[str, float] | None = None,
+    allow_missing_segment_audio: bool = False,
 ) -> str | None:
     if not metadata_path.exists():
         return None
@@ -1331,8 +1332,9 @@ def published_audio_metadata_mismatch(
             "id": item.segment.segment_id,
             "heading": item.segment.heading,
             "text": item.segment.text,
-            "audio": display_path(item.output_path),
         }
+        if not allow_missing_segment_audio or "audio" in segment:
+            expected["audio"] = display_path(item.output_path)
         for field, expected_value in expected.items():
             actual_value = segment.get(field)
             if actual_value != expected_value:
@@ -1376,6 +1378,7 @@ def validate_published_audio_metadata(
     anchors_by_segment_id: dict[str, list[dict[str, Any]]] | None = None,
     waits_by_segment_id: dict[str, list[dict[str, Any]]] | None = None,
     pause_after_by_segment_id: dict[str, float] | None = None,
+    allow_missing_segment_audio: bool = False,
 ) -> None:
     mismatch = published_audio_metadata_mismatch(
         plan,
@@ -1383,6 +1386,7 @@ def validate_published_audio_metadata(
         anchors_by_segment_id=anchors_by_segment_id,
         waits_by_segment_id=waits_by_segment_id,
         pause_after_by_segment_id=pause_after_by_segment_id,
+        allow_missing_segment_audio=allow_missing_segment_audio,
     )
     if mismatch is None:
         return
@@ -1901,6 +1905,7 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
                     anchors_by_segment_id=anchors_by_segment_id,
                     waits_by_segment_id=waits_by_segment_id,
                     pause_after_by_segment_id=pause_after_by_segment_id,
+                    allow_missing_segment_audio=True,
                 )
                 state = "enabled" if settings.enabled else "disabled"
                 pass_line(

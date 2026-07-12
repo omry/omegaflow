@@ -97,7 +97,7 @@ class PresentationCommand:
     run_interval: TimelineInterval | None
     prompt_payload: str
     output_mode: str
-    fake_output: str
+    replacement_output: str
     timing: str
     output_span: OutputSpan
 
@@ -1506,12 +1506,12 @@ def command_output_mode(interval: TimelineInterval | None) -> tuple[str, str]:
     if interval is None:
         return "real", ""
     mode = interval.start_event.get("output_mode", "real")
-    if not isinstance(mode, str) or mode not in {"real", "suppress", "fake"}:
+    if not isinstance(mode, str) or mode not in {"real", "suppress", "replace"}:
         mode = "real"
-    fake_output = interval.start_event.get("fake_output", "")
-    if not isinstance(fake_output, str):
-        fake_output = ""
-    return mode, fake_output
+    replacement_output = interval.start_event.get("replacement_output", "")
+    if not isinstance(replacement_output, str):
+        replacement_output = ""
+    return mode, replacement_output
 
 
 def command_timing_mode(interval: TimelineInterval | None) -> str:
@@ -1659,7 +1659,7 @@ def build_presentation_commands(
     for index, prompt_interval in enumerate(prompt_intervals):
         key = interval_key(prompt_interval.start_event)
         run_interval = run_by_key.get(key)
-        output_mode, fake_output = command_output_mode(run_interval)
+        output_mode, replacement_output = command_output_mode(run_interval)
         timing = command_timing_mode(run_interval)
         commands.append(
             PresentationCommand(
@@ -1668,7 +1668,7 @@ def build_presentation_commands(
                 run_interval=run_interval,
                 prompt_payload=prompt_payload_by_key.get(key, ""),
                 output_mode=output_mode,
-                fake_output=fake_output,
+                replacement_output=replacement_output,
                 timing=timing,
                 output_span=output_span_for_command(
                     events=events,
@@ -2032,19 +2032,19 @@ def schedule_command_output(
 ) -> float:
     if command.output_mode == "suppress":
         return output_start
-    if command.output_mode == "fake":
-        fake_output = command.fake_output
-        if fake_output and not fake_output.endswith("\n"):
-            fake_output = f"{fake_output}\n"
-        fake_output = terminal_line_endings(fake_output)
-        if not fake_output:
+    if command.output_mode == "replace":
+        replacement_output = command.replacement_output
+        if replacement_output and not replacement_output.endswith("\n"):
+            replacement_output = f"{replacement_output}\n"
+        replacement_output = terminal_line_endings(replacement_output)
+        if not replacement_output:
             return output_start
         scheduled.append(
             ScheduledEvent(
                 absolute_time=output_start,
                 order=order,
                 event_type="o",
-                payload=fake_output,
+                payload=replacement_output,
             )
         )
         return output_start

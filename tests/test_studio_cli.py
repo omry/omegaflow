@@ -53,6 +53,63 @@ def test_version_is_available() -> None:
     assert __version__ == "0.4.0"
 
 
+def test_command_output_replace_selects_replacement_mode() -> None:
+    assert record.command_output_config(
+        {"output": {"replace": "concise output"}}, field="actions.0"
+    ) == {"mode": "replace", "replace": "concise output"}
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"mode": "fake", "text": "legacy output"},
+        {"text": "ambiguous output"},
+        "fake",
+    ],
+)
+def test_command_output_rejects_old_fake_forms(output: object) -> None:
+    with pytest.raises(record.RecordingError):
+        record.command_output_config({"output": output}, field="actions.0")
+
+
+def test_published_audio_check_allows_sanitized_segment_paths(tmp_path) -> None:
+    plan = [
+        audio.AudioPlanItem(
+            segment=audio.NarrationSegment(
+                segment_id="intro",
+                heading="Introduction",
+                text="Hello.",
+            ),
+            cache_key="key",
+            output_path=tmp_path / "cache" / "intro.mp3",
+        )
+    ]
+    metadata_path = tmp_path / "published" / "audio.json"
+    metadata_path.parent.mkdir()
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "id": "intro",
+                        "heading": "Introduction",
+                        "text": "Hello.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audio.validate_published_audio_metadata(
+        plan,
+        metadata_path,
+        allow_missing_segment_audio=True,
+    )
+    with pytest.raises(audio.AudioError, match="field 'audio' is stale"):
+        audio.validate_published_audio_metadata(plan, metadata_path)
+
+
 def test_package_installs_omegaflow_command() -> None:
     root = Path(__file__).resolve().parents[1]
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
@@ -2657,7 +2714,9 @@ def test_timestamp_word_spans_tolerates_missing_word_end() -> None:
     ]
 
 
-def fake_presentation_command(*, fake_output: str) -> retime_cast.PresentationCommand:
+def replacement_presentation_command(
+    *, replacement_output: str
+) -> retime_cast.PresentationCommand:
     interval = retime_cast.TimelineInterval(
         start=0.0,
         end=0.0,
@@ -2669,19 +2728,19 @@ def fake_presentation_command(*, fake_output: str) -> retime_cast.PresentationCo
         prompt_interval=interval,
         run_interval=interval,
         prompt_payload="$ command",
-        output_mode="fake",
-        fake_output=fake_output,
+        output_mode="replace",
+        replacement_output=replacement_output,
         timing="presentation",
         output_span=retime_cast.OutputSpan(events=()),
     )
 
 
-def test_fake_output_uses_terminal_line_endings() -> None:
+def test_replacement_output_uses_terminal_line_endings() -> None:
     scheduled: list[retime_cast.ScheduledEvent] = []
 
     retime_cast.schedule_command_output(
         scheduled=scheduled,
-        command=fake_presentation_command(fake_output="one\ntwo\n"),
+        command=replacement_presentation_command(replacement_output="one\ntwo\n"),
         output_start=1.0,
         order=2.0,
     )
@@ -2689,12 +2748,14 @@ def test_fake_output_uses_terminal_line_endings() -> None:
     assert scheduled[0].payload == "one\r\ntwo\r\n"
 
 
-def test_fake_output_preserves_existing_terminal_line_endings() -> None:
+def test_replacement_output_preserves_existing_terminal_line_endings() -> None:
     scheduled: list[retime_cast.ScheduledEvent] = []
 
     retime_cast.schedule_command_output(
         scheduled=scheduled,
-        command=fake_presentation_command(fake_output="one\r\ntwo\r\n"),
+        command=replacement_presentation_command(
+            replacement_output="one\r\ntwo\r\n"
+        ),
         output_start=1.0,
         order=2.0,
     )

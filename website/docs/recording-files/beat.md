@@ -21,13 +21,114 @@ beat:
 | --- | --- | --- |
 | `id` | string | Unique beat id. |
 | `heading` | string | Section heading and narration label. |
-| `narration` | string | Spoken narration text. Supports markers such as `@anchor@` and `@wait:name+1s@`. |
+| `narration` | string | Spoken narration text. Supports markers such as `@anchor@` and `@wait:command_id+1s@`. |
 | `marker` | string | Optional UI marker id. |
 | `caption` | string | Text printed visibly in the terminal recording. |
 | `viewer_hold` | number | Extra viewer pause after the beat. |
 | `actions` | list | Commands to record. |
 | `checks` | list | Commands that validate the result. |
 | `guide` | mapping | Guided-mode commands and success hint. |
+
+## Synchronizing Narration And Commands
+
+The mental model is:
+
+- **`after: "@anchor@"`: the command waits for narration.** The command starts
+  when narration reaches the named anchor.
+- **`@wait:command_id@`: narration waits for the command.** Narration resumes
+  after the command with that `id` finishes.
+
+This synchronization is applied during the processing stage. OmegaFlow first
+captures the command session and obtains the narration timing, then uses the
+markers to construct the final presentation timeline. The recorded shell does
+not wait for live narration while commands are being captured.
+
+Think of narration and commands as two concurrent timelines with two
+synchronization points:
+
+```mermaid
+flowchart LR
+    N1[Narration speaks] --> A(("@anchor@"))
+    A --> N2[Narration continues] --> W(("@wait:command_id@")) --> N3[Narration resumes]
+    A -->|after releases command| C1[Command runs] --> C2[Command completes] --> W
+```
+
+Use both directions when narration introduces a command, the command runs for
+an unpredictable amount of time, and narration should discuss the result only
+after it is ready.
+
+### The Command Waits For Narration: Anchors And `after`
+
+An anchor such as `@install@` identifies a point in the processed narration
+timeline. A command with `after: "@install@"` appears to start when playback
+reaches that anchor:
+
+```yaml
+narration: First, @install@ install the package.
+actions:
+- commands:
+  - id: install_command
+    run: python -m pip install omegaflow
+    after: "@install@"
+```
+
+The anchor name is local timing vocabulary chosen by the recording author. The
+command `id` is separate: it identifies the command in the presentation so
+other timing directives can refer to its completion.
+
+Quote anchor values used in YAML. `after: "@install@"` is valid, while the
+unquoted `after: @install@` is not a valid YAML scalar.
+
+### Narration Waits For The Command: `@wait:...@`
+
+A wait marker points in the opposite direction. It pauses the narration
+timeline at the marker until the command with the referenced `id` has finished:
+
+```yaml
+narration: >-
+  First, @install@ install the package.
+  @wait:install_command@ Now inspect the result.
+```
+
+Here, `@wait:install_command@` prevents “Now inspect the result” from being
+spoken while `install_command` is still running. This is completion-based
+synchronization, so it remains correct when command duration varies between
+recordings or machines.
+
+Add an optional gap when the result needs a little time to settle visually:
+
+```text
+@wait:build+250ms@
+@wait:build+1s@
+@wait:build+1.5s@
+```
+
+The gap guarantees a minimum pause between command completion and narration
+continuing. Supported units are milliseconds (`ms`) and seconds (`s`). Without
+a gap, narration may resume as soon as the command completes.
+
+### Complete Example
+
+This beat starts the command from narration, then waits for that same command
+before continuing:
+
+```yaml
+beat:
+  id: install
+  heading: Install OmegaFlow
+  narration: >-
+    First, @install@ install the package.
+    @wait:install_command+300ms@ Now the command is ready.
+  actions:
+  - commands:
+    - id: install_command
+      run: python -m pip install omegaflow
+      after: "@install@"
+```
+
+Anchor and wait markers are timing instructions, not spoken content. OmegaFlow
+removes them before generating narration audio. Timing markers require
+`audio.enabled: true`.
 
 ## Actions And Checks
 
@@ -52,14 +153,13 @@ For multi-command actions, use `commands`:
 ```yaml
 actions:
 - commands:
-  - run: python -m pip install omegaflow
-    display: python -m pip install omegaflow
-    output:
-      mode: fake
-      text: |
-        Successfully installed omegaflow
+  - id: prepare_output
+    run: mkdir -p build
+  - id: write_output
+    run: printf 'hello\n' > build/message.txt
   expect:
-    exit_code: 0
+    file_exists:
+    - build/message.txt
 ```
 
 Step fields:
@@ -72,17 +172,44 @@ Step fields:
 | `name` | string | Check/setup/cleanup label. |
 | `after` | string | Anchor syntax such as `@server@`. |
 | `progress` | list | Progress labels for visible command chunks. |
-| `output` | string or mapping | `real`, `suppress`, or `fake` output behavior. |
+| `output` | string or mapping | Show real output, suppress it, or replace it with configured text. |
 | `expect` | mapping | Exit code, output, regex, or file-existence expectations. |
 | `commands` | list | Command entries for one action. |
 
 Command entries also accept `id`, `follow_along`, `show_prompt_after`,
 `timing`, and pre/post command pause fields.
 
-`output: fake` still runs the command. OmegaFlow hides the real stdout/stderr in
-the recording and displays `output.text` instead. Use a support script or
-controlled environment when the displayed command should be safe and
-reproducible during recording.
+## Controlling Visible Command Output
+
+Real command output is the default and should be preferred. Use `output` when
+the raw terminal output would distract from the recording:
+
+- `real` shows the command's actual stdout and stderr.
+- `suppress` runs the command without showing its output.
+- `output.replace` runs the command but replaces its visible output with the
+  configured text.
+
+Replacement output is useful for uncommon cases where real output is noisy,
+unstable, or contains irrelevant machine-specific detail. Use it sparingly: the
+replacement must not claim a result that OmegaFlow did not actually verify.
+Pair it with an expectation that validates the real result, and explain the
+substitution in a nearby source comment.
+
+```yaml
+actions:
+- run: ./scripts/build-package.sh
+  display: ./scripts/build-package.sh
+  output:
+    replace: |
+      Built dist/example.whl
+  expect:
+    file_exists:
+    - dist/example.whl
+```
+
+Here the real build runs and the file expectation proves that it produced the
+artifact. Only the verbose build log is replaced with a concise line for the
+viewer.
 
 ## Guide
 
