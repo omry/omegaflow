@@ -2,6 +2,7 @@ module.exports = {
   docs: [
     'intro',
     'quick-start',
+    'runtime-dependencies',
     {
       type: 'category',
       label: 'Tutorial',

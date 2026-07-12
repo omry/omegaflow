@@ -42,6 +42,12 @@ Install OmegaFlow in your project's Python environment:
 python -m pip install omegaflow
 ```
 
+OmegaFlow requires Python 3.11+ and Bash. Supported Linux and macOS wheels
+include asciinema 3.x. Narrated recordings additionally require `ffmpeg` and
+`ffprobe`; generating new narration requires OpenAI API access. See
+[Runtime Dependencies](https://omegaflow.dev/runtime-dependencies) for when
+each dependency is needed and how recording-specific tools are declared.
+
 Create the initial recording workspace:
 
 ```bash

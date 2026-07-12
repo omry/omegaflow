@@ -89,6 +89,9 @@ audio:
   format: mp3
 ```
 
+Enabling narration requires FFmpeg tools and OpenAI API access when generating
+new audio. See [Runtime Dependencies](../runtime-dependencies.md).
+
 ## Recording Frontmatter
 
 Each `<id>/index.md` recording starts with YAML frontmatter:
