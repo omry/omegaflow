@@ -14,84 +14,17 @@ server, client, plugin, deployment, and product-security work.
 
 - Keep each item small enough for one focused change.
 - Put only the most urgent OmegaFlow items in `Now`.
+- Keep pre-release work that is not currently active in `Release backlog`, and
+  work explicitly deferred until after release in `Post-release`.
 - Include brief context and concrete acceptance checks.
-- Move completed items out instead of keeping a long archive.
+- When an item is completed, move it to `Done` and add its completion date in
+  `YYYY-MM-DD` form. Do not leave checked items in `Now`.
+- Done items are a short-term changelog, not a permanent archive. Remove entries
+  whose completion date is more than one month old.
 - After each focused phase, run the relevant OmegaFlow tests and, when the player
   or generated artifacts are affected, rebuild or check the affected recording.
 
 ## Now
-
-- [x] `P1` Rename the Python module to `omegaflow`.
-      The public tool, package, and importable module now share the canonical
-      OmegaFlow name. Acceptance checks: the source package lives under
-      `src/omegaflow`; entry points, imports, tests, generated schema/docs
-      paths, and packaging metadata point at the canonical module; old Studio
-      package references were removed instead of preserved as a compatibility
-      surface.
-
-- [x] `P1` Publish Linux and macOS wheels with a bundled recorder.
-      OmegaFlow should not require most Linux and macOS users to install
-      `asciinema` separately. Acceptance checks: vendor a checked asciinema 3.x
-      release binary into platform-specific wheels for Linux and macOS; make the
-      runtime prefer an explicit `studio.asciinema_path`, then the bundled
-      binary, then `PATH`; keep Windows unsupported until its PTY story is
-      proven; document the wheel build path; and add tests for configured,
-      bundled, missing-command, old-version, and happy-path version detection.
-
-- [ ] `post-release` Explore Reploy-backed recording environments without
-      replacing local mode. Reploy can give OmegaFlow a reproducible recording
-      environment with `asciinema` and other demo dependencies, but it also
-      brings a Docker-backed workflow that may be too heavy for many projects.
-      Acceptance checks: design an optional Reploy blueprint or environment
-      path for managed recording dependencies; keep the current lightweight
-      local mode fully supported; make mode selection explicit in tool config
-      and CLI output; document when to use managed versus local recording; and
-      ensure missing-dependency errors remain clear when users stay in local
-      mode.
-
-- [ ] `post-release` Decide the Windows support shape.
-      Native Windows cannot currently record terminal sessions through
-      asciinema, but OmegaFlow can still have useful artifact-processing
-      workflows there, such as watching existing recordings, updating audio,
-      retiming existing casts, and publishing surfaces. Acceptance checks:
-      inventory which commands work without a recorder; define the official
-      Windows support tiers for native Windows, WSL, and Linux/macOS; evaluate
-      whether replacing or supplementing asciinema with a cross-platform
-      recorder is practical, especially if the effort is small; make
-      recorder-free commands explicit and discoverable; and document the
-      recommended Windows path without weakening the local Linux/macOS mode.
-
-- [x] `P1` Add automatic garbage collection for old recording runs.
-      `recordings/.omegaflow/runs` can accumulate stale successful and failed
-      runs quickly. Run retention should be controlled by the Studio/tool
-      configuration, not by each recording script. Acceptance checks: add
-      tool-config fields for enabling run GC and choosing retention limits such
-      as count and/or age; apply GC after successful builds without deleting the
-      current run; preserve enough failed-run data for debugging according to
-      the configured policy; provide dry-run/reporting output for what would be
-      removed; document the defaults; and add tests that cover successful runs,
-      failed runs, current-run protection, and disabled GC.
-
-- [x] `P1` Polish the generated recording viewing experience.
-      The current videos are pretty, but the pacing and terminal surface can
-      feel messy: some waits are too long, some command output is not useful to
-      viewers, and status/progress text can compete with the teaching content.
-      Acceptance checks: review a generated demo end to end and identify every
-      long pause, redundant line, noisy status block, and confusing transition;
-      decide which output should be hidden, summarized, or rendered as progress;
-      tune timing defaults or per-recording timing fields where the problem is
-      systemic; keep real-time output only where it adds trust or visual value;
-      update the quickstart demo as the primary fixture; and add regression
-      checks or docs so future recordings do not drift back into noisy output.
-
-- [ ] `P2` Bolster the README for the public OmegaFlow package.
-      The README should be ready for people arriving from GitHub or PyPI.
-      Acceptance checks: add useful badges, a concise product description,
-      install and quickstart commands, links to docs and the repo, and a short
-      explanation of generated videos; investigate whether the generated video
-      can be represented directly in GitHub Markdown, and if GitHub blocks
-      embedded video/HTML, choose the best fallback such as a thumbnail link,
-      GIF, SVG/terminal cast preview, or docs-site link.
 
 - [ ] `P2` Create an OmegaFlow logo and mascot direction.
       The website currently relies on text-only branding, which makes the
@@ -102,26 +35,7 @@ server, client, plugin, deployment, and product-security work.
       surfaces; verify the mark works on dark backgrounds and at small sizes;
       and document basic usage so future pages stay visually consistent.
 
-- [x] `P1` Organize publishing output into one asset directory per video.
-      Published surfaces should not scatter a video's cast, audio, player data,
-      HTML, and support assets across unrelated paths. Acceptance checks: define
-      a canonical output directory for each recording/video id; write all
-      generated publish assets for that video under that directory; update
-      publish surface defaults and docs to point at the new layout; avoid
-      preserving duplicate legacy output paths unless a concrete compatibility
-      need is identified; and add tests that prove two videos do not overwrite
-      or share generated assets accidentally.
-
-- [ ] `post-release` Export recordings to a standard video file.
-      OmegaFlow should be able to produce a shareable video artifact in addition
-      to the interactive terminal player surfaces. Acceptance checks: define a
-      first supported format, likely H.264 MP4 for broad compatibility; include
-      terminal playback and generated narration/audio when present; keep timing
-      consistent with the interactive player; place the exported file inside
-      the video's canonical asset directory; document any required system
-      dependencies such as browser capture or ffmpeg; and add a smoke test or
-      fixture-level validation that proves the export path produces a playable
-      media file.
+## Release backlog
 
 - [ ] `P2` Evaluate browser recording support with Playwright.
       OmegaFlow may eventually support browser demos alongside terminal demos.
@@ -213,3 +127,61 @@ server, client, plugin, deployment, and product-security work.
       that first focus-transfer click; preserve normal click-to-toggle behavior
       once the player already has focus; add tests for the supported case; and
       defer explicitly if the behavior is too browser-dependent to make robust.
+
+## Post-release
+
+- [ ] Explore Reploy-backed recording environments without replacing local
+      mode. Reploy can give OmegaFlow a reproducible recording environment with
+      `asciinema` and other demo dependencies, but it also brings a Docker-backed
+      workflow that may be too heavy for many projects. Acceptance checks:
+      design an optional Reploy blueprint or environment path for managed
+      recording dependencies; keep the current lightweight local mode fully
+      supported; make mode selection explicit in tool config and CLI output;
+      document when to use managed versus local recording; and ensure
+      missing-dependency errors remain clear in local mode.
+
+- [ ] Decide the Windows support shape.
+      Native Windows cannot currently record terminal sessions through
+      asciinema, but OmegaFlow can still support artifact-processing workflows
+      such as watching existing recordings, updating audio, retiming casts, and
+      publishing surfaces. Acceptance checks: inventory recorder-free commands;
+      define support tiers for native Windows, WSL, and Linux/macOS; evaluate a
+      cross-platform recorder when practical; make supported commands explicit;
+      and document the recommended Windows path.
+
+- [ ] Export recordings to a standard video file.
+      OmegaFlow should produce a shareable video artifact in addition to its
+      interactive terminal player. Acceptance checks: define a first format,
+      likely H.264 MP4; include terminal playback and narration; preserve player
+      timing; use the canonical video asset directory; document dependencies
+      such as browser capture or ffmpeg; and validate that output is playable.
+
+## Done
+
+- [x] `P2` Bolster the README for the public OmegaFlow package.
+      Completed: `2026-07-12`. Added a public-facing product description,
+      badges, quickstart, documentation and demo links, and moved repository
+      development details into a maintainer guide.
+
+- [x] `P1` Add automatic garbage collection for old recording runs.
+      Completed: `2026-07-11`. Added configurable, age-based run cleanup with
+      dry-run support, current-run protection, documentation, and tests.
+
+- [x] `P1` Polish the generated recording viewing experience.
+      Completed: `2026-07-11`. Shortened and reviewed the homepage demo,
+      reduced output noise, and fixed narration seeking while scrubbing.
+
+- [x] `P1` Publish Linux and macOS wheels with a bundled recorder.
+      Completed: `2026-07-09`. Added platform wheels with a bundled asciinema
+      recorder, runtime selection, packaging validation, documentation, and
+      tests.
+
+- [x] `P1` Rename the Python module to `omegaflow`.
+      Completed: `2026-07-09`. Aligned the package, import path, entry point,
+      tests, generated documentation, and packaging metadata on the canonical
+      OmegaFlow name.
+
+- [x] `P1` Organize publishing output into one asset directory per video.
+      Completed: `2026-07-08`. Consolidated each video's generated player,
+      cast, audio, metadata, and support files into one canonical asset
+      directory with collision coverage.
