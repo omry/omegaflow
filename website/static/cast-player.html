@@ -51,9 +51,10 @@
       }
 
       .bar {
-        display: flex;
+        display: grid;
         align-items: center;
         gap: 0.75rem;
+        grid-template-columns: 1.75rem minmax(0, 1fr);
         height: calc(2.7em + 1.3rem + 1px);
         padding: 0.65rem 0.8rem;
         border-bottom: 1px solid var(--border);
@@ -61,8 +62,7 @@
       }
 
       .narration {
-        flex: 1 1 auto;
-        min-width: 10rem;
+        min-width: 0;
         overflow-x: hidden;
         overflow-y: hidden;
         color: var(--fg);
@@ -401,6 +401,34 @@
         min-width: 4.8rem;
       }
 
+      .player-logo-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 5px;
+        opacity: 0.78;
+        transition: background-color 120ms ease, opacity 120ms ease;
+      }
+
+      .player-logo-link:hover {
+        background: rgba(139, 124, 255, 0.12);
+        opacity: 1;
+      }
+
+      .player-logo-link:focus-visible {
+        outline: 2px solid var(--cue);
+        outline-offset: 2px;
+      }
+
+      .player-logo-link svg {
+        display: block;
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+
       #voice {
         flex: 0 0 auto;
         position: relative;
@@ -498,13 +526,8 @@
       .ansi-bright-white { color: #ffffff; }
 
       @media (max-width: 620px) {
-        .bar,
         .status {
           flex-wrap: wrap;
-        }
-
-        .narration {
-          flex-basis: 100%;
         }
 
         .progress-wrap {
@@ -517,6 +540,12 @@
   <body>
     <main class="player">
       <div class="bar">
+        <a class="player-logo-link" href="https://omegaflow.dev/" target="_blank" rel="noopener noreferrer" aria-label="Open the OmegaFlow website" title="OmegaFlow">
+          <svg viewBox="0 0 256 256" aria-hidden="true">
+            <path d="M34 205h64v-31c-29-13-47-39-47-71 0-46 33-79 77-79s77 33 77 79c0 32-18 58-47 71v31h64" fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="34"/>
+            <path d="m110 71 58 35-58 35z" fill="#ffc247"/>
+          </svg>
+        </a>
         <div class="narration" id="narration">Terminal recording</div>
       </div>
       <div class="stage">

@@ -34,6 +34,19 @@ def test_player_uses_night_studio_brand_without_replacing_ansi_colors() -> None:
     assert ".ansi-white { color: var(--ansi-white); }" in html
 
 
+def test_player_links_logo_in_a_separate_top_bar_column() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "grid-template-columns: 1.75rem minmax(0, 1fr);" in html
+    assert '<div class="bar">\n        <a class="player-logo-link"' in html
+    assert '</a>\n        <div class="narration"' in html
+    assert 'class="player-logo-link"' in html
+    assert 'href="https://omegaflow.dev/"' in html
+    assert 'aria-label="Open the OmegaFlow website"' in html
+
+
 def run_player_script(script_body: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:

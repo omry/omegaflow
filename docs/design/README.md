@@ -40,7 +40,8 @@ ANSI colors remain independent from the brand palette.
 - Website homepage: `website/static/img/omegaflow-mascot-camera.svg`.
 - Social metadata: `website/static/img/omegaflow-social.svg` is the editable
   source and `website/static/img/omegaflow-social.png` is the published card.
-- Recording player: the Night Studio interface palette in
-  `src/omegaflow/player/static/cast-player.html`. Keep the narration bar free
-  of branding elements so its responsive text layout retains the full width.
+- Recording player: the Night Studio interface palette and a linked logo in a
+  dedicated top-bar column in `src/omegaflow/player/static/cast-player.html`.
+  Keep the logo outside the scrolling narration element so responsive text
+  layout and scrolling remain independent.
 - GitHub and PyPI README: the canonical `docs/design/logo.svg` source asset.
