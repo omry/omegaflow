@@ -1675,6 +1675,44 @@
         return false;
       }
 
+      function ignoresPlaybackToggle(event) {
+        const target = event?.target;
+        if (!target) {
+          return false;
+        }
+        const tagName = String(target.tagName || '').toLowerCase();
+        return (
+          tagName === 'button' ||
+          tagName === 'a' ||
+          tagName === 'input' ||
+          tagName === 'textarea' ||
+          tagName === 'select' ||
+          Boolean(target.isContentEditable)
+        );
+      }
+
+      function handleKeyboardPlayback(event) {
+        if (
+          event.defaultPrevented ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          event.repeat ||
+          ignoresPlaybackToggle(event) ||
+          (event.key !== ' ' && event.code !== 'Space')
+        ) {
+          return false;
+        }
+        event.preventDefault();
+        togglePlayPause();
+        return true;
+      }
+
+      function handleKeyboardShortcut(event) {
+        return handleKeyboardSeek(event) || handleKeyboardPlayback(event);
+      }
+
       function progressValueSeconds() {
         return totalSeconds
           ? (Number(progress.value) / 1000) * totalSeconds
@@ -2375,7 +2413,7 @@
       progress.addEventListener('pointercancel', () => {
         scrubbing = false;
       });
-      document.addEventListener('keydown', handleKeyboardSeek);
+      document.addEventListener('keydown', handleKeyboardShortcut);
 
       updateTransportButtons();
 

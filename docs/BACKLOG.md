@@ -93,13 +93,6 @@ No active item.
       the current `$` behavior as the default; and add tests for a non-`$`
       prompt.
 
-- [ ] `P1` Let Space pause and resume terminal recording playback.
-      The embedded player should support the standard video-player keyboard
-      habit of toggling play/pause with Space. Acceptance checks: pressing Space
-      toggles playback when the player has focus; text inputs or other editable
-      controls are not hijacked; the visual play/pause affordance still appears;
-      and tests cover the keyboard behavior.
-
 - [ ] `P2` Avoid treating first focus-click as a playback toggle when possible.
       Clicking inside the video can move focus from the surrounding page into
       the embedded player. Ideally, that first focus click should not also pause
@@ -152,6 +145,12 @@ No active item.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Let Space pause and resume terminal recording playback.
+      Completed: `2026-07-13`. Space now toggles playback when the player surface
+      has focus, preserves native behavior for editable and interactive
+      controls, ignores modified or repeated shortcuts, and shows the existing
+      play/pause feedback. Added keyboard behavior tests.
 
 - [x] `P2` Create and integrate the OmegaFlow logo and mascot direction.
       Completed: `2026-07-12`. Added the Night Studio logo and mascot system,

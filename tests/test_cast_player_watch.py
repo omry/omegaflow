@@ -60,6 +60,7 @@ const path = require('path');
 const html = fs.readFileSync('src/omegaflow/player/static/cast-player.html', 'utf8');
 const scripts = [...html.matchAll(/<script(?:\s+src="([^"]+)")?\s*>([\s\S]*?)<\/script>/g)];
 const elements = new Map();
+const documentListeners = new Map();
 
 function element(id) {
   if (!elements.has(id)) {
@@ -122,7 +123,16 @@ const context = {
     title: '',
     getElementById: element,
     createElement: () => element(`created-${elements.size}`),
-    addEventListener() {},
+    addEventListener(type, listener) {
+      const listeners = documentListeners.get(type) || [];
+      listeners.push(listener);
+      documentListeners.set(type, listeners);
+    },
+    dispatchEvent(event) {
+      for (const listener of documentListeners.get(event.type) || []) {
+        listener(event);
+      }
+    },
   },
   fetch: () => new Promise(() => {}),
   Audio: function () {
@@ -299,6 +309,148 @@ narration.scrollTop = 20;
 updateNarrationScroll();
 if (narration.scrollTop !== 20) {
   console.error(JSON.stringify({scrollTop: narration.scrollTop}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_space_toggles_playback_and_shows_visual_feedback() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+events = [{time: 1, data: 'done'}];
+totalSeconds = 1;
+updateTransportButtons();
+let prevented = 0;
+const event = {
+  type: 'keydown',
+  key: ' ',
+  code: 'Space',
+  target: terminal,
+  defaultPrevented: false,
+  altKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  shiftKey: false,
+  repeat: false,
+  preventDefault() {
+    this.defaultPrevented = true;
+    prevented += 1;
+  },
+};
+document.dispatchEvent(event);
+if (
+  !playing ||
+  prevented !== 1 ||
+  playbackFlash.dataset.visible !== 'true' ||
+  playbackFlash.innerHTML !== icons.play
+) {
+  console.error(JSON.stringify({
+    phase: 'play',
+    playing,
+    prevented,
+    flashVisible: playbackFlash.dataset.visible,
+    flashIcon: playbackFlash.innerHTML,
+  }));
+  process.exit(1);
+}
+event.defaultPrevented = false;
+document.dispatchEvent(event);
+if (
+  playing ||
+  prevented !== 2 ||
+  playbackFlash.dataset.visible !== 'true' ||
+  playbackFlash.innerHTML !== icons.pause
+) {
+  console.error(JSON.stringify({
+    phase: 'pause',
+    playing,
+    prevented,
+    flashVisible: playbackFlash.dataset.visible,
+    flashIcon: playbackFlash.innerHTML,
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_space_does_not_hijack_editable_or_native_controls() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+events = [{time: 1, data: 'done'}];
+totalSeconds = 1;
+const targets = [
+  {tagName: 'input', isContentEditable: false},
+  {tagName: 'textarea', isContentEditable: false},
+  {tagName: 'select', isContentEditable: false},
+  {tagName: 'div', isContentEditable: true},
+  {tagName: 'button', isContentEditable: false},
+  {tagName: 'a', isContentEditable: false},
+];
+let prevented = 0;
+for (const target of targets) {
+  document.dispatchEvent({
+    type: 'keydown',
+    key: ' ',
+    code: 'Space',
+    target,
+    defaultPrevented: false,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    repeat: false,
+    preventDefault() { prevented += 1; },
+  });
+}
+if (playing || prevented !== 0) {
+  console.error(JSON.stringify({playing, prevented}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_space_ignores_modified_or_repeated_keydown() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+events = [{time: 1, data: 'done'}];
+totalSeconds = 1;
+const baseEvent = {
+  type: 'keydown',
+  key: ' ',
+  code: 'Space',
+  target: terminal,
+  defaultPrevented: false,
+  altKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  shiftKey: false,
+  repeat: false,
+};
+let prevented = 0;
+for (const property of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey', 'repeat']) {
+  document.dispatchEvent({
+    ...baseEvent,
+    [property]: true,
+    preventDefault() { prevented += 1; },
+  });
+}
+if (playing || prevented !== 0) {
+  console.error(JSON.stringify({playing, prevented}));
   process.exit(1);
 }
 `, context);
