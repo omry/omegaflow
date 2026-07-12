@@ -16,7 +16,6 @@ module.exports = {
         'tutorial/publishing',
       ],
     },
-    'configuration',
     {
       type: 'category',
       label: 'Recording Files',
@@ -30,7 +29,32 @@ module.exports = {
         'recording-files/publishing-runtime',
       ],
     },
-    'omegaflow',
+    {
+      type: 'category',
+      label: 'OmegaFlow CLI',
+      link: {
+        type: 'doc',
+        id: 'omegaflow',
+      },
+      items: [
+        'cli/command-syntax',
+        {
+          type: 'category',
+          label: 'Actions',
+          items: [
+            'cli/actions/build-check',
+            'cli/actions/bootstrap',
+            'cli/actions/watch-play',
+            'cli/actions/list-clean',
+            'cli/actions/runs-inspect-output',
+          ],
+        },
+        'configuration',
+        'cli/overrides-parameters',
+        'cli/runs-troubleshooting',
+        'cli/option-reference',
+      ],
+    },
     'video-output',
   ],
 };

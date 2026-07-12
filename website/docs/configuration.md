@@ -1,9 +1,8 @@
 ---
-sidebar_position: 3
-sidebar_label: OmegaFlow Configuration
+sidebar_label: Project Configuration
 ---
 
-# OmegaFlow Configuration
+# Project Configuration
 
 OmegaFlow configuration controls the `omegaflow` tool itself: where recording files
 live, where generated run state is written, which action runs by default, and
@@ -69,7 +68,11 @@ omegaflow recording=hello rec.capture.headless=false
 | `workspace` | Bootstrap-only destination for `action=bootstrap`; defaults to `studio.recording_dir`. |
 | `dry_run` | Preview without writing. For bootstrap, use `dry_run=true` to list generated files or `dry_run=diff` to show unified diffs. |
 | `rec` | Recording config overrides merged on top of the selected recording. CLI shorthand such as `rec.capture.headless=false` is supported. |
+| `script_params` | Values for parameters explicitly declared by the selected recording. |
 
 Recording defaults such as capture style, audio generation, publish surfaces,
 beats, setup, and cleanup belong in the recording workspace. See
 [Recording Configuration](./recording-files/config.md).
+
+For every CLI field and its action-specific meaning, see the
+[Complete Option Reference](./cli/option-reference.md).

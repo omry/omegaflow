@@ -1,162 +1,106 @@
 ---
-sidebar_position: 3
-sidebar_label: CLI
+sidebar_label: Overview
+slug: /omegaflow
 ---
 
 # OmegaFlow CLI
 
-OmegaFlow is the authoring tool and CLI for scripted terminal and video
-flows.
+The `omegaflow` command turns a versioned recording script into a terminal
+video, checks generated artifacts, opens local playback, and preserves runs for
+troubleshooting.
 
-The current package is `omegaflow`, and it installs an `omegaflow` command.
-The CLI composes recording configuration with [Hydra](https://hydra.cc/), runs
-scripted terminal actions, stores per-run artifacts, retimes casts for human
-playback, manages optional narration audio, and publishes website-ready outputs.
+Most commands have this shape:
 
-## Command shape
+```bash
+omegaflow recording=<id> [action=<action>] [option=value ...]
+```
 
-Most commands select a recording and an action:
+The default action is `build`:
+
+```bash
+omegaflow recording=quickstart-demo action=build
+```
+
+Because `build` is the default, `action=build` can be omitted:
 
 ```bash
 omegaflow recording=quickstart-demo
-omegaflow recording=quickstart-demo action=watch
-omegaflow recording=quickstart-demo rec.capture.headless=false
 ```
 
-When `action` is omitted, OmegaFlow builds the selected recording.
+## Main workflows
 
-## Tool functions
-
-| Action | Use it for |
+| Goal | Command |
 | --- | --- |
-| `bootstrap` | Create `.omegaflow/config.yaml`, a recording workspace, shared recording defaults, and a small quickstart recording. |
-| `list` | Show available recording ids. |
-| `build` | Record, generate audio when enabled, retime, check alignment, and publish configured surfaces. |
-| `check` | Validate whether the current recording inputs and generated outputs are fresh. |
-| `clean` | Remove generated artifacts for a recording. |
-| `watch` | Start a local browser player for the generated recording. |
-| `play` | Replay the terminal cast in the terminal. |
-| `runs` | List preserved runs for a recording. |
-| `inspect` | Open a postmortem shell for troubleshooting a preserved run. |
-| `output` | Show captured failure output for troubleshooting. |
+| Build a recording | `omegaflow recording=demo` |
+| Watch in a browser | `omegaflow recording=demo action=watch` |
+| Verify generated artifacts | `omegaflow recording=demo action=check` |
+| Play in the terminal | `omegaflow recording=demo action=play` |
+| Preview the build plan | `omegaflow recording=demo dry_run=true` |
+| Troubleshoot runs | `omegaflow action=runs` |
+| See available recordings | `omegaflow action=list` |
+| Create a starter workspace | `omegaflow action=bootstrap` |
 
-Use `dry_run=true` to preview build work without running commands. For
-bootstrap, `dry_run=true` lists generated files and `dry_run=diff` shows the
-generated output as a diff.
+`build` is the user-facing operation. It records the scripted terminal
+session, prepares optional narration, adjusts presentation timing, validates
+the result, and publishes the configured surfaces. Those processing stages are
+not separate public CLI actions.
 
-## Tool config
+## Configuration layers
 
-OmegaFlow has tool config and recording config. Tool config controls the CLI:
-which recording directory to use, where generated run state lives, how `.env`
-is loaded, and which one-off recording overrides are applied.
+OmegaFlow has two distinct configuration surfaces:
 
-### Local config
+- **Tool configuration** typically lives in `.omegaflow/config.yaml`. It
+  controls the CLI, project paths, environment loading, run retention, and
+  one-off overrides.
+- **Recording configuration** typically lives in `recordings/config.yaml` for
+  workspace defaults and `recordings/<id>/index.md` frontmatter for one
+  recording. It controls terminal capture, beats, narration, commands, audio,
+  outputs, and publishing.
 
-Project-local tool config lives here:
+See [Project Configuration](./configuration.md) and
+[Recording Configuration](./recording-files/config.md) for the two schemas.
 
-```text
-.omegaflow/
-  config.yaml
+## Recommended commit policy
+
+Commit the files that define reproducible recordings:
+
+- `.omegaflow/config.yaml`
+- `recordings/config.yaml`
+- `recordings/<id>/index.md` and supporting scripts
+- generated public assets when a publish surface intentionally writes to a
+  tracked website directory
+
+Ignore local runtime state and secrets. With the default paths, add:
+
+```gitignore
+# OmegaFlow runs, caches, and intermediate outputs
+/recordings/.omegaflow/
+
+# Local environment values and secrets
+.env
 ```
 
-Typical project config:
+If `studio.data_dir` points somewhere else, ignore that directory instead. Do
+not ignore `.omegaflow/` as a whole: that would also hide the project config
+that should normally be committed.
 
-```yaml
-studio:
-  recording_dir: recordings
-  data_dir: recordings/.omegaflow
-```
+## Reference map
 
-Use the file for project defaults that should be shared by everyone working in
-the repository. Use CLI overrides for one-off changes:
+- [Command Syntax](./cli/command-syntax.md) explains Hydra overrides, quoting,
+  recording selection, and defaults.
+- **Actions** documents every public action, grouped by workflow.
+- [Overrides and Script Parameters](./cli/overrides-parameters.md) covers
+  `rec.*` and `script_params.*`.
+- [Runs and Troubleshooting](./cli/runs-troubleshooting.md) explains preserved
+  run state and the failure investigation workflow.
+- [Complete Option Reference](./cli/option-reference.md) lists every top-level
+  CLI and `studio.*` field, including fields reserved for OmegaFlow's internal
+  build stages.
 
-```bash
-omegaflow action=list studio.recording_dir=demos
-omegaflow recording=hello rec.capture.headless=false
-```
-
-Most installations use OmegaFlow's bundled recorder, falling back to
-`asciinema` on `PATH`. Set `studio.asciinema_path` only when a project needs a
-specific asciinema 3.x binary:
-
-```yaml
-studio:
-  asciinema_path: /opt/asciinema/bin/asciinema
-```
-
-### Config fields
-
-Common tool fields:
-
-| Field | Purpose |
-| --- | --- |
-| `recording` | Selected recording id, such as `quickstart-demo` or `tutorial/install`. |
-| `action` | Tool function to run. Defaults to `build`. |
-| `studio.recording_dir` | Workspace containing `config.yaml` and one directory per recording. |
-| `studio.data_dir` | Generated run state, caches, and local outputs. |
-| `studio.asciinema_path` | Optional explicit asciinema 3.x binary path. OmegaFlow otherwise uses its bundled recorder when present, then `PATH`. |
-| `load_env_file` / `env_file` | Load process-level environment values before running actions. |
-| `rec` | Temporary recording config overrides merged after recording frontmatter. |
-| `script_params` | Values for parameters declared by a recording. |
-
-See [OmegaFlow Configuration](./configuration.md) for tool config details and
-[Recording Configuration](./recording-files/config.md) for recording
-frontmatter, workspace defaults, and `rec.*` overrides.
-
-## Recording scripts
-
-Recording scripts are Markdown files with `studio-directive` YAML blocks. The
-Markdown keeps the human-readable walkthrough close to the machine-readable
-instructions that build it.
-
-See [Recording Files](./recording-files/overview.md) for the frontmatter and
-`studio-directive` schema.
-
-A recording can define:
-
-- capture settings such as terminal size and headless mode
-- beats with captions, narration, commands, and guide text
-- output paths for casts, audio, and metadata
-- publish surfaces such as Docusaurus MDX or standalone HTML
-- retiming rules for typing speed and pauses
-- environment variables used while recording
-
-## Build pipeline
-
-```mermaid
-%%{init: {"themeVariables": {"fontSize": "18px"}}}%%
-flowchart TB
-    Script["Recording script<br/>Markdown + directives"]
-
-    Record["Record<br/>baseline cast + timeline"]
-    AudioGenerate["Generate audio<br/>cached TTS fragments"]
-    AudioPublish["Publish audio<br/>voiceover + timing metadata"]
-
-    Retime["Retime<br/>terminal cast + audio timing"]
-    Align["Check alignment<br/>before publishing"]
-    Publish["Publish<br/>Docusaurus MDX or HTML"]
-
-    Script --> Record
-    Script -. optional narration .-> AudioGenerate
-    AudioGenerate -. when audio is enabled .-> AudioPublish
-
-    Record --> Retime
-    AudioPublish -. timing metadata .-> Retime
-
-    Retime --> Align
-    Align --> Publish
-    AudioPublish -. voiceover asset .-> Publish
-
-    classDef main fill:#282a36,stroke:#8be9fd,stroke-width:2px,color:#f8f8f2
-    classDef optional fill:#1f2335,stroke:#6272a4,stroke-width:2px,color:#f8f8f2
-    class Script,Record,Retime,Align,Publish main
-    class AudioGenerate,AudioPublish optional
-```
-
-Audio steps are skipped when `audio.enabled: false`. Build reuses fresh
-artifacts when it can; use `action=check` separately to validate recording,
-audio, retiming, and alignment freshness.
+Use `omegaflow --help` to print the composed config and
+`omegaflow --hydra-help` for Hydra's own flags.
 
 ## Repository
 
-The source lives at [github.com/omry/omegaflow](https://github.com/omry/omegaflow).
+The source lives at
+[github.com/omry/omegaflow](https://github.com/omry/omegaflow).

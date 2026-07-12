@@ -60,7 +60,7 @@ const config = {
         },
         {
           to: '/omegaflow',
-          label: 'CLI',
+          label: 'OmegaFlow CLI',
           position: 'left',
         },
         {

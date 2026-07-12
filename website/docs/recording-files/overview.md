@@ -11,7 +11,7 @@ file you edit most is `<recording-dir>/<id>/index.md`: it is the source for
 one video. Recording ids can include nested directories, such as
 `tutorial/install`, which maps to
 `recordings/tutorial/install/index.md`. Projects that keep recordings
-somewhere else can set that in [OmegaFlow Configuration](../configuration.md).
+somewhere else can set that in [Project Configuration](../configuration.md).
 
 ```bash
 omegaflow action=bootstrap  # Create the default quickstart recording
@@ -95,4 +95,4 @@ scene:
 - [Recording Configuration](./config.md): schema defaults, workspace defaults, and frontmatter overrides.
 - [Beat](./beat.md): beat structure, actions, checks, commands, and guide prompts.
 - [Publishing And Runtime Output](./publishing-runtime.md): publish surfaces and generated files.
-- [OmegaFlow Configuration](../configuration.md): tool defaults such as the recording directory and runtime state directory.
+- [Project Configuration](../configuration.md): tool defaults such as the recording directory and runtime state directory.

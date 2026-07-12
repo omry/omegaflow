@@ -22,7 +22,7 @@ fields; they belong in frontmatter and are rejected in workspace `config.yaml`.
 
 This page starts after OmegaFlow has selected the recording workspace. Tool-level
 settings such as which directory to use are documented in
-[OmegaFlow Configuration](../configuration.md).
+[Project Configuration](../configuration.md).
 
 ## Command Line Overrides
 

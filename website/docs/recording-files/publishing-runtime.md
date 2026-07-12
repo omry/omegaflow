@@ -37,7 +37,7 @@ writes a complete HTML page containing the cast player.
 
 By default, OmegaFlow runtime files are generated under `recordings/.omegaflow/`.
 Projects can change this with `studio.data_dir` in
-[OmegaFlow Configuration](../configuration.md).
+[Project Configuration](../configuration.md).
 
 ```text
 recordings/.omegaflow/
