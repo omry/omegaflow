@@ -71,6 +71,11 @@ beat:
   caption: Install OmegaFlow in a Python environment.
   actions:
   - commands:
+    # The homepage video is built from the current checkout, which may be an
+    # unreleased version that cannot yet be installed from PyPI. The PATH
+    # wrapper verifies that this checkout imports, while the fake output shows
+    # the public installation command users should run after release. It does
+    # not claim to validate the published package.
     - id: install_command
       run: python -m pip install omegaflow
       display: python -m pip install omegaflow
@@ -154,6 +159,10 @@ beat:
   caption: Watch the generated video in your browser.
   actions:
   - commands:
+    # This recording is captured in a headless terminal session, so launching
+    # the browser would be an external GUI side effect that the cast cannot
+    # show. Bootstrap and build above are real; only this browser-launch action
+    # and its concise confirmation are staged for the terminal-only demo.
     - id: watch_command
       run: ":"
       display: omegaflow recording=quickstart action=watch
