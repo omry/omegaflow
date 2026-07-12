@@ -1,5 +1,5 @@
 {
-  "duration": 11.16,
+  "duration": 10.24,
   "recording": "quickstart-demo",
   "segment": "install",
   "source_text": "OmegaFlow turns scripted terminal workflows into rebuildable videos with generated voiceover. Install it in your project's Python environment. The omegaflow command is now ready.",
@@ -10,123 +10,123 @@
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.92,
+      "end": 0.58,
       "start": 0.0,
       "word": "Omegaflow"
     },
     {
-      "end": 1.42,
-      "start": 0.92,
+      "end": 1.02,
+      "start": 0.58,
       "word": "turns"
     },
     {
-      "end": 2.08,
-      "start": 1.42,
+      "end": 1.6,
+      "start": 1.02,
       "word": "scripted"
     },
     {
-      "end": 2.4,
-      "start": 2.08,
+      "end": 1.84,
+      "start": 1.6,
       "word": "terminal"
     },
     {
-      "end": 2.88,
-      "start": 2.4,
+      "end": 2.3,
+      "start": 1.84,
       "word": "workflows"
     },
     {
-      "end": 3.28,
-      "start": 2.88,
+      "end": 2.66,
+      "start": 2.3,
       "word": "into"
     },
     {
-      "end": 3.92,
-      "start": 3.28,
+      "end": 3.22,
+      "start": 2.66,
       "word": "rebuildable"
     },
     {
-      "end": 4.26,
-      "start": 3.92,
+      "end": 3.58,
+      "start": 3.22,
       "word": "videos"
     },
     {
-      "end": 4.6,
-      "start": 4.26,
+      "end": 4.1,
+      "start": 3.58,
       "word": "with"
     },
     {
-      "end": 5.04,
-      "start": 4.6,
+      "end": 4.6,
+      "start": 4.1,
       "word": "generated"
     },
     {
-      "end": 5.64,
-      "start": 5.04,
+      "end": 5.18,
+      "start": 4.6,
       "word": "voiceover"
     },
     {
-      "end": 6.62,
-      "start": 6.62,
+      "end": 6.24,
+      "start": 6.24,
       "word": "Install"
     },
     {
-      "end": 6.8,
-      "start": 6.62,
+      "end": 6.4,
+      "start": 6.24,
       "word": "it"
     },
     {
-      "end": 6.94,
-      "start": 6.8,
+      "end": 6.54,
+      "start": 6.4,
       "word": "in"
     },
     {
-      "end": 7.06,
-      "start": 6.94,
+      "end": 6.66,
+      "start": 6.54,
       "word": "your"
     },
     {
-      "end": 7.88,
-      "start": 7.06,
+      "end": 7.22,
+      "start": 6.66,
       "word": "project's"
     },
     {
-      "end": 7.9,
-      "start": 7.88,
+      "end": 7.4,
+      "start": 7.22,
       "word": "Python"
     },
     {
-      "end": 8.42,
-      "start": 7.9,
+      "end": 7.88,
+      "start": 7.4,
       "word": "environment"
     },
     {
-      "end": 9.24,
-      "start": 9.04,
+      "end": 8.6,
+      "start": 8.42,
       "word": "The"
     },
     {
-      "end": 9.7,
-      "start": 9.24,
+      "end": 9.0,
+      "start": 8.6,
       "word": "Omegaflow"
     },
     {
-      "end": 10.08,
-      "start": 9.7,
+      "end": 9.4,
+      "start": 9.0,
       "word": "command"
     },
     {
-      "end": 10.38,
-      "start": 10.08,
+      "end": 9.66,
+      "start": 9.4,
       "word": "is"
     },
     {
-      "end": 10.8,
-      "start": 10.38,
+      "end": 10.04,
+      "start": 9.66,
       "word": "now"
     },
     {
-      "end": 10.9,
-      "start": 10.8,
+      "end": 10.1,
+      "start": 10.04,
       "word": "ready"
     }
   ]

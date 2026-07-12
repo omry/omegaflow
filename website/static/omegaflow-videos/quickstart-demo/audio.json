@@ -1,6 +1,6 @@
 {
   "audio": "website/static/omegaflow-videos/quickstart-demo/audio.mp3",
-  "duration": 43.224,
+  "duration": 43.968,
   "recording": "quickstart-demo",
   "segments": [
     {
@@ -11,7 +11,7 @@
           "text_offset": 93
         }
       ],
-      "duration": 11.16,
+      "duration": 10.248,
       "guide": {
         "commands": [
           "python -m pip install omegaflow"
@@ -25,12 +25,12 @@
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.install.timestamps.json",
       "waits": [
         {
-          "audio_second": 8.42,
+          "audio_second": 7.88,
           "gap_seconds": 0.2,
           "marker": "@wait:install_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 8.737,
-          "presentation_start": 8.737,
+          "presentation_end": 8.187,
+          "presentation_start": 8.187,
           "target": "install_command",
           "text_offset": 142
         }
@@ -44,7 +44,7 @@
           "text_offset": 26
         }
       ],
-      "duration": 8.16,
+      "duration": 9.048,
       "guide": {
         "commands": [
           "omegaflow action=bootstrap"
@@ -53,17 +53,17 @@
       },
       "heading": "Bootstrap Quickstart",
       "id": "bootstrap",
-      "offset": 11.16,
+      "offset": 10.248,
       "text": "From your repository root, run bootstrap once. It creates the recording workspace and a small quickstart example you can keep with your code.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.bootstrap.timestamps.json",
       "waits": [
         {
-          "audio_second": 3.0,
+          "audio_second": 3.3,
           "gap_seconds": 0.2,
           "marker": "@wait:bootstrap_run+200ms@",
-          "pause_seconds": 0.68,
-          "presentation_end": 15.157,
-          "presentation_start": 14.477,
+          "pause_seconds": 0.74,
+          "presentation_end": 14.595,
+          "presentation_start": 13.855,
           "target": "bootstrap_run",
           "text_offset": 46
         }
@@ -77,7 +77,7 @@
           "text_offset": 0
         }
       ],
-      "duration": 10.8,
+      "duration": 11.808,
       "guide": {
         "commands": [
           "omegaflow recording=quickstart"
@@ -86,17 +86,17 @@
       },
       "heading": "Build The Video",
       "id": "build",
-      "offset": 19.32,
+      "offset": 19.296,
       "text": "Build the quickstart recording. OmegaFlow runs the scripted workflow, synchronizes it with the narration, and writes a ready-to-watch video. The output shows where it was published.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.build.timestamps.json",
       "waits": [
         {
-          "audio_second": 8.18,
+          "audio_second": 8.7,
           "gap_seconds": 0.2,
           "marker": "@wait:build_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 28.497,
-          "presentation_start": 28.497,
+          "presentation_end": 29.043,
+          "presentation_start": 29.043,
           "target": "build_command",
           "text_offset": 140
         }
@@ -110,7 +110,7 @@
           "text_offset": 21
         }
       ],
-      "duration": 13.104,
+      "duration": 12.864,
       "guide": {
         "commands": [
           "omegaflow recording=quickstart action=watch"
@@ -119,17 +119,17 @@
       },
       "heading": "Watch The Result",
       "id": "view-and-publish",
-      "offset": 30.12,
+      "offset": 31.104,
       "text": "To review the result, run the watch command. OmegaFlow opens the recording in your browser exactly as viewers will see it. Keep the script with your code, rebuild it when the workflow changes, and publish the video with your docs.",
       "timestamps": "website/static/omegaflow-videos/quickstart-demo/quickstart-demo.view-and-publish.timestamps.json",
       "waits": [
         {
-          "audio_second": 7.06,
+          "audio_second": 7.12,
           "gap_seconds": 0.2,
           "marker": "@wait:watch_command+200ms@",
           "pause_seconds": 0.0,
-          "presentation_end": 38.177,
-          "presentation_start": 38.177,
+          "presentation_end": 39.271,
+          "presentation_start": 39.271,
           "target": "watch_command",
           "text_offset": 122
         }

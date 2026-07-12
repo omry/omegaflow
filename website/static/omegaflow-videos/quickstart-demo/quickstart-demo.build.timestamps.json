@@ -1,5 +1,5 @@
 {
-  "duration": 10.8,
+  "duration": 11.8,
   "recording": "quickstart-demo",
   "segment": "build",
   "source_text": "Build the quickstart recording. OmegaFlow runs the scripted workflow, synchronizes it with the narration, and writes a ready-to-watch video. The output shows where it was published.",
@@ -10,153 +10,153 @@
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.46,
+      "end": 0.54,
       "start": 0.0,
       "word": "Build"
     },
     {
-      "end": 0.68,
-      "start": 0.46,
+      "end": 0.98,
+      "start": 0.54,
       "word": "the"
     },
     {
-      "end": 1.02,
-      "start": 0.68,
+      "end": 1.22,
+      "start": 0.98,
       "word": "quick"
     },
     {
-      "end": 1.18,
-      "start": 1.02,
+      "end": 1.44,
+      "start": 1.22,
       "word": "start"
     },
     {
-      "end": 1.7,
-      "start": 1.18,
+      "end": 1.98,
+      "start": 1.44,
       "word": "recording"
     },
     {
-      "end": 2.54,
-      "start": 2.3,
+      "end": 3.0,
+      "start": 2.76,
       "word": "Omega"
     },
     {
-      "end": 2.74,
-      "start": 2.54,
+      "end": 3.24,
+      "start": 3.0,
       "word": "Flow"
     },
     {
-      "end": 3.12,
-      "start": 2.74,
+      "end": 3.62,
+      "start": 3.24,
       "word": "runs"
     },
     {
-      "end": 3.4,
-      "start": 3.12,
+      "end": 3.92,
+      "start": 3.62,
       "word": "the"
     },
     {
-      "end": 3.82,
-      "start": 3.4,
+      "end": 4.36,
+      "start": 3.92,
       "word": "scripted"
     },
     {
-      "end": 4.12,
-      "start": 3.82,
+      "end": 4.64,
+      "start": 4.36,
       "word": "workflow"
     },
     {
-      "end": 5.24,
-      "start": 4.92,
+      "end": 5.82,
+      "start": 5.5,
       "word": "synchronizes"
     },
     {
-      "end": 5.4,
-      "start": 5.24,
+      "end": 5.98,
+      "start": 5.82,
       "word": "it"
     },
     {
-      "end": 5.54,
-      "start": 5.4,
+      "end": 6.12,
+      "start": 5.98,
       "word": "with"
     },
     {
-      "end": 6.02,
-      "start": 5.54,
+      "end": 6.3,
+      "start": 6.12,
       "word": "the"
     },
     {
-      "end": 6.02,
-      "start": 6.02,
+      "end": 6.6,
+      "start": 6.3,
       "word": "narration"
     },
     {
-      "end": 6.74,
-      "start": 6.52,
+      "end": 7.5,
+      "start": 7.14,
       "word": "and"
     },
     {
-      "end": 6.92,
-      "start": 6.74,
+      "end": 7.5,
+      "start": 7.5,
       "word": "writes"
     },
     {
-      "end": 7.26,
-      "start": 6.92,
+      "end": 7.84,
+      "start": 7.5,
       "word": "a"
     },
     {
-      "end": 7.44,
-      "start": 7.26,
+      "end": 8.02,
+      "start": 7.84,
       "word": "ready"
     },
     {
-      "end": 7.56,
-      "start": 7.44,
+      "end": 8.12,
+      "start": 8.02,
       "word": "to"
     },
     {
-      "end": 7.84,
-      "start": 7.56,
+      "end": 8.4,
+      "start": 8.12,
       "word": "watch"
     },
     {
-      "end": 8.18,
-      "start": 7.84,
+      "end": 8.7,
+      "start": 8.4,
       "word": "video"
     },
     {
-      "end": 8.92,
-      "start": 8.74,
+      "end": 9.36,
+      "start": 9.18,
       "word": "The"
     },
     {
-      "end": 9.18,
-      "start": 8.92,
+      "end": 9.66,
+      "start": 9.36,
       "word": "output"
     },
     {
-      "end": 9.58,
-      "start": 9.18,
+      "end": 10.02,
+      "start": 9.66,
       "word": "shows"
     },
     {
-      "end": 9.88,
-      "start": 9.58,
+      "end": 10.28,
+      "start": 10.02,
       "word": "where"
     },
     {
-      "end": 9.96,
-      "start": 9.88,
+      "end": 10.36,
+      "start": 10.28,
       "word": "it"
     },
     {
-      "end": 10.2,
-      "start": 9.96,
+      "end": 10.6,
+      "start": 10.36,
       "word": "was"
     },
     {
-      "end": 10.48,
-      "start": 10.2,
+      "end": 10.9,
+      "start": 10.6,
       "word": "published"
     }
   ]

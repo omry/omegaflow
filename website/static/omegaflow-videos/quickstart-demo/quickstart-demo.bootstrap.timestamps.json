@@ -1,127 +1,132 @@
 {
-  "duration": 8.16,
+  "duration": 9.04,
   "recording": "quickstart-demo",
   "segment": "bootstrap",
   "source_text": "From your repository root, run bootstrap once. It creates the recording workspace and a small quickstart example you can keep with your code.",
   "timestamp_granularities": [
     "word"
   ],
-  "transcript": "From your repository root, run bootstrap once. It creates the recording workspace and a small quickstart example you can keep with your code.",
+  "transcript": "From your repository root, run bootstrap once. It creates the recording workspace and a small quick start example you can keep with your code.",
   "transcription_model": "whisper-1",
   "words": [
     {
-      "end": 0.32,
+      "end": 0.38,
       "start": 0.0,
       "word": "From"
     },
     {
-      "end": 0.54,
-      "start": 0.32,
+      "end": 0.68,
+      "start": 0.38,
       "word": "your"
     },
     {
-      "end": 1.04,
-      "start": 0.54,
+      "end": 1.28,
+      "start": 0.68,
       "word": "repository"
     },
     {
-      "end": 1.44,
-      "start": 1.04,
+      "end": 1.68,
+      "start": 1.28,
       "word": "root"
     },
     {
-      "end": 2.1,
-      "start": 1.98,
+      "end": 2.42,
+      "start": 2.34,
       "word": "run"
     },
     {
-      "end": 2.62,
-      "start": 2.1,
+      "end": 2.94,
+      "start": 2.42,
       "word": "bootstrap"
     },
     {
-      "end": 3.0,
-      "start": 2.62,
+      "end": 3.3,
+      "start": 2.94,
       "word": "once"
     },
     {
-      "end": 3.56,
-      "start": 3.52,
+      "end": 3.94,
+      "start": 3.84,
       "word": "It"
     },
     {
-      "end": 3.88,
-      "start": 3.56,
+      "end": 4.32,
+      "start": 3.94,
       "word": "creates"
     },
     {
-      "end": 4.1,
-      "start": 3.88,
+      "end": 4.54,
+      "start": 4.32,
       "word": "the"
     },
     {
-      "end": 4.5,
-      "start": 4.1,
+      "end": 4.94,
+      "start": 4.54,
       "word": "recording"
     },
     {
-      "end": 5.04,
-      "start": 4.5,
+      "end": 5.46,
+      "start": 4.94,
       "word": "workspace"
     },
     {
-      "end": 5.5,
-      "start": 5.04,
+      "end": 5.96,
+      "start": 5.46,
       "word": "and"
     },
     {
-      "end": 5.7,
-      "start": 5.5,
+      "end": 6.16,
+      "start": 5.96,
       "word": "a"
     },
     {
-      "end": 5.96,
-      "start": 5.7,
+      "end": 6.48,
+      "start": 6.16,
       "word": "small"
     },
     {
-      "end": 6.34,
-      "start": 5.96,
-      "word": "quickstart"
+      "end": 6.78,
+      "start": 6.48,
+      "word": "quick"
     },
     {
-      "end": 6.7,
-      "start": 6.34,
+      "end": 6.9,
+      "start": 6.78,
+      "word": "start"
+    },
+    {
+      "end": 7.28,
+      "start": 6.9,
       "word": "example"
     },
     {
-      "end": 6.92,
-      "start": 6.7,
+      "end": 7.7,
+      "start": 7.28,
       "word": "you"
     },
     {
-      "end": 7.12,
-      "start": 6.92,
+      "end": 7.88,
+      "start": 7.7,
       "word": "can"
     },
     {
-      "end": 7.32,
-      "start": 7.12,
+      "end": 8.06,
+      "start": 7.88,
       "word": "keep"
     },
     {
-      "end": 7.52,
-      "start": 7.32,
+      "end": 8.24,
+      "start": 8.06,
       "word": "with"
     },
     {
-      "end": 7.66,
-      "start": 7.52,
+      "end": 8.4,
+      "start": 8.24,
       "word": "your"
     },
     {
-      "end": 7.92,
-      "start": 7.66,
+      "end": 8.6,
+      "start": 8.4,
       "word": "code"
     }
   ]
