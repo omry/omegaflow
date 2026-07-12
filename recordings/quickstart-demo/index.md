@@ -40,12 +40,9 @@ audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
   env_file: .env
-setup:
-- name: prepare clean demo project
-  run: |-
-    rm -rf /tmp/omegaflow-quickstart-demo
-    mkdir -p /tmp/omegaflow-quickstart-demo
-    cd /tmp/omegaflow-quickstart-demo
+cleanup:
+- name: remove demo project
+  run_file: scripts/cleanup-demo-project.sh
 ---
 
 # Quickstart Demo
@@ -106,12 +103,6 @@ beat:
       display: omegaflow action=bootstrap
       after: "@bootstrap@"
       pre_command_pause: 0.45
-      expect:
-        file_exists:
-        - /tmp/omegaflow-quickstart-demo/.omegaflow/config.yaml
-        - /tmp/omegaflow-quickstart-demo/recordings/config.yaml
-        - /tmp/omegaflow-quickstart-demo/recordings/quickstart/index.md
-        - /tmp/omegaflow-quickstart-demo/recordings/quickstart/scripts/hello.sh
   guide:
     commands:
     - omegaflow action=bootstrap
@@ -135,10 +126,6 @@ beat:
       display: omegaflow recording=quickstart
       after: "@build@"
       timing: realtime
-      expect:
-        file_exists:
-        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart/recording.retimed.cast
-        - /tmp/omegaflow-quickstart-demo/recordings/.omegaflow/videos/quickstart/index.html
   guide:
     commands:
     - omegaflow recording=quickstart

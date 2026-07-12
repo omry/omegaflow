@@ -2,15 +2,19 @@
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "2b881c08b95a76177ab92bbaece0b6e8665d91120e964ecee08cf5e329d805fd"
+      "sha256": "c73f4f30778b9c73c0673e6cc3492416120a428f4752409a9a7fabfb5ae2fca7"
     },
     {
       "path": "recordings/quickstart-demo/scripts/build-demo-project.sh",
-      "sha256": "92d565e9ef935588b8179b29be22bf0001b5cfa4020adaad39e3c703a30c1615"
+      "sha256": "ef215fc6bced17cf372e2c2ecf384e8b092a2b22bee1b46ab7fc4f9fa744503d"
+    },
+    {
+      "path": "recordings/quickstart-demo/scripts/cleanup-demo-project.sh",
+      "sha256": "dd283869162ffc6f5b0c603eba66739106b7da5f75feefcdd685adc85f289490"
     },
     {
       "path": "recordings/quickstart-demo/scripts/create-demo-project.sh",
-      "sha256": "0e66bbd20dd35cf3d9defefbb67f1334c59e36bcf5cd4748a93c06b85afaf557"
+      "sha256": "7ef466b495dd409dfc41012ede0a4f3ba914fa697d0e40a5353addb77bbf0d49"
     },
     {
       "path": "src/omegaflow/record.py",
@@ -25,8 +29,8 @@
       "sha256": "8dadc067b6fac52ea585eb557d84bc6b21189785b7ef4b3a59f3e41562332915"
     }
   ],
-  "fingerprint": "8fe1cf4cccba6ff68c079391ca628ff27eb8f758e53e5c6dc59732d254e7aec1",
+  "fingerprint": "67197b7c2ebc77a1483bd4191770dfc7c9ca4fb895b14cd1e3656b934060b93c",
   "recording": "quickstart-demo",
-  "spec_sha256": "9a44c74a1e5c93426c2b3b7eae57792f92736e72612ea7406574de7ff79ba1d0",
+  "spec_sha256": "e20a29b2f8f8bf8ef15f5e6b4cb985a264e21236d60b3308d4067f035966d699",
   "version": 2
 }
