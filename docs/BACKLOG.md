@@ -113,15 +113,27 @@ No active item.
 
 ## Post-release
 
-- [ ] Explore Reploy-backed recording environments without replacing local
-      mode. Reploy can give OmegaFlow a reproducible recording environment with
-      `asciinema` and other demo dependencies, but it also brings a Docker-backed
-      workflow that may be too heavy for many projects. Acceptance checks:
-      design an optional Reploy blueprint or environment path for managed
-      recording dependencies; keep the current lightweight local mode fully
-      supported; make mode selection explicit in tool config and CLI output;
-      document when to use managed versus local recording; and ensure
-      missing-dependency errors remain clear in local mode.
+- [ ] Explore Reploy-backed recording and processing environments without
+      replacing local mode. Reploy could provide two complementary isolation
+      layers: a reusable processing environment containing OmegaFlow,
+      `asciinema`, Chromium, fonts, `ffmpeg`, and `ffprobe`; and a clean,
+      disposable environment per recording containing the demo's declared
+      dependencies, persistent recording shell, and only the minimal injected
+      recorder tooling needed by the selected backend. Evaluate one-shot
+      processing for CI and release builds plus reusable sessions for local
+      iteration.
+      Acceptance checks: define the artifact boundary between the environments,
+      including casts, timelines, narration, logs, failure metadata, and
+      published video; evaluate whether a Reploy processing environment can
+      safely create and control a nested Reploy recording environment; define a
+      non-nested controller/worker fallback if nesting is unavailable; compare
+      recording a remote PTY with copying a platform-compatible `asciinema`
+      binary and minimal OmegaFlow runner into the recording environment; keep
+      the current lightweight local mode fully supported; avoid requiring broad
+      Docker-socket access where a narrower Reploy API is available; make mode
+      and lifecycle selection explicit in tool config and CLI output; document
+      when to use managed versus local execution; and keep missing-dependency
+      errors clear in local mode.
 
 - [ ] Decide the Windows support shape.
       Native Windows cannot currently record terminal sessions through
