@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OmegaFlow mascot</title>
+  <desc id="desc">A minimal friendly mascot made from the Night Studio OmegaFlow logo.</desc>
+  <path d="M67 410h129v-62c-58-26-94-78-94-142 0-92 66-158 154-158s154 66 154 158c0 64-36 116-94 142v62h129"
+        fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="68"/>
+  <circle cx="256" cy="205" r="84" fill="#10131a"/>
+  <ellipse cx="220" cy="181" rx="17" ry="21" fill="#f5f6fa"/>
+  <ellipse cx="292" cy="181" rx="17" ry="21" fill="#f5f6fa"/>
+  <circle cx="224" cy="185" r="8" fill="#10131a"/>
+  <circle cx="296" cy="185" r="8" fill="#10131a"/>
+  <path d="m232 215 48 29-48 29z" fill="#ffc247"/>
+</svg>
