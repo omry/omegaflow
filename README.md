@@ -1,5 +1,9 @@
 # OmegaFlow
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/omry/omegaflow/main/docs/design/logo.svg" width="112" alt="OmegaFlow logo" />
+</p>
+
 [![PyPI version](https://badge.fury.io/py/omegaflow.svg)](https://badge.fury.io/py/omegaflow)
 [![Downloads](https://pepy.tech/badge/omegaflow/month)](https://pepy.tech/project/omegaflow)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)

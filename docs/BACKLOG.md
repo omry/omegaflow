@@ -26,14 +26,7 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-- [ ] `P2` Create an OmegaFlow logo and mascot direction.
-      The website currently relies on text-only branding, which makes the
-      navbar and public package surfaces feel unfinished. Acceptance checks:
-      propose a small set of logo/mascot concepts that fit rebuildable terminal
-      demos and generated voiceover; choose one direction; create source assets
-      for the website navbar, docs favicon/social preview, and README/PyPI
-      surfaces; verify the mark works on dark backgrounds and at small sizes;
-      and document basic usage so future pages stay visually consistent.
+No active item.
 
 ## Release backlog
 
@@ -147,6 +140,11 @@ server, client, plugin, deployment, and product-security work.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P2` Create and integrate the OmegaFlow logo and mascot direction.
+      Completed: `2026-07-12`. Added the Night Studio logo and mascot system,
+      integrated it into the website navbar, favicon, homepage, social metadata,
+      README/PyPI surface, and recording player, and documented usage.
 
 - [x] `P1` Document narration anchors, command `after`, and audio wait markers.
       Completed: `2026-07-12`. Added a complete synchronization example and

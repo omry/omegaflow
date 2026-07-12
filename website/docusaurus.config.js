@@ -32,6 +32,7 @@ const config = {
   ],
   themes: ['@docusaurus/theme-mermaid'],
   themeConfig: {
+    image: 'img/omegaflow-social.png',
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: true,
@@ -44,7 +45,7 @@ const config = {
       title: 'OmegaFlow',
       logo: {
         alt: 'OmegaFlow mark',
-        src: 'img/omegaflow-mascot.svg',
+        src: 'img/omegaflow-logo.svg',
       },
       items: [
         {
@@ -71,34 +72,6 @@ const config = {
     },
     footer: {
       style: 'dark',
-      links: [
-        {
-          title: 'Project',
-          items: [
-            {
-              label: 'Repository',
-              href: 'https://github.com/omry/omegaflow',
-            },
-            {
-              label: 'Quick Start',
-              to: '/quick-start',
-            },
-          ],
-        },
-        {
-          title: 'Reference',
-          items: [
-            {
-              label: 'OmegaFlow',
-              to: '/omegaflow',
-            },
-            {
-              label: 'Video Output',
-              to: '/video-output',
-            },
-          ],
-        },
-      ],
       copyright: `Copyright © ${new Date().getFullYear()} OmegaFlow.`,
     },
   },

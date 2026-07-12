@@ -32,3 +32,15 @@ ANSI colors remain independent from the brand palette.
 - Add at most one expression or one prop to the canonical mascot.
 - Do not add gradients or additional accent colors inside the mark.
 - Do not let a mascot prop compete with the amber play cue.
+
+## Integrated Surfaces
+
+- Website navbar and favicon: `website/static/img/omegaflow-logo.svg` and
+  `website/static/img/favicon.svg`.
+- Website homepage: `website/static/img/omegaflow-mascot-camera.svg`.
+- Social metadata: `website/static/img/omegaflow-social.svg` is the editable
+  source and `website/static/img/omegaflow-social.png` is the published card.
+- Recording player: the Night Studio interface palette in
+  `src/omegaflow/player/static/cast-player.html`. Keep the narration bar free
+  of branding elements so its responsive text layout retains the full width.
+- GitHub and PyPI README: the canonical `docs/design/logo.svg` source asset.

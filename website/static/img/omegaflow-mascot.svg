@@ -1,26 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">OmegaFlow mark</title>
-  <desc id="desc">A terminal prompt flowing into a video playhead.</desc>
-  <defs>
-    <linearGradient id="rail" x1="70" x2="190" y1="154" y2="154" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#66d9c8"/>
-      <stop offset="1" stop-color="#6eb6ff"/>
-    </linearGradient>
-    <filter id="shadow" x="24" y="34" width="208" height="190" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="14" flood-color="#000000" flood-opacity=".3" stdDeviation="11"/>
-    </filter>
-  </defs>
-
-  <g filter="url(#shadow)">
-    <rect x="34" y="52" width="188" height="152" rx="30" fill="#101418" stroke="#4fb7a8" stroke-width="10"/>
-    <path d="M60 88h136" stroke="#2c3944" stroke-linecap="round" stroke-width="8"/>
-
-    <path d="M73 112l29 22-29 22" fill="none" stroke="#66d9c8" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
-    <path d="M116 134h38" stroke="#d8e0e8" stroke-linecap="round" stroke-width="10"/>
-
-    <path d="M168 112l35 22-35 22z" fill="#6eb6ff"/>
-    <path d="M66 178h92" stroke="url(#rail)" stroke-linecap="round" stroke-width="10"/>
-    <path d="M158 178h32" stroke="#2c3944" stroke-linecap="round" stroke-width="10"/>
-    <circle cx="158" cy="178" r="10" fill="#e8edf2"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OmegaFlow mascot</title>
+  <desc id="desc">A minimal friendly mascot made from the Night Studio OmegaFlow logo.</desc>
+  <path d="M67 410h129v-62c-58-26-94-78-94-142 0-92 66-158 154-158s154 66 154 158c0 64-36 116-94 142v62h129"
+        fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="68"/>
+  <circle cx="256" cy="205" r="84" fill="#10131a"/>
+  <ellipse cx="220" cy="181" rx="17" ry="21" fill="#f5f6fa"/>
+  <ellipse cx="292" cy="181" rx="17" ry="21" fill="#f5f6fa"/>
+  <circle cx="224" cy="185" r="8" fill="#10131a"/>
+  <circle cx="296" cy="185" r="8" fill="#10131a"/>
+  <path d="m232 215 48 29-48 29z" fill="#ffc247"/>
 </svg>

@@ -10,6 +10,30 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_published_player_matches_packaged_player() -> None:
+    packaged = REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    published = REPO_ROOT / "website/static/cast-player.html"
+
+    assert published.read_bytes() == packaged.read_bytes()
+
+
+def test_player_uses_night_studio_brand_without_replacing_ansi_colors() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "--brand: #8b7cff" in html
+    assert "--cue: #ffc247" in html
+    assert "--ansi-white: #f8f8f2" in html
+    assert 'class="player-brand"' not in html
+    assert "linear-gradient(90deg, var(--brand), var(--cue))" in html
+    assert "#play {" in html
+    assert "background: var(--cue);" in html
+    assert ".ansi-green { color: var(--green); }" in html
+    assert ".ansi-cyan { color: var(--cyan); }" in html
+    assert ".ansi-white { color: var(--ansi-white); }" in html
+
+
 def run_player_script(script_body: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:
@@ -231,6 +255,37 @@ if (
   audioPlaybackSegments[0].presentationStart !== 0.2
 ) {
   console.error(JSON.stringify({audioPlaybackSegments}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_narration_scroll_uses_position_relative_to_narration_box() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+const currentWord = {
+  offsetTop: 100,
+  getBoundingClientRect() { return {top: 100}; },
+};
+narration.clientHeight = 40;
+narration.scrollHeight = 100;
+narration.scrollTop = 0;
+narration.getBoundingClientRect = () => ({top: 100});
+narration.querySelector = () => currentWord;
+updateNarrationScroll();
+if (narration.scrollTop !== 0) {
+  console.error(JSON.stringify({scrollTop: narration.scrollTop}));
+  process.exit(1);
+}
+narration.scrollTop = 20;
+updateNarrationScroll();
+if (narration.scrollTop !== 20) {
+  console.error(JSON.stringify({scrollTop: narration.scrollTop}));
   process.exit(1);
 }
 `, context);

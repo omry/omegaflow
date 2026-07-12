@@ -7,12 +7,15 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #282a36;
-        --panel: #1f2130;
-        --voiceover-panel: #252d3d;
-        --fg: #f8f8f2;
-        --muted: #b9bed6;
-        --border: #44475a;
+        --bg: #10131a;
+        --panel: #19202c;
+        --voiceover-panel: #151a24;
+        --fg: #f5f6fa;
+        --muted: #b9c0cf;
+        --border: #3a4355;
+        --brand: #8b7cff;
+        --cue: #ffc247;
+        --ansi-white: #f8f8f2;
         --cyan: #8be9fd;
         --green: #50fa7b;
         --pink: #ff79c6;
@@ -80,7 +83,7 @@
       }
 
       .narration-word.current {
-        background: rgba(139, 233, 253, 0.18);
+        background: rgba(139, 124, 255, 0.2);
         color: var(--fg);
       }
 
@@ -94,7 +97,7 @@
         border: 1px solid var(--border);
         border-radius: 6px;
         padding: 0.3rem 0.65rem;
-        background: #343746;
+        background: #252d3d;
         color: var(--fg);
         cursor: pointer;
         font: inherit;
@@ -102,7 +105,11 @@
       }
 
       button:hover {
-        border-color: var(--cyan);
+        border-color: var(--brand);
+      }
+
+      #play {
+        color: var(--cue);
       }
 
       button:disabled {
@@ -132,8 +139,8 @@
       }
 
       .icon-button[data-active="true"] {
-        border-color: var(--cyan);
-        color: var(--cyan);
+        border-color: var(--brand);
+        color: var(--brand);
       }
 
       .transport {
@@ -236,7 +243,7 @@
 
       .guide-title {
         margin: 0 0 0.45rem;
-        color: var(--cyan);
+        color: var(--brand);
         cursor: move;
         font-size: 1rem;
         user-select: none;
@@ -253,7 +260,7 @@
         border: 1px solid var(--border);
         border-radius: 6px;
         padding: 0.75rem;
-        background: #191a24;
+        background: #0c0f15;
         color: var(--fg);
         font: 0.9rem/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
           monospace;
@@ -288,9 +295,9 @@
         border: 0;
         border-radius: 999px;
         background:
-          linear-gradient(90deg, var(--cyan), var(--green)) 0 / var(--position) 100%
+          linear-gradient(90deg, var(--brand), var(--cue)) 0 / var(--position) 100%
             no-repeat,
-          #191a24;
+          #0c0f15;
         cursor: pointer;
         appearance: none;
       }
@@ -348,7 +355,7 @@
       .section-marker.debug {
         width: 1px;
         height: 0.52rem;
-        background: var(--cyan);
+        background: var(--brand);
         opacity: 0.58;
         box-shadow: 0 0 0 1px rgba(25, 26, 36, 0.75);
       }
@@ -356,13 +363,13 @@
       .section-marker.active {
         width: 3px;
         height: 1.1rem;
-        background: var(--green);
+        background: var(--cue);
       }
 
       .section-marker.debug.active {
         width: 2px;
         height: 0.86rem;
-        background: var(--cyan);
+        background: var(--brand);
         opacity: 1;
       }
 
@@ -371,7 +378,7 @@
         height: var(--thumb-size);
         border: 2px solid var(--panel);
         border-radius: 999px;
-        background: var(--fg);
+        background: var(--cue);
         appearance: none;
       }
 
@@ -380,7 +387,7 @@
         height: 0.65rem;
         border: 2px solid var(--panel);
         border-radius: 999px;
-        background: var(--fg);
+        background: var(--cue);
       }
 
       .status button {
@@ -402,7 +409,7 @@
         background:
           linear-gradient(currentColor, currentColor) center / 2px 0.64rem
             no-repeat;
-        color: rgba(139, 233, 253, 0.42);
+        color: rgba(139, 124, 255, 0.42);
         opacity: 0;
         transition: color 180ms ease;
       }
@@ -433,7 +440,7 @@
 
       #voice[data-state="ready"],
       #voice[data-state="playing"] {
-        color: var(--cyan);
+        color: var(--brand);
         opacity: 1;
       }
 
@@ -480,7 +487,7 @@
       .ansi-blue { color: #6272a4; }
       .ansi-magenta { color: var(--purple); }
       .ansi-cyan { color: var(--cyan); }
-      .ansi-white { color: var(--fg); }
+      .ansi-white { color: var(--ansi-white); }
       .ansi-bright-black { color: #6272a4; }
       .ansi-bright-red { color: #ff6e6e; }
       .ansi-bright-green { color: var(--green); }
@@ -1244,7 +1251,13 @@
           return;
         }
         const lineHeight = Math.max(1, narration.clientHeight / 2);
-        const targetLine = Math.floor(current.offsetTop / lineHeight);
+        const narrationTop = narration.getBoundingClientRect().top;
+        const currentTop = current.getBoundingClientRect().top;
+        const relativeTop = Math.max(
+          0,
+          currentTop - narrationTop + narration.scrollTop,
+        );
+        const targetLine = Math.floor(relativeTop / lineHeight);
         setNarrationScrollTop(Math.min(overflow, targetLine * lineHeight), {
           animate,
         });

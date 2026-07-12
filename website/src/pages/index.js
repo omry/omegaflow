@@ -12,7 +12,17 @@ export default function Home() {
         <section className="homeHero">
           <div className="container homeHero__inner">
             <div className="homeHero__copy">
-              <h1>Rebuildable terminal demos.</h1>
+              <div className="homeHero__identity">
+                <span>Scripted. Synchronized. Rebuildable.</span>
+              </div>
+              <div className="homeHero__headline">
+                <h1>Rebuildable terminal demos.</h1>
+                <img
+                  className="homeHero__mascot"
+                  src="/img/omegaflow-mascot-camera.svg"
+                  alt="OmegaFlow mascot holding a video camera"
+                />
+              </div>
               <p className="homeHero__lede">
                 Write the terminal flow once, then rebuild the video whenever the docs change.
                 To learn more, start the tutorial or read the docs.
@@ -45,7 +55,7 @@ export default function Home() {
             </article>
             <article>
               <h2>Build</h2>
-              <p>Record, retime, and package the terminal video.</p>
+              <p>Turn the script into a synchronized, ready-to-publish video.</p>
             </article>
             <article>
               <h2>Publish</h2>

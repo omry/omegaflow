@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
+  <title id="title">OmegaFlow mascot holding a camera</title>
+  <desc id="desc">The Night Studio OmegaFlow mascot holds a camera with a prominent amber play button.</desc>
+  <path d="M84 513h161v-77c-72-32-117-97-117-177 0-115 82-197 192-197s192 82 192 197c0 80-45 145-117 177v77h161"
+        fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="84"/>
+  <circle cx="320" cy="257" r="105" fill="#10131a"/>
+  <ellipse cx="275" cy="227" rx="21" ry="27" fill="#f5f6fa"/>
+  <ellipse cx="365" cy="227" rx="21" ry="27" fill="#f5f6fa"/>
+  <circle cx="280" cy="232" r="10" fill="#10131a"/>
+  <circle cx="370" cy="232" r="10" fill="#10131a"/>
+  <path d="m290 271 60 36-60 36z" fill="#ffc247"/>
+  <path d="M166 384c18-4 31-20 40-48M474 384c-18-4-31-20-40-48" fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-width="40"/>
+  <circle cx="206" cy="334" r="22" fill="#8b7cff"/>
+  <circle cx="434" cy="334" r="22" fill="#8b7cff"/>
+  <rect x="190" y="260" width="260" height="137" rx="25" fill="#f5f6fa" stroke="#10131a" stroke-width="12"/>
+  <circle cx="371" cy="329" r="50" fill="#10131a"/>
+  <circle cx="371" cy="329" r="33" fill="#8b7cff"/>
+  <circle cx="371" cy="329" r="16" fill="#19202c"/>
+  <circle cx="246" cy="329" r="38" fill="#10131a"/>
+  <path d="m236 307 36 22-36 22z" fill="#ffc247"/>
+  <circle cx="190" cy="336" r="22" fill="#8b7cff"/>
+  <circle cx="450" cy="336" r="22" fill="#8b7cff"/>
+</svg>
