@@ -22,6 +22,12 @@ A build:
 5. publishes the configured output surfaces; and
 6. applies run retention after a successful build.
 
+For browser and mixed recordings, the analogous pipeline normalizes the typed
+plan, reuses or captures one persistent terminal/browser environment, prepares
+narration takes, solves a global semantic timeline, validates the closed public
+bundle, and publishes the selected surfaces. Presentation-only changes reuse a
+fresh private capture.
+
 Fresh artifacts are reused. Force every rebuildable stage to run with:
 
 ```bash
@@ -74,6 +80,10 @@ omegaflow recording=demo action=check
 Use it when a CI job or release gate should fail instead of silently updating
 an output. If it reports stale or missing artifacts, run a build and check
 again.
+
+For browser/mixed recordings, check validates the source, capture fingerprint,
+complete `run_end`, and the freshest run-local presentation bundle when one
+exists. It does not visit external sites or rebuild artifacts.
 
 ## Common failures
 

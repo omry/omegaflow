@@ -30,18 +30,22 @@ from . import align_cast
 from . import audio
 from . import record
 from . import retime_cast
+from . import presentation_build
 from . import studio_config as studio_config_module
+from .recording_plan import RecordingPlanError, normalize_recording_plan
 from .studio_config import (
     CONFIG_DIR,
     STUDIO_CONFIG_NAME,
     StudioAction,
     StudioConfigError,
     StudioStep,
+    configure_project_root,
     container_from_hydra_cfg,
     is_valid_recording_id,
     list_recording_ids,
     load_configured_env_file,
     load_recording_spec_from_hydra_cfg,
+    project_config_searchpath_override,
     recording_script_dir_from_config,
     recording_spec_from_config,
 )
@@ -148,6 +152,34 @@ BUILD_STEPS = [
     },
 ]
 
+PRESENTATION_BUILD_STEPS = [
+    {
+        "action": "record",
+        "kind": "capture",
+        "description": "capture terminal and browser beats in one persistent environment",
+    },
+    {
+        "action": "audio_generate",
+        "kind": "compile",
+        "description": "generate or reuse narration-take audio and timestamps",
+    },
+    {
+        "action": "presentation_compile",
+        "kind": "compile",
+        "description": "solve global timing and materialize beat-local presentation payloads",
+    },
+    {
+        "action": "presentation_validate",
+        "kind": "validate",
+        "description": "validate the manifest, assets, hashes, and public-safety boundary",
+    },
+    {
+        "action": "publish_surface",
+        "kind": "link",
+        "description": "atomically publish the bundle and selected embed surfaces",
+    },
+]
+
 PUBLIC_ACTIONS = [action.value for action in StudioAction]
 
 RECORD_ACTIONS = {
@@ -239,6 +271,23 @@ def run_record_action(cfg: DictConfig, action: str, label: str | None = None) ->
     verbose = bool_config(config, "verbose")
     if action == "record":
         spec = recording_spec_from_config(config, recording_id=None, overrides=())
+        plan = normalized_recording_plan(spec)
+        if presentation_build.uses_presentation_pipeline(plan):
+            run_dir = current_recording_run_dir(spec)
+            if text_output_enabled(cfg):
+                step_line("capture browser/mixed recording")
+            presentation_build.capture_recording(spec, plan, run_dir)
+            fingerprint_path = presentation_build.write_capture_fingerprint(
+                spec, plan, run_dir
+            )
+            if text_output_enabled(cfg):
+                pass_line(f"captured recording: {display_path(run_dir)}")
+                if verbose:
+                    pass_line(
+                        "wrote recording fingerprint: "
+                        f"{display_path(fingerprint_path)}"
+                    )
+            return
     run_step(
         label or action.replace("_", " "), record.run_tool_from_hydra_cfg, cfg, action
     )
@@ -276,6 +325,48 @@ def run_build_record_action(cfg: DictConfig, spec: dict[str, Any]) -> Path:
         "record",
         config_overrides={"output": paths["cast"]},
     )
+    return run_dir
+
+
+def normalized_recording_plan(spec: dict[str, Any]) -> Any:
+    try:
+        return normalize_recording_plan(spec)
+    except RecordingPlanError as exc:
+        raise StudioError(str(exc)) from exc
+
+
+def run_build_record_action(
+    cfg: DictConfig,
+    spec: dict[str, Any],
+    plan: Any,
+) -> Path:
+    config = container_from_hydra_cfg(cfg)
+    verbose = bool_config(config, "verbose")
+    if not bool_config(config, "force"):
+        latest = latest_successful_recording_run_dir(spec)
+        if latest is not None and presentation_build.capture_is_fresh(
+            spec, plan, latest
+        ):
+            if text_output_enabled(cfg):
+                skip_line(
+                    "capture recording",
+                    detail=f"{display_path(latest)} is fresh",
+                )
+            return latest
+        if latest is not None and text_output_enabled(cfg) and verbose:
+            info_line("capture recording: capture fingerprint changed")
+    run_dir = current_recording_run_dir(spec)
+    if text_output_enabled(cfg):
+        step_line("capture recording")
+    presentation_build.capture_recording(
+        spec,
+        plan,
+        run_dir,
+        headed=bool_config(config, "headed"),
+    )
+    presentation_build.write_capture_fingerprint(spec, plan, run_dir)
+    if text_output_enabled(cfg):
+        pass_line(f"captured recording: {display_path(run_dir)}")
     return run_dir
 
 
@@ -767,7 +858,7 @@ def display_path(path: Path | str | None) -> str | None:
         return None
     candidate = Path(path)
     try:
-        return str(candidate.relative_to(retime_cast.REPO_ROOT))
+        return str(candidate.relative_to(studio_config_module.project_root()))
     except ValueError:
         return str(candidate)
 
@@ -912,7 +1003,7 @@ def bootstrap_workspace_path(config: dict[str, Any]) -> Path:
     path = Path(value).expanduser()
     if path.is_absolute():
         return path
-    return studio_config_module.PROJECT_ROOT / path
+    return studio_config_module.project_root(config) / path
 
 
 def write_bootstrap_file(
@@ -1192,7 +1283,6 @@ def recording_fingerprint_path(cast_path: Path) -> Path:
 
 
 def publish_artifact_paths(spec: dict[str, Any]) -> dict[str, Path]:
-    return artifact_paths(spec) | {
         "recording_fingerprint": recording_fingerprint_path(
             retime_cast.cast_path_from_manifest(spec)
         ),
@@ -1507,6 +1597,9 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    presentation_paths = presentation_build.run_paths(
+        current_recording_run_dir(spec)
+    )
     return {
         "recording": str(spec["_recording_id"]),
         "title": optional_string(spec.get("title")),
@@ -1592,8 +1685,11 @@ def clean_recording_outputs(config: dict[str, Any]) -> list[Path]:
         if not path.exists():
             continue
         if path.is_dir():
-            raise StudioError(f"refusing to remove directory: {display_path(path)}")
-        path.unlink()
+            if path != presentation_build.public_bundle_dir(spec):
+                raise StudioError(f"refusing to remove directory: {display_path(path)}")
+            shutil.rmtree(path)
+        else:
+            path.unlink()
         removed.append(path)
     return removed
 
@@ -1630,7 +1726,7 @@ def run_clean(config: dict[str, Any]) -> int:
 
 
 def site_url(path: Path) -> str:
-    static_root = retime_cast.REPO_ROOT / "website" / "static"
+    static_root = studio_config_module.project_root() / "website" / "static"
     try:
         return "/" + path.relative_to(static_root).as_posix()
     except ValueError:
@@ -1665,11 +1761,14 @@ def player_params(
         spec,
         intro_segment,
     )
-    params = {
-        "title": title,
-        "src": site_url(paths["retimed_cast"]),
-    }
-    if audio.audio_settings(spec).enabled:
+    if "manifest" in paths:
+        params = {"title": title, "manifest": site_url(paths["manifest"])}
+    else:
+        params = {
+            "title": title,
+            "src": site_url(paths["retimed_cast"]),
+        }
+    if "manifest" not in paths and audio.audio_settings(spec).enabled:
         params["audio"] = site_url(paths["audio"])
         params["audioMeta"] = site_url(paths["audio_metadata"])
     if intro:
@@ -1718,11 +1817,11 @@ def render_html_embed(
     paths: dict[str, Path] | None = None,
 ) -> str:
     params = player_params(spec, surface, paths or artifact_paths(spec))
-    attributes = {
-        "title": params["title"],
-        "src": params["src"],
-        "player": "/cast-player.html",
-    }
+    attributes = {"title": params["title"], "player": "/cast-player.html"}
+    if "manifest" in params:
+        attributes["manifest"] = params["manifest"]
+    else:
+        attributes["src"] = params["src"]
     if "audio" in params:
         attributes["audio"] = params["audio"]
     if "audioMeta" in params:
@@ -1780,14 +1879,91 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path: str) -> str:
         request_path = urlparse(path).path
         if request_path.startswith(WATCH_ARTIFACT_PREFIX):
-            artifact_name = Path(unquote(request_path)).stem
-            artifact = self.artifacts.get(artifact_name)
+            relative = unquote(request_path[len(WATCH_ARTIFACT_PREFIX) :])
+            artifact = self.artifacts.get(relative)
+            if artifact is None:
+                artifact = self.artifacts.get(Path(relative).stem)
             if artifact is not None:
                 return str(artifact)
         return super().translate_path(path)
 
+    def end_headers(self) -> None:
+        self.send_header("Accept-Ranges", "bytes")
+        super().end_headers()
+
+    def send_head(self) -> Any:
+        range_header = self.headers.get("Range")
+        if range_header is None:
+            return super().send_head()
+        path = self.translate_path(self.path)
+        if not os.path.isfile(path):
+            return super().send_head()
+        try:
+            source = open(path, "rb")  # noqa: SIM115
+        except OSError:
+            self.send_error(404, "File not found")
+            return None
+        size = os.fstat(source.fileno()).st_size
+        try:
+            start, end = parse_http_byte_range(range_header, size=size)
+        except ValueError:
+            source.close()
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return None
+        self._response_byte_range = (start, end)
+        self.send_response(206)
+        self.send_header("Content-type", self.guess_type(path))
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Last-Modified", self.date_time_string(os.fstat(source.fileno()).st_mtime))
+        self.end_headers()
+        return source
+
+    def copyfile(self, source: Any, outputfile: Any) -> None:
+        byte_range = getattr(self, "_response_byte_range", None)
+        if byte_range is None:
+            super().copyfile(source, outputfile)
+            return
+        start, end = byte_range
+        source.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = source.read(min(64 * 1024, remaining))
+            if not chunk:
+                break
+            outputfile.write(chunk)
+            remaining -= len(chunk)
+
     def log_message(self, format: str, *args: object) -> None:
         return
+
+
+def parse_http_byte_range(value: str, *, size: int) -> tuple[int, int]:
+    if size <= 0 or not value.startswith("bytes="):
+        raise ValueError("invalid byte range")
+    requested = value[6:].strip()
+    if not requested or "," in requested or "-" not in requested:
+        raise ValueError("invalid byte range")
+    raw_start, raw_end = requested.split("-", 1)
+    if not raw_start:
+        try:
+            suffix = int(raw_end)
+        except ValueError as exc:
+            raise ValueError("invalid byte range") from exc
+        if suffix <= 0:
+            raise ValueError("invalid byte range")
+        return max(0, size - suffix), size - 1
+    try:
+        start = int(raw_start)
+        end = int(raw_end) if raw_end else size - 1
+    except ValueError as exc:
+        raise ValueError("invalid byte range") from exc
+    if start < 0 or start >= size or end < start:
+        raise ValueError("invalid byte range")
+    return start, min(end, size - 1)
 
 
 def replace_placeholder(text: str, placeholder: str, replacement: str) -> str:
@@ -1884,24 +2060,23 @@ def publish_surface(
     source_paths: dict[str, Path] | None = None,
     surface_name: str | None = None,
     validation_retimed_cast: Path | None = None,
+    presentation_run_dir: Path | None = None,
 ) -> Path | None:
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
     selected = selected_surface(config, spec, surface_name=surface_name)
     if selected is None:
         return None
-    paths = source_paths or artifact_paths(spec)
-    publish_paths = publish_artifact_paths(spec)
-    try:
-        retime_cast.require_fresh_retimed_cast(
-            cast_path=paths["cast"],
-            timeline_path=paths["timeline"],
-            output_path=validation_retimed_cast or paths["retimed_cast"],
-            audio_metadata_path=paths["audio_metadata"],
+    run_dir = presentation_run_dir or latest_successful_recording_run_dir(spec)
+    if run_dir is None:
+        raise StudioError(
+            "no successful recording run found; run omegaflow action=build first"
         )
-    except retime_cast.RetimeError as exc:
+    try:
+        presentation_build.validate_run_bundle(spec, run_dir)
+        presentation_build.publish_bundle(spec, run_dir)
+    except presentation_build.PresentationBuildError as exc:
         raise StudioError(str(exc)) from exc
-    if source_paths is not None:
-        publish_artifacts_from_run(spec, source_paths)
+    publish_paths = {"manifest": presentation_build.public_manifest_path(spec)}
     _surface_name, surface = selected
     surface_type = optional_string(surface.get("type"))
     file_name = optional_string(surface.get("file"))
@@ -1958,6 +2133,7 @@ def run_publish_surface(
     source_paths: dict[str, Path] | None = None,
     surface_name: str | None = None,
     validation_retimed_cast: Path | None = None,
+    presentation_run_dir: Path | None = None,
 ) -> None:
     config = container_from_hydra_cfg(cfg)
     path = publish_surface(
@@ -1965,6 +2141,7 @@ def run_publish_surface(
         source_paths=source_paths,
         surface_name=surface_name,
         validation_retimed_cast=validation_retimed_cast,
+        presentation_run_dir=presentation_run_dir,
     )
     if path is not None and text_output_enabled(cfg):
         step_line("publish surface")
@@ -1980,6 +2157,10 @@ def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
         return 0
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    plan = normalized_recording_plan(spec)
+    if presentation_build.uses_presentation_pipeline(plan):
+        url_path, artifacts = watch_player_url_path(spec)
+        return run_watch_server(cfg, url_path, artifacts)
     paths = latest_run_artifact_paths(spec)
     if paths is None:
         raise StudioError(
@@ -1997,13 +2178,13 @@ def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
     record.check_asciinema(config)
     return subprocess.run(
         [asciinema_command, "play", str(cast_path)],
-        cwd=retime_cast.REPO_ROOT,
+        cwd=studio_config_module.project_root(),
         check=False,
     ).returncode
 
 
 def watch_artifact_url(path: Path, key: str, artifacts: dict[str, Path]) -> str:
-    static_root = (retime_cast.REPO_ROOT / "website" / "static").resolve()
+    static_root = (studio_config_module.project_root() / "website" / "static").resolve()
     resolved = path.resolve()
     try:
         return "/" + quote(resolved.relative_to(static_root).as_posix(), safe="/")
@@ -2019,6 +2200,36 @@ def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
         raise StudioError(
             "no successful recording run found; run omegaflow action=build first"
         )
+    browser_beats = spec.get("beats")
+    has_browser = spec.get("browser") is not None or (
+        isinstance(browser_beats, list)
+        and any(
+            isinstance(beat, dict) and beat.get("medium") == "browser"
+            for beat in browser_beats
+        )
+    )
+    if has_browser:
+        plan = normalized_recording_plan(spec)
+    else:
+        plan = None
+    if plan is not None and presentation_build.uses_presentation_pipeline(plan):
+        bundle = paths["presentation"]
+        manifest = paths["manifest"]
+        if not manifest.is_file():
+            raise StudioError(
+                f"presentation manifest not found: {display_path(manifest)}; "
+                "run omegaflow action=build first"
+            )
+        artifacts = {
+            path.relative_to(bundle).as_posix(): path.resolve()
+            for path in bundle.rglob("*")
+            if path.is_file()
+        }
+        manifest_url = WATCH_ARTIFACT_PREFIX + quote(
+            presentation_build.MANIFEST_FILE, safe="/"
+        )
+        return "/cast-player.html?" + urlencode({"manifest": manifest_url}), artifacts
+
     required = {
         "cast": paths["retimed_cast"],
     }
@@ -2129,7 +2340,7 @@ def run_watch_server(
     url_path: str,
     artifacts: dict[str, Path],
 ) -> int:
-    static_root = retime_cast.REPO_ROOT / "website" / "static"
+    static_root = studio_config_module.project_root() / "website" / "static"
 
     def handler_factory(*args: Any, **kwargs: Any) -> StudioWatchRequestHandler:
         return StudioWatchRequestHandler(
@@ -2221,11 +2432,69 @@ def print_build_elapsed(cfg: DictConfig, seconds: float, *, success: bool) -> No
         fail_line(f"build failed after {format_elapsed(seconds)}")
 
 
+def run_manifest_build(
+    cfg: DictConfig,
+    config: dict[str, Any],
+    spec: dict[str, Any],
+    plan: Any,
+) -> int:
+    started = time.monotonic()
+    success = False
+    try:
+        run_dir = run_build_record_action(cfg, spec, plan)
+        if text_output_enabled(cfg):
+            step_line("prepare narration takes")
+        audio_artifacts = presentation_build.prepare_narration_audio(
+            spec,
+            plan,
+            run_dir,
+            force=bool_config(config, "force"),
+        )
+        if text_output_enabled(cfg):
+            if audio_artifacts is None:
+                skip_line("prepare narration takes", detail="audio is disabled or empty")
+            else:
+                pass_line(f"prepared {len(audio_artifacts.timestamps)} narration take(s)")
+            step_line("compile presentation")
+        result = presentation_build.compile_presentation_bundle(
+            spec,
+            plan,
+            run_dir,
+            audio_artifacts=audio_artifacts,
+        )
+        if text_output_enabled(cfg):
+            pass_line(f"wrote presentation: {display_path(result.manifest)}")
+            for warning in result.warnings:
+                info_line(f"{warning}: review recommended")
+        for surface_name in build_publish_surface_names(config, spec):
+            run_publish_surface(
+                cfg,
+                surface_name=surface_name,
+                presentation_run_dir=run_dir,
+            )
+        remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
+        garbage_collect_recording_runs(
+            spec,
+            current_run_dir=run_dir,
+            report=text_output_enabled(cfg),
+        )
+        success = True
+    except presentation_build.PresentationBuildError as exc:
+        raise StudioError(str(exc)) from exc
+    finally:
+        print_build_elapsed(cfg, time.monotonic() - started, success=success)
+    print_success_followups(cfg)
+    return 0
+
+
 def run_build(cfg: DictConfig) -> int:
     started = time.monotonic()
     success = False
     config = container_from_hydra_cfg(cfg)
     spec = load_recording_spec_from_hydra_cfg(cfg)
+    plan = normalized_recording_plan(spec)
+    if presentation_build.uses_presentation_pipeline(plan):
+        return run_presentation_build(cfg, config, spec, plan)
     staged_retimed: Path | None = None
     try:
         run_dir = run_build_record_action(cfg, spec)
@@ -2297,6 +2566,28 @@ def run_build(cfg: DictConfig) -> int:
 
 
 def run_check(cfg: DictConfig) -> int:
+    config = container_from_hydra_cfg(cfg)
+    spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    plan = normalized_recording_plan(spec)
+    if presentation_build.uses_presentation_pipeline(plan):
+        run_dir = latest_successful_recording_run_dir(spec)
+        if run_dir is None or not presentation_build.capture_artifacts_exist(
+            plan, run_dir
+        ):
+            raise StudioError(
+                "no complete browser/mixed capture found; run omegaflow action=record first"
+            )
+        if not presentation_build.capture_is_fresh(spec, plan, run_dir):
+            raise StudioError("browser/mixed capture fingerprint is stale")
+        manifest = presentation_build.run_paths(run_dir)["manifest"]
+        if manifest.exists():
+            try:
+                presentation_build.validate_run_bundle(spec, run_dir)
+            except Exception as exc:
+                raise StudioError(f"presentation validation failed: {exc}") from exc
+        if text_output_enabled(cfg):
+            pass_line(f"browser/mixed recording is valid: {display_path(run_dir)}")
+        return 0
     run_record_action(cfg, "check", "check recording")
     run_audio_action(cfg, "check", "check audio")
     run_retime_action(cfg, "check", "check retime")
@@ -2305,6 +2596,16 @@ def run_check(cfg: DictConfig) -> int:
 
 
 def run_internal_step(cfg: DictConfig, config: dict[str, Any], step: str) -> int:
+    spec = load_recording_spec_from_hydra_cfg(cfg)
+    plan = normalized_recording_plan(spec)
+    if presentation_build.uses_presentation_pipeline(plan):
+        if step in {"record_dry_run", "dry_run"}:
+            return run_build_dry_run(cfg, config)
+        if step == "record_check":
+            return run_check(cfg)
+        if step == "publish":
+            run_publish_surface(cfg)
+            return 0
     if step in RECORD_ACTIONS:
         action = (
             "dry_run"
@@ -2328,6 +2629,7 @@ def run_internal_step(cfg: DictConfig, config: dict[str, Any], step: str) -> int
 def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     try:
         config = container_from_hydra_cfg(cfg)
+        configure_project_root(config)
     except StudioConfigError as exc:
         raise StudioError(str(exc)) from exc
     action = validate_action(config.get("action", "build"))
@@ -2391,6 +2693,15 @@ def normalize_cli_rec_overrides(argv: list[str]) -> list[str]:
     ]
 
 
+def add_project_config_searchpath(argv: list[str]) -> list[str]:
+    if not argv:
+        return []
+    searchpath_override = project_config_searchpath_override(argv[1:])
+    if searchpath_override is None:
+        return list(argv)
+    return [argv[0], searchpath_override, *argv[1:]]
+
+
 @hydra.main(
     version_base=None,
     config_path=str(CONFIG_DIR),
@@ -2429,7 +2740,8 @@ def hydra_main(cfg: DictConfig) -> None:
 
 
 def main() -> None:
-    sys.argv[:] = normalize_cli_rec_overrides(sys.argv)
+    normalized = normalize_cli_rec_overrides(sys.argv)
+    sys.argv[:] = add_project_config_searchpath(normalized)
     hydra_main()
 
 

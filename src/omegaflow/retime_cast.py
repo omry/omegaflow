@@ -17,17 +17,16 @@ from omegaconf import DictConfig
 
 from .studio_config import (
     CONFIG_DIR,
-    PROJECT_ROOT,
     STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    project_root,
 )
 from .terminal_style import ANSI_GREEN_BOLD, print_status
 
 
-REPO_ROOT = PROJECT_ROOT
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 ANSI_SCREEN_CONTROL_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[HJK]")
 PROMPT_PREFIX_RE = re.compile(r"^(?:\([^)\r\n]+\)\s*)?\$\s*")
@@ -169,12 +168,12 @@ def relative_path(path: str) -> Path:
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
-    return REPO_ROOT / candidate
+    return project_root() / candidate
 
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(project_root()))
     except ValueError:
         return str(path)
 
@@ -326,7 +325,7 @@ def metadata_relative_path(raw_path: str, metadata_path: Path) -> Path:
     path = Path(raw_path)
     if path.is_absolute():
         return path
-    repo_path = REPO_ROOT / path
+    repo_path = project_root() / path
     if repo_path.exists():
         return repo_path
     return metadata_path.parent / path

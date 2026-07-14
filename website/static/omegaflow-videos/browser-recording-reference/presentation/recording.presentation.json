@@ -1,0 +1,88 @@
+{
+  "assets": {
+    "state-3878570f4a62a0d65f57cf1754e0269e56ec797f4e36e26b44c172eb6e800401": {
+      "bytes": 86,
+      "media_type": "image/webp",
+      "path": "media/193f15bad8a103d2c153be4481bce889ec858ab9a7cf689f3c9ddcd564a2bad9.webp",
+      "sha256": "193f15bad8a103d2c153be4481bce889ec858ab9a7cf689f3c9ddcd564a2bad9"
+    },
+    "state-d3bcc9b27fbc056f128bbcb1bad83d8a88d85101929191ad0a6591fb01c48771": {
+      "bytes": 11856,
+      "media_type": "image/webp",
+      "path": "media/f252e23563cda088d5ad8d7c312e51904c70993844a621c3e5101685d975e4e2.webp",
+      "sha256": "f252e23563cda088d5ad8d7c312e51904c70993844a621c3e5101685d975e4e2"
+    },
+    "state-ec21a27c7f1b092969c5e4cce53da8898d141f8eba8655c9f7fb052a9210d767": {
+      "bytes": 10434,
+      "media_type": "image/webp",
+      "path": "media/35b3a9597996848c54dd880715698c9c4b8bf07c78548ddcd80976be17b1c584.webp",
+      "sha256": "35b3a9597996848c54dd880715698c9c4b8bf07c78548ddcd80976be17b1c584"
+    },
+    "state-f19410aff7551f8711a3b56779d22047cb27349567101b9ba00dd886d3fe8db0": {
+      "bytes": 10618,
+      "media_type": "image/webp",
+      "path": "media/83ed0a61ca92bae1b5dba240bdbbc523cc0c25eedeefc4f0ab121f5e4454f240.webp",
+      "sha256": "83ed0a61ca92bae1b5dba240bdbbc523cc0c25eedeefc4f0ab121f5e4454f240"
+    }
+  },
+  "beats": [
+    {
+      "duration_ms": 491,
+      "guide": null,
+      "heading": "Prepare application state",
+      "id": "prepare",
+      "offset_ms": 0,
+      "payload": "beats/prepare.cast",
+      "renderer": "terminal",
+      "transition_in": null
+    },
+    {
+      "duration_ms": 2955,
+      "guide": {
+        "success_hint": "The application state is browser-updated."
+      },
+      "heading": "Operate the browser",
+      "id": "browser",
+      "offset_ms": 491,
+      "payload": "beats/browser.browser.json",
+      "renderer": "browser",
+      "transition_in": "window-open"
+    },
+    {
+      "duration_ms": 592,
+      "guide": null,
+      "heading": "Verify shared state",
+      "id": "verify",
+      "offset_ms": 3446,
+      "payload": "beats/verify.cast",
+      "renderer": "terminal",
+      "transition_in": null
+    }
+  ],
+  "manifest_version": 1,
+  "presentation": {
+    "browser": {
+      "chrome": {
+        "mode": "minimal"
+      },
+      "window": {
+        "mode": "framed",
+        "theme": "kde-breeze",
+        "title": "OmegaFlow Reference"
+      }
+    }
+  },
+  "recording": {
+    "duration_ms": 4038,
+    "id": "browser-recording-reference",
+    "title": "Browser Recording Reference"
+  },
+  "renderers": {
+    "browser": {
+      "payload_version": 1
+    },
+    "terminal": {
+      "payload_version": 1
+    }
+  }
+}

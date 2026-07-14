@@ -86,6 +86,39 @@ def test_omegaconf_schema_authority_supports_versioned_artifacts() -> None:
         assert OmegaConf.structured(schema) is not None
 
 
+def test_run_files_resolve_from_the_recording_source_directory(tmp_path: Path) -> None:
+    source_dir = tmp_path / "recordings" / "demo"
+    scripts = source_dir / "scripts"
+    scripts.mkdir(parents=True)
+    for name in ("setup.sh", "action.sh", "check.sh", "cleanup.sh"):
+        (scripts / name).write_text("true\n", encoding="utf-8")
+
+    plan = normalize_recording_plan(
+        {
+            "id": "demo",
+            "_script_dir": str(source_dir),
+            "setup": [{"run_file": "scripts/setup.sh"}],
+            "beats": [
+                {
+                    "id": "run",
+                    "actions": [
+                        {"commands": [{"run_file": "scripts/action.sh"}]}
+                    ],
+                    "checks": [{"run_file": "scripts/check.sh"}],
+                }
+            ],
+            "cleanup": [{"run_file": "scripts/cleanup.sh"}],
+        }
+    )
+
+    assert plan.setup[0].config["run_file"] == str(scripts / "setup.sh")
+    assert plan.beats[0].actions[0].config["commands"][0]["run_file"] == str(
+        scripts / "action.sh"
+    )
+    assert plan.beats[0].checks[0].config["run_file"] == str(scripts / "check.sh")
+    assert plan.cleanup[0].config["run_file"] == str(scripts / "cleanup.sh")
+
+
 def test_normalizes_browser_actions_checks_and_references() -> None:
     plan = normalize_recording_plan(browser_spec())
 
@@ -95,6 +128,28 @@ def test_normalizes_browser_actions_checks_and_references() -> None:
     assert isinstance(beat.actions[0], BrowserActionPlan)
     assert beat.waits[0].target == "done"
     assert beat.waits[0].gap_ms == 300
+
+
+def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "script-backed",
+            "narration": {
+                "beats": [
+                    {
+                        "id": "beat",
+                        "heading": "Script heading",
+                        "text": "Script narration.",
+                        "viewer_hold": 0.25,
+                    }
+                ]
+            },
+            "beats": [{"id": "beat", "actions": [{"run": "printf ok"}]}],
+        }
+    )
+
+    assert plan.beats[0].heading == "Script heading"
+    assert plan.beats[0].viewer_hold_ms == 250
 
 
 @pytest.mark.parametrize(
@@ -397,7 +452,7 @@ def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
                 "text": "First",
                 "text_start": 0,
                 "text_end": 5,
-                "start_ms": 0,
+                "start_ms": 100,
                 "end_ms": 400,
             },
             {
@@ -412,7 +467,7 @@ def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
                 "text_start": 12,
                 "text_end": 19,
                 "start_ms": 950,
-                "end_ms": 1500,
+                "end_ms": 1400,
             },
         ],
     )
@@ -424,7 +479,9 @@ def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
     )
 
     assert sidecar["version"] == 1
+    assert sidecar["members"][0]["source_start_ms"] == 0
     assert sidecar["members"][1]["source_start_ms"] == 950
+    assert sidecar["members"][1]["source_end_ms"] == 1500
     assert metadata["version"] == 2
     assert metadata["duration_ms"] == 1500
     assert metadata["takes"][0]["members"][1]["beat_id"] == "two"

@@ -83,6 +83,10 @@ docs/_build/
 /.artifacts/
 /.playwright-browsers/
 
+# Platform-specific recorder vendored while building wheels
+/src/omegaflow/bin/asciinema
+/src/omegaflow/bin/asciinema.platform
+
 # PyBuilder
 .pybuilder/
 target/

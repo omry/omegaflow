@@ -2,12 +2,14 @@
 
 ## Status
 
-Accepted for phased implementation. This document fixes the source, capture,
-timeline, artifact, player, and publishing contracts that follow from the
-accepted HLD. Phase 0 selected five bounded visual policies: stable-state
-detection, text-overlay eligibility, scroll synthesis, dynamic-fragment
-capture, and dynamic redaction. Real-device playback and the provisional
-decoded-asset memory budget remain subject to the Phase 1 release gate.
+Implemented for the constrained `desktop-v1` capture profile, shared
+terminal/browser timeline, browser renderer, CLI, documentation, and secure
+publishing surfaces described here. Phase 0 selected five bounded visual
+policies: stable-state detection, text-overlay eligibility, scroll synthesis,
+dynamic-fragment capture, and dynamic redaction. Automated desktop and
+responsive mobile-emulation playback validation passes. Physical-device
+playback and the provisional decoded-asset memory budget remain later
+release-stage work.
 
 ## Scope
 

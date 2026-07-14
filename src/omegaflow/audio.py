@@ -36,8 +36,6 @@ from .recording_plan import NarrationTakePlan, RecordingPlan
 
 from .studio_config import (
     CONFIG_DIR,
-    GENERATED_DIR,
-    PROJECT_ROOT,
     STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
@@ -45,6 +43,7 @@ from .studio_config import (
     load_env_file,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    project_root,
     studio_data_dir_from_config,
     studio_directive_blocks as parse_studio_directive_blocks,
 )
@@ -52,7 +51,6 @@ from .terminal_style import ANSI_CYAN_BOLD, ANSI_GREEN_BOLD
 from .tool_progress import LogProgressRenderer, ProgressBarRenderer, ToolProgress
 
 
-REPO_ROOT = PROJECT_ROOT
 OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech"
 OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
 SUPPORTED_FORMATS = {"mp3", "opus", "aac", "flac", "wav", "pcm"}
@@ -198,7 +196,7 @@ def relative_path(path: str) -> Path:
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
-    return REPO_ROOT / candidate
+    return project_root() / candidate
 
 
 def normalize_narration_text(text: str) -> str:
@@ -430,7 +428,12 @@ def narration_config_path(
                 / "narration"
                 / f"{recording_id}.yaml"
             )
-    return GENERATED_DIR / "narration" / f"{recording_id}.yaml"
+    return (
+        studio_data_dir_from_config(None)
+        / "generated"
+        / "narration"
+        / f"{recording_id}.yaml"
+    )
 
 
 def yaml_block_scalar(text: str, *, indent: int) -> str:
@@ -773,7 +776,7 @@ def narration_timestamp_sidecar_payload(
         if (
             typed.text_start < previous_text_end
             or typed.text_end <= typed.text_start
-            or typed.end_ms < typed.start_ms
+            or typed.end_ms <= typed.start_ms
             or typed.start_ms < previous_time_end
             or typed.end_ms > duration_ms
             or typed.text_end > len(take.synthesis_text)
@@ -790,14 +793,22 @@ def narration_timestamp_sidecar_payload(
             beat_id=member.beat_id,
             text_start=member.text_start,
             text_end=member.text_end,
-            source_start_ms=_timestamp_source_ms(
-                member.text_start, typed_words, duration_ms=duration_ms
+            source_start_ms=(
+                0
+                if index == 0
+                else _timestamp_source_ms(
+                    member.text_start, typed_words, duration_ms=duration_ms
+                )
             ),
-            source_end_ms=_timestamp_source_ms(
-                member.text_end, typed_words, duration_ms=duration_ms
+            source_end_ms=(
+                duration_ms
+                if index + 1 == len(take.members)
+                else _timestamp_source_ms(
+                    member.text_end, typed_words, duration_ms=duration_ms
+                )
             ),
         )
-        for member in take.members
+        for index, member in enumerate(take.members)
     ]
     anchors = [
         NarrationTimestampAnchorV1(
@@ -2002,7 +2013,7 @@ def generate_timestamps(
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(project_root()))
     except ValueError:
         return str(path)
 

@@ -2,9 +2,10 @@
 
 ## Status
 
-Ready for detailed-design handoff and the Phase 0 technical spike. Detailed
-design may proceed against the accepted semantic interfaces; Phase 0 selects
-the concrete visual capture, transition, and redaction policies.
+Accepted and implemented through the constrained browser-recording MVP. The
+semantic interfaces, Phase 0 visual policies, mixed capture pipeline, shared
+player shell, and publishing path are implemented. Physical iOS/Android device
+validation remains a later release-stage gate.
 
 ## Summary
 

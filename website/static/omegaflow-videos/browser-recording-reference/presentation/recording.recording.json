@@ -1,0 +1,17 @@
+{
+  "capture_fingerprint": "44ab990ed9d75a2c9a0836fd5110236aafe9b3ee93aac9ae7a56d19e87c53ada",
+  "dependencies": [
+    {
+      "path": "recordings/browser-recording-reference/index.md",
+      "sha256": "3b95854afe76fe8f48a6d363e6b6d3a2db88935cafa61bd8f9157d2cbde613de"
+    }
+  ],
+  "presentation_fingerprint": "7eb92577034dffe176f6e91cc3919618cd0c01cffce76a504a382afe18971375",
+  "recording": "browser-recording-reference",
+  "version": 1,
+  "versions": {
+    "compiler": "presentation-v1",
+    "renderer": "payload-v1"
+  },
+  "warnings": []
+}

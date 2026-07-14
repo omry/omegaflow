@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
+from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
@@ -421,6 +422,40 @@ class NormalizedBeatActions:
     terminal_checks: tuple[RecordingStepConfig, ...] = ()
     browser_actions: tuple[BrowserActionConfig, ...] = ()
     browser_checks: tuple[BrowserCheckConfig, ...] = ()
+
+
+def _recording_source_dir(spec: dict[str, Any]) -> Path | None:
+    value = spec.get("_script_dir")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        root = spec.get("_project_root")
+        if isinstance(root, str) and root:
+            path = Path(root).expanduser() / path
+    return path.resolve()
+
+
+def _resolve_terminal_run_files(
+    step: RecordingStepConfig,
+    *,
+    source_dir: Path | None,
+) -> RecordingStepConfig:
+    if source_dir is None:
+        return step
+
+    def resolved(value: str | None) -> str | None:
+        if value is None:
+            return None
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = source_dir / path
+        return str(path.resolve())
+
+    commands = step.commands
+    if commands is not None:
+        commands = [replace(command, run_file=resolved(command.run_file)) for command in commands]
+    return replace(step, run_file=resolved(step.run_file), commands=commands)
 
 
 def normalize_beat_actions(
@@ -898,6 +933,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         validate_browser_config(browser_mapping) if browser_mapping is not None else None
     )
     presentation = validate_presentation_config(spec.get("presentation", {}))
+    source_dir = _recording_source_dir(spec)
     lifecycle_steps: dict[str, tuple[TerminalCheckPlan, ...]] = {}
     for lifecycle in ("setup", "cleanup"):
         raw_steps = spec.get(lifecycle, [])
@@ -906,10 +942,13 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         lifecycle_steps[lifecycle] = tuple(
             TerminalCheckPlan(
                 config=freeze_value(
-                    _typed(
-                        _mapping(step, field=f"{lifecycle}.{index}"),
-                        RecordingStepConfig,
-                        field=f"{lifecycle}.{index}",
+                    _resolve_terminal_run_files(
+                        _typed(
+                            _mapping(step, field=f"{lifecycle}.{index}"),
+                            RecordingStepConfig,
+                            field=f"{lifecycle}.{index}",
+                        ),
+                        source_dir=source_dir,
                     )
                 )
             )
@@ -931,9 +970,20 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         except (TypeError, ValueError) as exc:
             raise RecordingPlanError(f"beats.{index}.medium is invalid") from exc
         normalized = normalize_beat_actions(beat, index=index)
-        narration_text, anchors, waits = _beat_narration(
-            beat, narration_by_beat.get(beat_id)
-        )
+        if medium is RecordingMedium.terminal:
+            normalized = replace(
+                normalized,
+                terminal_actions=tuple(
+                    _resolve_terminal_run_files(action, source_dir=source_dir)
+                    for action in normalized.terminal_actions
+                ),
+                terminal_checks=tuple(
+                    _resolve_terminal_run_files(check, source_dir=source_dir)
+                    for check in normalized.terminal_checks
+                ),
+            )
+        narration_entry = narration_by_beat.get(beat_id)
+        narration_text, anchors, waits = _beat_narration(beat, narration_entry)
         anchor_ids = {anchor.id for anchor in anchors}
 
         if medium is RecordingMedium.browser:
@@ -1023,6 +1073,8 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 )
 
         viewer_hold = beat.get("viewer_hold")
+        if viewer_hold is None and narration_entry is not None:
+            viewer_hold = narration_entry.get("viewer_hold")
         if viewer_hold is None:
             viewer_hold_ms = 0
         elif isinstance(viewer_hold, bool) or not isinstance(viewer_hold, (int, float)):
@@ -1039,7 +1091,11 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             not isinstance(explicit_take, str) or not ACTION_ID_RE.fullmatch(explicit_take)
         ):
             raise RecordingPlanError(f"beat {beat_id!r} narration_take is invalid")
-        heading = beat.get("heading", "")
+        heading = beat.get("heading")
+        if not heading and narration_entry is not None:
+            heading = narration_entry.get("heading", "")
+        if heading is None:
+            heading = ""
         if not isinstance(heading, str):
             raise RecordingPlanError(f"beat {beat_id!r} heading must be a string")
         caption = beat.get("caption", "")

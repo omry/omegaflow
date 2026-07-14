@@ -23,9 +23,6 @@ from omegaconf import DictConfig
 
 from .studio_config import (
     CONFIG_DIR,
-    PROJECT_DATA_DIR,
-    PROJECT_ROOT,
-    RECORDING_SCRIPT_DIR,
     STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
@@ -33,6 +30,7 @@ from .studio_config import (
     list_recording_ids,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    project_root,
     recording_script_dir_from_config,
     recording_script_path,
     studio_data_dir_from_config,
@@ -54,7 +52,6 @@ from .tool_progress import (
 )
 
 
-REPO_ROOT = PROJECT_ROOT
 RUN_ID_DATETIME_FORMAT = "%Y%m%d-%H%M%S"
 RUN_SINCE_UNITS = {
     "s": 1,
@@ -227,7 +224,7 @@ def relative_path(path: str) -> Path:
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
-    return REPO_ROOT / candidate
+    return project_root() / candidate
 
 
 def run_file_path(run_file: str, spec: dict[str, Any] | None = None) -> Path:
@@ -239,7 +236,7 @@ def run_file_path(run_file: str, spec: dict[str, Any] | None = None) -> Path:
         script_dir = spec.get("_script_dir")
         if isinstance(script_dir, str) and script_dir:
             search_roots.append(relative_path(script_dir))
-    search_roots.append(REPO_ROOT)
+    search_roots.append(project_root())
     for root in search_roots:
         path = root / candidate
         if path.exists():
@@ -249,7 +246,7 @@ def run_file_path(run_file: str, spec: dict[str, Any] | None = None) -> Path:
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(project_root()))
     except ValueError:
         return str(path)
 
@@ -769,7 +766,6 @@ def postmortem_entrypoint_text(*, run_dir: str, workdir: str, venv: str) -> str:
         f"export OMEGAFLOW_RUN_ID={shlex.quote(run_id)}",
         "export OMEGAFLOW_POSTMORTEM=1",
         'export OMEGAFLOW_RUN_DIR="$run_dir"',
-        'export OMEGAFLOW_WORKDIR="$workdir"',
         'export OMEGAFLOW_VENV="$venv"',
         'cd "$workdir"',
         'if [[ -n "$venv" && -f "$venv/bin/activate" ]]; then',
@@ -1549,7 +1545,6 @@ def validate_session_overrides(overrides: list[str]) -> None:
     ]
     result = subprocess.run(
         command,
-        cwd=REPO_ROOT,
         text=True,
         capture_output=True,
         check=False,
@@ -1571,7 +1566,6 @@ def has_recording_config(spec: dict[str, Any]) -> bool:
         recording_id = require_string(spec, "id")
         return recording_script_path(recording_id, Path(recording_dir)).exists()
     recording_id = require_string(spec, "id")
-    return recording_script_path(recording_id, RECORDING_SCRIPT_DIR).exists()
 
 
 def render_session_script(spec: dict[str, Any]) -> str:
@@ -1733,7 +1727,6 @@ def render_session_script(spec: dict[str, Any]) -> str:
             "    f'export OMEGAFLOW_RUN_ID={shlex.quote(run_id)}',",
             "    'export OMEGAFLOW_POSTMORTEM=1',",
             "    'export OMEGAFLOW_RUN_DIR=\"$run_dir\"',",
-            "    'export OMEGAFLOW_WORKDIR=\"$workdir\"',",
             "    'export OMEGAFLOW_VENV=\"$venv\"',",
             "    'cd \"$workdir\"',",
             '    \'if [[ -n "$venv" && -f "$venv/bin/activate" ]]; then\',',
@@ -3015,7 +3008,6 @@ def record(
     try:
         progress.start()
         with RecordingSuspendGuard():
-            result = subprocess.run(command, cwd=REPO_ROOT, check=False)
     except KeyboardInterrupt as exc:
         removed = remove_recording_artifacts(staged_paths)
         raise RecordingInterrupted(
@@ -3128,7 +3120,7 @@ def recording_data_dir(spec: dict[str, Any] | None) -> Path:
         config = spec.get("_studio_config")
         if isinstance(config, dict):
             return studio_data_dir_from_config(config)
-    return PROJECT_DATA_DIR
+    return studio_data_dir_from_config(None)
 
 
 def recording_runs_dir(spec: dict[str, Any]) -> Path:
@@ -3142,7 +3134,7 @@ def recording_runs_dir(spec: dict[str, Any]) -> Path:
 
 
 def all_recording_runs_root(data_dir: Path | None = None) -> Path:
-    return (data_dir or PROJECT_DATA_DIR) / "runs"
+    return (data_dir or studio_data_dir_from_config(None)) / "runs"
 
 
 def validate_run_id(run_id: str) -> None:
@@ -3187,17 +3179,16 @@ def run_dir_has_artifact(run_dir: Path, artifact: str) -> bool:
     if artifact == "play":
         return (run_dir / "recording.cast").exists() or (
             run_dir / "failed.cast"
-        ).exists()
     if artifact == "success":
-        return (run_dir / "recording.cast").exists() and not (
-            run_dir / "failure.json"
-        ).exists()
+        return fingerprint.exists() and not (run_dir / "failure.json").exists()
     if artifact == "preserved":
         return (
             (run_dir / "enter").exists()
             or (run_dir / "failure.json").exists()
             or (run_dir / "recording.cast").exists()
             or (run_dir / "failed.cast").exists()
+            or fingerprint.exists()
+            or manifest.exists()
         )
     raise RecordingError(f"unknown run artifact filter: {artifact}")
 
@@ -3548,7 +3539,7 @@ def inspect_run(
     if not entrypoint.exists():
         raise RecordingError(f"postmortem entrypoint not found: {entrypoint}")
     refresh_postmortem_entrypoint(entrypoint)
-    return subprocess.run([str(entrypoint)], cwd=REPO_ROOT, check=False).returncode
+    return subprocess.run([str(entrypoint)], cwd=project_root(), check=False).returncode
 
 
 def failure_output_path(run_dir: Path) -> Path | None:
@@ -3620,7 +3611,6 @@ def play_recording(
     check_asciinema(spec)
     return subprocess.run(
         [asciinema_command_path, "play", str(cast_path)],
-        cwd=REPO_ROOT,
         check=False,
     ).returncode
 
@@ -3706,7 +3696,7 @@ def run_tool_from_hydra_cfg(cfg: Any) -> int:
         check_required_commands(spec)
         script_text = render_session_script(spec)
         result = subprocess.run(
-            ["bash"], input=script_text, cwd=REPO_ROOT, text=True, check=False
+            ["bash"], input=script_text, cwd=project_root(), text=True, check=False
         )
         return result.returncode
     if action not in {"record", "check", "dry_run"}:

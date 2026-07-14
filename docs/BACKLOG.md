@@ -30,7 +30,7 @@ No active item.
 
 ## Release backlog
 
-- [ ] `P2` Evaluate browser recording support with Playwright.
+- [x] `P2` Evaluate browser recording support with Playwright.
       OmegaFlow may eventually support browser demos alongside terminal demos.
       The design should preserve the core value of generated narration,
       synchronization markers, and rebuildable scripts. Acceptance checks:
@@ -43,6 +43,10 @@ No active item.
       network, assets, auth, and secrets handling; and recommend whether this
       should share the existing player/publish surfaces or use a dedicated
       browser-demo rendering path.
+      Implemented as a semantic mixed-modality timeline with Playwright
+      capture, beat-local terminal/browser payloads, a shared player shell,
+      dedicated renderers, and closed atomic presentation bundles. Physical
+      iOS/Android device validation remains a later release-stage gate.
 
 - [ ] `P2` Add support for selecting a thumbnail frame.
       Published videos need a stable preview image for docs, GitHub fallbacks,

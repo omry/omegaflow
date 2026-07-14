@@ -6,7 +6,8 @@ sidebar_label: Beat
 # Beat
 
 A beat is one narrated section of a recording. It can describe what the viewer
-is seeing, run terminal actions, run checks, and provide guided-mode prompts.
+is seeing, operate either a terminal or browser, run checks, and provide guide
+text.
 
 ```yaml
 beat:
@@ -20,8 +21,10 @@ beat:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string | Unique beat id. |
+| `medium` | `terminal` or `browser` | Renderer and action vocabulary for this beat. Defaults to `terminal`. |
 | `heading` | string | Section heading and narration label. |
 | `narration` | string | Spoken narration text. Supports markers such as `@anchor@` and `@wait:command_id+1s@`. |
+| `narration_take` | string | Optional take id shared by adjacent beats. When omitted, this beat receives an implicit singleton take. |
 | `marker` | string | Optional UI marker id. |
 | `caption` | string | Text printed visibly in the terminal recording. |
 | `viewer_hold` | number | Extra viewer pause after the beat. |
@@ -132,6 +135,8 @@ removes them before generating narration audio. Timing markers require
 
 ## Actions And Checks
 
+### Terminal beats
+
 Actions and checks can run a single inline command:
 
 ```yaml
@@ -179,6 +184,94 @@ Step fields:
 Command entries also accept `id`, `follow_along`, `show_prompt_after`,
 `timing`, and pre/post command pause fields.
 
+### Browser beats
+
+Browser actions operate one persistent Playwright page shared by every browser
+beat in the recording. Terminal and browser beats also share the same process
+environment, so a terminal beat can start a local server that a later browser
+beat visits.
+
+```yaml
+- id: create-project
+  medium: browser
+  heading: Create a project
+  narration: >-
+    @open@ Open the application, then @name@ enter a project name.
+    @wait:project_ready+300ms@ The project is ready.
+  guide:
+    success_hint: The new project appears in the project list.
+  actions:
+  - id: open
+    open_page:
+      url: /projects
+      display_url: https://app.example.com/projects
+      ready:
+        visible: {role: heading, name: Projects}
+  - id: new-project
+    click:
+      target: {role: button, name: New project}
+  - id: name
+    fill:
+      target: {label: Project name}
+      text: OmegaFlow demo
+  - id: submit
+    press:
+      key: Enter
+      target: {label: Project name}
+  - id: project_ready
+    wait_for:
+      visible: {text: OmegaFlow demo}
+  checks:
+  - name: project was created
+    visible: {text: OmegaFlow demo}
+```
+
+Each action has an `id` and exactly one operation:
+
+| Operation | Purpose |
+| --- | --- |
+| `open_page` | Navigate, optionally show loading, and wait for a readiness boundary. |
+| `click` | Click a semantic target. |
+| `fill` | Set a field efficiently; this is the default for text entry. |
+| `type_keys` | Fall back to physical key events when a site rejects fill or paste. |
+| `press` | Send a key or shortcut, optionally to a target. |
+| `scroll` | Scroll the page, a target, or a container. |
+| `wait_for` | Synchronize with a visible, hidden, URL, or network-response condition. |
+
+`fill` and `type_keys` produce the same terminal typing visualization. Their
+difference affects capture semantics, not playback pacing.
+
+Prefer targets based on `role` and `name`, `label`, `placeholder`, `text`, or
+`test_id`. CSS and XPath are available as best-effort escape hatches and emit a
+non-blocking portability warning. Checks validate the real browser state during
+capture but are not published as presentation events.
+
+`open_page` waits for `DOMContentLoaded` by default. Use `ready` when the page
+has an application-specific readiness condition. `loading: show` includes the
+loading stage in the presentation; the default `hide` starts the visible action
+at the ready state. `display_url` changes only the safe URL shown in browser
+chrome and never changes navigation.
+
+### Narration takes across beats
+
+Omitting `narration_take` keeps the common case local to one beat. Give adjacent
+beats the same explicit id when a sentence or paragraph should flow naturally
+across their boundary:
+
+```yaml
+- id: introduce
+  narration_take: project-creation
+  narration: First, open the project list,
+- id: create
+  medium: browser
+  narration_take: project-creation
+  narration: then create a new project.
+```
+
+OmegaFlow derives all implicit singleton takes before checking that each take
+is contiguous. Reordering beats covered by a multi-beat take is allowed but
+emits a non-blocking review warning because the narration may need rewriting.
+
 ## Controlling Visible Command Output
 
 Real command output is the default and should be preferred. Use `output` when
@@ -213,7 +306,8 @@ viewer.
 
 ## Guide
 
-`guide` adds guided-mode prompts to the player:
+`guide` adds prompts to the player. Terminal beats can provide commands to copy;
+browser beats provide explanatory `success_hint` text only.
 
 ```yaml
 guide:

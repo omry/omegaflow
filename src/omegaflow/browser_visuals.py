@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import struct
 import subprocess
 import time
@@ -12,6 +11,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .browser_runtime import BrowserRuntimeError, require_browser_media_runtime
 
 
 STABLE_SAMPLE_INTERVAL_MS = 60
@@ -173,9 +174,11 @@ class BrowserVisualCapture:
             source_end_ms=current_end,
         )
         self.dynamic_requests.append(request)
+        end_state = self._store_state(samples[-1])
         return {
             "kind": "clip",
             "policy": "playwright-video-v1",
+            "end_state": end_state,
             "request": {
                 "beat_id": beat_id,
                 "action_id": action_id,
@@ -189,13 +192,15 @@ class BrowserVisualCapture:
     ) -> tuple[DynamicFragmentAsset, ...]:
         if not self.dynamic_requests:
             return ()
-        ffmpeg = shutil.which("ffmpeg")
-        ffprobe = shutil.which("ffprobe")
-        if ffmpeg is None or ffprobe is None:
+        try:
+            media = require_browser_media_runtime(require_vp8=True)
+        except BrowserRuntimeError as exc:
             raise BrowserVisualError(
                 "BROWSER_UNSUPPORTED_MOTION",
-                "dynamic fragments require ffmpeg and ffprobe",
-            )
+                str(exc),
+            ) from exc
+        ffmpeg = media.ffmpeg
+        ffprobe = media.ffprobe
         assets: list[DynamicFragmentAsset] = []
         for index, request in enumerate(self.dynamic_requests, 1):
             duration_ms = request.source_end_ms - request.source_start_ms

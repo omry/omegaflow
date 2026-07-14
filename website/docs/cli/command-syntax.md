@@ -18,6 +18,13 @@ flags. For example:
 omegaflow recording=tutorial/install action=check verbose=true
 ```
 
+OmegaFlow discovers the project root automatically. Override it when operating
+on another project without changing directories:
+
+```bash
+omegaflow project_root=/path/to/project recording=tutorial/install
+```
+
 ## Select a recording
 
 Recording ids map to directories under `studio.recording_dir`. With the default

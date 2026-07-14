@@ -21,7 +21,7 @@ where OmegaFlow cannot open a graphical browser, open the printed URL manually.
 Watch requires a recording id and built artifacts. It does not accept
 `run_id` or `cast`; use `play` for preserved or arbitrary casts.
 
-## Play in the terminal
+## Play the latest build
 
 With a recording id, `play` replays the presentation-timed cast from the latest
 successful build:
@@ -29,6 +29,10 @@ successful build:
 ```bash
 omegaflow recording=demo action=play
 ```
+
+Terminal-only, browser, and mixed builds all use the same manifest player.
+Unlike `watch`, `play` uses the default browser and does not start playback
+automatically.
 
 To replay a preserved run, provide its id:
 

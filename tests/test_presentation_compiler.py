@@ -635,6 +635,61 @@ def test_terminal_materialization_rejects_visual_overflow(tmp_path: Path) -> Non
     assert caught.value.code == "PRESENTATION_OVERFLOW"
 
 
+def test_terminal_materialization_relocates_events_to_solved_action_start(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.cast"
+    destination = tmp_path / "published.cast"
+    write_cast(source, 3, [[0.1, "o", "$ command\n"], [0.2, "o", "done\n"]])
+
+    materialize_terminal_beat(
+        source,
+        destination,
+        duration_ms=1200,
+        captured_action_intervals_ms={"command": (0, 300)},
+        action_starts_ms={"command": 700},
+    )
+
+    output = [json.loads(line) for line in destination.read_text().splitlines()]
+    assert output[1:] == [
+        [0.8, "o", "$ command\n"],
+        [0.2, "o", "done\n"],
+        [0.2, "o", ""],
+    ]
+
+
+def test_terminal_materialization_removes_private_capture_header_fields(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.cast"
+    source.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "term": {"cols": 80, "rows": 24},
+                "timestamp": 123,
+                "command": "bash /private/run/session.sh",
+                "title": "Demo",
+                "env": {"SHELL": "/bin/zsh"},
+            }
+        )
+        + "\n"
+        + json.dumps([0.1, "o", "ok"])
+        + "\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "published.cast"
+
+    materialize_terminal_beat(source, destination, duration_ms=100)
+
+    header = json.loads(destination.read_text(encoding="utf-8").splitlines()[0])
+    assert header == {
+        "version": 3,
+        "term": {"cols": 80, "rows": 24},
+        "title": "Demo",
+    }
+
+
 def state_asset(character: str) -> dict[str, object]:
     digest = character * 64
     return {

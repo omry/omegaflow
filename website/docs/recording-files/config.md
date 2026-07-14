@@ -133,6 +133,8 @@ The frontmatter header is the right place for recording-specific config:
 | `timing` | mapping | Presentation timing and playback controls. |
 | `environment` | mapping | Working directory, environment values, and `path_prepend`. |
 | `audio` | mapping | Narration audio configuration. |
+| `browser` | mapping or null | Deterministic Playwright capture profile, viewport, context, authentication, timeouts, and redaction targets. Required when any beat has `medium: browser`. |
+| `presentation` | mapping | Recording-wide browser window, chrome, transition, pointer, and typing presentation policy. |
 | `publish` | mapping | Publish surfaces such as Docusaurus MDX and standalone HTML. |
 | `setup` | list | Commands that run before beats. See [Beat](./beat.md). |
 | `cleanup` | list | Commands that run after recording. See [Beat](./beat.md). |
@@ -140,6 +142,54 @@ The frontmatter header is the right place for recording-specific config:
 
 Publishing surface details are covered in
 [Publishing And Runtime](./publishing-runtime.md).
+
+## Browser header configuration
+
+Browser capture parameters are recording-wide because every browser beat uses
+one persistent page and deterministic viewport:
+
+```yaml
+browser:
+  base_url: http://127.0.0.1:3000
+  viewport:
+    width: 1280
+    height: 720
+    device_scale_factor: 1
+  context:
+    locale: en-US
+    timezone: UTC
+    color_scheme: light
+    reduced_motion: reduce
+  auth:
+    storage_state_env: DEMO_STORAGE_STATE
+  timeouts:
+    action_ms: 10000
+    readiness_ms: 15000
+```
+
+`storage_state_env` names an environment variable whose value is a private
+Playwright storage-state path. Use `storage_state_path` instead when the path is
+safe to keep in recording config. The file content remains private and its hash,
+not its secrets, participates in capture freshness.
+
+Presentation framing is also a recording header concern, not a beat setting:
+
+```yaml
+presentation:
+  browser:
+    window:
+      mode: framed
+      theme: kde-breeze
+      title: Demo application
+      opening_transition: window-open
+    chrome:
+      mode: minimal
+    transitions:
+      default: fade
+```
+
+The captured viewport never changes during playback. The renderer scales and
+letterboxes it inside any selected window frame.
 
 ## Config Schema
 

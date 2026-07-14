@@ -52,7 +52,7 @@ def test_persistent_terminal_protocol_preserves_state_and_marks_hidden_intervals
                     "actions": [
                         {
                             "run": (
-                                "test \"$PWD\" = \"$OMEGAFLOW_WORKDIR/shared\"; "
+                                f"test \"$PWD\" = \"{tmp_path / 'shared'}\"; "
                                 "test \"$BEAT_VALUE\" = persisted; "
                                 "test \"$(cat state.txt)\" = ready"
                             )
@@ -152,7 +152,7 @@ def test_terminal_run_file_executes_in_the_persistent_shell(tmp_path: Path) -> N
                         {
                             "run": (
                                 "test \"$FROM_FILE\" = yes; "
-                                "test \"$PWD\" = \"$OMEGAFLOW_WORKDIR/nested\""
+                                f"test \"$PWD\" = \"{tmp_path / 'nested'}\""
                             )
                         }
                     ],
@@ -487,13 +487,30 @@ def test_terminal_protocol_runs_inside_one_asciinema_capture(tmp_path: Path) -> 
     beat_dir = cast_path.parent / "terminal-beats"
     one = (beat_dir / "one.cast").read_text(encoding="utf-8")
     two = (beat_dir / "two.cast").read_text(encoding="utf-8")
+    one_actions = json.loads(
+        (beat_dir / "one.actions.json").read_text(encoding="utf-8")
+    )
+    two_actions = json.loads(
+        (beat_dir / "two.actions.json").read_text(encoding="utf-8")
+    )
     assert "one" in one and "two" not in one
     assert "two" in two and "one" not in two
+    one_output = "".join(
+        json.loads(line)[2] for line in one.splitlines()[1:]
+    )
+    assert "$ printf 'one\\n'" in one_output
+    assert [item["id"] for item in one_actions["actions"]] == ["__step_0"]
+    assert [item["id"] for item in two_actions["actions"]] == ["__step_0"]
+    assert (
+        one_actions["actions"][0]["end_ms"]
+        >= one_actions["actions"][0]["start_ms"]
+    )
     for value in (one, two):
         assert "hidden-setup" not in value
         assert "hidden-check" not in value
         assert "hidden-cleanup" not in value
         assert "OmegaFlow;" not in value
+        assert "OmegaFlowAction;" not in value
         first_event = json.loads(value.splitlines()[1])
         assert first_event[0] >= 0
 

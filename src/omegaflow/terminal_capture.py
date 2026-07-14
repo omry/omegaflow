@@ -34,6 +34,16 @@ TERMINAL_MARKER_RE = re.compile(
     r"(?P<op>setup|beat|checks|cleanup);(?P<phase>start|end);"
     r"(?P<beat>[A-Za-z0-9_-]*)\x07"
 )
+TERMINAL_ACTION_MARKER_RE = re.compile(
+    r"\x1b\]1337;OmegaFlowAction;(?P<beat>[A-Za-z0-9_-]+);"
+    r"(?P<action>[A-Za-z0-9_-]+);(?P<phase>start|end)\x07"
+)
+TERMINAL_ANY_MARKER_RE = re.compile(
+    r"\x1b\]1337;(?:"
+    r"OmegaFlow;[0-9]+;(?:setup|beat|checks|cleanup);(?:start|end);[A-Za-z0-9_-]*"
+    r"|OmegaFlowAction;[A-Za-z0-9_-]+;[A-Za-z0-9_-]+;(?:start|end)"
+    r")\x07"
+)
 
 
 class TerminalCaptureError(RuntimeError):
@@ -190,11 +200,13 @@ PY
 omegaflow_run_step() {
   local command="$1"
   local expect="$2"
+  local display="$3"
   local stdout_start
   local stderr_start
   local status
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
+  printf '$ %s\n' "$display"
   omegaflow_run_user_command \
     "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
   status=$?
@@ -214,6 +226,18 @@ omegaflow_run_group() {
   eval "$script"
   status=$?
   omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start"
+}
+
+omegaflow_run_marked() {
+  local beat_id="$1"
+  local action_id="$2"
+  local script="$3"
+  local status
+  printf '\033]1337;OmegaFlowAction;%s;%s;start\007' "$beat_id" "$action_id"
+  eval "$script"
+  status=$?
+  printf '\033]1337;OmegaFlowAction;%s;%s;end\007' "$beat_id" "$action_id"
+  return "$status"
 }
 
 while IFS= read -r request <&8; do
@@ -600,10 +624,12 @@ class PersistentTerminalRunner:
         *,
         record_cast: bool = True,
         title: str = "OmegaFlow recording",
+        window_size: str = "100x28",
         timeout_seconds: float = CONTROL_TIMEOUT_SECONDS,
     ) -> None:
         self.record_cast = record_cast
         self.title = title
+        self.window_size = window_size
         self.timeout_seconds = timeout_seconds
         self.context: CaptureContext | None = None
         self.session: TerminalControlSession | None = None
@@ -618,6 +644,7 @@ class PersistentTerminalRunner:
             context,
             record_cast=self.record_cast,
             title=self.title,
+            window_size=self.window_size,
             timeout_seconds=self.timeout_seconds,
         )
         session.start()
@@ -647,8 +674,11 @@ class PersistentTerminalRunner:
         start_ms, end_ms = session.execute(
             "beat",
             beat_id=beat.id,
-            script=_steps_script(
-                (action.config for action in actions), self.context
+            script=_beat_script(
+                beat.id,
+                actions,
+                self.context,
+                command_snapshots=command_snapshots,
             ),
         )
         if checks:
@@ -658,9 +688,12 @@ class PersistentTerminalRunner:
                 script=_steps_script((check.config for check in checks), self.context),
             )
         beat_cast = session.cast_path.parent / "terminal-beats" / f"{beat.id}.cast"
+        action_timing = (
+            session.cast_path.parent / "terminal-beats" / f"{beat.id}.actions.json"
+        )
         return BeatCapture(
             beat_id=beat.id,
-            artifacts=(beat_cast, session.timeline_path),
+            artifacts=(beat_cast, action_timing, session.timeline_path),
             metadata={"capture_start_ms": start_ms, "capture_end_ms": end_ms},
         )
 
@@ -720,14 +753,117 @@ def _steps_script(
     return " && ".join(commands)
 
 
+def _beat_script(
+    beat_id: str,
+    actions: Iterable[TerminalActionPlan],
+    context: CaptureContext | None,
+    *,
+    command_snapshots: Mapping[str, Mapping[str, str]],
+) -> str:
+    if context is None:
+        raise TerminalCaptureError("terminal capture context is unavailable")
+    steps: list[str] = []
+    for action_index, action in enumerate(actions):
+        value = _thaw(action.config)
+        command_entries = value.get("commands")
+        if command_entries:
+            commands: list[str] = []
+            for command_index, command in enumerate(command_entries):
+                action_id = _capture_action_id(
+                    action_index, command_index, command
+                )
+                commands.append(
+                    _marked_step_script(
+                        beat_id,
+                        action_id,
+                        _validated_step_script(
+                            command,
+                            context,
+                            snapshot=command_snapshots[action_id],
+                        ),
+                    )
+                )
+            steps.append(
+                _validated_group_script(" && ".join(commands), value.get("expect", {}))
+            )
+        else:
+            steps.append(
+                _marked_step_script(
+                    beat_id,
+                    f"__step_{action_index}",
+                    _validated_step_script(
+                        value,
+                        context,
+                        snapshot=command_snapshots[f"__step_{action_index}"],
+                    ),
+                )
+            )
+    if not steps:
+        return "omegaflow_begin_beat"
+    return "omegaflow_begin_beat && " + " && ".join(steps)
+
+
+def _beat_command_snapshots(
+    actions: Iterable[TerminalActionPlan],
+    context: CaptureContext | None,
+) -> dict[str, dict[str, str]]:
+    if context is None:
+        raise TerminalCaptureError("terminal capture context is unavailable")
+    snapshots: dict[str, dict[str, str]] = {}
+    for action_index, action in enumerate(actions):
+        value = _thaw(action.config)
+        command_entries = value.get("commands")
+        if command_entries:
+            commands = enumerate(command_entries)
+        else:
+            commands = ((None, value),)
+        for command_index, command in commands:
+            action_id = _capture_action_id(action_index, command_index, command)
+            command_text = _step_command(command, context)
+            snapshots[action_id] = {
+                "command": command_text,
+                "display": _step_display(command, command_text),
+            }
+    return snapshots
+
+
+def _capture_action_id(
+    action_index: int,
+    command_index: int | None,
+    command: Mapping[str, Any] | None = None,
+) -> str:
+    if command_index is None:
+        return f"__step_{action_index}"
+    explicit = command.get("id") if command is not None else None
+    return explicit or f"__step_{action_index}_command_{command_index}"
+
+
+def _marked_step_script(beat_id: str, action_id: str, script: str) -> str:
+    return "omegaflow_run_marked " + " ".join(
+        shlex.quote(value) for value in (beat_id, action_id, script)
+    )
+
+
 def _validated_step_script(step: Mapping[str, Any], context: CaptureContext) -> str:
     command = _step_command(step, context)
+    display = step.get("display")
+    if display is None:
+        display = step.get("run")
+    if display is None and isinstance(step.get("run_file"), str):
+        display = f"bash {step['run_file']}"
+    if not isinstance(display, str) or not display:
+        raise TerminalCaptureError("terminal step display must be a non-empty string")
     expect = step.get("expect", {})
     if not isinstance(expect, dict):
         raise TerminalCaptureError("terminal step expect must be a mapping")
     _validate_expect(expect)
-    return "omegaflow_run_step " + shlex.quote(command) + " " + shlex.quote(
-        json.dumps(expect, separators=(",", ":"))
+    return "omegaflow_run_step " + " ".join(
+        shlex.quote(value)
+        for value in (
+            command,
+            json.dumps(expect, separators=(",", ":")),
+            display,
+        )
     )
 
 
@@ -841,8 +977,11 @@ def extract_terminal_beat_casts(
     if len(expected_set) != len(expected):
         raise TerminalCaptureError("terminal beat extraction received duplicate beat ids")
     captured: dict[str, list[list[Any]]] = {}
+    action_timings: dict[str, list[dict[str, Any]]] = {}
     previous_times: dict[str, float] = {}
+    beat_origins: dict[str, float] = {}
     active: str | None = None
+    active_action: tuple[str, str, float] | None = None
     absolute_time = 0.0
 
     def append_event(beat_id: str, timestamp: float, kind: Any, data: Any) -> None:
@@ -851,7 +990,7 @@ def extract_terminal_beat_casts(
         captured[beat_id].append([delta, kind, data])
         previous_times[beat_id] = timestamp
 
-    def handle_marker(match: re.Match[str]) -> None:
+    def handle_beat_marker(match: re.Match[str]) -> None:
         nonlocal active
         op = match.group("op")
         phase = match.group("phase")
@@ -873,13 +1012,57 @@ def extract_terminal_beat_casts(
                 )
             active = beat_id
             captured[beat_id] = []
+            action_timings[beat_id] = []
             previous_times[beat_id] = absolute_time
+            beat_origins[beat_id] = absolute_time
             return
         if active != beat_id:
             raise TerminalCaptureError(
                 f"terminal beat {beat_id!r} end marker does not match active beat"
             )
+        if active_action is not None:
+            raise TerminalCaptureError(
+                f"terminal action {active_action[1]!r} has no end marker"
+            )
         active = None
+
+    def handle_action_marker(match: re.Match[str]) -> None:
+        nonlocal active_action
+        beat_id = match.group("beat")
+        action_id = match.group("action")
+        phase = match.group("phase")
+        if active != beat_id:
+            raise TerminalCaptureError(
+                f"terminal action marker {beat_id!r}/{action_id!r} is outside its beat"
+            )
+        if phase == "start":
+            if active_action is not None:
+                raise TerminalCaptureError(
+                    f"terminal action {action_id!r} starts inside {active_action[1]!r}"
+                )
+            if any(item["id"] == action_id for item in action_timings[beat_id]):
+                raise TerminalCaptureError(
+                    f"terminal action {action_id!r} has a duplicate start marker"
+                )
+            active_action = (beat_id, action_id, absolute_time)
+            return
+        if active_action is None or active_action[:2] != (beat_id, action_id):
+            raise TerminalCaptureError(
+                f"terminal action {beat_id!r}/{action_id!r} end marker does not match"
+            )
+        start = active_action[2]
+        origin = beat_origins[beat_id]
+        start_ms = round((start - origin) * 1000)
+        end_ms = round((absolute_time - origin) * 1000)
+        action_timings[beat_id].append(
+            {
+                "id": action_id,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "duration_ms": end_ms - start_ms,
+            }
+        )
+        active_action = None
 
     for line_number, line in enumerate(lines[1:], 2):
         try:
@@ -905,11 +1088,18 @@ def extract_terminal_beat_casts(
                 append_event(active, absolute_time, kind, data)
             continue
         cursor = 0
-        for marker in TERMINAL_MARKER_RE.finditer(data):
+        for marker in TERMINAL_ANY_MARKER_RE.finditer(data):
             prefix = data[cursor : marker.start()]
             if prefix and active is not None:
                 append_event(active, absolute_time, kind, prefix)
-            handle_marker(marker)
+            beat_marker = TERMINAL_MARKER_RE.fullmatch(marker.group(0))
+            if beat_marker is not None:
+                handle_beat_marker(beat_marker)
+            else:
+                action_marker = TERMINAL_ACTION_MARKER_RE.fullmatch(marker.group(0))
+                if action_marker is None:
+                    raise TerminalCaptureError("terminal cast marker is malformed")
+                handle_action_marker(action_marker)
             cursor = marker.end()
         suffix = data[cursor:]
         if suffix and active is not None:
@@ -931,6 +1121,32 @@ def extract_terminal_beat_casts(
         event_lines = [json.dumps(event, separators=(",", ":")) for event in captured[beat_id]]
         output.write_text(
             "\n".join([header_line, *event_lines]) + "\n",
+            encoding="utf-8",
+        )
+        timing_output = output_dir / f"{beat_id}.actions.json"
+        timing_actions = action_timings[beat_id]
+        if command_snapshots is not None:
+            beat_snapshots = command_snapshots.get(beat_id, {})
+            timing_ids = {item["id"] for item in timing_actions}
+            if set(beat_snapshots) != timing_ids:
+                raise TerminalCaptureError(
+                    f"terminal command snapshots do not match beat {beat_id!r} actions"
+                )
+            timing_actions = [
+                {**item, **beat_snapshots[item["id"]]}
+                for item in timing_actions
+            ]
+        timing_output.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "beat_id": beat_id,
+                    "actions": timing_actions,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
         outputs[beat_id] = output

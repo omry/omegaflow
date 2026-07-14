@@ -1124,8 +1124,10 @@ def materialize_terminal_beat(
     destination: Path,
     *,
     duration_ms: int,
+    captured_action_intervals_ms: Mapping[str, tuple[int, int]] | None = None,
+    action_starts_ms: Mapping[str, int] | None = None,
 ) -> TerminalBeatMaterialization:
-    """Copy a beat-local cast and extend its final hold to the solved duration."""
+    """Relocate a beat-local cast and extend its final hold to solved duration."""
 
     solved_duration = milliseconds_half_up(duration_ms)
     try:
@@ -1140,7 +1142,17 @@ def materialize_terminal_beat(
             "PRESENTATION_SCHEMA", "terminal beat cast must use version 2 or 3"
         )
     version = int(header["version"])
+    # Asciinema records the private control-script command and wall-clock
+    # timestamp in its physical capture header.  Neither is presentation data,
+    # and the command contains the private run directory, so publish only the
+    # stable terminal geometry and optional authored title.
+    public_header = {
+        key: header[key]
+        for key in ("version", "width", "height", "term", "title")
+        if key in header
+    }
     events: list[list[object]] = []
+    event_absolute_ms: list[int] = []
     captured_seconds = 0.0
     previous_absolute = 0.0
     for index, line in enumerate(lines[1:], 2):
@@ -1175,23 +1187,40 @@ def materialize_terminal_beat(
             previous_absolute = event_time
             captured_seconds = event_time
         events.append(event)
+        event_absolute_ms.append(
+            milliseconds_half_up(Decimal(str(captured_seconds)) * 1000)
+        )
 
     captured_ms = milliseconds_half_up(Decimal(str(captured_seconds)) * 1000)
-    if captured_ms > solved_duration:
+    materialized_ms = captured_ms
+    if captured_action_intervals_ms is not None or action_starts_ms is not None:
+        if captured_action_intervals_ms is None or action_starts_ms is None:
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                "terminal action intervals and solved starts must be supplied together",
+            )
+        events, materialized_ms = _relocate_terminal_events(
+            events,
+            event_absolute_ms,
+            version=version,
+            captured_action_intervals_ms=captured_action_intervals_ms,
+            action_starts_ms=action_starts_ms,
+        )
+    if materialized_ms > solved_duration:
         raise PresentationCompileError(
             "PRESENTATION_OVERFLOW",
-            f"terminal media is {captured_ms}ms but its beat is {solved_duration}ms",
+            f"terminal media is {materialized_ms}ms but its beat is {solved_duration}ms",
         )
-    if captured_ms < solved_duration:
+    if materialized_ms < solved_duration:
         if version == 3:
-            hold_time = (solved_duration - captured_ms) / 1000
+            hold_time = (solved_duration - materialized_ms) / 1000
         else:
             hold_time = solved_duration / 1000
         events.append([hold_time, "o", ""])
 
     payload = "\n".join(
         [
-            json.dumps(header, separators=(",", ":")),
+            json.dumps(public_header, separators=(",", ":")),
             *(json.dumps(event, separators=(",", ":")) for event in events),
         ]
     ) + "\n"
@@ -1210,6 +1239,68 @@ def materialize_terminal_beat(
         sha256=digest,
         bytes=len(content),
     )
+
+
+def _relocate_terminal_events(
+    events: list[list[object]],
+    event_absolute_ms: list[int],
+    *,
+    version: int,
+    captured_action_intervals_ms: Mapping[str, tuple[int, int]],
+    action_starts_ms: Mapping[str, int],
+) -> tuple[list[list[object]], int]:
+    if set(captured_action_intervals_ms) != set(action_starts_ms):
+        raise PresentationCompileError(
+            "PRESENTATION_SCHEMA", "terminal action timing identities do not match"
+        )
+    intervals: list[tuple[str, int, int, int]] = []
+    previous_end = 0
+    for action_id, interval in captured_action_intervals_ms.items():
+        if (
+            not isinstance(interval, tuple)
+            or len(interval) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in interval
+            )
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA", "terminal action interval is invalid"
+            )
+        start, end = interval
+        target = action_starts_ms[action_id]
+        if (
+            start < previous_end
+            or end < start
+            or isinstance(target, bool)
+            or not isinstance(target, int)
+            or target < 0
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA", "terminal action timing is invalid"
+            )
+        intervals.append((action_id, start, end, target))
+        previous_end = end
+
+    relocated_absolute: list[int] = []
+    previous = 0
+    for source_ms in event_absolute_ms:
+        target_ms = source_ms
+        for _action_id, start, end, target in intervals:
+            if start <= source_ms <= end:
+                target_ms = target + source_ms - start
+                break
+        target_ms = max(previous, target_ms)
+        relocated_absolute.append(target_ms)
+        previous = target_ms
+
+    relocated: list[list[object]] = []
+    previous = 0
+    for event, target_ms in zip(events, relocated_absolute, strict=True):
+        timestamp_ms = target_ms - previous if version == 3 else target_ms
+        relocated.append([timestamp_ms / 1000, *event[1:]])
+        previous = target_ms
+    return relocated, (relocated_absolute[-1] if relocated_absolute else 0)
 
 
 POINTER_MIN_DURATION_MS = 260

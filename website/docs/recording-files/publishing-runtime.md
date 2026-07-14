@@ -33,6 +33,28 @@ publish:
 `docusaurus_mdx` replaces a placeholder block in an MDX file. `standalone_html`
 writes a complete HTML page containing the cast player.
 
+Terminal-only, browser, and mixed surfaces use the same component and HTML
+custom element with a generated `manifest` attribute:
+
+```mdx
+<VideoPlayer
+  title="Product walkthrough"
+  manifest="/videos/product/presentation/recording.presentation.json"
+/>
+```
+
+```html
+<cast-player-embed
+  title="Product walkthrough"
+  player="/cast-player.html"
+  manifest="/videos/product/presentation/recording.presentation.json">
+</cast-player-embed>
+```
+
+The bundle and the surface are separate: the atomic bundle lives at
+`${outputs.asset_dir}/presentation/`, while a standalone page can remain at
+`${outputs.asset_dir}/index.html`.
+
 ## Runtime Output
 
 By default, OmegaFlow runtime files are generated under `recordings/.omegaflow/`.
@@ -50,6 +72,11 @@ recordings/.omegaflow/
 Do not edit those files by hand. Commit the authored recording files and public
 website assets; leave local runtime output ignored unless a publish surface
 explicitly targets a tracked path.
+
+Browser/mixed runs additionally preserve private `capture/`, `diagnostics/`,
+and a run-local validated `presentation/` bundle. `action=clean` removes the
+published presentation bundle but retains preserved runs, diagnostics, and
+narration cache. A failed build never publishes an incomplete capture log.
 
 ## Schema
 

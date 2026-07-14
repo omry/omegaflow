@@ -20,8 +20,8 @@ OmegaFlow composes tool config in this order:
 
 1. Schema default values.
 2. The bundled `base-config.yaml`.
-3. `$PWD/.omegaflow/config.yaml`, when it exists.
-4. CLI overrides such as `omegaflow action=list studio.recording_dir=demos`.
+3. `<project_root>/.omegaflow/config.yaml`, when it exists.
+4. CLI overrides such as `omegaflow project_root=/path/to/project action=list`.
 
 The local file is optional, but bootstrap creates it.
 
@@ -49,13 +49,21 @@ the repository. Use CLI overrides for one-off changes:
 
 ```bash
 omegaflow action=list studio.recording_dir=demos
+omegaflow project_root=/path/to/project recording=hello
 omegaflow recording=hello rec.capture.headless=false
 ```
+
+OmegaFlow discovers `project_root` from the nearest `.omegaflow/config.yaml` or
+`recordings/config.yaml` in the current directory and its parents. An explicit
+Hydra override loads that project's `.omegaflow/config.yaml`, making it useful
+when invoking one project from another directory. Relative recording, data,
+output, and env-file paths are resolved from that root.
 
 ## Common Fields
 
 | Field | Purpose |
 | --- | --- |
+| `project_root` | Automatically discovered project directory. Override it on the command line when operating on a different project. |
 | `studio.recording_dir` | Directory containing `config.yaml` plus one directory per video. Each video directory contains `index.md`. |
 | `studio.data_dir` | Directory for generated run state, scratch output, caches, and generated artifacts. Defaults to `recordings/.omegaflow`. |
 | `studio.keep_output_dir` | Keeps Hydra's output directory metadata when a run is created. |

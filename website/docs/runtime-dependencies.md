@@ -19,6 +19,39 @@ Some capabilities also invoke external programs or services at runtime.
 OmegaFlow checks the asciinema version before recording or terminal playback
 and reports how to configure or install it when unavailable.
 
+## Browser recording
+
+Browser recording and `action=watch` use OmegaFlow's managed Chromium. Install
+the matching Python extra, then install the pinned Chromium revision managed by
+Playwright:
+
+```bash
+pip install 'omegaflow[browser]'
+python -m playwright install chromium
+```
+
+On Linux hosts or containers that do not already contain Chromium's shared
+libraries, install them with Playwright's platform helper (usually as root):
+
+```bash
+python -m playwright install-deps chromium
+```
+
+OmegaFlow pins the Playwright package and Chromium revision together. It fails
+with a specific remedy when the extra, browser binary, or host libraries are
+missing; using an arbitrary system Chrome is not a supported substitute.
+
+Published browser states and motion also require FFmpeg tools:
+
+| Dependency | Required for | Required capability |
+| --- | --- | --- |
+| `ffmpeg` | All browser presentations | Lossless `libwebp` encoder for stable states. |
+| `ffmpeg` | Captured browser motion | `libvpx` VP8 encoder for muted WebM clips. |
+| `ffprobe` | Browser bundle validation | Image/video dimensions, codec, duration, and absence of audio. |
+
+The build reports missing tools or encoders before publishing. Browser audio is
+muted during capture and is not part of the browser media payload.
+
 ## Narration audio
 
 Narration is optional. Recordings with `audio.enabled: false` do not need these
@@ -26,7 +59,7 @@ dependencies.
 
 | Dependency | Required for | Notes |
 | --- | --- | --- |
-| `ffmpeg` | Combining generated narration segments | OmegaFlow invokes the executable on `PATH` when publishing narration audio. |
+| `ffmpeg` | Combining generated narration segments | OmegaFlow invokes the executable on `PATH` when publishing narration audio. Browser recording additionally requires the codecs above. |
 | `ffprobe` | Measuring segment and published-audio duration | It is normally installed with `ffmpeg` as part of the FFmpeg distribution. |
 | OpenAI API access | Generating new narration and word timestamps | Requires network access and the environment variable named by `audio.env`. Cached audio can be reused without another generation request. |
 

@@ -19,7 +19,7 @@ ANSI_CYAN_BOLD = "\033[36;1m"
 def color_enabled(stream: Any = sys.stdout) -> bool:
     if os.environ.get("NO_COLOR") is not None:
         return False
-    color = os.environ.get("FORCE_COLOR") or os.environ.get("OMEGAFLOW_COLOR")
+    color = os.environ.get("FORCE_COLOR")
     if color and color.lower() not in {"0", "false", "no", "never"}:
         return True
     isatty = getattr(stream, "isatty", None)

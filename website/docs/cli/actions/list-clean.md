@@ -31,8 +31,10 @@ omegaflow recording=demo action=clean
 ```
 
 Clean deliberately retains audio outputs, audio metadata, the audio cache, and
-preserved recording runs. Those can be expensive or valuable for diagnosis,
-whereas the removed terminal and publish artifacts can be rebuilt.
+preserved recording runs. For browser/mixed recordings it removes the published
+`presentation/` bundle but retains private capture and diagnostics in preserved
+runs. Those can be expensive or valuable for diagnosis, whereas removed public
+artifacts can be rebuilt.
 
 For machine-readable output:
 

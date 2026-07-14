@@ -228,6 +228,89 @@ if (!playing || currentSeconds !== 75 || audio.currentTime !== 75) {
     assert result.returncode == 0, result.stderr
 
 
+def test_manifest_scrubber_uses_beat_ticks_and_sections() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+presentationManifest = {
+  beats: [
+    {id: 'prepare', heading: 'Prepare', offset_ms: 0, duration_ms: 3320},
+    {id: 'browser', heading: 'Browser', offset_ms: 3320, duration_ms: 4732},
+    {id: 'verify', heading: 'Verify', offset_ms: 8052, duration_ms: 4316},
+  ],
+};
+guidedPausePoints = [{time: 8.052, heading: 'Browser checkpoint'}];
+totalSeconds = 12.368;
+renderSectionMarkers();
+const starts = sectionMarkers.children.map((marker) => Number(marker.dataset.start));
+const sectionStarts = sectionStartTimes();
+const active = sectionForSeconds(4);
+if (
+  JSON.stringify(starts) !== JSON.stringify([0, 3.32, 8.052]) ||
+  JSON.stringify(sectionStarts) !== JSON.stringify([0, 3.32, 8.052]) ||
+  active.heading !== 'Browser'
+) {
+  console.error(JSON.stringify({starts, sectionStarts, active}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_scrubbing_manifest_previews_renderer_and_does_not_snap_when_unguided() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+let renderedAt = null;
+presentationManifest = {
+  recording: {duration_ms: 12000},
+  beats: [
+    {id: 'one', renderer: 'terminal', offset_ms: 0, duration_ms: 4000},
+    {id: 'two', renderer: 'browser', offset_ms: 4000, duration_ms: 4000},
+    {id: 'three', renderer: 'terminal', offset_ms: 8000, duration_ms: 4000},
+  ],
+};
+presentationShell = {
+  renderAt(milliseconds) { renderedAt = milliseconds; return Promise.resolve(); },
+  setPlaybackRate() {},
+};
+events = [{time: 12, data: 'done'}];
+audioPlaybackSegments = [{
+  audioStart: 0, audioEnd: 12, presentationStart: 0, presentationEnd: 12,
+}];
+audioReady = true;
+audio = new Audio('/audio.mp3');
+audio.duration = 12;
+totalSeconds = 12;
+guidedPausePoints = [{time: 8, heading: 'Checkpoint'}];
+guidedMode = false;
+playing = true;
+startedAt = 0;
+beginScrub();
+progress.value = '500';
+previewSeek(progressValueSeconds());
+if (renderedAt !== 6000 || audio.currentTime !== 6) {
+  console.error(JSON.stringify({phase: 'preview', renderedAt, audioTime: audio.currentTime}));
+  process.exit(1);
+}
+commitProgressSeek();
+if (!playing || currentSeconds !== 6 || audio.currentTime !== 6 || !guideModal.hidden) {
+  console.error(JSON.stringify({
+    phase: 'commit', playing, currentSeconds, audioTime: audio.currentTime,
+    guideHidden: guideModal.hidden,
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_player_does_not_make_first_audio_segment_intro_by_default() -> None:
     result = run_player_script(
         r"""

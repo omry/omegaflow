@@ -27,7 +27,9 @@ from omegaflow.studio_config import (
     discover_project_layout,
     list_recording_ids,
     recording_from_script,
+    recording_script_dir_from_config,
     recording_spec_from_config,
+    studio_data_dir_from_config,
     studio_directive_blocks,
     studio_run_dir,
 )
@@ -373,7 +375,6 @@ def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("OMEGAFLOW_PROJECT_ROOT", raising=False)
 
     layout = discover_project_layout()
 
@@ -383,9 +384,28 @@ def test_discovers_recordings_project_directory(tmp_path, monkeypatch) -> None:
     assert layout.recording_script_dir == recordings_dir
 
 
+def test_discovers_project_config_from_nested_directory(tmp_path, monkeypatch) -> None:
+    project = tmp_path / "project"
+    nested = project / "docs" / "guide"
+    nested.mkdir(parents=True)
+    config_dir = project / ".omegaflow"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        "studio:\n  recording_dir: demos\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(nested)
+
+    layout = discover_project_layout()
+    config = compose_studio_config(None, ())
+
+    assert layout.root == project
+    assert config["project_root"] == str(project)
+    assert config["studio"]["recording_dir"] == "demos"
+
+
 def test_empty_workspace_uses_bundled_config(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("OMEGAFLOW_PROJECT_ROOT", raising=False)
 
     layout = discover_project_layout()
 
@@ -394,6 +414,30 @@ def test_empty_workspace_uses_bundled_config(tmp_path, monkeypatch) -> None:
     assert layout.config_dir.parent.name == "omegaflow"
     assert layout.data_dir == tmp_path / "recordings" / ".omegaflow"
     assert layout.recording_script_dir == tmp_path / "recordings"
+
+
+def test_project_root_is_hydra_config_and_environment_does_not_override_it(
+    tmp_path, monkeypatch
+) -> None:
+    ignored = tmp_path / "ignored"
+    configured = tmp_path / "configured"
+    config_dir = configured / ".omegaflow"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.yaml").write_text(
+        "studio:\n  recording_dir: demos\n  data_dir: .data\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OMEGAFLOW_PROJECT_ROOT", str(ignored))
+
+    config = compose_studio_config(
+        None,
+        overrides=(f"project_root={configured}",),
+    )
+
+    assert config["project_root"] == str(configured)
+    assert recording_script_dir_from_config(config) == configured / "demos"
+    assert studio_data_dir_from_config(config) == configured / ".data"
+    assert discover_project_layout(start=configured).root == configured
 
 
 def test_studio_run_dir_uses_data_directory() -> None:
@@ -1320,6 +1364,52 @@ def test_cli_rec_overrides_are_normalized_for_hydra() -> None:
         "+rec.capture.headless=false",
         "+rec.audio.enabled=false",
     ]
+
+
+def test_cli_adds_selected_project_to_hydra_searchpath(tmp_path) -> None:
+    argv = studio.add_project_config_searchpath(
+        ["omegaflow", f"project_root={tmp_path}", "action=list"]
+    )
+
+    assert argv == [
+        "omegaflow",
+        f'hydra.searchpath=["file://{tmp_path.as_posix()}"]',
+        f"project_root={tmp_path}",
+        "action=list",
+    ]
+
+
+def test_cli_project_root_loads_selected_project_config(tmp_path) -> None:
+    config_dir = tmp_path / ".omegaflow"
+    recording_dir = tmp_path / "demos" / "demo"
+    config_dir.mkdir()
+    recording_dir.mkdir(parents=True)
+    (config_dir / "config.yaml").write_text(
+        "studio:\n  recording_dir: demos\n",
+        encoding="utf-8",
+    )
+    (recording_dir / "index.md").write_text(
+        "---\nid: demo\ntitle: Demo\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "omegaflow.studio",
+            f"project_root={tmp_path}",
+            "action=list",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Available recording scripts:\n  demo\n" in result.stdout
 
 
 def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> None:

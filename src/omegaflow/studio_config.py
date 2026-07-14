@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -27,18 +28,17 @@ class ProjectLayout:
     recording_script_dir: Path
 
 
-def discover_project_layout() -> ProjectLayout:
+def discover_project_layout(start: Path | None = None) -> ProjectLayout:
     bundled_config_dir = Path(__file__).resolve().parent / "conf"
-    configured = os.environ.get("OMEGAFLOW_PROJECT_ROOT")
-    if configured:
-        root = Path(configured).expanduser().resolve()
-    else:
-        cwd = Path.cwd().resolve()
-        root = cwd
-        for candidate in (cwd, *cwd.parents):
-            if (candidate / "recordings" / "config.yaml").exists():
-                root = candidate
-                break
+    cwd = (start or Path.cwd()).expanduser().resolve()
+    root = cwd
+    for candidate in (cwd, *cwd.parents):
+        if (
+            (candidate / ".omegaflow" / "config.yaml").is_file()
+            or (candidate / "recordings" / "config.yaml").is_file()
+        ):
+            root = candidate
+            break
 
     config_dir = bundled_config_dir
 
@@ -52,20 +52,8 @@ def discover_project_layout() -> ProjectLayout:
     )
 
 
-def project_root() -> Path:
-    return discover_project_layout().root
-
-
-def relative_project_path(path: Path) -> str:
-    try:
-        return path.relative_to(PROJECT_ROOT).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 PROJECT_LAYOUT = discover_project_layout()
 PROJECT_ROOT = PROJECT_LAYOUT.root
-REPO_ROOT = PROJECT_ROOT
 PROJECT_DATA_DIR = PROJECT_LAYOUT.data_dir
 CONFIG_DIR = PROJECT_LAYOUT.config_dir
 STUDIO_CONFIG_NAME = "base-config"
@@ -78,6 +66,37 @@ NARRATION_BEAT_KEYS = {"id", "heading", "narration", "viewer_hold"}
 NARRATION_MARKER_RE = re.compile(
     r"@(?:(wait):([A-Za-z][A-Za-z0-9_-]*)(?:\+([0-9]+(?:\.[0-9]+)?)(ms|s))?|([A-Za-z][A-Za-z0-9_-]*))@"
 )
+
+_ACTIVE_PROJECT_ROOT: Path | None = None
+
+
+def project_root_from_value(value: object) -> Path:
+    text = normalize_studio_token(value)
+    if not text:
+        return PROJECT_ROOT
+    candidate = Path(text).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    return candidate.resolve()
+
+
+def project_root(config: dict[str, Any] | None = None) -> Path:
+    if config is not None:
+        return project_root_from_value(config.get("project_root"))
+    return _ACTIVE_PROJECT_ROOT or PROJECT_ROOT
+
+
+def configure_project_root(config: dict[str, Any]) -> Path:
+    global _ACTIVE_PROJECT_ROOT
+    _ACTIVE_PROJECT_ROOT = project_root(config)
+    return _ACTIVE_PROJECT_ROOT
+
+
+def relative_project_path(path: Path) -> str:
+    try:
+        return path.relative_to(project_root()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 class StudioConfigError(RuntimeError):
@@ -92,18 +111,18 @@ def normalize_studio_token(value: object) -> str:
     return str(value)
 
 
-def project_data_dir_from_value(value: object) -> str:
+def project_data_dir_from_value(value: object, root_value: object = None) -> str:
     data_dir_text = normalize_studio_token(value)
     if not data_dir_text:
         return relative_project_path(PROJECT_DATA_DIR)
     data_dir = Path(data_dir_text).expanduser()
-    if data_dir.is_absolute():
-        return data_dir.as_posix()
+    if not data_dir.is_absolute() and root_value is not None:
+        data_dir = project_root_from_value(root_value) / data_dir
     return data_dir.as_posix()
 
 
 def recording_script_dir_from_config(config: dict[str, Any] | None) -> Path:
-    root = project_root()
+    root = project_root(config)
     studio = config.get("studio", {}) if config else {}
     recording_dir_value = None
     if isinstance(studio, dict):
@@ -116,7 +135,7 @@ def recording_script_dir_from_config(config: dict[str, Any] | None) -> Path:
 
 
 def studio_data_dir_from_config(config: dict[str, Any] | None) -> Path:
-    root = project_root()
+    root = project_root(config)
     studio = config.get("studio", {}) if config else {}
     data_dir_value = None
     if isinstance(studio, dict):
@@ -129,12 +148,24 @@ def studio_data_dir_from_config(config: dict[str, Any] | None) -> Path:
 
 
 def studio_run_dir(*args: object) -> str:
-    if len(args) != 6:
+    if len(args) == 6:
+        root_value = None
+        data_dir_value, action, step, dry_run, recording_id, timestamp = args
+    elif len(args) == 7:
+        (
+            root_value,
+            data_dir_value,
+            action,
+            step,
+            dry_run,
+            recording_id,
+            timestamp,
+        ) = args
+    else:
         raise StudioConfigError(
-            "studio_run_dir expects data_dir, action, step, dry_run, "
-            "recording_id, timestamp"
+            "studio_run_dir expects optional project_root followed by data_dir, "
+            "action, step, dry_run, recording_id, timestamp"
         )
-    data_dir_value, action, step, dry_run, recording_id, timestamp = args
     action_text = normalize_studio_token(action) or "build"
     step_text = normalize_studio_token(step)
     recording_text = normalize_studio_token(recording_id)
@@ -148,7 +179,7 @@ def studio_run_dir(*args: object) -> str:
         step_text in {"record", "session"}
         or (not step_text and action_text in {"build", "record"})
     )
-    data_dir = project_data_dir_from_value(data_dir_value)
+    data_dir = project_data_dir_from_value(data_dir_value, root_value)
     if is_recording_run:
         return f"{data_dir}/runs/{recording_text}/{timestamp_text}"
     job_kind = step_text or action_text
@@ -158,6 +189,11 @@ def studio_run_dir(*args: object) -> str:
 def register_resolvers() -> None:
     if not OmegaConf.has_resolver("studio_run_dir"):
         OmegaConf.register_resolver("studio_run_dir", studio_run_dir)
+    if not OmegaConf.has_resolver("omegaflow_project_root"):
+        OmegaConf.register_resolver(
+            "omegaflow_project_root",
+            lambda: str(discover_project_layout().root),
+        )
 
 
 class StudioAction(str, Enum):
@@ -217,6 +253,7 @@ class StudioRuntimeConfig:
 
 @dataclass
 class StudioConfig:
+    project_root: str = "${omegaflow_project_root:}"
     action: StudioAction = StudioAction.build
     step: StudioStep | None = None
     output_format: str = "text"
@@ -765,6 +802,31 @@ def normalize_hydra_override(override: str) -> str:
     return f"{key}='{escaped}'"
 
 
+def override_value(overrides: Sequence[str], key: str) -> str | None:
+    prefix = f"{key}="
+    value = None
+    for override in overrides:
+        text = str(override)
+        if text.startswith("+"):
+            text = text[1:]
+        if text.startswith(prefix):
+            value = text[len(prefix) :]
+    return value
+
+
+def project_config_searchpath_override(overrides: Sequence[str]) -> str | None:
+    if override_value(overrides, "hydra.searchpath") is not None:
+        return None
+    configured_root = override_value(overrides, "project_root")
+    root = (
+        project_root_from_value(configured_root)
+        if configured_root is not None
+        else discover_project_layout().root
+    )
+    uri = f"file://{root.as_posix()}"
+    return f"hydra.searchpath=[{json.dumps(uri)}]"
+
+
 def compose_studio_config(
     recording_id: str | None,
     overrides: Sequence[str] = (),
@@ -775,6 +837,9 @@ def compose_studio_config(
     hydra_overrides = [
         normalize_hydra_override(str(override)) for override in overrides
     ]
+    searchpath_override = project_config_searchpath_override(overrides)
+    if searchpath_override is not None:
+        hydra_overrides.insert(0, searchpath_override)
     if recording_id is not None:
         hydra_overrides.insert(0, f"recording={recording_id}")
     try:
@@ -798,14 +863,15 @@ def container_from_hydra_cfg(cfg: DictConfig) -> dict[str, Any]:
     data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
     if not isinstance(data, dict):
         raise StudioConfigError("composed Hydra config must be a mapping")
+    configure_project_root(data)
     return data
 
 
-def resolve_config_path(path: str) -> Path:
+def resolve_config_path(path: str, config: dict[str, Any] | None = None) -> Path:
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
-    return REPO_ROOT / candidate
+    return project_root(config) / candidate
 
 
 def dotenv_entry(line: str, *, path: Path, line_number: int) -> tuple[str, str] | None:
@@ -865,7 +931,7 @@ def load_configured_env_file(config: dict[str, Any]) -> dict[str, str]:
     if not isinstance(override, bool):
         raise StudioConfigError("env_override must be a boolean")
 
-    return load_env_file(resolve_config_path(env_file), override=override)
+    return load_env_file(resolve_config_path(env_file, config), override=override)
 
 
 def merge_mapping(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -980,7 +1046,7 @@ def split_frontmatter(script_text: str, *, source: Path) -> tuple[dict[str, Any]
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(project_root()))
     except ValueError:
         return str(path)
 
@@ -1470,7 +1536,7 @@ def recording_from_script(
         schema=RecordingSpec,
         source=str(script_path),
     )
-    spec["_script_dir"] = display_path(script_path.parent)
+    spec["_script_dir"] = str(script_path.parent.resolve())
     merge_script_recording_beats(spec, blocks)
     from .recording_plan import validate_recording_modalities
 
@@ -1568,6 +1634,7 @@ def recording_spec_from_config(
     overrides: Sequence[str],
     hydra_output_dir: str | None = None,
 ) -> dict[str, Any]:
+    configure_project_root(config)
     resolved_recording_id = recording_id_from_config(config, recording_id)
     recording_dir = recording_script_dir_from_config(config)
     spec = recording_from_script(
@@ -1598,11 +1665,12 @@ def recording_spec_from_config(
 
     script = spec.get("script")
     manifest_path = (
-        resolve_config_path(script)
+        resolve_config_path(script, config)
         if isinstance(script, str) and script
         else recording_script_path(resolved_recording_id, recording_dir=recording_dir)
     )
     spec["_manifest_path"] = str(manifest_path)
+    spec["_project_root"] = str(project_root(config))
     spec["_config_dir"] = str(CONFIG_DIR)
     spec["_recording_dir"] = str(recording_dir)
     spec["_recording_id"] = resolved_recording_id

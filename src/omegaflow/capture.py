@@ -134,8 +134,6 @@ class CaptureContext:
         resolved_environment.update(
             {
                 "OMEGAFLOW_RUN_DIR": str(paths.run),
-                "OMEGAFLOW_WORKSPACE": str(resolved_workspace),
-                "OMEGAFLOW_WORKDIR": str(resolved_working_directory),
                 "TMPDIR": str(paths.temporary),
             }
         )

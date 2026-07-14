@@ -36,6 +36,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
+| `project_root` | auto-discovered | Base directory for relative project, recording, data, output, and env-file paths. May be overridden with an absolute or current-directory-relative path. |
 | `load_env_file` | `true` | Load a process-level env file before actions that execute or inspect recording work. |
 | `env_file` | `.env` | Env file path resolved from the project root; `null` disables it even when loading is enabled. |
 | `env_override` | `false` | Let env-file values replace variables already present in the process environment. |

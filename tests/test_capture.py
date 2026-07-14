@@ -58,7 +58,8 @@ def test_capture_context_keeps_explicit_working_directory(tmp_path: Path) -> Non
     )
 
     assert context.working_directory == workdir.resolve()
-    assert context.environment["OMEGAFLOW_WORKDIR"] == str(workdir.resolve())
+    assert "OMEGAFLOW_WORKSPACE" not in context.environment
+    assert "OMEGAFLOW_WORKDIR" not in context.environment
 
 
 def test_prepare_capture_paths_rejects_symlink_and_file(tmp_path: Path) -> None:

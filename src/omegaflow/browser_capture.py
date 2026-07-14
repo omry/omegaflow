@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
-from .browser_runtime import BrowserRuntimeError, pinned_browser_runtime
+from .browser_runtime import (
+    BrowserRuntimeError,
+    actionable_playwright_error,
+    pinned_browser_runtime,
+)
 from .browser_visuals import BrowserVisualCapture, BrowserVisualError
 from .capture import BeatCapture, CaptureContext
 from .recording_plan import (
@@ -424,11 +428,7 @@ class PersistentBrowserRunner:
         except PlaywrightError as exc:
             message = self._sanitize(str(exc))
             self._close_resources()
-            if "Executable doesn't exist" in message:
-                message = (
-                    "pinned Chromium is not installed; run "
-                    "`python -m playwright install chromium`"
-                )
+            message = actionable_playwright_error(message)
             raise BrowserCaptureError("BROWSER_SCHEMA", message) from exc
         except BaseException as exc:
             message = self._sanitize(str(exc))

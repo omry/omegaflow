@@ -1218,14 +1218,37 @@
         renderSectionMarkers();
       }
 
+      function timelineMarkerPoints() {
+        const beatPoints = Array.isArray(presentationManifest?.beats)
+          ? presentationManifest.beats.map((beat) => ({
+            time: Number(beat.offset_ms) / 1000,
+            heading: String(beat.heading || beat.id || 'Beat'),
+            kind: 'beat',
+            debugOnly: false,
+          }))
+          : [];
+        if (!beatPoints.length) {
+          return guidedPausePoints;
+        }
+        const points = [...beatPoints];
+        for (const checkpoint of guidedPausePoints) {
+          const time = Number(checkpoint.time);
+          if (!points.some((point) => Math.abs(point.time - time) < 0.001)) {
+            points.push({...checkpoint, kind: 'checkpoint'});
+          }
+        }
+        return points.sort((left, right) => left.time - right.time);
+      }
+
       function renderSectionMarkers() {
         sectionMarkers.textContent = '';
         hideSectionTooltip();
-        if (!totalSeconds || !guidedPausePoints.length) {
+        const points = timelineMarkerPoints();
+        if (!totalSeconds || !points.length) {
           return;
         }
         const seen = new Set();
-        for (const point of guidedPausePoints) {
+        for (const point of points) {
           const start = Number(point.time || 0);
           if (!Number.isFinite(start) || seen.has(start)) {
             continue;
@@ -1244,7 +1267,7 @@
             `${((0.5 - ratio) * 0.9).toFixed(4)}rem`,
           );
           marker.dataset.start = String(start);
-          marker.dataset.kind = point.debugOnly ? 'debug' : 'checkpoint';
+          marker.dataset.kind = point.debugOnly ? 'debug' : point.kind || 'checkpoint';
           marker.dataset.heading = point.heading || 'Checkpoint';
           marker.title = point.debugOnly
             ? `Debug checkpoint: ${point.heading || 'Beat'}`
@@ -1272,6 +1295,19 @@
       }
 
       function sectionForSeconds(seconds) {
+        if (Array.isArray(presentationManifest?.beats) && presentationManifest.beats.length) {
+          const milliseconds = Math.max(0, seconds) * 1000;
+          const beat = [...presentationManifest.beats]
+            .reverse()
+            .find((candidate) => milliseconds >= Number(candidate.offset_ms));
+          if (beat) {
+            return {
+              heading: String(beat.heading || beat.id || 'Beat'),
+              presentationStart: Number(beat.offset_ms) / 1000,
+              text: String(beat.heading || beat.id || 'Beat'),
+            };
+          }
+        }
         if (!audioPlaybackSegments.length) {
           return null;
         }
@@ -1604,9 +1640,14 @@
       }
 
       function sectionStartTimes() {
-        const source = audioPlaybackSegments.length
-          ? audioPlaybackSegments.map((segment) => segment.presentationStart)
-          : [0, ...guidedPausePoints.map((point) => point.time)];
+        const manifestStarts = Array.isArray(presentationManifest?.beats)
+          ? presentationManifest.beats.map((beat) => Number(beat.offset_ms) / 1000)
+          : [];
+        const source = manifestStarts.length
+          ? manifestStarts
+          : audioPlaybackSegments.length
+            ? audioPlaybackSegments.map((segment) => segment.presentationStart)
+            : [0, ...guidedPausePoints.map((point) => point.time)];
         return [...new Set(source
           .map((value) => Number(value))
           .filter((value) => Number.isFinite(value) && value >= 0 && value <= totalSeconds))]
@@ -1951,6 +1992,7 @@
       function previewSeek(seconds) {
         currentSeconds = Math.max(0, Math.min(seconds, totalSeconds));
         const clamped = Math.min(currentSeconds, totalSeconds);
+        renderPresentationFrame(clamped, true);
         if (audioReady && audio) {
           audio.currentTime = audioTimeForPresentation(clamped);
         }
@@ -1986,7 +2028,7 @@
           return;
         }
         const rawTarget = progressValueSeconds();
-        const checkpoint = nearestCheckpoint(rawTarget);
+        const checkpoint = guidedMode ? nearestCheckpoint(rawTarget) : null;
         const target = checkpoint?.time ?? rawTarget;
         seekTo(target, {
           resume: checkpoint ? false : resumeAfterSeek,

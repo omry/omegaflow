@@ -21,12 +21,12 @@ from omegaconf import DictConfig
 from . import retime_cast
 from .studio_config import (
     CONFIG_DIR,
-    PROJECT_ROOT,
     STUDIO_CONFIG_NAME,
     StudioConfigError,
     container_from_hydra_cfg,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
+    project_root,
 )
 from .terminal_style import (
     ANSI_CYAN_BOLD,
@@ -36,7 +36,6 @@ from .terminal_style import (
 )
 
 
-REPO_ROOT = PROJECT_ROOT
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -103,12 +102,12 @@ def relative_path(path: str) -> Path:
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
-    return REPO_ROOT / candidate
+    return project_root() / candidate
 
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(REPO_ROOT))
+        return str(path.relative_to(project_root()))
     except ValueError:
         return str(path)
 
