@@ -80,6 +80,8 @@ docs/_build/
 
 # OmegaFlow Studio runtime
 /recordings/.omegaflow/
+/.artifacts/
+/.playwright-browsers/
 
 # PyBuilder
 .pybuilder/

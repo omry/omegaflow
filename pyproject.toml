@@ -19,6 +19,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+browser = [
+  "playwright==1.61.0",
+]
 dev = [
   "build>=1.2",
   "hatchling>=1.26",

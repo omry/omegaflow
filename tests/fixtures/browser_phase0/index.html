@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmegaFlow Browser Fixture</title>
+    <style>
+      * { box-sizing: border-box; }
+      html { color-scheme: light; background: #eef1f7; }
+      body {
+        margin: 0;
+        color: #182033;
+        background: #eef1f7;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 16px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 64px;
+        padding: 0 32px;
+        color: white;
+        background: #252a46;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 24px;
+        max-width: 1180px;
+        margin: 32px auto;
+      }
+      .card {
+        padding: 24px;
+        border: 1px solid #ccd3e0;
+        border-radius: 14px;
+        background: white;
+        box-shadow: 0 8px 24px rgb(30 40 70 / 8%);
+      }
+      .stack { display: grid; gap: 16px; }
+      label { display: grid; gap: 6px; font-weight: 700; }
+      input, textarea {
+        width: 100%;
+        height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #8994aa;
+        border-radius: 7px;
+        color: #182033;
+        background: white;
+        font: 400 16px/22px Arial, Helvetica, sans-serif;
+        letter-spacing: 0;
+      }
+      textarea { height: 84px; resize: none; }
+      [contenteditable] {
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #8994aa;
+        border-radius: 7px;
+        background: white;
+        font: 400 16px/22px Arial, Helvetica, sans-serif;
+      }
+      button {
+        min-height: 40px;
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 7px;
+        color: white;
+        background: #5c4ee5;
+        font: 700 15px Arial, Helvetica, sans-serif;
+        cursor: pointer;
+      }
+      .muted { color: #667089; }
+      .scroll-box {
+        height: 190px;
+        overflow: auto;
+        border: 1px solid #ccd3e0;
+        border-radius: 8px;
+        background: #fafbfe;
+      }
+      .row { min-height: 54px; padding: 16px; border-bottom: 1px solid #e2e6ef; }
+      .sticky { position: sticky; top: 0; z-index: 1; background: #ffefb8; }
+      .fixed { position: fixed; right: 12px; bottom: 12px; z-index: 2; background: #ffd8e4; }
+      #finite-box { width: 80px; height: 36px; border-radius: 6px; background: #5c4ee5; transition: width 240ms ease; }
+      #finite-box.settled { width: 260px; }
+      #static-target { padding: 12px; border-radius: 7px; background: #e8f5e9; }
+      #dynamic-fragment {
+        position: relative;
+        height: 150px;
+        overflow: hidden;
+        border-radius: 10px;
+        background: #151b31;
+      }
+      #dynamic-orb {
+        position: absolute;
+        top: 45px;
+        left: 24px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #ffcc4d, #ff4f8b);
+        animation: orbit 1.2s linear infinite alternate;
+      }
+      #dynamic-secret {
+        position: absolute;
+        right: 18px;
+        bottom: 16px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        color: white;
+        background: #b52d53;
+        animation: sensitive-move .8s ease-in-out infinite alternate;
+      }
+      #motion-canvas, #fixture-video { position: absolute; width: 120px; height: 68px; border: 1px solid #ffffff55; }
+      #motion-canvas { left: 12px; bottom: 10px; }
+      #fixture-video { right: 12px; top: 10px; object-fit: cover; }
+      #complex-scroll { position: absolute; right: 12px; bottom: 10px; width: 120px; height: 52px; overflow: auto; color: white; background: #ffffff15; }
+      #delayed-secret { position: absolute; left: 150px; top: 8px; color: white; background: #b52d53; }
+      @keyframes orbit { from { transform: translateX(0); } to { transform: translateX(220px); } }
+      @keyframes sensitive-move { from { transform: translateX(0) scale(1); } to { transform: translateX(-70px) scale(1.15); } }
+      dialog { width: 420px; border: 0; border-radius: 12px; box-shadow: 0 24px 80px #1118; }
+      dialog::backdrop { background: rgb(20 25 45 / 45%); }
+      #loading {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: none;
+        place-items: center;
+        color: white;
+        background: #252a46;
+        font-size: 28px;
+      }
+      body.loading #loading { display: grid; }
+    </style>
+  </head>
+  <body>
+    <div id="loading">Loading deterministic workspace…</div>
+    <header>
+      <strong>OmegaFlow Fixture</strong>
+      <span data-testid="account-email">Public demo account</span>
+    </header>
+    <main>
+      <section class="card stack" aria-label="Project form">
+        <div>
+          <h1>Create a project</h1>
+          <p class="muted">A local, deterministic browser-recording fixture.</p>
+        </div>
+        <label>
+          Project name
+          <input id="project-name" data-testid="project-name" placeholder="Example project" />
+        </label>
+        <label>
+          Password
+          <input id="password" data-testid="password" type="password" autocomplete="off" />
+        </label>
+        <label>
+          Notes
+          <textarea id="notes" data-testid="notes"></textarea>
+        </label>
+        <label>
+          Controlled code
+          <input id="controlled" data-testid="controlled" />
+        </label>
+        <label>
+          Formatted amount
+          <input id="formatted" data-testid="formatted" inputmode="decimal" />
+        </label>
+        <label>
+          Rich description
+          <div id="editable" data-testid="editable" contenteditable="true"></div>
+        </label>
+        <div>
+          <button id="create" type="button">Create project</button>
+          <button id="open-dialog" type="button">Open dialog</button>
+        </div>
+        <div id="status" role="status">Ready</div>
+        <div id="static-target">Stable content</div>
+        <button id="start-transition" type="button">Start finite transition</button>
+        <div id="finite-box"></div>
+        <div id="polling">Polling 0</div>
+        <div id="async-content">Waiting for async content</div>
+        <div class="scroll-box" id="static-scroll" data-testid="static-scroll">
+          <div class="row">Static row 1</div><div class="row">Static row 2</div>
+          <div class="row">Static row 3</div><div class="row">Static row 4</div>
+          <div class="row">Static row 5</div><div class="row">Static row 6</div>
+        </div>
+        <div class="scroll-box" id="sticky-scroll" data-testid="sticky-scroll">
+          <div class="row sticky">Sticky heading</div><div class="row">Sticky row 1</div>
+          <div class="row">Sticky row 2</div><div class="row">Sticky row 3</div>
+        </div>
+        <div class="scroll-box" id="fixed-scroll" data-testid="fixed-scroll">
+          <div class="row fixed">Fixed notice</div><div class="row">Fixed row 1</div>
+          <div class="row">Fixed row 2</div><div class="row">Fixed row 3</div>
+        </div>
+        <div class="scroll-box" id="virtual-scroll" data-testid="virtual-scroll" data-virtualized="true">
+          <div class="row">Virtual row 1</div><div class="row">Virtual row 2</div>
+        </div>
+        <div class="scroll-box" id="scroll-linked" data-testid="scroll-linked" data-scroll-linked="true">
+          <div class="row">Scroll-linked row 1</div><div class="row">Scroll-linked row 2</div>
+        </div>
+      </section>
+      <aside class="card stack">
+        <h2>Dynamic fragment</h2>
+        <div id="dynamic-fragment" data-testid="dynamic-fragment">
+          <div id="dynamic-orb"></div>
+          <div id="dynamic-secret" data-testid="dynamic-secret">Moving fixture label</div>
+          <canvas id="motion-canvas" width="120" height="68"></canvas>
+          <video id="fixture-video" src="/fixture-video.webm" autoplay muted loop playsinline></video>
+          <div id="complex-scroll"><div style="height: 180px">Complex<br />scroll<br />motion<br />fixture</div></div>
+        </div>
+        <button id="create-sensitive" type="button">Create sensitive content</button>
+      </aside>
+    </main>
+    <dialog id="dialog">
+      <h2>Project created</h2>
+      <p id="dialog-message">The deterministic response completed.</p>
+      <button id="close-dialog" type="button">Close</button>
+    </dialog>
+    <script>
+      const query = new URLSearchParams(location.search);
+      if (query.get('loading') === 'show') {
+        document.body.classList.add('loading');
+        setTimeout(() => document.body.classList.remove('loading'), 350);
+      }
+      document.getElementById('open-dialog').addEventListener('click', () => {
+        const message = document.getElementById('dialog-message');
+        message.textContent = 'Waiting for async dialog content';
+        document.getElementById('dialog').showModal();
+        setTimeout(() => { message.textContent = 'Async dialog ready'; }, 180);
+      });
+      document.getElementById('close-dialog').addEventListener('click', () => {
+        document.getElementById('dialog').close();
+      });
+      document.getElementById('create').addEventListener('click', async () => {
+        const status = document.getElementById('status');
+        status.textContent = 'Creating…';
+        const response = await fetch('/api/project', {method: 'POST'});
+        const project = await response.json();
+        status.textContent = `Created ${project.id}`;
+        document.getElementById('dialog').showModal();
+      });
+      document.getElementById('start-transition').addEventListener('click', () => {
+        document.getElementById('finite-box').classList.add('settled');
+      });
+      document.getElementById('controlled').addEventListener('input', (event) => {
+        event.target.value = event.target.value.toUpperCase();
+      });
+      document.getElementById('formatted').addEventListener('blur', (event) => {
+        const value = Number(String(event.target.value).replace(/[^0-9.]/g, ''));
+        event.target.value = Number.isFinite(value) ? `$${value.toFixed(2)}` : '';
+      });
+      document.getElementById('create-sensitive').addEventListener('click', () => {
+        const value = document.createElement('div');
+        value.id = 'delayed-secret';
+        value.dataset.testid = 'delayed-secret';
+        value.textContent = 'late-secret-value';
+        document.getElementById('dynamic-fragment').appendChild(value);
+      });
+      setTimeout(() => {
+        document.getElementById('async-content').textContent = 'Async content ready';
+      }, 180);
+      let poll = 0;
+      setInterval(() => {
+        poll += 1;
+        document.getElementById('polling').textContent = `Polling ${poll % 10}`;
+      }, 90);
+      const canvas = document.getElementById('motion-canvas');
+      const drawing = canvas.getContext('2d');
+      let frame = 0;
+      function draw() {
+        frame += 1;
+        drawing.fillStyle = '#11182b';
+        drawing.fillRect(0, 0, canvas.width, canvas.height);
+        drawing.fillStyle = '#58d6c7';
+        drawing.fillRect((frame * 2) % canvas.width, 20, 18, 18);
+        requestAnimationFrame(draw);
+      }
+      draw();
+      const complexScroll = document.getElementById('complex-scroll');
+      setInterval(() => {
+        complexScroll.scrollTop = (complexScroll.scrollTop + 2) % 100;
+      }, 40);
+    </script>
+  </body>
+</html>

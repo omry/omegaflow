@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OmegaFlow Mixed Player Prototype</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; background: #101424; }
+      body { display: grid; grid-template-rows: 1fr auto; color: white; font-family: Arial, sans-serif; }
+      #stage { display: grid; min-height: 0; place-items: center; padding: 24px; overflow: hidden; }
+      #window {
+        display: grid;
+        grid-template-rows: 34px 40px minmax(0, 1fr);
+        width: min(1100px, 100%);
+        overflow: hidden;
+        border: 1px solid #69718d;
+        border-radius: 12px;
+        background: #272d42;
+        box-shadow: 0 24px 70px #0009;
+        animation: window-open 320ms ease-out both;
+      }
+      body.windowless #window {
+        grid-template-rows: 40px minmax(0, 1fr);
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      body.windowless #titlebar { display: none; }
+      body.chrome-hidden #window { grid-template-rows: 34px minmax(0, 1fr); }
+      body.chrome-hidden #chrome { display: none; }
+      #titlebar { display: flex; align-items: center; padding: 0 12px; background: #31384e; }
+      #titlebar::before { content: '●  ●  ●'; color: #9da6c1; letter-spacing: 5px; }
+      #chrome { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: #e9edf5; color: #283047; }
+      #url { flex: 1; padding: 6px 10px; border-radius: 7px; background: white; font-size: 13px; }
+      #viewport { position: relative; aspect-ratio: 1440 / 900; min-height: 0; overflow: hidden; background: #eef1f7; }
+      #viewport iframe {
+        position: absolute;
+        inset: 0;
+        width: 1440px;
+        height: 900px;
+        border: 0;
+        transform-origin: 0 0;
+        pointer-events: none;
+      }
+      #terminal { display: none; height: 100%; margin: 0; padding: 22px; color: #eff2ff; background: #151929; font: 16px/1.5 monospace; }
+      body.terminal #chrome { visibility: hidden; }
+      body.terminal #terminal { display: block; }
+      body.terminal iframe { display: none; }
+      #controls { display: flex; justify-content: center; gap: 12px; padding: 14px; background: #1b2034; }
+      #controls button { min-width: 48px; min-height: 44px; border: 0; border-radius: 8px; color: white; background: #5c4ee5; }
+      @keyframes window-open { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      body.fade #window { animation: fade-in 240ms linear both; }
+      @media (prefers-reduced-motion: reduce) { #window { animation: none; } }
+      @media (max-width: 600px) {
+        #stage { padding: 8px; }
+        #window { width: 100%; border-radius: 7px; }
+        #titlebar { height: 26px; }
+        #chrome { min-width: 0; }
+        #url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #controls { justify-content: space-around; }
+      }
+      @media (max-height: 500px) {
+        body { grid-template-rows: 1fr 52px; }
+        #stage { padding: 4px; }
+        #window { width: min(100%, 105vh); }
+        #controls { padding: 4px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="stage">
+      <section id="window" aria-label="Synthetic KDE browser window">
+        <div id="titlebar"></div>
+        <div id="chrome"><span>←</span><span>→</span><div id="url">https://app.example.test/projects</div></div>
+        <div id="viewport">
+          <iframe src="/" title="Browser demo viewport"></iframe>
+          <pre id="terminal">$ omegaflow recording=phase0-mixed
+Starting local service…
+Ready on http://127.0.0.1:3000</pre>
+        </div>
+      </section>
+    </main>
+    <nav id="controls" aria-label="Playback controls">
+      <button type="button" aria-label="Previous">◀</button>
+      <button type="button" aria-label="Play">▶</button>
+      <button type="button" aria-label="Next">▶|</button>
+    </nav>
+    <script>
+      const query = new URLSearchParams(location.search);
+      if (query.get('scene') === 'terminal') document.body.classList.add('terminal');
+      if (query.get('chrome') === 'hidden') document.body.classList.add('chrome-hidden');
+      if (query.get('window') === 'none') document.body.classList.add('windowless');
+      if (query.get('transition') === 'fade') document.body.classList.add('fade');
+      const viewport = document.getElementById('viewport');
+      const frame = viewport.querySelector('iframe');
+      const scaleCapture = () => {
+        frame.style.transform = `scale(${viewport.clientWidth / 1440})`;
+      };
+      new ResizeObserver(scaleCapture).observe(viewport);
+      scaleCapture();
+      const phase0Beats = [
+        {id: 'terminal-start', renderer: 'terminal', offset_ms: 0, duration_ms: 900},
+        {id: 'browser-create', renderer: 'browser', offset_ms: 900, duration_ms: 1300},
+        {id: 'terminal-verify', renderer: 'terminal', offset_ms: 2200, duration_ms: 800},
+      ];
+      window.phase0RenderAt = (globalMs) => {
+        let beat = phase0Beats[0];
+        for (const candidate of phase0Beats) {
+          if (candidate.offset_ms <= globalMs) beat = candidate;
+        }
+        document.body.classList.toggle('terminal', beat.renderer === 'terminal');
+        return {
+          id: beat.id,
+          renderer: beat.renderer,
+          local_ms: globalMs - beat.offset_ms,
+        };
+      };
+    </script>
+  </body>
+</html>

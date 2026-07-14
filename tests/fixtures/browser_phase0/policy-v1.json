@@ -1,0 +1,82 @@
+{
+  "policy_version": 1,
+  "runtime": {
+    "playwright": "1.61.0",
+    "chromium_revision": "1228",
+    "chromium_version": "149.0.7827.55"
+  },
+  "stable_state": {
+    "name": "stable-v1",
+    "sample_interval_ms": 60,
+    "consecutive_equal_frames": 3,
+    "timeout_ms": 1200,
+    "ready_condition_precedes_sampling": true,
+    "on_timeout": "dynamic-fragment-or-error",
+    "diagnostic_frames": "first-last-and-differing"
+  },
+  "text": {
+    "name": "input-overlay-v1",
+    "eligible": [
+      "single-line-input",
+      "controlled-single-line-input-with-equal-fill-and-type-result"
+    ],
+    "required_fields": [
+      "bounds",
+      "font",
+      "line-height",
+      "letter-spacing",
+      "color",
+      "alignment",
+      "padding",
+      "clipping",
+      "selection",
+      "caret"
+    ],
+    "fallback": "captured-state-or-dynamic-fragment",
+    "secret_presentations": ["masked", "placeholder", "omitted"]
+  },
+  "scroll": {
+    "name": "scroll-v1",
+    "reconstruct_only_if": [
+      "no-video-or-canvas",
+      "no-animation",
+      "no-sticky-or-fixed-descendant",
+      "not-virtualized",
+      "no-scroll-linked-effects"
+    ],
+    "fallback": "playwright-video-v1-or-error"
+  },
+  "dynamic_fragment": {
+    "name": "playwright-video-v1",
+    "source": "playwright-context-video",
+    "container": "webm",
+    "codec": "vp8",
+    "crf": 10,
+    "target_bitrate_bps": 2000000,
+    "timing": "context-video-origin-plus-action-window-relative-milliseconds",
+    "trim": "frame-accurate-keyframe-safe-ffmpeg-vp8-reencode",
+    "max_trim_duration_error_ms": 120,
+    "max_large_frame_gaps": 0,
+    "audio_streams": 0,
+    "max_duration_ms": 3000,
+    "max_encoded_bytes": 2000000,
+    "decoded_asset_memory_budget_bytes": 67108864,
+    "decoded_asset_memory_budget_status": "provisional-until-real-device-release-gate",
+    "alternate_source": "cdp-jpeg-screencast-diagnostics-only"
+  },
+  "redaction": {
+    "name": "redaction-v1",
+    "stable_states": "capture-time-solid-mask",
+    "dynamic_fragments_with_required_redaction": "prohibited",
+    "failure": "BROWSER_REDACTION_UNSAFE",
+    "target_missing_or_untrackable": "fail-closed"
+  },
+  "renderer": {
+    "viewport_scaling": "uniform-letterbox",
+    "current_and_next_beats_ready": true,
+    "older_assets": "evict",
+    "mobile_controls": "responsive-touch-targets",
+    "reduced_motion": "preserve-duration-use-cuts",
+    "real_device_validation": "phase-1-release-gate"
+  }
+}
