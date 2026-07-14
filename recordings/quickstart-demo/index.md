@@ -38,7 +38,7 @@ browser:
   base_url: http://127.0.0.1:18474
   viewport:
     width: 1280
-    height: 720
+    height: 450
   context:
     locale: en-US
     timezone: UTC

@@ -1,6 +1,6 @@
 {
   "audio": "audio.mp3",
-  "duration_ms": 61368,
+  "duration_ms": 59088,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -13,7 +13,7 @@
           "text_start": 0
         }
       ],
-      "source_end_ms": 14064,
+      "source_end_ms": 13512,
       "source_start_ms": 0,
       "timestamps": "timestamps/__beat__-install.json"
     },
@@ -27,8 +27,8 @@
           "text_start": 0
         }
       ],
-      "source_end_ms": 27864,
-      "source_start_ms": 14064,
+      "source_end_ms": 27120,
+      "source_start_ms": 13512,
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -47,8 +47,8 @@
           "text_start": 177
         }
       ],
-      "source_end_ms": 61368,
-      "source_start_ms": 27864,
+      "source_end_ms": 59088,
+      "source_start_ms": 27120,
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

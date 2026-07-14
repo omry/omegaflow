@@ -3,15 +3,15 @@
     {
       "beat_id": "install",
       "id": "install",
-      "source_ms": 6820,
+      "source_ms": 5841,
       "text_offset": 99
     }
   ],
-  "duration_ms": 14064,
+  "duration_ms": 13512,
   "members": [
     {
       "beat_id": "install",
-      "source_end_ms": 14064,
+      "source_end_ms": 13512,
       "source_start_ms": 0,
       "text_end": 229,
       "text_start": 0
@@ -23,232 +23,232 @@
     {
       "beat_id": "install",
       "gap_ms": 200,
-      "source_ms": 9460,
+      "source_ms": 9205,
       "target": "install_command",
       "text_offset": 156
     }
   ],
   "words": [
     {
-      "end_ms": 840,
+      "end_ms": 531,
       "start_ms": 0,
       "text": "OmegaFlow",
       "text_end": 9,
       "text_start": 0
     },
     {
-      "end_ms": 1360,
-      "start_ms": 840,
+      "end_ms": 885,
+      "start_ms": 590,
       "text": "turns",
       "text_end": 15,
       "text_start": 10
     },
     {
-      "end_ms": 2100,
-      "start_ms": 1360,
+      "end_ms": 1416,
+      "start_ms": 944,
       "text": "scripted",
       "text_end": 24,
       "text_start": 16
     },
     {
-      "end_ms": 2300,
-      "start_ms": 2100,
+      "end_ms": 1947,
+      "start_ms": 1475,
       "text": "terminal",
       "text_end": 33,
       "text_start": 25
     },
     {
-      "end_ms": 2580,
-      "start_ms": 2300,
+      "end_ms": 2183,
+      "start_ms": 2006,
       "text": "and",
       "text_end": 37,
       "text_start": 34
     },
     {
-      "end_ms": 2900,
-      "start_ms": 2580,
+      "end_ms": 2655,
+      "start_ms": 2242,
       "text": "browser",
       "text_end": 45,
       "text_start": 38
     },
     {
-      "end_ms": 3440,
-      "start_ms": 2900,
+      "end_ms": 3245,
+      "start_ms": 2714,
       "text": "workflows",
       "text_end": 55,
       "text_start": 46
     },
     {
-      "end_ms": 3920,
-      "start_ms": 3440,
+      "end_ms": 3540,
+      "start_ms": 3304,
       "text": "into",
       "text_end": 60,
       "text_start": 56
     },
     {
-      "end_ms": 4480,
-      "start_ms": 3920,
+      "end_ms": 4130,
+      "start_ms": 3599,
       "text": "narrated,",
       "text_end": 70,
       "text_start": 61
     },
     {
-      "end_ms": 5220,
-      "start_ms": 4740,
+      "end_ms": 4838,
+      "start_ms": 4189,
       "text": "rebuildable",
       "text_end": 82,
       "text_start": 71
     },
     {
-      "end_ms": 5640,
-      "start_ms": 5220,
+      "end_ms": 5310,
+      "start_ms": 4897,
       "text": "videos.",
       "text_end": 90,
       "text_start": 83
     },
     {
-      "end_ms": 6521,
-      "start_ms": 6520,
+      "end_ms": 5664,
+      "start_ms": 5369,
       "text": "Start",
       "text_end": 96,
       "text_start": 91
     },
     {
-      "end_ms": 6820,
-      "start_ms": 6521,
+      "end_ms": 5841,
+      "start_ms": 5723,
       "text": "by",
       "text_end": 99,
       "text_start": 97
     },
     {
-      "end_ms": 7020,
-      "start_ms": 6820,
+      "end_ms": 6254,
+      "start_ms": 5900,
       "text": "adding",
       "text_end": 106,
       "text_start": 100
     },
     {
-      "end_ms": 7240,
-      "start_ms": 7020,
+      "end_ms": 6490,
+      "start_ms": 6313,
       "text": "the",
       "text_end": 110,
       "text_start": 107
     },
     {
-      "end_ms": 7480,
-      "start_ms": 7240,
+      "end_ms": 6963,
+      "start_ms": 6549,
       "text": "package",
       "text_end": 118,
       "text_start": 111
     },
     {
-      "end_ms": 7760,
-      "start_ms": 7480,
+      "end_ms": 7140,
+      "start_ms": 7022,
       "text": "to",
       "text_end": 121,
       "text_start": 119
     },
     {
-      "end_ms": 7960,
-      "start_ms": 7760,
+      "end_ms": 7435,
+      "start_ms": 7199,
       "text": "your",
       "text_end": 126,
       "text_start": 122
     },
     {
-      "end_ms": 8560,
-      "start_ms": 7960,
+      "end_ms": 8025,
+      "start_ms": 7494,
       "text": "project's",
       "text_end": 136,
       "text_start": 127
     },
     {
-      "end_ms": 8880,
-      "start_ms": 8560,
+      "end_ms": 8438,
+      "start_ms": 8084,
       "text": "Python",
       "text_end": 143,
       "text_start": 137
     },
     {
-      "end_ms": 9460,
-      "start_ms": 8880,
+      "end_ms": 9205,
+      "start_ms": 8497,
       "text": "environment.",
       "text_end": 156,
       "text_start": 144
     },
     {
-      "end_ms": 10180,
-      "start_ms": 10060,
+      "end_ms": 9500,
+      "start_ms": 9264,
       "text": "When",
       "text_end": 161,
       "text_start": 157
     },
     {
-      "end_ms": 10700,
-      "start_ms": 10180,
+      "end_ms": 10267,
+      "start_ms": 9559,
       "text": "installation",
       "text_end": 174,
       "text_start": 162
     },
     {
-      "end_ms": 11180,
-      "start_ms": 10700,
+      "end_ms": 10857,
+      "start_ms": 10326,
       "text": "finishes,",
       "text_end": 184,
       "text_start": 175
     },
     {
-      "end_ms": 11680,
-      "start_ms": 11640,
+      "end_ms": 11093,
+      "start_ms": 10916,
       "text": "you",
       "text_end": 188,
       "text_start": 185
     },
     {
-      "end_ms": 11920,
-      "start_ms": 11680,
+      "end_ms": 11329,
+      "start_ms": 11152,
       "text": "can",
       "text_end": 192,
       "text_start": 189
     },
     {
-      "end_ms": 12140,
-      "start_ms": 11920,
+      "end_ms": 11565,
+      "start_ms": 11388,
       "text": "run",
       "text_end": 196,
       "text_start": 193
     },
     {
-      "end_ms": 12700,
-      "start_ms": 12140,
+      "end_ms": 12155,
+      "start_ms": 11624,
       "text": "omegaflow",
       "text_end": 206,
       "text_start": 197
     },
     {
-      "end_ms": 13000,
-      "start_ms": 12700,
+      "end_ms": 12450,
+      "start_ms": 12214,
       "text": "from",
       "text_end": 211,
       "text_start": 207
     },
     {
-      "end_ms": 13200,
-      "start_ms": 13000,
+      "end_ms": 12686,
+      "start_ms": 12509,
       "text": "the",
       "text_end": 215,
       "text_start": 212
     },
     {
-      "end_ms": 13460,
-      "start_ms": 13200,
+      "end_ms": 13158,
+      "start_ms": 12745,
       "text": "command",
       "text_end": 223,
       "text_start": 216
     },
     {
-      "end_ms": 13720,
-      "start_ms": 13460,
+      "end_ms": 13512,
+      "start_ms": 13217,
       "text": "line.",
       "text_end": 229,
       "text_start": 224

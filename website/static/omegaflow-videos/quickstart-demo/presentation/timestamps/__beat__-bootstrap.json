@@ -3,15 +3,15 @@
     {
       "beat_id": "bootstrap",
       "id": "bootstrap",
-      "source_ms": 1903,
+      "source_ms": 1877,
       "text_offset": 32
     }
   ],
-  "duration_ms": 13800,
+  "duration_ms": 13608,
   "members": [
     {
       "beat_id": "bootstrap",
-      "source_end_ms": 13800,
+      "source_end_ms": 13608,
       "source_start_ms": 0,
       "text_end": 232,
       "text_start": 0
@@ -23,253 +23,253 @@
     {
       "beat_id": "bootstrap",
       "gap_ms": 200,
-      "source_ms": 4818,
+      "source_ms": 4751,
       "target": "bootstrap_run",
       "text_offset": 81
     }
   ],
   "words": [
     {
-      "end_ms": 297,
+      "end_ms": 293,
       "start_ms": 0,
       "text": "Next,",
       "text_end": 5,
       "text_start": 0
     },
     {
-      "end_ms": 595,
-      "start_ms": 357,
+      "end_ms": 587,
+      "start_ms": 352,
       "text": "from",
       "text_end": 10,
       "text_start": 6
     },
     {
-      "end_ms": 892,
-      "start_ms": 654,
+      "end_ms": 880,
+      "start_ms": 645,
       "text": "your",
       "text_end": 15,
       "text_start": 11
     },
     {
-      "end_ms": 1547,
-      "start_ms": 952,
+      "end_ms": 1525,
+      "start_ms": 938,
       "text": "repository",
       "text_end": 26,
       "text_start": 16
     },
     {
-      "end_ms": 1903,
-      "start_ms": 1606,
+      "end_ms": 1877,
+      "start_ms": 1584,
       "text": "root,",
       "text_end": 32,
       "text_start": 27
     },
     {
-      "end_ms": 2141,
-      "start_ms": 1963,
+      "end_ms": 2112,
+      "start_ms": 1936,
       "text": "run",
       "text_end": 36,
       "text_start": 33
     },
     {
-      "end_ms": 2736,
-      "start_ms": 2201,
+      "end_ms": 2698,
+      "start_ms": 2170,
       "text": "bootstrap",
       "text_end": 46,
       "text_start": 37
     },
     {
-      "end_ms": 2915,
-      "start_ms": 2796,
+      "end_ms": 2874,
+      "start_ms": 2757,
       "text": "to",
       "text_end": 49,
       "text_start": 47
     },
     {
-      "end_ms": 3153,
-      "start_ms": 2974,
+      "end_ms": 3109,
+      "start_ms": 2933,
       "text": "set",
       "text_end": 53,
       "text_start": 50
     },
     {
-      "end_ms": 3331,
-      "start_ms": 3212,
+      "end_ms": 3285,
+      "start_ms": 3167,
       "text": "up",
       "text_end": 56,
       "text_start": 54
     },
     {
-      "end_ms": 3569,
-      "start_ms": 3391,
+      "end_ms": 3519,
+      "start_ms": 3343,
       "text": "the",
       "text_end": 60,
       "text_start": 57
     },
     {
-      "end_ms": 4164,
-      "start_ms": 3628,
+      "end_ms": 4106,
+      "start_ms": 3578,
       "text": "recording",
       "text_end": 70,
       "text_start": 61
     },
     {
-      "end_ms": 4818,
-      "start_ms": 4223,
+      "end_ms": 4751,
+      "start_ms": 4165,
       "text": "workspace.",
       "text_end": 81,
       "text_start": 71
     },
     {
-      "end_ms": 5056,
-      "start_ms": 4878,
+      "end_ms": 4986,
+      "start_ms": 4810,
       "text": "The",
       "text_end": 85,
       "text_start": 82
     },
     {
-      "end_ms": 5532,
-      "start_ms": 5116,
+      "end_ms": 5455,
+      "start_ms": 5044,
       "text": "command",
       "text_end": 93,
       "text_start": 86
     },
     {
-      "end_ms": 6008,
-      "start_ms": 5591,
+      "end_ms": 5924,
+      "start_ms": 5514,
       "text": "creates",
       "text_end": 101,
       "text_start": 94
     },
     {
-      "end_ms": 6246,
-      "start_ms": 6067,
+      "end_ms": 6159,
+      "start_ms": 5983,
       "text": "the",
       "text_end": 105,
       "text_start": 102
     },
     {
-      "end_ms": 6722,
-      "start_ms": 6305,
+      "end_ms": 6628,
+      "start_ms": 6217,
       "text": "project",
       "text_end": 113,
       "text_start": 106
     },
     {
-      "end_ms": 7316,
-      "start_ms": 6781,
+      "end_ms": 7215,
+      "start_ms": 6687,
       "text": "settings,",
       "text_end": 123,
       "text_start": 114
     },
     {
-      "end_ms": 7911,
-      "start_ms": 7376,
+      "end_ms": 7801,
+      "start_ms": 7273,
       "text": "recording",
       "text_end": 133,
       "text_start": 124
     },
     {
-      "end_ms": 8506,
-      "start_ms": 7971,
+      "end_ms": 8388,
+      "start_ms": 7860,
       "text": "defaults,",
       "text_end": 143,
       "text_start": 134
     },
     {
-      "end_ms": 8744,
-      "start_ms": 8566,
+      "end_ms": 8622,
+      "start_ms": 8446,
       "text": "and",
       "text_end": 147,
       "text_start": 144
     },
     {
-      "end_ms": 9339,
-      "start_ms": 8803,
+      "end_ms": 9209,
+      "start_ms": 8681,
       "text": "workspace",
       "text_end": 157,
       "text_start": 148
     },
     {
-      "end_ms": 9815,
-      "start_ms": 9398,
+      "end_ms": 9678,
+      "start_ms": 9268,
       "text": "layout.",
       "text_end": 165,
       "text_start": 158
     },
     {
-      "end_ms": 10053,
-      "start_ms": 9874,
+      "end_ms": 9913,
+      "start_ms": 9737,
       "text": "The",
       "text_end": 169,
       "text_start": 166
     },
     {
-      "end_ms": 10588,
-      "start_ms": 10112,
+      "end_ms": 10441,
+      "start_ms": 9971,
       "text": "included",
       "text_end": 178,
       "text_start": 170
     },
     {
-      "end_ms": 11242,
-      "start_ms": 10647,
+      "end_ms": 11086,
+      "start_ms": 10499,
       "text": "quickstart",
       "text_end": 189,
       "text_start": 179
     },
     {
-      "end_ms": 11421,
-      "start_ms": 11302,
+      "end_ms": 11262,
+      "start_ms": 11144,
       "text": "is",
       "text_end": 192,
       "text_start": 190
     },
     {
-      "end_ms": 11718,
-      "start_ms": 11480,
+      "end_ms": 11555,
+      "start_ms": 11320,
       "text": "only",
       "text_end": 197,
       "text_start": 193
     },
     {
-      "end_ms": 11837,
-      "start_ms": 11778,
+      "end_ms": 11672,
+      "start_ms": 11614,
       "text": "a",
       "text_end": 199,
       "text_start": 198
     },
     {
-      "end_ms": 12194,
-      "start_ms": 11897,
+      "end_ms": 12024,
+      "start_ms": 11731,
       "text": "small",
       "text_end": 205,
       "text_start": 200
     },
     {
-      "end_ms": 12670,
-      "start_ms": 12253,
+      "end_ms": 12494,
+      "start_ms": 12083,
       "text": "example",
       "text_end": 213,
       "text_start": 206
     },
     {
-      "end_ms": 12848,
-      "start_ms": 12729,
+      "end_ms": 12670,
+      "start_ms": 12552,
       "text": "of",
       "text_end": 216,
       "text_start": 214
     },
     {
-      "end_ms": 13146,
-      "start_ms": 12908,
+      "end_ms": 12963,
+      "start_ms": 12728,
       "text": "that",
       "text_end": 221,
       "text_start": 217
     },
     {
-      "end_ms": 13800,
-      "start_ms": 13205,
+      "end_ms": 13608,
+      "start_ms": 13021,
       "text": "structure.",
       "text_end": 232,
       "text_start": 222
