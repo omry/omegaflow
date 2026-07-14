@@ -645,7 +645,9 @@ class RecordingPlan:
     title: str | None
     browser: FrozenMapping | None
     presentation: FrozenMapping
+    setup: tuple[TerminalCheckPlan, ...]
     beats: tuple[BeatPlan, ...]
+    cleanup: tuple[TerminalCheckPlan, ...]
     narration_takes: tuple[NarrationTakePlan, ...]
 
 
@@ -896,6 +898,23 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         validate_browser_config(browser_mapping) if browser_mapping is not None else None
     )
     presentation = validate_presentation_config(spec.get("presentation", {}))
+    lifecycle_steps: dict[str, tuple[TerminalCheckPlan, ...]] = {}
+    for lifecycle in ("setup", "cleanup"):
+        raw_steps = spec.get(lifecycle, [])
+        if not isinstance(raw_steps, list):
+            raise RecordingPlanError(f"{lifecycle} must be a list")
+        lifecycle_steps[lifecycle] = tuple(
+            TerminalCheckPlan(
+                config=freeze_value(
+                    _typed(
+                        _mapping(step, field=f"{lifecycle}.{index}"),
+                        RecordingStepConfig,
+                        field=f"{lifecycle}.{index}",
+                    )
+                )
+            )
+            for index, step in enumerate(raw_steps)
+        )
 
     for index, raw_beat in enumerate(raw_beats):
         beat = _mapping(raw_beat, field=f"beats.{index}")
@@ -1058,6 +1077,8 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         title=title,
         browser=freeze_value(browser_config) if browser_config is not None else None,
         presentation=freeze_value(presentation),
+        setup=lifecycle_steps["setup"],
         beats=frozen_beats,
+        cleanup=lifecycle_steps["cleanup"],
         narration_takes=plan_narration_takes(frozen_beats),
     )
