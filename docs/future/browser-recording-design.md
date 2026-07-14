@@ -947,8 +947,8 @@ facts and references assets by manifest asset ID:
       "action_id": "open_menu",
       "at_ms": 600,
       "end_ms": 1040,
-      "from": {"x": 720, "y": 450},
-      "to": {"x": 1334, "y": 42},
+      "start": {"x": 720, "y": 450},
+      "end": {"x": 1334, "y": 42},
       "curve": {"x1": 850, "y1": 400, "x2": 1200, "y2": 90}
     },
     {

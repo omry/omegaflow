@@ -17,10 +17,22 @@ import urllib.request
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
+
+from .presentation_schema import (
+    NarrationAudioMemberV2,
+    NarrationAudioMetadataV2,
+    NarrationAudioTakeV2,
+    NarrationTimestampAnchorV1,
+    NarrationTimestampMemberV1,
+    NarrationTimestampSidecarV1,
+    NarrationTimestampWaitV1,
+    NarrationTimestampWordV1,
+)
+from .recording_plan import NarrationTakePlan, RecordingPlan
 
 from .studio_config import (
     CONFIG_DIR,
@@ -134,6 +146,14 @@ class AudioPlanItem:
     segment: NarrationSegment
     cache_key: str
     output_path: Path
+
+
+@dataclass(frozen=True)
+class NarrationTakeAudioPlanItem:
+    take: NarrationTakePlan
+    cache_key: str
+    output_path: Path
+    index_path: Path
 
 
 @dataclass(frozen=True)
@@ -565,6 +585,306 @@ def segment_cache_key(segment: NarrationSegment, settings: AudioSettings) -> str
     }
     digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return digest[:16]
+
+
+def narration_take_cache_key(
+    take: NarrationTakePlan,
+    settings: AudioSettings,
+    *,
+    timing_settings: Mapping[str, Any] | None = None,
+) -> str:
+    payload = {
+        "provider": settings.provider,
+        "model": settings.model,
+        "voice": settings.voice,
+        "format": settings.format,
+        "instructions": settings.instructions,
+        "timing_settings": dict(timing_settings or {}),
+        "ordered_beat_ids": [member.beat_id for member in take.members],
+        "members": [
+            {
+                "beat_id": member.beat_id,
+                "text": member.text,
+                "text_start": member.text_start,
+                "text_end": member.text_end,
+            }
+            for member in take.members
+        ],
+        "synthesis_text": take.synthesis_text,
+    }
+    digest = sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return digest[:16]
+
+
+def narration_take_filename_id(take_id: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", take_id).strip("-.")
+    if value:
+        return value
+    return sha256(take_id.encode("utf-8")).hexdigest()[:12]
+
+
+def plan_narration_take_audio(
+    recording_id: str,
+    takes: tuple[NarrationTakePlan, ...],
+    settings: AudioSettings,
+    *,
+    timing_settings: Mapping[str, Any] | None = None,
+) -> list[NarrationTakeAudioPlanItem]:
+    recording_dir = settings.cache_dir / recording_id
+    items: list[NarrationTakeAudioPlanItem] = []
+    for take in takes:
+        cache_key = narration_take_cache_key(
+            take, settings, timing_settings=timing_settings
+        )
+        safe_id = narration_take_filename_id(take.id)
+        items.append(
+            NarrationTakeAudioPlanItem(
+                take=take,
+                cache_key=cache_key,
+                output_path=recording_dir
+                / f"{safe_id}-{cache_key}.{settings.format}",
+                index_path=recording_dir / f"{safe_id}.take.json",
+            )
+        )
+    return items
+
+
+def narration_take_index_payload(item: NarrationTakeAudioPlanItem) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "take_id": item.take.id,
+        "explicit": item.take.explicit,
+        "ordered_beat_ids": [member.beat_id for member in item.take.members],
+        "cache_key": item.cache_key,
+    }
+
+
+def narration_take_review_warning(
+    item: NarrationTakeAudioPlanItem,
+    previous: object,
+) -> dict[str, Any] | None:
+    if not item.take.explicit or not isinstance(previous, dict):
+        return None
+    if previous.get("take_id") != item.take.id:
+        return None
+    old_order = previous.get("ordered_beat_ids")
+    new_order = [member.beat_id for member in item.take.members]
+    if old_order == new_order:
+        return None
+    if not isinstance(old_order, list) or not all(
+        isinstance(beat_id, str) for beat_id in old_order
+    ):
+        return None
+    return {
+        "code": "NARRATION_TAKE_REVIEW",
+        "take_id": item.take.id,
+        "previous_beat_ids": old_order,
+        "current_beat_ids": new_order,
+    }
+
+
+def load_narration_take_index(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def write_narration_take_index(item: NarrationTakeAudioPlanItem) -> None:
+    item.index_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = item.index_path.with_suffix(item.index_path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(narration_take_index_payload(item), indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(item.index_path)
+
+
+def _structured_payload(value: object) -> dict[str, Any]:
+    payload = OmegaConf.to_container(
+        OmegaConf.structured(value), resolve=True, enum_to_str=True
+    )
+    if not isinstance(payload, dict):
+        raise AudioError("generated audio payload must be a mapping")
+    return payload
+
+
+def _timestamp_source_ms(
+    text_offset: int,
+    words: list[NarrationTimestampWordV1],
+    *,
+    duration_ms: int,
+) -> int:
+    if not words:
+        raise AudioError("cannot resolve narration marker without word timestamps")
+    if text_offset <= words[0].text_start:
+        return words[0].start_ms
+    for word in words:
+        if text_offset <= word.text_end:
+            width = word.text_end - word.text_start
+            if width <= 0:
+                return word.start_ms
+            fraction = (text_offset - word.text_start) / width
+            fraction = min(1.0, max(0.0, fraction))
+            return round(word.start_ms + fraction * (word.end_ms - word.start_ms))
+    return duration_ms
+
+
+def narration_timestamp_sidecar_payload(
+    take: NarrationTakePlan,
+    *,
+    duration_ms: int,
+    words: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if isinstance(duration_ms, bool) or not isinstance(duration_ms, int):
+        raise AudioError("narration take duration must be an integer")
+    if duration_ms < 0:
+        raise AudioError("narration take duration must be non-negative")
+    typed_words: list[NarrationTimestampWordV1] = []
+    previous_text_end = 0
+    previous_time_end = 0
+    for index, word in enumerate(words):
+        if not isinstance(word, dict):
+            raise AudioError(f"narration timestamp word {index} must be a mapping")
+        try:
+            text = word["text"]
+            text_start = word["text_start"]
+            text_end = word["text_end"]
+            start_ms = word["start_ms"]
+            end_ms = word["end_ms"]
+            if not isinstance(text, str) or any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in (text_start, text_end, start_ms, end_ms)
+            ):
+                raise TypeError
+            typed = NarrationTimestampWordV1(
+                text=text,
+                text_start=text_start,
+                text_end=text_end,
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+        except (KeyError, TypeError) as exc:
+            raise AudioError(f"invalid narration timestamp word {index}") from exc
+        if (
+            typed.text_start < previous_text_end
+            or typed.text_end <= typed.text_start
+            or typed.end_ms < typed.start_ms
+            or typed.start_ms < previous_time_end
+            or typed.end_ms > duration_ms
+            or typed.text_end > len(take.synthesis_text)
+        ):
+            raise AudioError(f"invalid narration timestamp word ordering at {index}")
+        if take.synthesis_text[typed.text_start : typed.text_end] != typed.text:
+            raise AudioError(f"narration timestamp word {index} does not match take text")
+        typed_words.append(typed)
+        previous_text_end = typed.text_end
+        previous_time_end = typed.end_ms
+
+    members = [
+        NarrationTimestampMemberV1(
+            beat_id=member.beat_id,
+            text_start=member.text_start,
+            text_end=member.text_end,
+            source_start_ms=_timestamp_source_ms(
+                member.text_start, typed_words, duration_ms=duration_ms
+            ),
+            source_end_ms=_timestamp_source_ms(
+                member.text_end, typed_words, duration_ms=duration_ms
+            ),
+        )
+        for member in take.members
+    ]
+    anchors = [
+        NarrationTimestampAnchorV1(
+            beat_id=anchor.beat_id,
+            id=anchor.id,
+            text_offset=anchor.text_offset,
+            source_ms=_timestamp_source_ms(
+                anchor.text_offset, typed_words, duration_ms=duration_ms
+            ),
+        )
+        for anchor in take.anchors
+    ]
+    waits = [
+        NarrationTimestampWaitV1(
+            beat_id=wait.beat_id,
+            target=wait.target,
+            text_offset=wait.text_offset,
+            source_ms=_timestamp_source_ms(
+                wait.text_offset, typed_words, duration_ms=duration_ms
+            ),
+            gap_ms=wait.gap_ms,
+        )
+        for wait in take.waits
+    ]
+    return _structured_payload(
+        NarrationTimestampSidecarV1(
+            take_id=take.id,
+            duration_ms=duration_ms,
+            members=members,
+            words=typed_words,
+            anchors=anchors,
+            waits=waits,
+        )
+    )
+
+
+def narration_audio_metadata_v2_payload(
+    plan: RecordingPlan,
+    *,
+    audio_path: str,
+    take_durations_ms: Mapping[str, int],
+    timestamp_paths: Mapping[str, str],
+) -> dict[str, Any]:
+    if not isinstance(audio_path, str) or not audio_path:
+        raise AudioError("narration audio path must be a non-empty string")
+    takes: list[NarrationAudioTakeV2] = []
+    source_offset = 0
+    for take in plan.narration_takes:
+        try:
+            duration = take_durations_ms[take.id]
+            timestamp_path = timestamp_paths[take.id]
+        except KeyError as exc:
+            raise AudioError(f"missing audio metadata for narration take {take.id!r}") from exc
+        if isinstance(duration, bool) or not isinstance(duration, int):
+            raise AudioError(
+                f"audio duration for narration take {take.id!r} must be an integer"
+            )
+        if duration < 0:
+            raise AudioError(f"negative audio duration for narration take {take.id!r}")
+        if not isinstance(timestamp_path, str) or not timestamp_path:
+            raise AudioError(f"invalid timestamp path for narration take {take.id!r}")
+        takes.append(
+            NarrationAudioTakeV2(
+                id=take.id,
+                source_start_ms=source_offset,
+                source_end_ms=source_offset + duration,
+                timestamps=timestamp_path,
+                members=[
+                    NarrationAudioMemberV2(
+                        beat_id=member.beat_id,
+                        text=member.text,
+                        text_start=member.text_start,
+                        text_end=member.text_end,
+                    )
+                    for member in take.members
+                ],
+            )
+        )
+        source_offset += duration
+    return _structured_payload(
+        NarrationAudioMetadataV2(
+            recording=plan.id,
+            audio=audio_path,
+            duration_ms=source_offset,
+            takes=takes,
+        )
+    )
 
 
 def plan_audio(

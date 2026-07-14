@@ -7,6 +7,7 @@
     'intro',
     'intro-segment',
     'intro-seconds',
+    'manifest',
     'player',
     'src',
     'title',
@@ -19,10 +20,11 @@
 
   function buildCastPlayerUrl(options = {}) {
     const player = options.player || 'cast-player.html';
-    const params = new URLSearchParams({
-      cast: options.src || '',
-      title: options.title || 'Terminal recording',
-    });
+    const params = new URLSearchParams();
+    params.set('manifest', options.manifest || '');
+    if (options.title) {
+      params.set('title', options.title || 'Terminal recording');
+    }
     if (options.audio) {
       params.set('audio', options.audio);
     }
@@ -48,6 +50,7 @@
       intro: optionalAttribute(element, 'intro'),
       introSegment: optionalAttribute(element, 'intro-segment'),
       introSeconds: optionalAttribute(element, 'intro-seconds'),
+      manifest: optionalAttribute(element, 'manifest'),
       player: optionalAttribute(element, 'player'),
       src: optionalAttribute(element, 'src'),
       title: optionalAttribute(element, 'title'),

@@ -596,8 +596,10 @@
     <script>
       const params = new URLSearchParams(window.location.search);
       const castUrl = params.get('cast');
-      const audioUrl = params.get('audio');
-      const audioMetaUrl = params.get('audioMeta');
+      const manifestUrl = params.get('manifest');
+      const autoplayCountdown = params.get('autoplay') === 'countdown';
+      let audioUrl = null;
+      let audioMetaUrl = null;
       const introText = params.get('intro') || '';
       const explicitIntroSeconds = params.has('introSeconds');
       let introSeconds = Math.max(0, Number(params.get('introSeconds') || '0'));
@@ -613,7 +615,7 @@
         return false;
       }
       const debugMode = params.get('debug') === '1' || parentDebugMode();
-      const titleText = params.get('title') || 'Terminal recording';
+      let titleText = params.get('title') || 'Terminal recording';
 
       const terminal = document.getElementById('terminal');
       const narration = document.getElementById('narration');
@@ -643,6 +645,8 @@
       narration.textContent = titleText;
 
       let events = [];
+      let presentationManifest = null;
+      let manifestBaseUrl = null;
       let castSeconds = 0;
       let totalSeconds = 0;
       let eventIndex = 0;
@@ -2302,8 +2306,44 @@
       }
 
       async function loadCast() {
+        if (presentationManifest) {
+          const rawEvents = [];
+          for (const beat of presentationManifest.beats) {
+            if (beat.renderer !== 'terminal') {
+              throw new Error(`renderer unavailable: ${beat.renderer}`);
+            }
+            const response = await fetch(new URL(beat.payload, manifestBaseUrl).href);
+            if (!response.ok) {
+              throw new Error(`could not load terminal payload: ${response.status}`);
+            }
+            const decoded = CastPlayerCore.decodeAsciinemaCast(await response.text());
+            rawEvents.push({time: beat.offset_ms / 1000, data: '\u001b[2J\u001b[H'});
+            for (const event of decoded.events) {
+              if (event.type === 'o') {
+                rawEvents.push({
+                  time: (beat.offset_ms + event.atMs) / 1000,
+                  data: String(event.data || ''),
+                });
+              }
+            }
+          }
+          events = rawEvents.sort((left, right) => left.time - right.time);
+          castSeconds = presentationManifest.recording.duration_ms / 1000;
+          audioPlaybackSegments = presentationManifest.audio
+            ? presentationManifest.audio.intervals.map((interval) => ({
+              audioStart: interval.source_start_ms / 1000,
+              audioEnd: interval.source_end_ms / 1000,
+              presentationStart: interval.presentation_start_ms / 1000,
+              presentationEnd: interval.presentation_end_ms / 1000,
+            }))
+            : [];
+          audioPresentationSeconds = audioPlaybackSegments.length
+            ? Math.max(...audioPlaybackSegments.map((segment) => segment.presentationEnd))
+            : 0;
+          updateTotalSeconds();
+          return;
+        }
         if (!castUrl) {
-          throw new Error('missing cast parameter');
         }
         const response = await fetch(castUrl);
         if (!response.ok) {
@@ -2324,6 +2364,31 @@
           ? Math.max(...events.map((event) => event.time))
           : time + introSeconds;
         updateTotalSeconds();
+      }
+
+      async function loadPresentationManifest() {
+        if (!manifestUrl) {
+          throw new Error('missing manifest parameter');
+        }
+        const response = await fetch(manifestUrl);
+        if (!response.ok) {
+          throw new Error(`could not load presentation manifest: ${response.status}`);
+        }
+        presentationManifest = CastPlayerCore.validatePresentationManifest(
+          await response.json(),
+        );
+        manifestBaseUrl = new URL('.', new URL(manifestUrl, document.baseURI));
+        if (!params.has('title') && presentationManifest.recording.title) {
+          titleText = presentationManifest.recording.title;
+          narration.textContent = titleText;
+        }
+        if (presentationManifest.audio) {
+          audioUrl = new URL(presentationManifest.audio.src, manifestBaseUrl).href;
+          audioMetaUrl = new URL(
+            presentationManifest.audio.metadata,
+            manifestBaseUrl,
+          ).href;
+        }
       }
 
       async function loadAudio() {
@@ -2417,7 +2482,8 @@
 
       updateTransportButtons();
 
-      loadAudioMeta()
+      loadPresentationManifest()
+        .then(loadAudioMeta)
         .then(() => Promise.all([loadCast(), loadAudio()]))
         .then(() => {
           updateTotalSeconds();

@@ -3,6 +3,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 export default function VideoPlayer({
   src,
+  manifest,
   title,
   audio,
   audioMeta,
@@ -10,7 +11,9 @@ export default function VideoPlayer({
   introSegment,
   introSeconds,
 }) {
-  const castSrc = useBaseUrl(src);
+  const recordingSrc = useBaseUrl(manifest || src);
+  const castSrc = manifest ? null : recordingSrc;
+  const manifestSrc = manifest ? recordingSrc : null;
   const audioSrc = audio ? useBaseUrl(audio) : null;
   const audioMetaSrc = audioMeta ? useBaseUrl(audioMeta) : null;
   const playerSrc = useBaseUrl('/cast-player.html');
@@ -30,7 +33,8 @@ export default function VideoPlayer({
     <div className="video-player">
       <cast-player-embed
         title={title}
-        src={castSrc}
+        src={castSrc || undefined}
+        manifest={manifestSrc || undefined}
         audio={audioSrc || undefined}
         audio-meta={audioMetaSrc || undefined}
         intro={intro || undefined}

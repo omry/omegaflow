@@ -192,6 +192,11 @@ class StudioStep(str, Enum):
     align_check = "align_check"
 
 
+class RecordingMedium(str, Enum):
+    terminal = "terminal"
+    browser = "browser"
+
+
 @dataclass
 class RunGarbageCollectionConfig:
     enabled: bool = True
@@ -320,6 +325,115 @@ class RecordingAudioConfig:
 
 
 @dataclass
+class BrowserViewportConfig:
+    width: int | None = None
+    height: int | None = None
+    device_scale_factor: float | None = None
+
+
+@dataclass
+class BrowserContextConfig:
+    locale: str | None = None
+    timezone: str | None = None
+    color_scheme: str | None = None
+    reduced_motion: str | None = None
+    permissions: list[str] | None = None
+
+
+@dataclass
+class BrowserAuthConfig:
+    storage_state_env: str | None = None
+    storage_state_path: str | None = None
+
+
+@dataclass
+class BrowserTimeoutsConfig:
+    action_ms: int = 10_000
+    readiness_ms: int = 15_000
+
+
+@dataclass
+class BrowserTargetConfig:
+    role: str | None = None
+    name: str | None = None
+    label: str | None = None
+    placeholder: str | None = None
+    text: str | None = None
+    test_id: str | None = None
+    css: str | None = None
+    xpath: str | None = None
+    exact: bool = False
+
+
+@dataclass
+class BrowserRedactionConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+
+
+@dataclass
+class BrowserRecordingConfig:
+    profile: str = "desktop-v1"
+    base_url: str | None = None
+    viewport: BrowserViewportConfig | None = None
+    context: BrowserContextConfig | None = None
+    auth: BrowserAuthConfig = field(default_factory=BrowserAuthConfig)
+    timeouts: BrowserTimeoutsConfig = field(default_factory=BrowserTimeoutsConfig)
+    redactions: list[BrowserRedactionConfig] = field(default_factory=list)
+
+
+@dataclass
+class BrowserWindowPresentationConfig:
+    mode: str = "none"
+    theme: str = "kde-breeze"
+    title: str | None = None
+    opening_transition: str = "cut"
+
+
+@dataclass
+class BrowserChromePresentationConfig:
+    mode: str = "hidden"
+
+
+@dataclass
+class BrowserTransitionsPresentationConfig:
+    default: str = "cut"
+
+
+@dataclass
+class BrowserPointerPresentationConfig:
+    visible: bool = True
+
+
+@dataclass
+class BrowserTypingPresentationConfig:
+    policy: str = "natural-v1"
+
+
+@dataclass
+class BrowserPresentationConfig:
+    window: BrowserWindowPresentationConfig = field(
+        default_factory=BrowserWindowPresentationConfig
+    )
+    chrome: BrowserChromePresentationConfig = field(
+        default_factory=BrowserChromePresentationConfig
+    )
+    transitions: BrowserTransitionsPresentationConfig = field(
+        default_factory=BrowserTransitionsPresentationConfig
+    )
+    pointer: BrowserPointerPresentationConfig = field(
+        default_factory=BrowserPointerPresentationConfig
+    )
+    typing: BrowserTypingPresentationConfig = field(
+        default_factory=BrowserTypingPresentationConfig
+    )
+
+
+@dataclass
+class RecordingPresentationConfig:
+    browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
+
+
+@dataclass
 class RecordingPublishSurfaceConfig:
     type: str = ""
     file: str = ""
@@ -380,6 +494,128 @@ class RecordingStepConfig:
 
 
 @dataclass
+class BrowserUrlMatcherConfig:
+    equals: str | None = None
+    contains: str | None = None
+    matches: str | None = None
+
+
+@dataclass
+class BrowserResponseMatcherConfig(BrowserUrlMatcherConfig):
+    method: str | None = None
+    status: int | None = None
+
+
+@dataclass
+class BrowserConditionConfig:
+    visible: BrowserTargetConfig | None = None
+    hidden: BrowserTargetConfig | None = None
+    url: BrowserUrlMatcherConfig | None = None
+    response: BrowserResponseMatcherConfig | None = None
+    timeout_ms: int | None = None
+
+
+@dataclass
+class BrowserOpenPageConfig:
+    url: str = ""
+    display_url: str | None = None
+    lifecycle: str = "domcontentloaded"
+    ready: BrowserConditionConfig | None = None
+    loading: str = "hide"
+    timeout_ms: int | None = None
+
+
+@dataclass
+class BrowserClickConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+    button: str = "left"
+    position: str | dict[str, float] = "center"
+
+
+@dataclass
+class BrowserSecretConfig:
+    env: str = ""
+    presentation: str = "masked"
+    placeholder: str | None = None
+
+
+@dataclass
+class BrowserFillConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+    text: str | None = None
+    secret: BrowserSecretConfig | None = None
+
+
+@dataclass
+class BrowserTypeKeysConfig(BrowserFillConfig):
+    capture_delay_ms: int | None = None
+
+
+@dataclass
+class BrowserPressConfig:
+    key: str = ""
+    target: BrowserTargetConfig | None = None
+
+
+@dataclass
+class BrowserScrollOffsetConfig:
+    x: int = 0
+    y: int = 0
+
+
+@dataclass
+class BrowserScrollConfig:
+    target: BrowserTargetConfig | None = None
+    by: BrowserScrollOffsetConfig | None = None
+    to: BrowserScrollOffsetConfig | None = None
+    container: BrowserTargetConfig | None = None
+
+
+@dataclass
+class BrowserWaitForConfig(BrowserConditionConfig):
+    pass
+
+
+@dataclass
+class BrowserActionConfig:
+    id: str = ""
+    open_page: BrowserOpenPageConfig | None = None
+    click: BrowserClickConfig | None = None
+    fill: BrowserFillConfig | None = None
+    type_keys: BrowserTypeKeysConfig | None = None
+    press: BrowserPressConfig | None = None
+    scroll: BrowserScrollConfig | None = None
+    wait_for: BrowserWaitForConfig | None = None
+    after: str | None = None
+    hold_after_ms: int | None = None
+    transition: str | None = None
+    display_url_after: str | None = None
+
+
+@dataclass
+class BrowserTextCheckConfig(BrowserUrlMatcherConfig):
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+
+
+@dataclass
+class BrowserCountCheckConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+    equals: int | None = None
+
+
+@dataclass
+class BrowserCheckConfig:
+    name: str = ""
+    url: BrowserUrlMatcherConfig | None = None
+    visible: BrowserTargetConfig | None = None
+    hidden: BrowserTargetConfig | None = None
+    text: BrowserTextCheckConfig | None = None
+    value: BrowserTextCheckConfig | None = None
+    count: BrowserCountCheckConfig | None = None
+    response: BrowserResponseMatcherConfig | None = None
+
+
+@dataclass
 class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
     success_hint: str | None = None
@@ -388,13 +624,15 @@ class RecordingGuideConfig:
 @dataclass
 class RecordingBeatConfig:
     id: str = ""
+    medium: RecordingMedium = RecordingMedium.terminal
     heading: str = ""
     narration: str = ""
+    narration_take: str | None = None
     marker: str | None = None
     caption: str | None = None
     viewer_hold: float | None = None
-    actions: list[RecordingStepConfig] = field(default_factory=list)
-    checks: list[RecordingStepConfig] = field(default_factory=list)
+    actions: list[Any] = field(default_factory=list)
+    checks: list[Any] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
 
 
@@ -411,6 +649,10 @@ class RecordingDefaults:
         default_factory=RecordingEnvironmentConfig
     )
     audio: RecordingAudioConfig = field(default_factory=RecordingAudioConfig)
+    browser: BrowserRecordingConfig | None = None
+    presentation: RecordingPresentationConfig = field(
+        default_factory=RecordingPresentationConfig
+    )
     narration: dict[str, Any] = field(default_factory=dict)
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
@@ -454,8 +696,8 @@ class StudioDirectiveGuide(RecordingGuideConfig):
 
 @dataclass
 class StudioDirectiveBeat(RecordingBeatConfig):
-    actions: list[StudioDirectiveStep] = field(default_factory=list)
-    checks: list[StudioDirectiveStep] = field(default_factory=list)
+    actions: list[Any] = field(default_factory=list)
+    checks: list[Any] = field(default_factory=list)
     guide: StudioDirectiveGuide | None = None
 
 
@@ -1230,6 +1472,9 @@ def recording_from_script(
     )
     spec["_script_dir"] = display_path(script_path.parent)
     merge_script_recording_beats(spec, blocks)
+    from .recording_plan import validate_recording_modalities
+
+    validate_recording_modalities(spec)
     spec["narration"] = narration_from_script(
         recording_id=recording_id,
         script_path=script_path,
@@ -1241,6 +1486,7 @@ def recording_from_script(
         source=f"recording {recording_id} overrides",
     )
     spec = resolve_recording_spec_interpolations(spec)
+    validate_recording_modalities(spec)
     validate_recording_inline_run_lengths(spec)
     validate_recording_audio_timing_requirements(spec)
     return spec
@@ -1335,6 +1581,9 @@ def recording_spec_from_config(
         schema=RecordingSpec,
         source=f"recording {resolved_recording_id}",
     )
+    from .recording_plan import validate_recording_modalities
+
+    validate_recording_modalities(spec)
     validate_recording_inline_run_lengths(spec)
     validate_recording_audio_timing_requirements(spec)
 

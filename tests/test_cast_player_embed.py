@@ -160,3 +160,26 @@ if (
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_cast_player_embed_accepts_manifest_and_title() -> None:
+    result = run_embed_script(
+        r"""
+const Element = context.customElements.get('cast-player-embed');
+const element = new Element();
+element.setAttribute('title', 'Browser Demo');
+element.setAttribute('manifest', '/videos/demo/recording.presentation.json');
+element.setAttribute('player', '/cast-player.html');
+element.connectedCallback();
+
+if (
+  element.children.length !== 1 ||
+  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&title=Browser+Demo'
+) {
+  console.error(JSON.stringify({src: element.children[0] && element.children[0].src}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr

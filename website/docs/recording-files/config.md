@@ -235,6 +235,102 @@ class RecordingAudioConfig:
 
 
 @dataclass
+class BrowserViewportConfig:
+    width: int | None = None
+    height: int | None = None
+    device_scale_factor: float | None = None
+
+
+@dataclass
+class BrowserContextConfig:
+    locale: str | None = None
+    timezone: str | None = None
+    color_scheme: str | None = None
+    reduced_motion: str | None = None
+    permissions: list[str] | None = None
+
+
+@dataclass
+class BrowserAuthConfig:
+    storage_state_env: str | None = None
+    storage_state_path: str | None = None
+
+
+@dataclass
+class BrowserTimeoutsConfig:
+    action_ms: int = 10_000
+    readiness_ms: int = 15_000
+
+
+@dataclass
+class BrowserRedactionConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+
+
+@dataclass
+class BrowserRecordingConfig:
+    profile: str = "desktop-v1"
+    base_url: str | None = None
+    viewport: BrowserViewportConfig | None = None
+    context: BrowserContextConfig | None = None
+    auth: BrowserAuthConfig = field(default_factory=BrowserAuthConfig)
+    timeouts: BrowserTimeoutsConfig = field(default_factory=BrowserTimeoutsConfig)
+    redactions: list[BrowserRedactionConfig] = field(default_factory=list)
+
+
+@dataclass
+class BrowserWindowPresentationConfig:
+    mode: str = "none"
+    theme: str = "kde-breeze"
+    title: str | None = None
+    opening_transition: str = "cut"
+
+
+@dataclass
+class BrowserChromePresentationConfig:
+    mode: str = "hidden"
+
+
+@dataclass
+class BrowserTransitionsPresentationConfig:
+    default: str = "cut"
+
+
+@dataclass
+class BrowserPointerPresentationConfig:
+    visible: bool = True
+
+
+@dataclass
+class BrowserTypingPresentationConfig:
+    policy: str = "natural-v1"
+
+
+@dataclass
+class BrowserPresentationConfig:
+    window: BrowserWindowPresentationConfig = field(
+        default_factory=BrowserWindowPresentationConfig
+    )
+    chrome: BrowserChromePresentationConfig = field(
+        default_factory=BrowserChromePresentationConfig
+    )
+    transitions: BrowserTransitionsPresentationConfig = field(
+        default_factory=BrowserTransitionsPresentationConfig
+    )
+    pointer: BrowserPointerPresentationConfig = field(
+        default_factory=BrowserPointerPresentationConfig
+    )
+    typing: BrowserTypingPresentationConfig = field(
+        default_factory=BrowserTypingPresentationConfig
+    )
+
+
+@dataclass
+class RecordingPresentationConfig:
+    browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
+
+
+@dataclass
 class RecordingFailureAnimationConfig:
     regex: str = ""
     replacement: str = ""
@@ -260,6 +356,10 @@ class RecordingDefaults:
         default_factory=RecordingEnvironmentConfig
     )
     audio: RecordingAudioConfig = field(default_factory=RecordingAudioConfig)
+    browser: BrowserRecordingConfig | None = None
+    presentation: RecordingPresentationConfig = field(
+        default_factory=RecordingPresentationConfig
+    )
     narration: dict[str, Any] = field(default_factory=dict)
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
