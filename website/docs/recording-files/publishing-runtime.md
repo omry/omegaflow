@@ -31,7 +31,7 @@ publish:
 ```
 
 `docusaurus_mdx` replaces a placeholder block in an MDX file. `standalone_html`
-writes a complete HTML page containing the cast player.
+writes a complete HTML page containing the presentation player.
 
 Terminal-only, browser, and mixed surfaces use the same component and HTML
 custom element with a generated `manifest` attribute:

@@ -1,4 +1,4 @@
 {"version":3,"term":{"cols":80,"rows":20},"title":"Browser Recording Reference"}
-[0.005,"o","$ python scripts/set_state.py terminal-ready && printf 'terminal-ready\\n'\r\n"]
-[0.043,"o","terminal-ready\r\n"]
-[0.443,"o",""]
+[0.043,"o","$ python scripts/set_state.py terminal-ready && printf 'terminal-ready\\n'\r\n"]
+[0.047,"o","terminal-ready\r\n"]
+[0.446,"o",""]

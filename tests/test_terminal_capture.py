@@ -515,6 +515,255 @@ def test_terminal_protocol_runs_inside_one_asciinema_capture(tmp_path: Path) -> 
         assert first_event[0] >= 0
 
 
+def test_persistent_terminal_applies_recorded_output_policy(tmp_path: Path) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "output-policy",
+            "beats": [
+                {
+                    "id": "replace",
+                    "actions": [
+                        {
+                            "run": "printf 'private real output\\n'",
+                            "display": "generate replaceable output",
+                            "output": {"replace": "public replacement output"},
+                            "expect": {"output_contains": ["private real output"]},
+                        }
+                    ],
+                },
+                {
+                    "id": "suppress",
+                    "actions": [
+                        {
+                            "run": "printf 'suppressed real output\\n'",
+                            "display": "generate suppressible output",
+                            "output": "suppress",
+                            "expect": {"output_contains": ["suppressed real output"]},
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True, title="Output policy test", timeout_seconds=5.0
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    beat_dir = tmp_path / "run" / "capture" / "terminal-beats"
+    replaced = (beat_dir / "replace.cast").read_text(encoding="utf-8")
+    suppressed = (beat_dir / "suppress.cast").read_text(encoding="utf-8")
+    assert "public replacement output" in replaced
+    assert "private real output" not in replaced
+    assert "suppressed real output" not in suppressed
+    assert _cast_output(replaced).endswith("public replacement output\r\n$ ")
+    assert _cast_output(suppressed).endswith(
+        "$ generate suppressible output\r\n$ "
+    )
+
+
+def test_persistent_terminal_reuses_visible_prompt_between_commands(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "prompt-state",
+            "beats": [
+                {
+                    "id": "commands",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": "printf 'first output\\n'",
+                                    "display": "first command",
+                                },
+                                {
+                                    "run": "printf 'second output\\n'",
+                                    "display": "second command",
+                                    "show_prompt_after": False,
+                                },
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "fresh-beat",
+                    "actions": [
+                        {
+                            "run": "printf 'fresh output\\n'",
+                            "display": "fresh command",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True, title="Prompt state test", timeout_seconds=5.0
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    beat_dir = tmp_path / "run" / "capture" / "terminal-beats"
+    commands = _cast_output(
+        (beat_dir / "commands.cast").read_text(encoding="utf-8")
+    )
+    fresh = _cast_output(
+        (beat_dir / "fresh-beat.cast").read_text(encoding="utf-8")
+    )
+    assert commands == (
+        "$ first command\r\n"
+        "first output\r\n"
+        "$ second command\r\n"
+        "second output\r\n"
+    )
+    assert fresh == "$ fresh command\r\nfresh output\r\n$ "
+
+
+def test_persistent_terminal_colors_prompt_and_command_when_enabled(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "colored-prompt",
+            "beats": [
+                {
+                    "id": "command",
+                    "actions": [
+                        {
+                            "run": "printf 'colored output\\n'",
+                            "display": "colored command",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            title="Colored prompt test",
+            color=True,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    output = _cast_output(
+        (
+            tmp_path
+            / "run"
+            / "capture"
+            / "terminal-beats"
+            / "command.cast"
+        ).read_text(encoding="utf-8")
+    )
+    assert (
+        "\x1b[32;1m$\x1b[0m \x1b[1mcolored command\x1b[0m\r\n"
+        in output
+    )
+    assert output.endswith("\x1b[32;1m$\x1b[0m ")
+
+
+def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "typed-command",
+            "beats": [
+                {
+                    "id": "typed",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "command",
+                                    "run": "printf 'finished\\n'",
+                                    "display": "abcde",
+                                    "pre_command_pause": 0.2,
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=True,
+            typing_min_delay=0.02,
+            typing_max_delay=0.02,
+            typing_space_delay=0,
+            typing_punctuation_delay=0,
+            typing_newline_delay=0,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    beat_dir = tmp_path / "run" / "capture" / "terminal-beats"
+    source = beat_dir / "typed.cast"
+    action_payload = json.loads(
+        (beat_dir / "typed.actions.json").read_text(encoding="utf-8")
+    )
+    interval = action_payload["actions"][0]
+    destination = tmp_path / "published.cast"
+    presentation_build.materialize_terminal_beat(
+        source,
+        destination,
+        duration_ms=2_000,
+        captured_action_intervals_ms={
+            "command": (interval["start_ms"], interval["end_ms"])
+        },
+        action_starts_ms={"command": 700},
+    )
+
+    absolute_ms = 0
+    visible_events: list[tuple[int, str]] = []
+    for line in destination.read_text(encoding="utf-8").splitlines()[1:]:
+        event = json.loads(line)
+        absolute_ms += round(float(event[0]) * 1000)
+        if event[1] == "o" and event[2]:
+            visible_events.append((absolute_ms, event[2]))
+
+    assert visible_events[0][0] <= 10
+    assert visible_events[0][1] == "$ "
+    typed_events: list[tuple[int, str]] = []
+    for at_ms, text in visible_events[1:]:
+        if "\n" in text:
+            break
+        typed_events.append((at_ms, text))
+    assert typed_events[0][0] >= 900
+    assert "".join(text for _, text in typed_events).startswith("abcde")
+    assert len(typed_events) >= 3
+    assert all(text != "abcde" for _, text in typed_events)
+
+
+def _cast_output(cast: str) -> str:
+    return "".join(json.loads(line)[2] for line in cast.splitlines()[1:])
+
+
 def test_persistent_terminal_honors_exit_output_regex_and_file_gates(
     tmp_path: Path,
 ) -> None:

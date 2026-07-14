@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .capture import BeatCapture, CaptureContext
-from .record import asciinema_command
+from .record import RecordingError, asciinema_command, command_output_config
 from .recording_plan import (
     BeatPlan,
     FrozenMapping,
@@ -58,6 +58,134 @@ exec 8<>"$OMEGAFLOW_REQUEST_STREAM"
 exec 9<>"$OMEGAFLOW_RESPONSE_STREAM"
 : >"$OMEGAFLOW_TERMINAL_STDOUT"
 : >"$OMEGAFLOW_TERMINAL_STDERR"
+OMEGAFLOW_PROMPT_VISIBLE=0
+OMEGAFLOW_USER_COMMAND_SEQ=0
+OMEGAFLOW_VISIBLE=0
+: "${OMEGAFLOW_COLOR:=0}"
+: "${OMEGAFLOW_TYPING:=0}"
+: "${OMEGAFLOW_TYPING_MIN_DELAY:=0.012}"
+: "${OMEGAFLOW_TYPING_MAX_DELAY:=0.045}"
+: "${OMEGAFLOW_TYPING_SPACE_DELAY:=0.025}"
+: "${OMEGAFLOW_TYPING_PUNCTUATION_DELAY:=0.05}"
+: "${OMEGAFLOW_TYPING_NEWLINE_DELAY:=0.16}"
+: "${OMEGAFLOW_TYPING_SEED:=17}"
+: "${OMEGAFLOW_POST_ENTER_PAUSE:=0}"
+: "${OMEGAFLOW_POST_COMMAND_PAUSE:=0}"
+: "${OMEGAFLOW_BEAT_PROMPT_SETTLE:=0.03}"
+OMEGAFLOW_USER_SHELL_INPUT="$TMPDIR/omegaflow-user-shell.input.pipe"
+OMEGAFLOW_USER_SHELL_DEAD="$TMPDIR/omegaflow-user-shell.dead"
+OMEGAFLOW_USER_SHELL_PGID="$TMPDIR/omegaflow-user-shell.pgid"
+rm -f "$OMEGAFLOW_USER_SHELL_INPUT" "$OMEGAFLOW_USER_SHELL_DEAD" "$OMEGAFLOW_USER_SHELL_PGID"
+mkfifo "$OMEGAFLOW_USER_SHELL_INPUT"
+
+"$OMEGAFLOW_PYTHON" - "$OMEGAFLOW_USER_SHELL_INPUT" "$OMEGAFLOW_USER_SHELL_DEAD" "$OMEGAFLOW_USER_SHELL_PGID" <<'PY' &
+import subprocess
+import sys
+from pathlib import Path
+
+input_path, dead_path, pgid_path = sys.argv[1:]
+with open(input_path, "rb") as shell_input:
+    process = subprocess.Popen(
+        ["/bin/bash", "--noprofile", "--norc"],
+        stdin=shell_input,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    Path(pgid_path).write_text(f"{process.pid}\n", encoding="utf-8")
+    status = process.wait()
+Path(dead_path).write_text(f"{status}\n", encoding="utf-8")
+PY
+OMEGAFLOW_USER_SHELL_MONITOR_PID=$!
+exec 7>"$OMEGAFLOW_USER_SHELL_INPUT"
+
+omegaflow_cleanup_user_shell() {
+  local ignored_status=$?
+  trap - EXIT
+  set +e
+  exec 7>&- 2>/dev/null || true
+  local wait_index
+  for ((wait_index = 0; wait_index < 20; wait_index += 1)); do
+    [[ -f "$OMEGAFLOW_USER_SHELL_DEAD" ]] && break
+    sleep 0.05
+  done
+  if [[ -f "$OMEGAFLOW_USER_SHELL_PGID" ]]; then
+    local user_shell_pgid
+    IFS= read -r user_shell_pgid <"$OMEGAFLOW_USER_SHELL_PGID" || user_shell_pgid=""
+    [[ -n "$user_shell_pgid" ]] && kill -TERM -- "-$user_shell_pgid" 2>/dev/null || true
+    sleep 0.1
+    [[ -n "$user_shell_pgid" ]] && kill -KILL -- "-$user_shell_pgid" 2>/dev/null || true
+  fi
+  wait "$OMEGAFLOW_USER_SHELL_MONITOR_PID" 2>/dev/null || true
+  rm -f "$OMEGAFLOW_USER_SHELL_INPUT" "$OMEGAFLOW_USER_SHELL_DEAD" "$OMEGAFLOW_USER_SHELL_PGID"
+  return "$ignored_status"
+}
+trap omegaflow_cleanup_user_shell EXIT
+
+omegaflow_run_user_command() {
+  local command="$1"
+  local stdout_target="$2"
+  local stderr_target="$3"
+  OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
+  local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
+  local status_result="${status_pipe}.result"
+  rm -f "$status_pipe" "$status_result"
+  mkfifo "$status_pipe"
+  "$OMEGAFLOW_PYTHON" - "$status_pipe" "$status_result" "$OMEGAFLOW_USER_SHELL_DEAD" <<'PY' &
+import os
+import sys
+import time
+
+fifo_path, result_path, dead_path = sys.argv[1:]
+fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+buffer = b""
+status = "125"
+try:
+    while True:
+        try:
+            chunk = os.read(fd, 128)
+        except BlockingIOError:
+            chunk = b""
+        if chunk:
+            buffer += chunk
+            if b"\n" in buffer:
+                status = buffer.split(b"\n", 1)[0].decode("ascii", "replace")
+                break
+        if os.path.exists(dead_path):
+            try:
+                dead_status = open(dead_path, encoding="utf-8").read().strip()
+            except OSError:
+                dead_status = ""
+            if dead_status:
+                status = dead_status
+                break
+        time.sleep(0.02)
+finally:
+    os.close(fd)
+with open(result_path, "w", encoding="utf-8") as handle:
+    handle.write(status + "\n")
+PY
+  local status_monitor_pid=$!
+  local encoded_command
+  encoded_command=$("$OMEGAFLOW_PYTHON" - "$command" <<'PY'
+import base64
+import sys
+
+print(base64.b64encode(sys.argv[1].encode()).decode())
+PY
+  )
+  local decoder='import base64,sys;print(base64.b64decode(sys.argv[1]).decode(),end="")'
+  printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\nprintf "%%s\\n" "$?" >%q\n' \
+    "$OMEGAFLOW_PYTHON" "$decoder" "$encoded_command" \
+    "$stdout_target" "$stderr_target" "$status_pipe" >&7 || true
+  wait "$status_monitor_pid" 2>/dev/null || true
+  local status=125
+  if [[ -f "$status_result" ]]; then
+    IFS= read -r status <"$status_result" || status=125
+  fi
+  rm -f "$status_pipe" "$status_result"
+  return "$status"
+}
 
 omegaflow_emit_range() {
   "$OMEGAFLOW_PYTHON" - "$1" "$2" <<'PY'
@@ -201,17 +329,48 @@ omegaflow_run_step() {
   local command="$1"
   local expect="$2"
   local display="$3"
+  local output_mode="$4"
+  local replacement_output="$5"
+  local show_prompt_after="$6"
+  local pre_command_pause="$7"
+  local pre_enter_pause="$8"
+  local post_enter_pause="$9"
+  local post_command_pause="${10}"
   local stdout_start
   local stderr_start
   local status
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
-  printf '$ %s\n' "$display"
+  if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
+    omegaflow_print_prompt
+  fi
+  omegaflow_pause "$pre_command_pause"
+  omegaflow_print_command "$display" "$pre_enter_pause"
+  OMEGAFLOW_PROMPT_VISIBLE=0
   omegaflow_run_user_command \
     "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
   status=$?
-  omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_start"
-  omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_start" >&2
+  if [[ -z "$post_enter_pause" ]]; then
+    post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
+  fi
+  omegaflow_pause "$post_enter_pause"
+  if [[ "$output_mode" == "real" ]]; then
+    omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_start"
+    omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_start" >&2
+  elif [[ "$output_mode" == "replace" && -n "$replacement_output" ]]; then
+    printf '%s' "$replacement_output"
+    if [[ "$replacement_output" != *$'\n' ]]; then
+      printf '\n'
+    fi
+  fi
+  if [[ "$show_prompt_after" == "true" ]]; then
+    omegaflow_print_prompt
+    OMEGAFLOW_PROMPT_VISIBLE=1
+  fi
+  if [[ -z "$post_command_pause" ]]; then
+    post_command_pause="$OMEGAFLOW_POST_COMMAND_PAUSE"
+  fi
+  omegaflow_pause "$post_command_pause"
   omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start"
 }
 
@@ -278,6 +437,12 @@ PY
   if [[ "$op" == "shutdown" ]]; then
     printf '{"seq":%s,"status":"completed"}\n' "$seq" >&9
     break
+  fi
+  OMEGAFLOW_PROMPT_VISIBLE=0
+  if [[ "$op" == "beat" ]]; then
+    OMEGAFLOW_VISIBLE=1
+  else
+    OMEGAFLOW_VISIBLE=0
   fi
   printf '\033]1337;OmegaFlow;%s;%s;start;%s\007' "$seq" "$op" "$beat_id"
   eval "$script"
@@ -625,11 +790,35 @@ class PersistentTerminalRunner:
         record_cast: bool = True,
         title: str = "OmegaFlow recording",
         window_size: str = "100x28",
+        idle_time_limit: float | None = None,
+        headless: bool = True,
+        color: bool = False,
+        typing: bool = False,
+        typing_min_delay: float = 0.012,
+        typing_max_delay: float = 0.045,
+        typing_space_delay: float = 0.025,
+        typing_punctuation_delay: float = 0.05,
+        typing_newline_delay: float = 0.16,
+        typing_seed: int = 17,
+        post_enter_pause: float = 0.0,
+        post_command_pause: float = 0.0,
         timeout_seconds: float = CONTROL_TIMEOUT_SECONDS,
     ) -> None:
         self.record_cast = record_cast
         self.title = title
         self.window_size = window_size
+        self.idle_time_limit = idle_time_limit
+        self.headless = headless
+        self.color = color
+        self.typing = typing
+        self.typing_min_delay = typing_min_delay
+        self.typing_max_delay = typing_max_delay
+        self.typing_space_delay = typing_space_delay
+        self.typing_punctuation_delay = typing_punctuation_delay
+        self.typing_newline_delay = typing_newline_delay
+        self.typing_seed = typing_seed
+        self.post_enter_pause = post_enter_pause
+        self.post_command_pause = post_command_pause
         self.timeout_seconds = timeout_seconds
         self.context: CaptureContext | None = None
         self.session: TerminalControlSession | None = None
@@ -645,6 +834,18 @@ class PersistentTerminalRunner:
             record_cast=self.record_cast,
             title=self.title,
             window_size=self.window_size,
+            idle_time_limit=self.idle_time_limit,
+            headless=self.headless,
+            color=self.color,
+            typing=self.typing,
+            typing_min_delay=self.typing_min_delay,
+            typing_max_delay=self.typing_max_delay,
+            typing_space_delay=self.typing_space_delay,
+            typing_punctuation_delay=self.typing_punctuation_delay,
+            typing_newline_delay=self.typing_newline_delay,
+            typing_seed=self.typing_seed,
+            post_enter_pause=self.post_enter_pause,
+            post_command_pause=self.post_command_pause,
             timeout_seconds=self.timeout_seconds,
         )
         session.start()
@@ -844,25 +1045,48 @@ def _marked_step_script(beat_id: str, action_id: str, script: str) -> str:
     )
 
 
-def _validated_step_script(step: Mapping[str, Any], context: CaptureContext) -> str:
-    command = _step_command(step, context)
-    display = step.get("display")
-    if display is None:
-        display = step.get("run")
-    if display is None and isinstance(step.get("run_file"), str):
-        display = f"bash {step['run_file']}"
-    if not isinstance(display, str) or not display:
-        raise TerminalCaptureError("terminal step display must be a non-empty string")
+def _validated_step_script(
+    step: Mapping[str, Any],
+    context: CaptureContext,
+    *,
+    snapshot: Mapping[str, str] | None = None,
+) -> str:
+    command = snapshot["command"] if snapshot is not None else _step_command(step, context)
+    display = (
+        snapshot["display"]
+        if snapshot is not None
+        else _step_display(step, command)
+    )
     expect = step.get("expect", {})
     if not isinstance(expect, dict):
         raise TerminalCaptureError("terminal step expect must be a mapping")
     _validate_expect(expect)
+    try:
+        output = command_output_config(dict(step), field="terminal step")
+    except RecordingError as exc:
+        raise TerminalCaptureError(str(exc)) from exc
+    show_prompt_after = step.get("show_prompt_after", True)
+    if not isinstance(show_prompt_after, bool):
+        raise TerminalCaptureError("terminal step show_prompt_after must be a boolean")
+    pauses = tuple(
+        _optional_pause(step, field)
+        for field in (
+            "pre_command_pause",
+            "pre_enter_pause",
+            "post_enter_pause",
+            "post_command_pause",
+        )
+    )
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
             command,
             json.dumps(expect, separators=(",", ":")),
             display,
+            output["mode"],
+            output["replace"],
+            "true" if show_prompt_after else "false",
+            *pauses,
         )
     )
 

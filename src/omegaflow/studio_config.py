@@ -176,7 +176,7 @@ def studio_run_dir(*args: object) -> str:
     timestamp_text = normalize_studio_token(timestamp)
     dry_run_enabled = str(dry_run).lower() == "true"
     is_recording_run = has_recording_id and not dry_run_enabled and (
-        step_text in {"record", "session"}
+        step_text == "record"
         or (not step_text and action_text in {"build", "record"})
     )
     data_dir = project_data_dir_from_value(data_dir_value, root_value)
@@ -213,19 +213,9 @@ class StudioStep(str, Enum):
     record = "record"
     record_check = "record_check"
     record_dry_run = "record_dry_run"
-    session = "session"
     dry_run = "dry_run"
     sync_narration = "sync_narration"
-    retime = "retime"
-    retime_check = "retime_check"
-    generate = "generate"
     publish = "publish"
-    audio_check = "audio_check"
-    audio_dry_run = "audio_dry_run"
-    audio_generate = "audio_generate"
-    audio_publish = "audio_publish"
-    align = "align"
-    align_check = "align_check"
 
 
 class RecordingMedium(str, Enum):
@@ -261,16 +251,10 @@ class StudioConfig:
     load_env_file: bool = True
     env_file: str | None = ".env"
     env_override: bool = False
-    output: str | None = None
-    cast: str | None = None
-    timeline: str | None = None
-    audio_metadata: str | None = None
     surface: str | None = None
     dry_run: Any = False
     headed: bool = False
     force: bool = False
-    timestamps: bool = True
-    allow_mismatch: bool = False
     run_id: str | None = None
     runs_since: str | None = None
     runs_limit: int | None = 10
@@ -285,7 +269,6 @@ class StudioConfig:
 class RecordingCaptureConfig:
     window_size: str = "100x28"
     headless: bool = True
-    baseline_compressed: bool = False
     idle_time_limit: float | None = None
 
 
@@ -305,10 +288,6 @@ class RecordingStyleConfig:
 class RecordingOutputsConfig:
     dir: str = "recordings/.omegaflow/videos"
     asset_dir: str = "${outputs.dir}/${id}"
-    cast: str = "${outputs.asset_dir}/recording.cast"
-    retimed_cast: str | None = None
-    audio: str | None = "${outputs.asset_dir}/audio.${audio.format}"
-    audio_metadata: str | None = "${outputs.asset_dir}/audio.json"
 
 
 @dataclass

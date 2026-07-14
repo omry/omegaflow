@@ -311,12 +311,26 @@ def capture_recording(
             )
         ),
     )
-    return coordinator.capture(
-        plan,
-        run_dir,
-        workspace=project_root_from_spec(spec),
-        working_directory=working_directory,
-        environment=environment,
+    try:
+        result = coordinator.capture(
+            plan,
+            run_dir,
+            workspace=project_root_from_spec(spec),
+            working_directory=working_directory,
+            environment=environment,
+        )
+    except Exception as exc:
+        _preserve_capture_diagnostics(spec, run_dir, exc)
+        raise
+    _copy_capture_logs(run_dir)
+    return result
+
+
+def _copy_capture_logs(run_dir: Path) -> tuple[Path, Path, Path]:
+    capture_dir = run_dir / "capture"
+    outputs = (
+        (capture_dir / "terminal.stdout.log", run_dir / "stdout"),
+        (capture_dir / "terminal.stderr.log", run_dir / "stderr"),
     )
     for source, destination in outputs:
         destination.parent.mkdir(parents=True, exist_ok=True)

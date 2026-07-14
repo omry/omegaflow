@@ -1,21 +1,17 @@
 # Video Output Contract
 
-Status: initial migration contract.
+Status: current manifest-bundle contract.
 
-Video output is currently published as a set of website assets:
+Every terminal, browser, and mixed recording is published as one atomic bundle
+under `website/static/omegaflow-videos/<id>/presentation/`:
 
-- baseline cast: `website/static/omegaflow-videos/<id>/<id>.cast`
-- retimed cast: `website/static/omegaflow-videos/<id>/<id>.retimed.cast`
-- recording fingerprint: `website/static/omegaflow-videos/<id>/<id>.recording.json`
-- timeline metadata: `website/static/omegaflow-videos/<id>/<id>.timeline.jsonl`
-- optional audio: `website/static/omegaflow-videos/<id>/<id>.mp3`
-- optional audio metadata: `website/static/omegaflow-videos/<id>/<id>.json`
-- optional beat timestamp files:
-  `website/static/omegaflow-videos/<id>/<id>.<beat>.timestamps.json`
+- `recording.presentation.json`
+- `recording.recording.json`
+- beat-local terminal `.cast` and browser `.json` payloads
+- referenced browser media
+- optional narration audio, metadata, and timestamp sidecars
 
 The initial player assets are owned by the Python package under
 `omegaflow/player/static/`. A website target may receive copied player
 assets plus generated video assets. Website-published video assets are
 committed; non-website generated videos are ignored by default.
-
-The final video output format is intentionally not locked yet.

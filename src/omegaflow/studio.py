@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import difflib
-import hashlib
 import html
 import http.server
 import io
@@ -18,7 +17,6 @@ import time
 import webbrowser
 from collections.abc import Callable
 from contextlib import redirect_stdout
-from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, unquote, urlparse
@@ -26,10 +24,8 @@ from urllib.parse import quote, urlencode, unquote, urlparse
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from . import align_cast
 from . import audio
 from . import record
-from . import retime_cast
 from . import presentation_build
 from . import studio_config as studio_config_module
 from .recording_plan import RecordingPlanError, normalize_recording_plan
@@ -48,6 +44,7 @@ from .studio_config import (
     project_config_searchpath_override,
     recording_script_dir_from_config,
     recording_spec_from_config,
+    studio_data_dir_from_config,
 )
 from .terminal_style import (
     ANSI_CYAN_BOLD,
@@ -62,19 +59,6 @@ from .terminal_style import (
 
 class StudioError(RuntimeError):
     pass
-
-
-RECORDING_FINGERPRINT_VERSION = 2
-FINGERPRINT_PRIVATE_SPEC_KEYS = {"_overrides", "_recording_id"}
-CAPTURE_FINGERPRINT_IGNORED_KEYS = {
-    "audio",
-    "audio_metadata",
-    "guide",
-    "narration",
-    "publish",
-    "retimed_cast",
-    "surfaces",
-}
 
 
 ToolRunner = Callable[[Any], int]
@@ -119,39 +103,6 @@ def info_line(message: str) -> None:
     status_line("info", message, color=ANSI_CYAN_BOLD)
 
 
-BUILD_STEPS = [
-    {
-        "action": "record",
-        "kind": "compile",
-        "description": "record a fast terminal baseline and timeline sidecar",
-    },
-    {
-        "action": "audio_generate",
-        "kind": "compile",
-        "description": "generate or reuse cached TTS fragments for each beat",
-    },
-    {
-        "action": "audio_publish",
-        "kind": "link",
-        "description": "concatenate voiceover and write audio timing metadata",
-    },
-    {
-        "action": "retime",
-        "kind": "optimize",
-        "description": "create the watchable cast using terminal and audio timing",
-    },
-    {
-        "action": "publish_surface",
-        "kind": "link",
-        "description": "embed the finished recording in the selected publish surface",
-    },
-    {
-        "action": "align_check",
-        "kind": "validate",
-        "description": "verify visible captions and commands still match the script",
-    },
-]
-
 PRESENTATION_BUILD_STEPS = [
     {
         "action": "record",
@@ -185,31 +136,10 @@ PUBLIC_ACTIONS = [action.value for action in StudioAction]
 RECORD_ACTIONS = {
     "record": "record",
     "record_check": "check",
-    "record_dry_run": "dry_run",
-    "dry_run": "dry_run",
-    "session": "session",
     "list": "list",
     "runs": "runs",
-    "play": "play",
     "inspect": "inspect",
     "output": "output",
-}
-AUDIO_ACTIONS = {
-    "sync_narration": "sync_narration",
-    "audio_check": "check",
-    "audio_dry_run": "dry_run",
-    "audio_generate": "generate",
-    "audio_publish": "publish",
-    "generate": "generate",
-    "publish": "publish",
-}
-RETIME_ACTIONS = {
-    "retime": "retime",
-    "retime_check": "check",
-}
-ALIGN_ACTIONS = {
-    "align": "align",
-    "align_check": "check",
 }
 WATCH_ARTIFACT_PREFIX = "/__studio_artifacts__/"
 WATCH_HOST = "127.0.0.1"
@@ -267,65 +197,45 @@ def run_step(
 def run_record_action(cfg: DictConfig, action: str, label: str | None = None) -> None:
     spec: dict[str, Any] | None = None
     config = container_from_hydra_cfg(cfg)
-    output_format = config.get("output_format", "text")
     verbose = bool_config(config, "verbose")
+    if action == "check":
+        spec = recording_spec_from_config(config, recording_id=None, overrides=())
+        normalized_recording_plan(spec)
+        try:
+            record.validate_manifest(spec)
+            record.check_required_commands(spec)
+            asciinema_version = record.check_asciinema(spec)
+        except record.RecordingError as exc:
+            raise StudioError(str(exc)) from exc
+        if text_output_enabled(cfg):
+            pass_line(f"recording source is valid: {spec['id']} ({asciinema_version})")
+        return
     if action == "record":
         spec = recording_spec_from_config(config, recording_id=None, overrides=())
         plan = normalized_recording_plan(spec)
-        if presentation_build.uses_presentation_pipeline(plan):
-            run_dir = current_recording_run_dir(spec)
-            if text_output_enabled(cfg):
-                step_line("capture browser/mixed recording")
-            presentation_build.capture_recording(spec, plan, run_dir)
-            fingerprint_path = presentation_build.write_capture_fingerprint(
-                spec, plan, run_dir
-            )
-            if text_output_enabled(cfg):
-                pass_line(f"captured recording: {display_path(run_dir)}")
-                if verbose:
-                    pass_line(
-                        "wrote recording fingerprint: "
-                        f"{display_path(fingerprint_path)}"
-                    )
-            return
+        run_dir = current_recording_run_dir(spec)
+        if text_output_enabled(cfg):
+            step_line("capture recording")
+        presentation_build.capture_recording(
+            spec,
+            plan,
+            run_dir,
+            headed=bool_config(config, "headed"),
+        )
+        fingerprint_path = presentation_build.write_capture_fingerprint(
+            spec, plan, run_dir
+        )
+        if text_output_enabled(cfg):
+            pass_line(f"captured recording: {display_path(run_dir)}")
+            if verbose:
+                pass_line(
+                    "wrote recording fingerprint: "
+                    f"{display_path(fingerprint_path)}"
+                )
+        return
     run_step(
         label or action.replace("_", " "), record.run_tool_from_hydra_cfg, cfg, action
     )
-    if spec is not None:
-        fingerprint_path = write_recording_fingerprint(spec)
-        if output_format != "json" and verbose:
-            pass_line(f"wrote recording fingerprint: {display_path(fingerprint_path)}")
-
-
-def run_build_record_action(cfg: DictConfig, spec: dict[str, Any]) -> Path:
-    config = container_from_hydra_cfg(cfg)
-    output_format = config.get("output_format", "text")
-    verbose = bool_config(config, "verbose")
-    if not bool_config(config, "force"):
-        reason = recording_skip_reason(spec)
-        if reason is None:
-            run_dir = latest_successful_recording_run_dir(spec)
-            if run_dir is None:
-                raise StudioError("recording was fresh but no successful run was found")
-            if output_format != "json":
-                cast_path = run_artifact_paths(run_dir, spec)["cast"]
-                skip_line(
-                    "record baseline cast",
-                    detail=f"{display_path(cast_path)} is fresh",
-                )
-            return run_dir
-        if output_format != "json" and verbose:
-            info_line(f"record baseline cast: {reason}")
-    run_dir = current_recording_run_dir(spec)
-    paths = run_artifact_paths(run_dir, spec)
-    run_step(
-        "record baseline cast",
-        record.run_tool_from_hydra_cfg,
-        cfg,
-        "record",
-        config_overrides={"output": paths["cast"]},
-    )
-    return run_dir
 
 
 def normalized_recording_plan(spec: dict[str, Any]) -> Any:
@@ -372,414 +282,6 @@ def run_build_record_action(
 
 def run_audio_action(cfg: DictConfig, action: str, label: str | None = None) -> None:
     run_step(label or f"audio {action}", audio.run_tool_from_hydra_cfg, cfg, action)
-
-
-def status_message_from_output(output: str, status: str) -> str | None:
-    prefix = f"{status:<5} "
-    for line in reversed(output.splitlines()):
-        if line.startswith(prefix):
-            return line[len(prefix) :]
-    return None
-
-
-@dataclass(frozen=True)
-class BuildAudioStats:
-    generated_segments: int
-    reused_segments: int
-    generated_timestamp_files: int
-    tts_billable_characters: int | None
-    transcription_audio_seconds: float | None
-    estimated_tts_cost: str | None
-    estimated_transcription_cost: str | None
-    estimated_openai_cost: str | None
-    transcription_cost_unavailable: bool = False
-    timestamp_items: tuple[audio.AudioPlanItem, ...] = ()
-
-
-def count_phrase(count: int, singular: str, plural: str | None = None) -> str:
-    if count == 1:
-        return f"1 {singular}"
-    return f"{count} {plural or singular + 's'}"
-
-
-def build_audio_stats(
-    cfg: DictConfig, *, generate_needed: bool
-) -> BuildAudioStats | None:
-    if not generate_needed:
-        return None
-    config = container_from_hydra_cfg(cfg)
-    try:
-        spec = recording_spec_from_config(config, recording_id=None, overrides=())
-        settings = audio.audio_settings(spec)
-        if not settings.enabled:
-            return None
-        transcription = audio.transcription_settings(spec)
-        segments = audio.load_narration_segments(spec)
-        recording_id = audio.require_string(spec, "_recording_id", field="recording")
-        plan = audio.plan_audio(recording_id, segments, settings)
-    except (StudioConfigError, audio.AudioError):
-        return None
-
-    force = bool_config(config, "force")
-    synthesized_items = audio.audio_items_requiring_synthesis(
-        plan,
-        settings,
-        force=force,
-    )
-    materialized_items = [
-        item
-        for item in audio.audio_items_requiring_materialization(
-            plan,
-            settings,
-            force=force,
-        )
-        if item not in synthesized_items
-    ]
-    timestamps = bool_config(config, "timestamps", default=True)
-    timestamp_items = (
-        audio.timestamp_items_requiring_generation(
-            plan,
-            transcription=transcription,
-            force=force,
-        )
-        if timestamps
-        else []
-    )
-    billing = (
-        audio.estimate_openai_tts_billing(synthesized_items, settings)
-        if settings.provider == "openai"
-        else None
-    )
-    return BuildAudioStats(
-        generated_segments=len(synthesized_items),
-        reused_segments=len(materialized_items),
-        generated_timestamp_files=len(timestamp_items),
-        tts_billable_characters=(
-            billing.billable_characters if billing is not None else None
-        ),
-        transcription_audio_seconds=None,
-        estimated_tts_cost=(
-            audio.format_usd(billing.estimated_cost_usd)
-            if billing is not None
-            else None
-        ),
-        estimated_transcription_cost=None,
-        estimated_openai_cost=(
-            audio.format_usd(billing.estimated_cost_usd)
-            if billing is not None
-            else None
-        ),
-        timestamp_items=tuple(timestamp_items),
-    )
-
-
-def build_audio_stats_with_transcription_cost(
-    cfg: DictConfig,
-    stats: BuildAudioStats,
-) -> BuildAudioStats:
-    if not stats.timestamp_items:
-        return stats
-    config = container_from_hydra_cfg(cfg)
-    try:
-        spec = recording_spec_from_config(config, recording_id=None, overrides=())
-        settings = audio.audio_settings(spec)
-        transcription = audio.transcription_settings(spec)
-        billing = audio.estimate_openai_transcription_billing(
-            list(stats.timestamp_items),
-            transcription,
-        )
-    except (StudioConfigError, audio.AudioError):
-        return replace(stats, transcription_cost_unavailable=True)
-
-    tts_cost = None
-    if stats.estimated_tts_cost is not None:
-        if stats.tts_billable_characters is not None:
-            tts_cost = (
-                stats.tts_billable_characters
-                * settings.tts_usd_per_1m_characters
-                / 1_000_000
-            )
-    total_cost = billing.estimated_cost_usd + (tts_cost or 0)
-    return replace(
-        stats,
-        transcription_audio_seconds=billing.audio_seconds,
-        estimated_transcription_cost=audio.format_usd(billing.estimated_cost_usd),
-        estimated_openai_cost=audio.format_usd(total_cost),
-    )
-
-
-def build_audio_stats_message(stats: BuildAudioStats) -> str | None:
-    parts: list[str] = []
-    if stats.generated_segments:
-        parts.append(count_phrase(stats.generated_segments, "generated TTS segment"))
-    if stats.reused_segments:
-        parts.append(count_phrase(stats.reused_segments, "reused cached segment"))
-    if stats.generated_timestamp_files:
-        parts.append(
-            count_phrase(stats.generated_timestamp_files, "generated timestamp file")
-        )
-    if stats.tts_billable_characters is not None:
-        parts.append(f"{stats.tts_billable_characters} TTS chars")
-    if stats.transcription_audio_seconds is not None:
-        parts.append(f"{stats.transcription_audio_seconds:.1f}s transcribed audio")
-    if (
-        stats.estimated_tts_cost is not None
-        and stats.estimated_transcription_cost is not None
-        and stats.estimated_openai_cost is not None
-    ):
-        parts.append(
-            "estimated OpenAI cost "
-            f"TTS {stats.estimated_tts_cost}, "
-            f"transcription {stats.estimated_transcription_cost}, "
-            f"total {stats.estimated_openai_cost}"
-        )
-    elif stats.estimated_tts_cost is not None:
-        parts.append(f"estimated TTS cost {stats.estimated_tts_cost}")
-    elif stats.estimated_transcription_cost is not None:
-        parts.append(
-            f"estimated transcription cost {stats.estimated_transcription_cost}"
-        )
-    if stats.transcription_cost_unavailable:
-        parts.append("transcription cost unavailable")
-    if not parts:
-        return None
-    return "audio updated: " + ", ".join(parts)
-
-
-def run_build_audio_actions(
-    cfg: DictConfig,
-    *,
-    generate_needed: bool,
-    publish_needed: bool,
-    output: Path | None = None,
-) -> None:
-    if publish_needed and not generate_needed and audio_segments_need_materialization(
-        cfg
-    ):
-        generate_needed = True
-    if not generate_needed and not publish_needed:
-        return
-    config = container_from_hydra_cfg(cfg)
-    verbose = bool_config(config, "verbose")
-    if verbose:
-        if generate_needed:
-            run_audio_action(cfg, "generate", "generate audio")
-        if publish_needed:
-            run_step(
-                "publish audio",
-                audio.run_tool_from_hydra_cfg,
-                cfg,
-                "publish",
-                config_overrides={"output": output} if output is not None else None,
-            )
-        return
-
-    if text_output_enabled(cfg):
-        step_line("audio")
-    if text_output_enabled(cfg):
-        if generate_needed:
-            run_step(
-                "audio",
-                audio.run_tool_from_hydra_cfg,
-                cfg,
-                "generate",
-                show_step=False,
-            )
-        if publish_needed:
-            run_step(
-                "audio",
-                audio.run_tool_from_hydra_cfg,
-                cfg,
-                "publish",
-                show_step=False,
-                config_overrides={"output": output} if output is not None else None,
-            )
-        return
-
-    stats = build_audio_stats(cfg, generate_needed=generate_needed)
-    generate_output = ""
-    publish_output = ""
-    if generate_needed:
-        generate_output = run_step(
-            "audio",
-            audio.run_tool_from_hydra_cfg,
-            cfg,
-            "generate",
-            quiet=True,
-        )
-        if stats is not None:
-            stats = build_audio_stats_with_transcription_cost(cfg, stats)
-    if publish_needed:
-        publish_output = run_step(
-            "audio",
-            audio.run_tool_from_hydra_cfg,
-            cfg,
-            "publish",
-            quiet=True,
-            config_overrides={"output": output} if output is not None else None,
-        )
-    if text_output_enabled(cfg):
-        message = build_audio_stats_message(stats) if stats is not None else None
-        if message is None:
-            message = status_message_from_output(generate_output, "pass")
-        if message is None:
-            message = status_message_from_output(publish_output, "pass")
-        pass_line(message or "audio ready")
-
-
-def audio_generate_needs_work(cfg: DictConfig) -> bool:
-    config = container_from_hydra_cfg(cfg)
-    spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    try:
-        settings = audio.audio_settings(spec)
-        if not settings.enabled:
-            return False
-        if bool_config(config, "force"):
-            return True
-        transcription = audio.transcription_settings(spec)
-        segments = audio.load_narration_segments(spec)
-        recording_id = audio.require_string(spec, "_recording_id", field="recording")
-        plan = audio.plan_audio(recording_id, segments, settings)
-    except audio.AudioError:
-        return True
-    if audio.audio_items_requiring_synthesis(plan, settings):
-        return True
-    if audio.audio_items_requiring_materialization(plan, settings):
-        return True
-    timestamps = bool_config(config, "timestamps", default=True)
-    return bool(
-        timestamps
-        and audio.timestamp_items_requiring_generation(
-            plan,
-            transcription=transcription,
-            force=False,
-        )
-    )
-
-
-def audio_segments_need_materialization(cfg: DictConfig) -> bool:
-    config = container_from_hydra_cfg(cfg)
-    spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    try:
-        settings = audio.audio_settings(spec)
-        if not settings.enabled:
-            return False
-        segments = audio.load_narration_segments(spec)
-        recording_id = audio.require_string(spec, "_recording_id", field="recording")
-        plan = audio.plan_audio(recording_id, segments, settings)
-    except audio.AudioError:
-        return True
-    return any(not item.output_path.exists() for item in plan)
-
-
-def audio_publish_needs_work(cfg: DictConfig, *, output: Path | None = None) -> bool:
-    config = container_from_hydra_cfg(cfg)
-    spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    try:
-        settings = audio.audio_settings(spec)
-        if not settings.enabled:
-            return False
-        if bool_config(config, "force"):
-            return True
-        segments = audio.load_narration_segments(spec)
-        recording_id = audio.require_string(spec, "_recording_id", field="recording")
-        plan = audio.plan_audio(recording_id, segments, settings)
-        anchors_by_segment_id = audio.anchors_by_segment_id_from_spec(spec, plan)
-        waits_by_segment_id = audio.waits_by_segment_id_from_spec(spec, plan)
-        pause_after_by_segment_id = audio.pause_after_by_segment_id_from_spec(
-            spec,
-            plan,
-        )
-        published_audio = output or audio.output_audio_path(
-            spec, recording_id, settings
-        )
-        published_metadata = (
-            published_audio.with_suffix(".json")
-            if output is not None
-            else audio.output_audio_metadata_path(spec, published_audio)
-        )
-    except audio.AudioError:
-        return True
-    return not audio.published_audio_is_fresh(
-        plan,
-        published_audio,
-        published_metadata,
-        anchors_by_segment_id=anchors_by_segment_id,
-        waits_by_segment_id=waits_by_segment_id,
-        pause_after_by_segment_id=pause_after_by_segment_id,
-    )
-
-
-def retime_needs_work(
-    cfg: DictConfig, *, paths: dict[str, Path] | None = None
-) -> bool:
-    config = container_from_hydra_cfg(cfg)
-    if bool_config(config, "force"):
-        return True
-    try:
-        if paths is None:
-            spec = recording_spec_from_config(config, recording_id=None, overrides=())
-            paths = artifact_paths(spec)
-        retime_cast.require_fresh_retimed_cast(
-            cast_path=paths["cast"],
-            timeline_path=paths["timeline"],
-            output_path=paths["retimed_cast"],
-            audio_metadata_path=paths["audio_metadata"],
-        )
-    except (StudioError, retime_cast.RetimeError):
-        return True
-    return False
-
-
-def staged_retimed_cast_path(path: Path) -> Path:
-    return path.with_name(f".{path.name}.build-{os.getpid()}.tmp")
-
-
-def run_retime_action(
-    cfg: DictConfig,
-    action: str,
-    label: str | None = None,
-    *,
-    cast: Path | None = None,
-    timeline: Path | None = None,
-    audio_metadata: Path | None = None,
-    output: Path | None = None,
-    quiet: bool = False,
-) -> str:
-    config_overrides = {}
-    if cast is not None:
-        config_overrides["cast"] = cast
-    if timeline is not None:
-        config_overrides["timeline"] = timeline
-    if audio_metadata is not None:
-        config_overrides["audio_metadata"] = audio_metadata
-    if output is not None:
-        config_overrides["output"] = output
-    return run_step(
-        label or f"retime {action}",
-        retime_cast.run_tool_from_hydra_cfg,
-        cfg,
-        action,
-        quiet=quiet,
-        config_overrides=config_overrides or None,
-    )
-
-
-def run_align_action(
-    cfg: DictConfig,
-    action: str,
-    label: str | None = None,
-    *,
-    cast: Path | None = None,
-) -> None:
-    config_overrides = {"cast": cast} if cast is not None else None
-    run_step(
-        label or f"align {action}",
-        align_cast.run_tool_from_hydra_cfg,
-        cfg,
-        action,
-        config_overrides=config_overrides,
-    )
 
 
 def bool_config(config: dict[str, Any], key: str, default: bool = False) -> bool:
@@ -898,7 +400,6 @@ BOOTSTRAP_WORKSPACE_CONFIG = """\
 capture:
   window_size: 80x20
   headless: true
-  baseline_compressed: true
 style:
   color: true
   typing: true
@@ -1139,29 +640,8 @@ def as_mapping(value: object, *, field: str) -> dict[str, Any]:
     return value
 
 
-def artifact_paths(spec: dict[str, Any]) -> dict[str, Path]:
-    recording_id = str(spec["_recording_id"])
-    cast_path = retime_cast.cast_path_from_manifest(spec)
-    timeline_path = retime_cast.timeline_path_for_cast(cast_path)
-    retimed_path = retime_cast.output_path_from_manifest(spec, cast_path)
-    settings = audio.audio_settings(spec)
-    audio_path = audio.output_audio_path(spec, recording_id, settings)
-    audio_metadata_path = audio.output_audio_metadata_path(spec, audio_path)
-    narration_path = audio.narration_config_path(recording_id, spec)
-    audio_cache = settings.cache_dir / recording_id
-    return {
-        "cast": cast_path,
-        "timeline": timeline_path,
-        "retimed_cast": retimed_path,
-        "audio": audio_path,
-        "audio_metadata": audio_metadata_path,
-        "narration_config": narration_path,
-        "audio_cache": audio_cache,
-    }
-
-
 def current_recording_run_dir(spec: dict[str, Any]) -> Path:
-    return record.run_artifact_dir(spec)
+    return record.relative_path(record.require_string(spec, "_hydra_output_dir"))
 
 
 def latest_successful_recording_run_dir(spec: dict[str, Any]) -> Path | None:
@@ -1174,29 +654,6 @@ def latest_successful_recording_run_dir(spec: dict[str, Any]) -> Path | None:
         )
     except record.RecordingError:
         return None
-
-
-def run_artifact_paths(run_dir: Path, spec: dict[str, Any]) -> dict[str, Path]:
-    recording_id = str(spec["_recording_id"])
-    settings = audio.audio_settings(spec)
-    audio_path = run_dir / "audio" / f"{recording_id}.{settings.format}"
-    return {
-        "cast": run_dir / "recording.cast",
-        "timeline": run_dir / "recording.timeline.jsonl",
-        "recording_fingerprint": run_dir / "recording.fingerprint.json",
-        "retimed_cast": run_dir / "recording.retimed.cast",
-        "audio": audio_path,
-        "audio_metadata": audio_path.with_suffix(".json"),
-        "narration_config": audio.narration_config_path(recording_id, spec),
-        "audio_cache": settings.cache_dir / recording_id,
-    }
-
-
-def latest_run_artifact_paths(spec: dict[str, Any]) -> dict[str, Path] | None:
-    run_dir = latest_successful_recording_run_dir(spec)
-    if run_dir is None:
-        return None
-    return run_artifact_paths(run_dir, spec)
 
 
 def remove_unused_empty_run_dir(spec: dict[str, Any], *, used_run_dir: Path) -> None:
@@ -1278,236 +735,6 @@ def garbage_collect_recording_runs(
     return candidates
 
 
-def recording_fingerprint_path(cast_path: Path) -> Path:
-    return cast_path.with_suffix(".recording.json")
-
-
-def publish_artifact_paths(spec: dict[str, Any]) -> dict[str, Path]:
-        "recording_fingerprint": recording_fingerprint_path(
-            retime_cast.cast_path_from_manifest(spec)
-        ),
-    }
-
-
-def clean_artifact_paths(spec: dict[str, Any]) -> dict[str, Path]:
-    cast_path = retime_cast.cast_path_from_manifest(spec)
-    return {
-        "baseline_cast": cast_path,
-        "timeline": retime_cast.timeline_path_for_cast(cast_path),
-        "recording_fingerprint": recording_fingerprint_path(cast_path),
-        "retimed_cast": retime_cast.output_path_from_manifest(spec, cast_path),
-    }
-
-
-def normalize_fingerprint_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): normalize_fingerprint_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-            if not (
-                str(key).startswith("_")
-                and str(key) not in FINGERPRINT_PRIVATE_SPEC_KEYS
-            )
-        }
-    if isinstance(value, list):
-        return [normalize_fingerprint_value(item) for item in value]
-    if isinstance(value, tuple):
-        return [normalize_fingerprint_value(item) for item in value]
-    if isinstance(value, Path):
-        return display_path(value)
-    return value
-
-
-def capture_fingerprint_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): capture_fingerprint_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-            if str(key) not in CAPTURE_FINGERPRINT_IGNORED_KEYS
-            and not (
-                str(key).startswith("_")
-                and str(key) not in FINGERPRINT_PRIVATE_SPEC_KEYS
-            )
-        }
-    if isinstance(value, list):
-        return [capture_fingerprint_value(item) for item in value]
-    if isinstance(value, tuple):
-        return [capture_fingerprint_value(item) for item in value]
-    if isinstance(value, Path):
-        return display_path(value)
-    return value
-
-
-def collect_run_file_values(value: Any) -> list[str]:
-    if isinstance(value, dict):
-        paths: list[str] = []
-        for key, item in value.items():
-            if key == "run_file" and isinstance(item, str) and item:
-                paths.append(item)
-            else:
-                paths.extend(collect_run_file_values(item))
-        return paths
-    if isinstance(value, list):
-        paths = []
-        for item in value:
-            paths.extend(collect_run_file_values(item))
-        return paths
-    return []
-
-
-def fingerprint_dependency_paths(spec: dict[str, Any]) -> list[Path]:
-    paths: list[Path] = []
-    manifest_path = optional_string(spec.get("_manifest_path"))
-    if manifest_path is not None:
-        paths.append(retime_cast.relative_path(manifest_path))
-    for value in collect_run_file_values(spec):
-        paths.append(record.run_file_path(value, spec))
-    paths.extend(
-        [
-            Path(__file__),
-            Path(record.__file__),
-            Path(studio_config_module.__file__),
-        ]
-    )
-    return sorted(set(paths), key=lambda path: display_path(path) or str(path))
-
-
-def file_fingerprint_entry(path: Path) -> dict[str, Any]:
-    entry: dict[str, Any] = {"path": display_path(path)}
-    if not path.exists():
-        entry["missing"] = True
-        return entry
-    if not path.is_file():
-        entry["type"] = "non-file"
-        return entry
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return entry
-
-
-def recording_fingerprint_payload(spec: dict[str, Any]) -> dict[str, Any]:
-    spec_payload = capture_fingerprint_value(spec)
-    dependencies = [
-        file_fingerprint_entry(path) for path in fingerprint_dependency_paths(spec)
-    ]
-    fingerprint_input = {
-        "version": RECORDING_FINGERPRINT_VERSION,
-        "spec": spec_payload,
-        "dependencies": dependencies,
-    }
-    encoded = json.dumps(
-        fingerprint_input, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
-    return {
-        "version": RECORDING_FINGERPRINT_VERSION,
-        "recording": str(spec.get("_recording_id") or spec.get("id") or ""),
-        "fingerprint": hashlib.sha256(encoded).hexdigest(),
-        "spec_sha256": hashlib.sha256(
-            json.dumps(
-                spec_payload,
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=True,
-            ).encode("utf-8")
-        ).hexdigest(),
-        "dependencies": dependencies,
-    }
-
-
-def dependency_missing(payload: dict[str, Any]) -> str | None:
-    dependencies = payload.get("dependencies")
-    if not isinstance(dependencies, list):
-        return None
-    for dependency in dependencies:
-        if not isinstance(dependency, dict):
-            continue
-        if dependency.get("missing"):
-            return str(dependency.get("path") or "unknown dependency")
-    return None
-
-
-def read_recording_fingerprint(path: Path) -> dict[str, Any] | None:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as exc:
-        raise StudioError(
-            f"invalid recording fingerprint JSON: {display_path(path)}"
-        ) from exc
-    if not isinstance(payload, dict):
-        raise StudioError(
-            f"recording fingerprint must be a mapping: {display_path(path)}"
-        )
-    return payload
-
-
-def write_recording_fingerprint(
-    spec: dict[str, Any], *, fingerprint_path: Path | None = None
-) -> Path:
-    if fingerprint_path is None:
-        cast_path = retime_cast.cast_path_from_manifest(spec)
-        fingerprint_path = recording_fingerprint_path(cast_path)
-    payload = recording_fingerprint_payload(spec)
-    missing = dependency_missing(payload)
-    if missing is not None:
-        raise StudioError(f"recording fingerprint dependency is missing: {missing}")
-    fingerprint_path.parent.mkdir(parents=True, exist_ok=True)
-    fingerprint_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return fingerprint_path
-
-
-def write_publish_recording_fingerprint(source: Path, destination: Path) -> Path:
-    payload = read_recording_fingerprint(source)
-    if payload is None:
-        raise StudioError(f"recording fingerprint is missing: {display_path(source)}")
-    dependencies = payload.get("dependencies")
-    if not isinstance(dependencies, list):
-        raise StudioError(f"recording fingerprint dependencies must be a list: {source}")
-    payload = dict(payload)
-    payload["dependencies"] = [
-        dependency
-        for dependency in dependencies
-        if isinstance(dependency, dict)
-        and isinstance(dependency.get("path"), str)
-        and not Path(dependency["path"]).is_absolute()
-    ]
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return destination
-
-
-def recording_skip_reason(spec: dict[str, Any]) -> str | None:
-    paths = latest_run_artifact_paths(spec)
-    if paths is None:
-        return "successful recording run is missing"
-    for name in ("cast", "timeline"):
-        path = paths[name]
-        if not path.exists():
-            return f"{name} is missing"
-    fingerprint_path = paths["recording_fingerprint"]
-    try:
-        stored = read_recording_fingerprint(fingerprint_path)
-    except StudioError as exc:
-        return str(exc)
-    if stored is None:
-        return "recording fingerprint is missing"
-    current = recording_fingerprint_payload(spec)
-    missing = dependency_missing(current)
-    if missing is not None:
-        return f"recording dependency is missing: {missing}"
-    if stored.get("version") != RECORDING_FINGERPRINT_VERSION:
-        return "recording fingerprint version changed"
-    if stored.get("fingerprint") != current["fingerprint"]:
-        return "recording fingerprint changed"
-    return None
-
-
 def publish_config(spec: dict[str, Any]) -> dict[str, Any]:
     publish = spec.get("publish")
     if publish is None:
@@ -1578,8 +805,6 @@ def selected_surface(
 
 def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
     spec = load_recording_spec_from_hydra_cfg(cfg)
-    paths = run_artifact_paths(current_recording_run_dir(spec), spec)
-    publish_paths = publish_artifact_paths(spec)
     manifest_path = optional_string(spec.get("_manifest_path"))
     script_path = optional_string(spec.get("script"))
     surface_info: list[dict[str, Any]] = []
@@ -1608,29 +833,35 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
             "recording_source": display_path(manifest_path),
         },
         "outputs": {
-            "baseline_cast": display_path(paths["cast"]),
-            "timeline": display_path(paths["timeline"]),
-            "recording_fingerprint": display_path(paths["recording_fingerprint"]),
-            "audio_fragments": display_path(paths["audio_cache"] / "*.mp3"),
-            "voiceover": display_path(paths["audio"]),
-            "audio_metadata": display_path(paths["audio_metadata"]),
-            "retimed_cast": display_path(paths["retimed_cast"]),
+            "private_capture": display_path(presentation_paths["capture"]),
+            "browser_capture_log": display_path(
+                presentation_paths["browser_capture"]
+            ),
+            "narration": display_path(presentation_paths["audio"]),
+            "presentation_bundle": display_path(
+                presentation_paths["presentation"]
+            ),
+            "presentation_manifest": display_path(
+                presentation_paths["manifest"]
+            ),
+            "recording_fingerprint": display_path(
+                presentation_paths["fingerprint"]
+            ),
+            "compilation_report": display_path(presentation_paths["report"]),
         },
         "publish": {
             "on_build": bool(publish_config(spec).get("on_build", True)),
             "surfaces": surface_info,
             "targets": {
-                "baseline_cast": display_path(publish_paths["cast"]),
-                "timeline": display_path(publish_paths["timeline"]),
-                "recording_fingerprint": display_path(
-                    publish_paths["recording_fingerprint"]
+                "presentation_bundle": display_path(
+                    presentation_build.public_bundle_dir(spec)
                 ),
-                "voiceover": display_path(publish_paths["audio"]),
-                "audio_metadata": display_path(publish_paths["audio_metadata"]),
-                "retimed_cast": display_path(publish_paths["retimed_cast"]),
+                "presentation_manifest": display_path(
+                    presentation_build.public_manifest_path(spec)
+                ),
             },
         },
-        "steps": BUILD_STEPS,
+        "steps": PRESENTATION_BUILD_STEPS,
     }
 
 
@@ -1680,18 +911,13 @@ def run_build_dry_run(cfg: DictConfig, config: dict[str, Any]) -> int:
 
 def clean_recording_outputs(config: dict[str, Any]) -> list[Path]:
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    removed: list[Path] = []
-    for path in clean_artifact_paths(spec).values():
-        if not path.exists():
-            continue
-        if path.is_dir():
-            if path != presentation_build.public_bundle_dir(spec):
-                raise StudioError(f"refusing to remove directory: {display_path(path)}")
-            shutil.rmtree(path)
-        else:
-            path.unlink()
-        removed.append(path)
-    return removed
+    bundle = presentation_build.public_bundle_dir(spec)
+    if not bundle.exists():
+        return []
+    if not bundle.is_dir():
+        raise StudioError(f"presentation output is not a directory: {display_path(bundle)}")
+    shutil.rmtree(bundle)
+    return [bundle]
 
 
 def run_clean(config: dict[str, Any]) -> int:
@@ -1702,12 +928,7 @@ def run_clean(config: dict[str, Any]) -> int:
             json.dumps(
                 {
                     "removed": removed_display,
-                    "retained": [
-                        "audio",
-                        "audio_metadata",
-                        "audio_cache",
-                        "recording_runs",
-                    ],
+                    "retained": ["audio_cache", "recording_runs"],
                 },
                 indent=2,
                 sort_keys=True,
@@ -1721,7 +942,7 @@ def run_clean(config: dict[str, Any]) -> int:
             pass_line(f"removed {path}")
     else:
         skip_line("nothing to clean")
-    info_line("retained audio outputs, audio metadata, audio cache, and recording runs")
+    info_line("retained audio cache and recording runs")
     return 0
 
 
@@ -1761,16 +982,7 @@ def player_params(
         spec,
         intro_segment,
     )
-    if "manifest" in paths:
-        params = {"title": title, "manifest": site_url(paths["manifest"])}
-    else:
-        params = {
-            "title": title,
-            "src": site_url(paths["retimed_cast"]),
-        }
-    if "manifest" not in paths and audio.audio_settings(spec).enabled:
-        params["audio"] = site_url(paths["audio"])
-        params["audioMeta"] = site_url(paths["audio_metadata"])
+    params = {"title": title, "manifest": site_url(paths["manifest"])}
     if intro:
         params["intro"] = intro
     if intro_segment:
@@ -1784,7 +996,11 @@ def render_docusaurus_mdx(
     paths: dict[str, Path] | None = None,
 ) -> str:
     component = optional_string(surface.get("component")) or "TerminalCast"
-    params = player_params(spec, surface, paths or artifact_paths(spec))
+    params = player_params(
+        spec,
+        surface,
+        paths or {"manifest": presentation_build.public_manifest_path(spec)},
+    )
     lines = [f"<{component}"]
     for key, value in params.items():
         lines.append(f"  {key}={json.dumps(value)}")
@@ -1816,16 +1032,13 @@ def render_html_embed(
     surface: dict[str, Any],
     paths: dict[str, Path] | None = None,
 ) -> str:
-    params = player_params(spec, surface, paths or artifact_paths(spec))
+    params = player_params(
+        spec,
+        surface,
+        paths or {"manifest": presentation_build.public_manifest_path(spec)},
+    )
     attributes = {"title": params["title"], "player": "/cast-player.html"}
-    if "manifest" in params:
-        attributes["manifest"] = params["manifest"]
-    else:
-        attributes["src"] = params["src"]
-    if "audio" in params:
-        attributes["audio"] = params["audio"]
-    if "audioMeta" in params:
-        attributes["audio-meta"] = params["audioMeta"]
+    attributes["manifest"] = params["manifest"]
     if "intro" in params:
         attributes["intro"] = params["intro"]
     if "introSegment" in params:
@@ -1982,84 +1195,10 @@ def replace_placeholder(text: str, placeholder: str, replacement: str) -> str:
     )
 
 
-def copy_publish_artifact(source: Path, destination: Path) -> Path | None:
-    if not source.exists():
-        raise StudioError(f"publish artifact is missing: {display_path(source)}")
-    if source.resolve() == destination.resolve():
-        return None
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    return destination
-
-
-def publish_artifacts_from_run(
-    spec: dict[str, Any],
-    source_paths: dict[str, Path],
-) -> list[Path]:
-    targets = publish_artifact_paths(spec)
-    required = [
-        "cast",
-        "timeline",
-        "recording_fingerprint",
-        "retimed_cast",
-    ]
-    if audio.audio_settings(spec).enabled:
-        required.extend(["audio", "audio_metadata"])
-    written: list[Path] = []
-    for name in required:
-        if name in {"audio_metadata", "recording_fingerprint"}:
-            continue
-        path = copy_publish_artifact(source_paths[name], targets[name])
-        if path is not None:
-            written.append(path)
-    if "recording_fingerprint" in required:
-        written.append(
-            write_publish_recording_fingerprint(
-                source_paths["recording_fingerprint"],
-                targets["recording_fingerprint"],
-            )
-        )
-    if "audio_metadata" in required:
-        metadata = json.loads(source_paths["audio_metadata"].read_text(encoding="utf-8"))
-        if not isinstance(metadata, dict):
-            raise StudioError(
-                "publish audio metadata must be a mapping: "
-                f"{display_path(source_paths['audio_metadata'])}"
-            )
-        metadata["audio"] = display_path(targets["audio"])
-        segments = metadata.get("segments")
-        if isinstance(segments, list):
-            for segment in segments:
-                if not isinstance(segment, dict):
-                    continue
-                segment.pop("audio", None)
-                timestamp = segment.get("timestamps")
-                if not isinstance(timestamp, str) or not timestamp:
-                    continue
-                source_timestamp = retime_cast.relative_path(timestamp)
-                target_timestamp = targets["audio_metadata"].with_name(
-                    source_timestamp.name
-                )
-                copied = copy_publish_artifact(source_timestamp, target_timestamp)
-                if copied is not None:
-                    written.append(copied)
-                segment["timestamps"] = display_path(target_timestamp)
-        targets["audio_metadata"].parent.mkdir(parents=True, exist_ok=True)
-        targets["audio_metadata"].write_text(
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        shutil.copystat(source_paths["audio_metadata"], targets["audio_metadata"])
-        written.append(targets["audio_metadata"])
-    return written
-
-
 def publish_surface(
     config: dict[str, Any],
     *,
-    source_paths: dict[str, Path] | None = None,
     surface_name: str | None = None,
-    validation_retimed_cast: Path | None = None,
     presentation_run_dir: Path | None = None,
 ) -> Path | None:
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
@@ -2084,7 +1223,7 @@ def publish_surface(
         raise StudioError("publish surface type must be a non-empty string")
     if not file_name:
         raise StudioError("publish surface file must be a non-empty string")
-    path = retime_cast.relative_path(file_name)
+    path = record.relative_path(file_name)
 
     if surface_type == "docusaurus_mdx":
         placeholder = optional_string(surface.get("placeholder"))
@@ -2130,17 +1269,13 @@ def publish_surface(
 def run_publish_surface(
     cfg: DictConfig,
     *,
-    source_paths: dict[str, Path] | None = None,
     surface_name: str | None = None,
-    validation_retimed_cast: Path | None = None,
     presentation_run_dir: Path | None = None,
 ) -> None:
     config = container_from_hydra_cfg(cfg)
     path = publish_surface(
         config,
-        source_paths=source_paths,
         surface_name=surface_name,
-        validation_retimed_cast=validation_retimed_cast,
         presentation_run_dir=presentation_run_dir,
     )
     if path is not None and text_output_enabled(cfg):
@@ -2149,114 +1284,71 @@ def run_publish_surface(
 
 
 def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
-    cast_override = config.get("cast")
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
-    if cast_override is not None or run_id is not None or recording_id is None:
-        run_record_action(cfg, "play", "play")
-        return 0
+    if recording_id is None:
+        try:
+            run_dir = (
+                record.find_run_dir_by_id(
+                    run_id,
+                    data_dir=studio_data_dir_from_config(config),
+                )
+                if isinstance(run_id, str) and run_id
+                else record.find_latest_run_dir(
+                    artifact="success",
+                    data_dir=studio_data_dir_from_config(config),
+                )
+            )
+        except record.RecordingError as exc:
+            raise StudioError(str(exc)) from exc
+        manifest = presentation_build.run_paths(run_dir)["manifest"]
+        if not manifest.is_file():
+            raise StudioError(f"presentation manifest not found: {display_path(manifest)}")
+        url_path, artifacts = watch_player_url_path({}, run_dir=run_dir)
+        return run_watch_server(cfg, url_path, artifacts)
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    plan = normalized_recording_plan(spec)
-    if presentation_build.uses_presentation_pipeline(plan):
-        url_path, artifacts = watch_player_url_path(spec)
-        return run_watch_server(cfg, url_path, artifacts)
-    paths = latest_run_artifact_paths(spec)
-    if paths is None:
-        raise StudioError(
-            "no successful recording run found; run omegaflow action=build first"
-        )
-    cast_path = paths["retimed_cast"]
-    if not cast_path.exists():
-        raise StudioError(
-            f"retimed cast not found: {display_path(cast_path)}; "
-            "run omegaflow action=build first"
-        )
-    if text_output_enabled(cfg):
-        step_line(f"play retimed cast: {display_path(cast_path)}")
-    asciinema_command = record.asciinema_command(config)
-    record.check_asciinema(config)
-    return subprocess.run(
-        [asciinema_command, "play", str(cast_path)],
-        cwd=studio_config_module.project_root(),
-        check=False,
-    ).returncode
-
-
-def watch_artifact_url(path: Path, key: str, artifacts: dict[str, Path]) -> str:
-    static_root = (studio_config_module.project_root() / "website" / "static").resolve()
-    resolved = path.resolve()
-    try:
-        return "/" + quote(resolved.relative_to(static_root).as_posix(), safe="/")
-    except ValueError:
-        artifacts[key] = resolved
-        suffix = quote(resolved.suffix)
-        return f"{WATCH_ARTIFACT_PREFIX}{quote(key)}{suffix}"
-
-
-def watch_player_url_path(spec: dict[str, Any]) -> tuple[str, dict[str, Path]]:
-    paths = latest_run_artifact_paths(spec)
-    if paths is None:
-        raise StudioError(
-            "no successful recording run found; run omegaflow action=build first"
-        )
-    browser_beats = spec.get("beats")
-    has_browser = spec.get("browser") is not None or (
-        isinstance(browser_beats, list)
-        and any(
-            isinstance(beat, dict) and beat.get("medium") == "browser"
-            for beat in browser_beats
-        )
-    )
-    if has_browser:
-        plan = normalized_recording_plan(spec)
-    else:
-        plan = None
-    if plan is not None and presentation_build.uses_presentation_pipeline(plan):
-        bundle = paths["presentation"]
-        manifest = paths["manifest"]
-        if not manifest.is_file():
+    run_dir = None
+    if isinstance(run_id, str) and run_id:
+        try:
+            run_dir = record.run_dir_for_optional_id(spec, run_id, artifact="success")
+        except record.RecordingError as exc:
+            raise StudioError(str(exc)) from exc
+        if not presentation_build.run_paths(run_dir)["manifest"].is_file():
             raise StudioError(
-                f"presentation manifest not found: {display_path(manifest)}; "
-                "run omegaflow action=build first"
+                "selected run has no presentation manifest; run a build first"
             )
-        artifacts = {
-            path.relative_to(bundle).as_posix(): path.resolve()
-            for path in bundle.rglob("*")
-            if path.is_file()
-        }
-        manifest_url = WATCH_ARTIFACT_PREFIX + quote(
-            presentation_build.MANIFEST_FILE, safe="/"
-        )
-        return "/cast-player.html?" + urlencode({"manifest": manifest_url}), artifacts
+    url_path, artifacts = watch_player_url_path(spec, run_dir=run_dir)
+    return run_watch_server(cfg, url_path, artifacts)
 
-    required = {
-        "cast": paths["retimed_cast"],
-    }
-    if audio.audio_settings(spec).enabled:
-        required["audio"] = paths["audio"]
-        required["audioMeta"] = paths["audio_metadata"]
-    missing = [display_path(path) for path in required.values() if not path.exists()]
-    if missing:
-        formatted = ", ".join(path for path in missing if path is not None)
+
+def watch_player_url_path(
+    spec: dict[str, Any],
+    *,
+    run_dir: Path | None = None,
+) -> tuple[str, dict[str, Path]]:
+    resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
+    if resolved_run_dir is None:
         raise StudioError(
-            f"watch artifacts not found: {formatted}; "
+            "no successful recording run found; run omegaflow action=build first"
+        )
+    paths = presentation_build.run_paths(resolved_run_dir)
+    bundle = paths["presentation"]
+    manifest = paths["manifest"]
+    if not manifest.is_file():
+        raise StudioError(
+            f"presentation manifest not found: {display_path(manifest)}; "
             "run omegaflow action=build first"
         )
-
-    artifacts: dict[str, Path] = {}
-    params = {
-        "title": optional_string(spec.get("title")) or str(spec["_recording_id"]),
-        "cast": watch_artifact_url(paths["retimed_cast"], "cast", artifacts),
+    artifacts = {
+        path.relative_to(bundle).as_posix(): path.resolve()
+        for path in bundle.rglob("*")
+        if path.is_file()
     }
-    if audio.audio_settings(spec).enabled:
-        params["audio"] = watch_artifact_url(paths["audio"], "audio", artifacts)
-        params["audioMeta"] = watch_artifact_url(
-            paths["audio_metadata"],
-            "audioMeta",
-            artifacts,
-        )
-    return "/cast-player.html?" + urlencode(params), artifacts
+    manifest_url = WATCH_ARTIFACT_PREFIX + quote(
+        presentation_build.MANIFEST_FILE, safe="/"
+    )
+    return "/cast-player.html?" + urlencode({"manifest": manifest_url}), artifacts
 
 
 def configured_browser_command_name() -> str | None:
@@ -2370,13 +1462,12 @@ def run_watch_server(
 
 
 def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
-    cast_override = config.get("cast")
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
-    if cast_override is not None or run_id is not None or recording_id is None:
+    if run_id is not None or recording_id is None:
         raise StudioError(
-            "watch requires a recording id and built recording artifacts; "
-            "use action=play for preserved run casts"
+            "watch requires a recording id and built presentation artifacts; "
+            "use action=play to select a preserved presentation run"
         )
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
@@ -2488,140 +1579,51 @@ def run_manifest_build(
 
 
 def run_build(cfg: DictConfig) -> int:
-    started = time.monotonic()
-    success = False
     config = container_from_hydra_cfg(cfg)
     spec = load_recording_spec_from_hydra_cfg(cfg)
     plan = normalized_recording_plan(spec)
-    if presentation_build.uses_presentation_pipeline(plan):
-        return run_presentation_build(cfg, config, spec, plan)
-    staged_retimed: Path | None = None
-    try:
-        run_dir = run_build_record_action(cfg, spec)
-        paths = run_artifact_paths(run_dir, spec)
-        generate_needed = audio_generate_needs_work(cfg)
-        publish_needed = audio_publish_needs_work(cfg, output=paths["audio"])
-        run_build_audio_actions(
-            cfg,
-            generate_needed=generate_needed,
-            publish_needed=publish_needed,
-            output=paths["audio"],
-        )
-        if retime_needs_work(cfg, paths=paths):
-            retimed_path = paths["retimed_cast"]
-            staged_retimed = staged_retimed_cast_path(retimed_path)
-            if staged_retimed.exists():
-                staged_retimed.unlink()
-            verbose = bool_config(config, "verbose")
-            if text_output_enabled(cfg) and not verbose:
-                step_line("retime cast")
-            run_retime_action(
-                cfg,
-                "retime",
-                "retime cast",
-                cast=paths["cast"],
-                timeline=paths["timeline"],
-                audio_metadata=paths["audio_metadata"],
-                output=staged_retimed,
-                quiet=not verbose,
-            )
-            if not staged_retimed.exists():
-                raise StudioError(
-                    "retime cast did not write expected output: "
-                    f"{display_path(staged_retimed)}"
-                )
-            run_align_action(cfg, "check", "check alignment", cast=staged_retimed)
-            staged_retimed.replace(retimed_path)
-            staged_retimed = None
-            if text_output_enabled(cfg) and not verbose:
-                pass_line(f"wrote retimed cast: {display_path(retimed_path)}")
-        else:
-            run_align_action(cfg, "check", "check alignment", cast=paths["retimed_cast"])
-        fingerprint_path = write_recording_fingerprint(
-            spec,
-            fingerprint_path=paths["recording_fingerprint"],
-        )
-        surface_names = build_publish_surface_names(config, spec)
-        for surface_name in surface_names:
-            run_publish_surface(
-                cfg,
-                source_paths=paths,
-                surface_name=surface_name,
-            )
-        if text_output_enabled(cfg) and bool_config(config, "verbose"):
-            pass_line(f"wrote recording fingerprint: {display_path(fingerprint_path)}")
-        remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
-        garbage_collect_recording_runs(
-            spec,
-            current_run_dir=run_dir,
-            report=text_output_enabled(cfg),
-        )
-        success = True
-    finally:
-        if staged_retimed is not None and staged_retimed.exists():
-            staged_retimed.unlink()
-        print_build_elapsed(cfg, time.monotonic() - started, success=success)
-    print_success_followups(cfg)
-    return 0
+    return run_manifest_build(cfg, config, spec, plan)
 
 
 def run_check(cfg: DictConfig) -> int:
     config = container_from_hydra_cfg(cfg)
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
     plan = normalized_recording_plan(spec)
-    if presentation_build.uses_presentation_pipeline(plan):
-        run_dir = latest_successful_recording_run_dir(spec)
-        if run_dir is None or not presentation_build.capture_artifacts_exist(
-            plan, run_dir
-        ):
-            raise StudioError(
-                "no complete browser/mixed capture found; run omegaflow action=record first"
-            )
-        if not presentation_build.capture_is_fresh(spec, plan, run_dir):
-            raise StudioError("browser/mixed capture fingerprint is stale")
-        manifest = presentation_build.run_paths(run_dir)["manifest"]
-        if manifest.exists():
-            try:
-                presentation_build.validate_run_bundle(spec, run_dir)
-            except Exception as exc:
-                raise StudioError(f"presentation validation failed: {exc}") from exc
-        if text_output_enabled(cfg):
-            pass_line(f"browser/mixed recording is valid: {display_path(run_dir)}")
-        return 0
-    run_record_action(cfg, "check", "check recording")
-    run_audio_action(cfg, "check", "check audio")
-    run_retime_action(cfg, "check", "check retime")
-    run_align_action(cfg, "check", "check alignment")
+    run_dir = latest_successful_recording_run_dir(spec)
+    if run_dir is None or not presentation_build.capture_artifacts_exist(
+        plan, run_dir
+    ):
+        raise StudioError(
+            "no complete capture found; run omegaflow action=record first"
+        )
+    if not presentation_build.capture_is_fresh(spec, plan, run_dir):
+        raise StudioError("capture fingerprint is stale")
+    manifest = presentation_build.run_paths(run_dir)["manifest"]
+    if manifest.exists():
+        try:
+            presentation_build.validate_run_bundle(spec, run_dir)
+        except Exception as exc:
+            raise StudioError(f"presentation validation failed: {exc}") from exc
+    if text_output_enabled(cfg):
+        pass_line(f"recording is valid: {display_path(run_dir)}")
     return 0
 
 
 def run_internal_step(cfg: DictConfig, config: dict[str, Any], step: str) -> int:
-    spec = load_recording_spec_from_hydra_cfg(cfg)
-    plan = normalized_recording_plan(spec)
-    if presentation_build.uses_presentation_pipeline(plan):
-        if step in {"record_dry_run", "dry_run"}:
-            return run_build_dry_run(cfg, config)
-        if step == "record_check":
-            return run_check(cfg)
-        if step == "publish":
-            run_publish_surface(cfg)
-            return 0
+    if step in {"record_dry_run", "dry_run"} or (
+        step == "record" and bool_config(config, "dry_run")
+    ):
+        return run_build_dry_run(cfg, config)
+    if step == "record_check":
+        return run_check(cfg)
+    if step == "publish":
+        run_publish_surface(cfg)
+        return 0
     if step in RECORD_ACTIONS:
-        action = (
-            "dry_run"
-            if step == "record" and bool_config(config, "dry_run")
-            else RECORD_ACTIONS[step]
-        )
-        run_record_action(cfg, action, step.replace("_", " "))
+        run_record_action(cfg, RECORD_ACTIONS[step], step.replace("_", " "))
         return 0
-    if step in AUDIO_ACTIONS:
-        run_audio_action(cfg, AUDIO_ACTIONS[step], step.replace("_", " "))
-        return 0
-    if step in RETIME_ACTIONS:
-        run_retime_action(cfg, RETIME_ACTIONS[step], step.replace("_", " "))
-        return 0
-    if step in ALIGN_ACTIONS:
-        run_align_action(cfg, ALIGN_ACTIONS[step], step.replace("_", " "))
+    if step == "sync_narration":
+        run_audio_action(cfg, "sync_narration", "sync narration")
         return 0
     raise StudioError(f"unknown internal step: {step}")
 
@@ -2711,16 +1713,6 @@ def hydra_main(cfg: DictConfig) -> None:
     use_color = record.host_color_enabled(sys.stderr)
     try:
         raise SystemExit(run_tool_from_hydra_cfg(cfg))
-    except record.RecordingInterrupted as exc:
-        print(
-            color_text(
-                f"interrupted: {exc}",
-                ANSI_YELLOW_BOLD,
-                enabled=use_color,
-            ),
-            file=sys.stderr,
-        )
-        raise SystemExit(130) from exc
     except KeyboardInterrupt:
         print(
             color_text(

@@ -23,10 +23,9 @@ changes, and publish the resulting assets with the documentation.
 
 ## What it produces
 
-- A baseline asciinema cast captured from scripted terminal actions.
-- A retimed cast that plays at presentation speed.
-- Optional voiceover audio and timing metadata.
-- Static website assets that can be embedded in Docusaurus.
-- Alignment checks that compare the generated recording back to the script.
+- A seekable presentation manifest spanning terminal and browser beats.
+- Beat-local terminal casts and deterministic browser payloads.
+- Optional voiceover audio and timing metadata in the presentation bundle.
+- Validated static website assets that can be embedded in Docusaurus.
 
 The repository is on GitHub: [omry/omegaflow](https://github.com/omry/omegaflow).

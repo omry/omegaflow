@@ -1,7 +1,6 @@
 capture:
   window_size: 80x20
   headless: true
-  baseline_compressed: true
 style:
   color: true
   typing: true

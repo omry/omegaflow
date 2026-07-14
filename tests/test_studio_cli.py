@@ -1,7 +1,6 @@
 import json
 import importlib.util
 import os
-import shlex
 import subprocess
 import sys
 import tomllib
@@ -14,7 +13,6 @@ from omegaconf import OmegaConf
 from omegaflow import __version__
 from omegaflow import audio
 from omegaflow import record
-from omegaflow import retime_cast
 from omegaflow import studio
 from omegaflow import studio_config as studio_config_module
 from omegaflow.record import collect_run_jobs
@@ -33,6 +31,19 @@ from omegaflow.studio_config import (
     studio_directive_blocks,
     studio_run_dir,
 )
+
+
+def write_successful_presentation_run(
+    run_dir: Path, *, duration_ms: int = 1_250
+) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "recording.fingerprint.json").write_text("{}\n", encoding="utf-8")
+    presentation = run_dir / "presentation"
+    presentation.mkdir()
+    (presentation / "recording.presentation.json").write_text(
+        json.dumps({"recording": {"duration_ms": duration_ms}}) + "\n",
+        encoding="utf-8",
+    )
 
 
 def load_custom_build_hook():
@@ -72,44 +83,6 @@ def test_command_output_replace_selects_replacement_mode() -> None:
 def test_command_output_rejects_old_fake_forms(output: object) -> None:
     with pytest.raises(record.RecordingError):
         record.command_output_config({"output": output}, field="actions.0")
-
-
-def test_published_audio_check_allows_sanitized_segment_paths(tmp_path) -> None:
-    plan = [
-        audio.AudioPlanItem(
-            segment=audio.NarrationSegment(
-                segment_id="intro",
-                heading="Introduction",
-                text="Hello.",
-            ),
-            cache_key="key",
-            output_path=tmp_path / "cache" / "intro.mp3",
-        )
-    ]
-    metadata_path = tmp_path / "published" / "audio.json"
-    metadata_path.parent.mkdir()
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "segments": [
-                    {
-                        "id": "intro",
-                        "heading": "Introduction",
-                        "text": "Hello.",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    audio.validate_published_audio_metadata(
-        plan,
-        metadata_path,
-        allow_missing_segment_audio=True,
-    )
-    with pytest.raises(audio.AudioError, match="field 'audio' is stale"):
-        audio.validate_published_audio_metadata(plan, metadata_path)
 
 
 def test_package_installs_omegaflow_command() -> None:
@@ -511,11 +484,7 @@ studio:
         encoding="utf-8",
     )
     run_dir = tmp_path / "custom-state" / "runs" / "demo" / "20260705-010203"
-    run_dir.mkdir(parents=True)
-    (run_dir / "recording.cast").write_text(
-        '{"version": 2}\n[1.25, "o", "ok"]\n',
-        encoding="utf-8",
-    )
+    write_successful_presentation_run(run_dir)
     monkeypatch.chdir(tmp_path)
     config = compose_studio_config(None, ("action=runs", "output_format=json"))
 
@@ -618,11 +587,10 @@ beat:
         / "tutorial"
         / "recording-file"
     )
-    paths = studio.artifact_paths(spec)
-    assert paths["cast"] == output_dir / "recording.cast"
-    assert paths["retimed_cast"] == output_dir / "recording.retimed.cast"
-    assert paths["audio"] == output_dir / "audio.mp3"
-    assert paths["audio_metadata"] == output_dir / "audio.json"
+    assert studio.presentation_build.public_bundle_dir(spec) == output_dir / "presentation"
+    assert studio.presentation_build.public_manifest_path(spec) == (
+        output_dir / "presentation" / "recording.presentation.json"
+    )
 
 
 def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
@@ -746,11 +714,7 @@ title: Old Layout
 def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
     data_dir = tmp_path / "media"
     run_dir = data_dir / "runs" / "demo" / "20260705-010203"
-    run_dir.mkdir(parents=True)
-    (run_dir / "recording.cast").write_text(
-        '{"version": 2}\n[1.25, "o", "ok"]\n',
-        encoding="utf-8",
-    )
+    write_successful_presentation_run(run_dir)
 
     jobs = collect_run_jobs(
         now=datetime(2026, 7, 5, 1, 3, 3),
@@ -765,11 +729,7 @@ def test_collect_run_jobs_uses_config_data_dir(tmp_path) -> None:
 def test_collect_run_jobs_handles_nested_recording_ids(tmp_path) -> None:
     data_dir = tmp_path / "media"
     run_dir = data_dir / "runs" / "tutorial" / "recording-file" / "20260705-010203"
-    run_dir.mkdir(parents=True)
-    (run_dir / "recording.cast").write_text(
-        '{"version": 2}\n[1.25, "o", "ok"]\n',
-        encoding="utf-8",
-    )
+    write_successful_presentation_run(run_dir)
 
     jobs = collect_run_jobs(
         now=datetime(2026, 7, 5, 1, 3, 3),
@@ -791,8 +751,7 @@ def test_collect_run_jobs_handles_nested_recording_ids(tmp_path) -> None:
 
 def test_success_artifact_filter_excludes_failed_runs(tmp_path) -> None:
     run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    run_dir.mkdir(parents=True)
-    (run_dir / "recording.cast").write_text('{"version": 2}\n', encoding="utf-8")
+    write_successful_presentation_run(run_dir)
 
     assert record.run_dir_has_artifact(run_dir, "success")
 
@@ -841,264 +800,6 @@ def test_audio_env_file_is_recording_local_config(tmp_path, monkeypatch) -> None
 
     assert loaded == {"OPENAI_RECORDING_KEY": "file-secret"}
     assert os.environ["OPENAI_RECORDING_KEY"] == "file-secret"
-
-
-def test_build_audio_generates_missing_segments_before_publish(monkeypatch) -> None:
-    cfg = OmegaConf.create({"output_format": "text", "verbose": False})
-    calls: list[tuple[str, bool, bool]] = []
-
-    monkeypatch.setattr(
-        studio,
-        "audio_segments_need_materialization",
-        lambda _cfg: True,
-    )
-    monkeypatch.setattr(studio, "build_audio_stats", lambda *args, **kwargs: None)
-
-    def fake_run_step(
-        label,
-        runner,
-        cfg,
-        step,
-        *,
-        quiet=False,
-        show_step=True,
-        config_overrides=None,
-    ):
-        calls.append((step, quiet, show_step))
-        return ""
-
-    monkeypatch.setattr(studio, "run_step", fake_run_step)
-
-    studio.run_build_audio_actions(
-        cfg,
-        generate_needed=False,
-        publish_needed=True,
-        output=Path("voiceover.mp3"),
-    )
-
-    assert calls == [
-        ("generate", False, False),
-        ("publish", False, False),
-    ]
-
-
-def test_retime_action_passes_audio_metadata_override(monkeypatch) -> None:
-    cfg = OmegaConf.create({"output_format": "text"})
-    calls: list[dict[str, object]] = []
-
-    def fake_run_step(
-        label,
-        runner,
-        cfg,
-        step,
-        *,
-        quiet=False,
-        show_step=True,
-        config_overrides=None,
-    ):
-        calls.append(config_overrides or {})
-        return ""
-
-    monkeypatch.setattr(studio, "run_step", fake_run_step)
-
-    studio.run_retime_action(
-        cfg,
-        "retime",
-        cast=Path("run.cast"),
-        timeline=Path("run.timeline.jsonl"),
-        audio_metadata=Path("run.json"),
-        output=Path("run.retimed.cast"),
-    )
-
-    assert calls == [
-        {
-            "cast": Path("run.cast"),
-            "timeline": Path("run.timeline.jsonl"),
-            "audio_metadata": Path("run.json"),
-            "output": Path("run.retimed.cast"),
-        }
-    ]
-
-
-def test_retime_tool_uses_audio_metadata_override(tmp_path, monkeypatch) -> None:
-    stale_metadata = tmp_path / "published.json"
-    run_metadata = tmp_path / "run.json"
-    output = tmp_path / "run.retimed.cast"
-    requested_metadata: list[Path | None] = []
-
-    monkeypatch.setattr(
-        retime_cast,
-        "load_recording_spec_from_hydra_cfg",
-        lambda _cfg: {
-            "_recording_id": "demo",
-            "outputs": {
-                "cast": str(tmp_path / "published.cast"),
-                "audio_metadata": str(stale_metadata),
-            },
-        },
-    )
-    monkeypatch.setattr(
-        retime_cast,
-        "read_audio_segment_timings",
-        lambda path: requested_metadata.append(path) or {},
-    )
-    monkeypatch.setattr(
-        retime_cast,
-        "read_cast",
-        lambda _path: ({"version": 3, "term": {"cols": 80, "rows": 24}}, ["event"]),
-    )
-    monkeypatch.setattr(retime_cast, "read_timeline", lambda _path: [])
-    monkeypatch.setattr(retime_cast, "retime_events", lambda *args, **kwargs: [])
-    monkeypatch.setattr(
-        retime_cast,
-        "write_cast",
-        lambda path, _header, _events: path.write_text(
-            '{"version": 3}\n', encoding="utf-8"
-        ),
-    )
-    monkeypatch.setattr(retime_cast, "pass_line", lambda _message: None)
-
-    result = retime_cast.run_tool_from_hydra_cfg(
-        OmegaConf.create(
-            {
-                "action": "retime",
-                "cast": str(tmp_path / "run.cast"),
-                "timeline": str(tmp_path / "run.timeline.jsonl"),
-                "audio_metadata": str(run_metadata),
-                "output": str(output),
-            }
-        )
-    )
-
-    assert result == 0
-    assert requested_metadata == [run_metadata]
-    assert output.exists()
-
-
-def test_audio_dry_run_output_override_uses_run_local_metadata(
-    tmp_path, monkeypatch, capsys
-) -> None:
-    run_audio = tmp_path / "runs" / "demo" / "audio" / "demo.mp3"
-    public_audio = tmp_path / "public" / "demo" / "audio.mp3"
-    public_metadata = tmp_path / "public" / "demo" / "audio.json"
-    spec = {
-        "id": "demo",
-        "_recording_id": "demo",
-        "outputs": {
-            "dir": str(tmp_path / "public"),
-            "asset_dir": str(tmp_path / "public" / "demo"),
-            "cast": str(tmp_path / "public" / "demo" / "recording.cast"),
-            "audio": str(public_audio),
-            "audio_metadata": str(public_metadata),
-        },
-        "audio": {
-            "enabled": True,
-            "provider": "openai",
-            "env": "OPENAI_API_KEY",
-            "model": "gpt-4o-mini-tts",
-            "voice": "marin",
-            "format": "mp3",
-            "cache_dir": str(tmp_path / "cache" / "audio"),
-        },
-        "narration": {
-            "beats": [
-                {
-                    "id": "intro",
-                    "heading": "Intro",
-                    "text": "Say hello.",
-                }
-            ]
-        },
-    }
-    monkeypatch.setattr(audio, "load_recording_spec_from_hydra_cfg", lambda _cfg: spec)
-
-    status = audio.run_tool_from_hydra_cfg(
-        OmegaConf.create(
-            {
-                "action": "dry_run",
-                "output": str(run_audio),
-                "output_format": "json",
-                "timestamps": True,
-                "force": False,
-                "verbose": False,
-                "load_env_file": False,
-            }
-        )
-    )
-
-    assert status == 0
-    payloads = [
-        json.loads(line)
-        for line in capsys.readouterr().out.splitlines()
-        if line.strip().startswith("{")
-    ]
-    assert payloads[-1]["published_audio"] == str(run_audio)
-    assert payloads[-1]["published_audio_metadata"] == str(run_audio.with_suffix(".json"))
-    assert payloads[-1]["published_audio_metadata"] != str(public_metadata)
-
-
-def test_audio_publish_needs_work_output_override_checks_run_local_metadata(
-    tmp_path, monkeypatch
-) -> None:
-    run_audio = tmp_path / "runs" / "demo" / "audio" / "demo.mp3"
-    public_metadata = tmp_path / "public" / "demo" / "audio.json"
-    spec = {
-        "id": "demo",
-        "_recording_id": "demo",
-        "outputs": {
-            "dir": str(tmp_path / "public"),
-            "asset_dir": str(tmp_path / "public" / "demo"),
-            "cast": str(tmp_path / "public" / "demo" / "recording.cast"),
-            "audio": str(tmp_path / "public" / "demo" / "audio.mp3"),
-            "audio_metadata": str(public_metadata),
-        },
-        "audio": {
-            "enabled": True,
-            "provider": "openai",
-            "env": "OPENAI_API_KEY",
-            "model": "gpt-4o-mini-tts",
-            "voice": "marin",
-            "format": "mp3",
-            "cache_dir": str(tmp_path / "cache" / "audio"),
-        },
-        "narration": {
-            "beats": [
-                {
-                    "id": "intro",
-                    "heading": "Intro",
-                    "text": "Say hello.",
-                }
-            ]
-        },
-    }
-    captured: dict[str, Path] = {}
-    monkeypatch.setattr(
-        studio,
-        "recording_spec_from_config",
-        lambda _config, recording_id, overrides: spec,
-    )
-
-    def fake_published_audio_is_fresh(
-        _plan,
-        output_path,
-        metadata_path,
-        **_kwargs,
-    ):
-        captured["audio"] = output_path
-        captured["metadata"] = metadata_path
-        return True
-
-    monkeypatch.setattr(audio, "published_audio_is_fresh", fake_published_audio_is_fresh)
-
-    needs_work = studio.audio_publish_needs_work(
-        OmegaConf.create({"force": False}),
-        output=run_audio,
-    )
-
-    assert needs_work is False
-    assert captured["audio"] == run_audio
-    assert captured["metadata"] == run_audio.with_suffix(".json")
-    assert captured["metadata"] != public_metadata
 
 
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
@@ -1156,9 +857,10 @@ beat:
     assert spec["audio"]["env"] == "SHARED_KEY"
     assert spec["outputs"]["dir"] == "site/videos"
     assert spec["outputs"]["asset_dir"] == "site/videos/hello"
-    assert spec["outputs"]["cast"] == "site/videos/hello/recording.cast"
-    assert spec["outputs"]["audio"] == "site/videos/hello/audio.mp3"
-    assert spec["outputs"]["audio_metadata"] == "site/videos/hello/audio.json"
+    assert "cast" not in spec["outputs"]
+    assert "retimed_cast" not in spec["outputs"]
+    assert "audio" not in spec["outputs"]
+    assert "audio_metadata" not in spec["outputs"]
     assert spec["style"]["color"] is False
     assert spec["beats"][0]["id"] == "hello"
 
@@ -1253,7 +955,8 @@ beat:
 
     assert spec["outputs"]["dir"] == "preview/videos"
     assert spec["outputs"]["asset_dir"] == "preview/videos/hello"
-    assert spec["outputs"]["cast"] == "preview/videos/hello/recording.cast"
+    assert "cast" not in spec["outputs"]
+    assert "retimed_cast" not in spec["outputs"]
 
 
 def test_rec_rejects_non_mapping(tmp_path) -> None:
@@ -1495,14 +1198,15 @@ beat:
 
     assert alpha["outputs"]["asset_dir"] == "site/videos/alpha"
     assert beta["outputs"]["asset_dir"] == "site/videos/beta"
-    assert studio.artifact_paths(alpha)["cast"] == Path.cwd() / (
-        "site/videos/alpha/recording.cast"
+    assert studio.presentation_build.public_bundle_dir(alpha) == (
+        Path.cwd() / "site/videos/alpha/presentation"
     )
-    assert studio.artifact_paths(beta)["cast"] == Path.cwd() / (
-        "site/videos/beta/recording.cast"
+    assert studio.presentation_build.public_bundle_dir(beta) == (
+        Path.cwd() / "site/videos/beta/presentation"
     )
-    assert studio.artifact_paths(alpha)["cast"] != studio.artifact_paths(beta)["cast"]
-    assert studio.artifact_paths(alpha)["audio"] != studio.artifact_paths(beta)["audio"]
+    assert studio.presentation_build.public_bundle_dir(
+        alpha
+    ) != studio.presentation_build.public_bundle_dir(beta)
 
 
 def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -> None:
@@ -1731,7 +1435,7 @@ beat:
     assert command == {"run": "printf 'hello\\n'"}
 
 
-def test_run_file_resolves_from_recording_script_dir(tmp_path) -> None:
+def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     support_dir = recordings_dir / "hello"
     support_dir.mkdir(parents=True)
@@ -1746,7 +1450,7 @@ def test_run_file_resolves_from_recording_script_dir(tmp_path) -> None:
         "_hydra_output_dir": str(tmp_path / "runs" / "hello"),
         "environment": {"working_directory": str(tmp_path)},
         "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
+        "capture": {},
         "setup": [{"run_file": "hello/setup.sh"}],
         "beats": [
             {
@@ -1765,13 +1469,12 @@ def test_run_file_resolves_from_recording_script_dir(tmp_path) -> None:
         ],
     }
 
-    script = record.render_session_script(spec)
-    dependencies = studio.fingerprint_dependency_paths(spec)
+    plan = studio.normalized_recording_plan(spec)
+    before = studio.presentation_build.artifact_fingerprints(spec, plan)
+    action_script.write_text("echo changed\n", encoding="utf-8")
+    after = studio.presentation_build.artifact_fingerprints(spec, plan)
 
-    assert "setup from recording script dir" in script
-    assert "action from recording script dir" in script
-    assert setup_script in dependencies
-    assert action_script in dependencies
+    assert before.capture_fingerprint != after.capture_fingerprint
 
 
 def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
@@ -1965,17 +1668,6 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
     assert support_script.stat().st_mode & 0o111
 
 
-def test_interrupted_recording_message_is_terse(tmp_path) -> None:
-    message = record.format_interrupted_recording(
-        tmp_path / "recording.cast",
-        [tmp_path / ".recording.cast.recording-123.cast"],
-    )
-
-    assert message == "recording cancelled by user\noutput was not updated."
-    assert str(tmp_path) not in message
-    assert "removed staged recording artifacts" not in message
-
-
 def test_success_followups_show_user_facing_actions(capsys) -> None:
     cfg = OmegaConf.create(
         {
@@ -2001,7 +1693,7 @@ def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str
         "_recording_id": "demo",
         "_hydra_output_dir": str(run_dir),
         "_studio_config": config,
-        "outputs": {"cast": "website/static/casts/demo.cast"},
+        "outputs": {"asset_dir": "website/static/videos/demo"},
         "audio": {
             "enabled": False,
             "provider": "openai",
@@ -2011,6 +1703,12 @@ def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str
             "format": "mp3",
         },
     }
+
+
+def test_current_recording_run_dir_uses_hydra_output_dir(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "demo" / "2026-07-14_12-00-00"
+
+    assert studio.current_recording_run_dir(minimal_recording_spec(run_dir)) == run_dir
 
 
 def test_run_gc_removes_runs_older_than_max_age_and_protects_current(
@@ -2024,7 +1722,7 @@ def test_run_gc_removes_runs_older_than_max_age_and_protects_current(
     now = 2_000_000_000.0
     monkeypatch.setattr(studio.time, "time", lambda: now)
     for index, run_dir in enumerate(run_dirs):
-        artifact = "recording.cast" if index < 3 else "failure.json"
+        artifact = "recording.fingerprint.json" if index < 3 else "failure.json"
         (run_dir / artifact).write_text("{}\n", encoding="utf-8")
         age_days = 31 if index in {0, 1, 3} else 29
         os.utime(run_dir, (now - age_days * 86400,) * 2)
@@ -2048,7 +1746,7 @@ def test_run_gc_dry_run_reports_without_removing(tmp_path, monkeypatch, capsys) 
     current = runs_dir / "20260705-010202"
     for run_dir in [old_run, current]:
         run_dir.mkdir(parents=True)
-        (run_dir / "recording.cast").write_text("{}\n", encoding="utf-8")
+        (run_dir / "recording.fingerprint.json").write_text("{}\n", encoding="utf-8")
     now = 2_000_000_000.0
     monkeypatch.setattr(studio.time, "time", lambda: now)
     os.utime(old_run, (now - 31 * 86400,) * 2)
@@ -2118,120 +1816,6 @@ def test_run_gc_deletion_failure_is_non_fatal(tmp_path, monkeypatch, capsys) -> 
     assert "removed 0 old run(s)" in captured.out
 
 
-def test_recording_skip_reason_uses_latest_successful_run(tmp_path) -> None:
-    data_dir = tmp_path / "media"
-    run_dir = data_dir / "runs" / "demo" / "20260705-010203"
-    run_dir.mkdir(parents=True)
-    (run_dir / "recording.cast").write_text(
-        '{"version": 2}\n[1.25, "o", "ok"]\n',
-        encoding="utf-8",
-    )
-    (run_dir / "recording.timeline.jsonl").write_text(
-        '{"time": 0, "phase": "start"}\n',
-        encoding="utf-8",
-    )
-    spec = minimal_recording_spec(run_dir, data_dir=data_dir)
-    studio.write_recording_fingerprint(
-        spec,
-        fingerprint_path=run_dir / "recording.fingerprint.json",
-    )
-
-    assert studio.recording_skip_reason(spec) is None
-
-    (run_dir / "recording.cast").unlink()
-
-    assert studio.recording_skip_reason(spec) == "successful recording run is missing"
-
-
-def test_publish_artifacts_from_run_rewrites_public_metadata(tmp_path) -> None:
-    run_dir = tmp_path / "media" / "runs" / "demo" / "20260705-010203"
-    target_dir = tmp_path / "published"
-    target_cast = target_dir / "demo.cast"
-    target_audio = target_dir / "demo.mp3"
-    spec = {
-        "id": "demo",
-        "_recording_id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "outputs": {
-            "cast": str(target_cast),
-            "audio": str(target_audio),
-        },
-        "audio": {
-            "enabled": True,
-            "provider": "openai",
-            "env": "OPENAI_API_KEY",
-            "model": "gpt-4o-mini-tts",
-            "voice": "marin",
-            "format": "mp3",
-        },
-    }
-    source_paths = studio.run_artifact_paths(run_dir, spec)
-    source_paths["cast"].parent.mkdir(parents=True)
-    source_paths["cast"].write_text('{"version": 2}\n', encoding="utf-8")
-    source_paths["timeline"].write_text('{"time": 0}\n', encoding="utf-8")
-    source_paths["retimed_cast"].write_text('{"version": 2}\n', encoding="utf-8")
-    source_paths["audio"].parent.mkdir(parents=True)
-    source_paths["audio"].write_bytes(b"mp3")
-    source_timestamp = source_paths["audio_metadata"].with_name(
-        "demo.intro.timestamps.json"
-    )
-    source_timestamp.write_text('{"words": []}\n', encoding="utf-8")
-    source_paths["audio_metadata"].write_text(
-        json.dumps(
-            {
-                "audio": str(source_paths["audio"]),
-                "segments": [
-                    {
-                        "id": "intro",
-                        "audio": str(source_paths["audio"]),
-                        "timestamps": str(source_timestamp),
-                    }
-                ],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    source_paths["recording_fingerprint"].write_text(
-        json.dumps(
-            {
-                "dependencies": [
-                    {"path": "recordings/demo/index.md"},
-                    {"path": str(tmp_path / "absolute-input.txt")},
-                ]
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    written = studio.publish_artifacts_from_run(spec, source_paths)
-
-    target_metadata = target_audio.with_suffix(".json")
-    target_timestamp = target_metadata.with_name(source_timestamp.name)
-    assert target_cast.read_text(encoding="utf-8") == '{"version": 2}\n'
-    assert target_cast.with_suffix(".timeline.jsonl").read_text(
-        encoding="utf-8"
-    ) == '{"time": 0}\n'
-    assert target_cast.with_name("demo.retimed.cast").read_text(
-        encoding="utf-8"
-    ) == '{"version": 2}\n'
-    assert target_audio.read_bytes() == b"mp3"
-    metadata = json.loads(target_metadata.read_text(encoding="utf-8"))
-    assert metadata["audio"] == str(target_audio)
-    assert "audio" not in metadata["segments"][0]
-    assert metadata["segments"][0]["timestamps"] == str(target_timestamp)
-    assert target_timestamp.read_text(encoding="utf-8") == '{"words": []}\n'
-    fingerprint = json.loads(
-        target_cast.with_suffix(".recording.json").read_text(encoding="utf-8")
-    )
-    assert fingerprint["dependencies"] == [
-        {"path": "recordings/demo/index.md"}
-    ]
-    assert target_audio in written
-    assert target_metadata in written
-
-
 def test_build_publish_surface_names_are_config_driven() -> None:
     spec = {
         "publish": {
@@ -2258,10 +1842,14 @@ def test_build_publish_surface_names_can_disable_build_publish() -> None:
     assert studio.build_publish_surface_names({}, spec) == []
 
 
-def test_watch_player_url_path_allows_silent_recordings(tmp_path, monkeypatch) -> None:
-    retimed_cast = tmp_path / "runs" / "hello" / "recording.retimed.cast"
-    retimed_cast.parent.mkdir(parents=True)
-    retimed_cast.write_text('{"version": 3}\n', encoding="utf-8")
+def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "hello"
+    bundle = run_dir / "presentation"
+    beat = bundle / "beats" / "terminal.cast"
+    beat.parent.mkdir(parents=True)
+    manifest = bundle / "recording.presentation.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    beat.write_text('{"version": 3}\n', encoding="utf-8")
     spec = {
         "_recording_id": "hello",
         "title": "Hello",
@@ -2274,19 +1862,14 @@ def test_watch_player_url_path_allows_silent_recordings(tmp_path, monkeypatch) -
             "format": "mp3",
         },
     }
-    paths = {
-        "retimed_cast": retimed_cast,
-        "audio": tmp_path / "missing.mp3",
-        "audio_metadata": tmp_path / "missing.json",
+    url_path, artifacts = studio.watch_player_url_path(spec, run_dir=run_dir)
+    assert "manifest=" in url_path
+    assert "cast=" not in url_path
+    assert "autoplay=" not in url_path
+    assert artifacts == {
+        "beats/terminal.cast": beat.resolve(),
+        "recording.presentation.json": manifest.resolve(),
     }
-    monkeypatch.setattr(studio, "latest_run_artifact_paths", lambda _spec: paths)
-
-    url_path, artifacts = studio.watch_player_url_path(spec)
-
-    assert "cast=" in url_path
-    assert "audio=" not in url_path
-    assert "audioMeta=" not in url_path
-    assert artifacts == {"cast": retimed_cast.resolve()}
 
 
 def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
@@ -2310,7 +1893,7 @@ def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
 
     status = studio.run_watch_server(
         OmegaConf.create({"output_format": "text"}),
-        "/cast-player.html?cast=/__watch_artifact__/cast",
+        "/cast-player.html?manifest=/__studio_artifacts__/recording.presentation.json",
         {"cast": Path("recording.cast")},
     )
     output = capsys.readouterr().out
@@ -2319,535 +1902,3 @@ def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
     assert "serving local watch server: http://127.0.0.1:51234/" in output
     assert "opened browser; press Ctrl-C to stop" in output
     assert "stopped local watch server" in output
-
-
-def test_session_cleanup_failure_fails_run(tmp_path) -> None:
-    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "_keep_hydra_output_dir": True,
-        "environment": {"working_directory": str(tmp_path)},
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "cleanup": [
-            {
-                "name": "Cleanup fails",
-                "run": "echo cleanup failed >&2; exit 7",
-            }
-        ],
-        "beats": [{"id": "done"}],
-    }
-    script_path = tmp_path / "session.sh"
-    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
-
-    result = subprocess.run(
-        ["bash", str(script_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 7
-    failure = json.loads((run_dir / "failure.json").read_text(encoding="utf-8"))
-    assert failure["kind"] == "cleanup"
-    assert failure["id"] == "cleanup_1"
-    assert failure["name"] == "Cleanup fails"
-    assert failure["message"] == "exited 7, expected 0"
-    assert "cleanup failed" in failure["stderr"]
-
-
-def test_session_uses_persistent_shell_without_replacing_omegaflow_cleanup(
-    tmp_path,
-) -> None:
-    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    child_dir = tmp_path / "child"
-    child_dir.mkdir()
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "_keep_hydra_output_dir": True,
-        "environment": {"working_directory": str(tmp_path)},
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "cleanup": [
-            {
-                "name": "prove controller cleanup ran",
-                "run": f"touch {tmp_path / 'controller-cleanup'}",
-            }
-        ],
-        "beats": [
-            {
-                "id": "hello",
-                "actions": [
-                    {
-                        "commands": [
-                            {
-                                "run": """
-cd child
-export DEMO_STATE=ready
-demo_function() { printf 'function-ok\\n'; }
-shopt -s expand_aliases
-shopt -s extglob
-alias demo_alias="printf 'alias-ok\\n'"
-set -f
-trap 'printf user-trap > user-trap.txt' EXIT
-""".strip(),
-                                "display": "cd child",
-                                "timing": "realtime",
-                            },
-                            {
-                                "run": """
-printf '%s %s\\n' "$PWD" "$DEMO_STATE"
-demo_function
-demo_alias
-[[ $- == *f* ]]
-shopt -q expand_aliases
-[[ foobar == +(foo|bar) ]]
-""".strip(),
-                                "display": "echo state",
-                                "timing": "realtime",
-                            }
-                        ]
-                    }
-                ],
-            }
-        ],
-    }
-    script_path = tmp_path / "session.sh"
-    script = record.render_session_script(spec)
-    script_path.write_text(script, encoding="utf-8")
-
-    result = subprocess.run(
-        ["/bin/bash", str(script_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert "local -n" not in script
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stderr == ""
-    output = (run_dir / "stdout").read_text(encoding="utf-8")
-    assert f"{child_dir} ready" in output
-    assert "function-ok" in output
-    assert "alias-ok" in output
-    assert (child_dir / "user-trap.txt").read_text(encoding="utf-8") == "user-trap"
-    assert (tmp_path / "controller-cleanup").is_file()
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "exit 7",
-        "if then",
-        "set -e; false; printf should-not-run",
-    ],
-)
-def test_persistent_shell_failure_is_bounded_and_preserves_errexit(
-    tmp_path, command
-) -> None:
-    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "_keep_hydra_output_dir": True,
-        "environment": {"working_directory": str(tmp_path)},
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "beats": [
-            {
-                "id": "failure",
-                "actions": [
-                    {"commands": [{"run": command, "timing": "realtime"}]}
-                ],
-            }
-        ],
-    }
-    script_path = tmp_path / "session.sh"
-    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
-
-    result = subprocess.run(
-        ["/bin/bash", str(script_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=5,
-    )
-
-    assert result.returncode != 0
-    assert "should-not-run" not in (run_dir / "stdout").read_text(encoding="utf-8")
-    failure = json.loads((run_dir / "failure.json").read_text(encoding="utf-8"))
-    if command == "exit 7":
-        assert failure["message"] == "exited 7, expected 0"
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "nohup sleep 10 >/dev/null 2>&1 & echo $! > background.pid",
-        "trap 'sleep 10' EXIT",
-    ],
-)
-def test_persistent_shell_background_and_exit_trap_cleanup_is_bounded(
-    tmp_path, command
-) -> None:
-    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "_keep_hydra_output_dir": True,
-        "environment": {"working_directory": str(tmp_path)},
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "beats": [
-            {
-                "id": "bounded",
-                "actions": [
-                    {"commands": [{"run": command, "timing": "realtime"}]}
-                ],
-            }
-        ],
-    }
-    script_path = tmp_path / "session.sh"
-    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
-
-    result = subprocess.run(
-        ["/bin/bash", str(script_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=3,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    if "background.pid" in command:
-        background_pid = int((tmp_path / "background.pid").read_text().strip())
-        assert subprocess.run(
-            ["kill", "-0", str(background_pid)],
-            capture_output=True,
-            check=False,
-        ).returncode != 0
-
-
-def test_new_and_nested_bash_shells_clear_parent_shell_local_state(tmp_path) -> None:
-    run_dir = tmp_path / "runs" / "demo" / "20260705-010203"
-    child_dir = tmp_path / "child"
-    child_dir.mkdir()
-    fresh_shell_assertions = """
-[[ -z ${DEMO_LOCAL+x} ]]
-[[ $DEMO_EXPORTED == exported ]]
-[[ $PWD == */child ]]
-! declare -F demo_function >/dev/null
-! alias demo_alias >/dev/null 2>&1
-! shopt -q extglob
-[[ -z $(trap -p EXIT) ]]
-""".strip()
-    nested_command = (
-        "/bin/bash --noprofile --norc -c "
-        + shlex.quote(fresh_shell_assertions + "\nprintf nested-shell-ok\\n")
-    )
-    new_shell_command = (
-        fresh_shell_assertions
-        + "\n"
-        + nested_command
-        + "\nprintf new-shell-ok\\n"
-    )
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "_keep_hydra_output_dir": True,
-        "environment": {"working_directory": str(tmp_path)},
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "beats": [
-            {
-                "id": "shells",
-                "actions": [
-                    {
-                        "commands": [
-                            {
-                                "run": """
-cd child
-DEMO_LOCAL=parent
-export DEMO_EXPORTED=exported
-demo_function() { :; }
-alias demo_alias=:
-shopt -s extglob
-trap : EXIT
-""".strip(),
-                                "timing": "realtime",
-                            },
-                            {
-                                "run": "/bin/bash --noprofile --norc -c "
-                                + shlex.quote(new_shell_command),
-                                "timing": "realtime",
-                            },
-                        ]
-                    }
-                ],
-            }
-        ],
-    }
-    script_path = tmp_path / "session.sh"
-    script_path.write_text(record.render_session_script(spec), encoding="utf-8")
-
-    result = subprocess.run(
-        ["/bin/bash", str(script_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=5,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    output = (run_dir / "stdout").read_text(encoding="utf-8")
-    assert "new-shell-ok" in output
-    assert "nested-shell-ok" in output
-
-
-def test_environment_path_prepend_takes_precedence(tmp_path) -> None:
-    run_dir = tmp_path / "runs" / "demo"
-    spec = {
-        "id": "demo",
-        "_hydra_output_dir": str(run_dir),
-        "environment": {
-            "working_directory": str(tmp_path),
-            "path_prepend": ["tools/bin"],
-        },
-        "style": {"color": False, "typing": False},
-        "capture": {"baseline_compressed": True},
-        "beats": [{"id": "done"}],
-    }
-
-    script = record.render_session_script(spec)
-
-    path_line = next(line for line in script.splitlines() if line.startswith("export PATH="))
-    assert path_line.index("tools/bin") < path_line.index(str(Path(sys.executable).parent))
-
-
-def test_require_fresh_retimed_cast_rejects_unmaterialized_waits(tmp_path) -> None:
-    cast = tmp_path / "demo.cast"
-    timeline = tmp_path / "demo.timeline.jsonl"
-    retimed = tmp_path / "demo.retimed.cast"
-    metadata = tmp_path / "demo.json"
-    cast.write_text('{"version": 3}\n', encoding="utf-8")
-    timeline.write_text('{"time": 0}\n', encoding="utf-8")
-    metadata.write_text(
-        json.dumps(
-            {
-                "segments": [
-                    {
-                        "id": "intro",
-                        "waits": [
-                            {
-                                "marker": "@wait:server@",
-                                "target": "server",
-                                "text_offset": 4,
-                                "gap_seconds": 0.0,
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    retimed.write_text('{"version": 3}\n', encoding="utf-8")
-
-    try:
-        retime_cast.require_fresh_retimed_cast(
-            cast_path=cast,
-            timeline_path=timeline,
-            output_path=retimed,
-            audio_metadata_path=metadata,
-        )
-    except retime_cast.RetimeError as exc:
-        assert "has not been materialized by retime" in str(exc)
-    else:
-        raise AssertionError("expected unmaterialized wait to fail freshness check")
-
-
-def test_adjusted_audio_seconds_pauses_inline_wait_until_command_finishes() -> None:
-    timing = retime_cast.AudioSegmentTiming(
-        segment_id="hello",
-        duration=8.0,
-        anchor_seconds={"@run_demo@": 2.0},
-        waits=(
-            retime_cast.AudioWaitTiming(
-                target="run_demo",
-                marker="@wait:run_demo+300ms@",
-                seconds=4.0,
-                gap_seconds=0.3,
-            ),
-        ),
-    )
-    wait_windows: dict[str, dict[str, object]] = {}
-
-    before_wait = retime_cast.adjusted_audio_seconds(
-        base_seconds=2.0,
-        timing=timing,
-        command_end_by_id={},
-        beat_start=10.0,
-        beat_id="hello",
-        wait_windows=wait_windows,
-    )
-    after_wait = retime_cast.adjusted_audio_seconds(
-        base_seconds=8.0,
-        timing=timing,
-        command_end_by_id={"run_demo": 18.0},
-        beat_start=10.0,
-        beat_id="hello",
-        wait_windows=wait_windows,
-    )
-
-    assert before_wait == 2.0
-    assert after_wait == 12.3
-    assert wait_windows["@wait:run_demo+300ms@"]["presentation_start"] == 14.0
-    assert wait_windows["@wait:run_demo+300ms@"]["presentation_end"] == 18.3
-
-
-def test_adjusted_audio_seconds_can_start_command_at_same_second_as_wait() -> None:
-    timing = retime_cast.AudioSegmentTiming(
-        segment_id="hello",
-        duration=8.0,
-        anchor_seconds={"@run_demo@": 2.0},
-        waits=(
-            retime_cast.AudioWaitTiming(
-                target="run_demo",
-                marker="@wait:run_demo+300ms@",
-                seconds=2.0,
-                gap_seconds=0.3,
-            ),
-        ),
-    )
-
-    command_start = retime_cast.adjusted_audio_seconds(
-        base_seconds=2.0,
-        timing=timing,
-        command_end_by_id={},
-        beat_start=10.0,
-        beat_id="hello",
-        include_boundary_waits=False,
-    )
-    after_wait = retime_cast.adjusted_audio_seconds(
-        base_seconds=8.0,
-        timing=timing,
-        command_end_by_id={"run_demo": 15.0},
-        beat_start=10.0,
-        beat_id="hello",
-    )
-
-    assert command_start == 2.0
-    assert after_wait == 11.3
-
-
-def test_wait_marker_between_words_resumes_from_previous_word_end() -> None:
-    text = "Create a virtual environment first. Then install OmegaFlow."
-    spans = retime_cast.timestamp_word_spans(
-        text=text,
-        words=[
-            {"word": "Create", "start": 0.0, "end": 0.3},
-            {"word": "a", "start": 0.36, "end": 0.42},
-            {"word": "virtual", "start": 0.5, "end": 0.86},
-            {"word": "environment", "start": 0.92, "end": 1.4},
-            {"word": "first", "start": 1.5, "end": 1.78},
-            {"word": "Then", "start": 2.2, "end": 2.42},
-            {"word": "install", "start": 2.44, "end": 2.8},
-            {"word": "OmegaFlow", "start": 2.84, "end": 3.3},
-        ],
-        timestamp_path=Path("timestamps.json"),
-    )
-    marker_offset = len("Create a virtual environment first.")
-
-    wait_seconds = retime_cast.marker_seconds_from_offset(
-        marker="@wait:env_command+300ms@",
-        text_offset=marker_offset,
-        spans=spans,
-        segment_duration=4.0,
-        text=text,
-        segment_id="install",
-        prefer_previous_word_end=True,
-    )
-    anchor_seconds = retime_cast.marker_seconds_from_offset(
-        marker="@install@",
-        text_offset=marker_offset,
-        spans=spans,
-        segment_duration=4.0,
-        text=text,
-        segment_id="install",
-    )
-
-    assert wait_seconds == 1.78
-    assert anchor_seconds == 2.2
-
-
-def test_timestamp_word_spans_tolerates_missing_word_end() -> None:
-    spans = retime_cast.timestamp_word_spans(
-        text="Hello world.",
-        words=[
-            {"word": "Hello", "start": 0.0},
-            {"word": "world", "start": 0.4},
-        ],
-        timestamp_path=Path("timestamps.json"),
-    )
-
-    assert spans == [
-        (0, 5, 0.0, 0.0),
-        (6, 11, 0.4, 0.4),
-    ]
-
-
-def replacement_presentation_command(
-    *, replacement_output: str
-) -> retime_cast.PresentationCommand:
-    interval = retime_cast.TimelineInterval(
-        start=0.0,
-        end=0.0,
-        start_event={},
-        end_event={},
-    )
-    return retime_cast.PresentationCommand(
-        key=("beat", "action", "command"),
-        prompt_interval=interval,
-        run_interval=interval,
-        prompt_payload="$ command",
-        output_mode="replace",
-        replacement_output=replacement_output,
-        timing="presentation",
-        output_span=retime_cast.OutputSpan(events=()),
-    )
-
-
-def test_replacement_output_uses_terminal_line_endings() -> None:
-    scheduled: list[retime_cast.ScheduledEvent] = []
-
-    retime_cast.schedule_command_output(
-        scheduled=scheduled,
-        command=replacement_presentation_command(replacement_output="one\ntwo\n"),
-        output_start=1.0,
-        order=2.0,
-    )
-
-    assert scheduled[0].payload == "one\r\ntwo\r\n"
-
-
-def test_replacement_output_preserves_existing_terminal_line_endings() -> None:
-    scheduled: list[retime_cast.ScheduledEvent] = []
-
-    retime_cast.schedule_command_output(
-        scheduled=scheduled,
-        command=replacement_presentation_command(
-            replacement_output="one\r\ntwo\r\n"
-        ),
-        output_start=1.0,
-        order=2.0,
-    )
-
-    assert scheduled[0].payload == "one\r\ntwo\r\n"

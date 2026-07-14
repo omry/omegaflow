@@ -1,4 +1,4 @@
 {"version":3,"term":{"cols":80,"rows":20},"title":"Browser Recording Reference"}
-[0.006,"o","$ python scripts/check_state.py browser-updated\r\n"]
-[0.042,"o","browser-updated\r\n"]
-[0.544,"o",""]
+[0.043,"o","$ python scripts/check_state.py browser-updated\r\n"]
+[0.047,"o","browser-updated\r\n"]
+[0.547,"o",""]

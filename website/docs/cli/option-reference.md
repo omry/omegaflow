@@ -20,14 +20,11 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `force` | `false` | `build`, `bootstrap` | Rebuild reusable stages or replace bootstrap-created targets. |
 | `headed` | `false` | `build` | Override headless capture and show the recorder terminal. |
 | `surface` | `null` | `build` | Publish only the named configured surface. |
-| `timestamps` | `true` | `build` | Generate narration word timestamps when audio/transcription settings require them. |
-| `allow_mismatch` | `false` | `check`, `build` | Advanced escape hatch: report an alignment mismatch without failing that alignment stage. Prefer fixing the script. |
 
 ## Run and playback fields
 
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
-| `cast` | `null` | `play` | Path to a cast file to play directly, bypassing preserved-run selection. |
 | `run_id` | `null` | `play`, `inspect`, `output` | Timestamped preserved run id. Add `recording` if the id is ambiguous. |
 | `runs_since` | `null` | `runs` | Age filter such as `30m`, `2h`, or `1d`; `null`/`all` means no age limit. |
 | `runs_limit` | `10` | `runs` | Maximum rows to return; use a positive integer or `null`. |

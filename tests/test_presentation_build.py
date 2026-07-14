@@ -11,7 +11,9 @@ import omegaflow.presentation_build as presentation_build
 import omegaflow.studio as studio
 from omegaflow.capture import CaptureContext
 from omegaflow.presentation_build import (
+    _capture_environment,
     _source_words_with_timing,
+    capture_recording,
     compile_presentation_bundle,
     prepare_narration_audio,
     public_bundle_dir,

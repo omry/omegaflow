@@ -30,11 +30,10 @@ Remove rebuildable published artifacts for one recording:
 omegaflow recording=demo action=clean
 ```
 
-Clean deliberately retains audio outputs, audio metadata, the audio cache, and
-preserved recording runs. For browser/mixed recordings it removes the published
-`presentation/` bundle but retains private capture and diagnostics in preserved
-runs. Those can be expensive or valuable for diagnosis, whereas removed public
-artifacts can be rebuilt.
+Clean deliberately retains the narration cache and preserved recording runs. It
+removes the published `presentation/` bundle but retains private capture and
+diagnostics. Those can be expensive or valuable for diagnosis, whereas removed
+public artifacts can be rebuilt.
 
 For machine-readable output:
 

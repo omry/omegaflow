@@ -8,38 +8,16 @@ sidebar_label: Video
 Video output is the generated, website-ready media built from an OmegaFlow
 script.
 
-Terminal-only recordings use an asciinema cast plus a small browser player.
-OmegaFlow records a fast baseline cast, then writes a retimed cast that is
-comfortable to watch in documentation.
-
-Browser and mixed recordings use a semantic presentation manifest. Each beat
-has its own zero-based payload and the manifest assigns its offset in the whole
-recording. Terminal beats remain text-based casts. Browser beats contain a
+Every recording uses a semantic presentation manifest. Each beat has its own
+zero-based payload and the manifest assigns its offset in the whole recording.
+Terminal beats use text-based asciinema payloads. Browser beats contain a
 deterministic event timeline plus lossless WebP page states and, only when a
 stable state cannot reproduce motion, muted VP8 WebM fragments. This is not a
 live DOM replay and not one opaque full-video recording.
 
 ## Asset contract
 
-A published terminal-only video normally includes:
-
-- a retimed `.cast` file
-- the original baseline `.cast` and timeline sidecar
-- a recording fingerprint that describes source dependencies
-- optional audio and audio metadata
-- optional timestamp sidecars used for narration alignment
-
-The Docusaurus component embeds those assets with:
-
-```mdx
-<VideoPlayer
-  title="Quickstart Demo"
-  src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
-/>
-```
-
-A browser or mixed build publishes an atomic bundle under
-`<asset_dir>/presentation/`:
+Every build publishes an atomic bundle under `<asset_dir>/presentation/`:
 
 ```text
 presentation/
