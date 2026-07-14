@@ -21,9 +21,9 @@ and reports how to configure or install it when unavailable.
 
 ## Browser recording
 
-Browser recording and `action=watch` use OmegaFlow's managed Chromium. Install
-the matching Python extra, then install the pinned Chromium revision managed by
-Playwright:
+Browser recording and native Linux/macOS `action=watch` use OmegaFlow's managed
+Chromium. Install the matching Python extra, then install the pinned Chromium
+revision managed by Playwright:
 
 ```bash
 pip install 'omegaflow[browser]'
@@ -40,6 +40,11 @@ python -m playwright install-deps chromium
 OmegaFlow pins the Playwright package and Chromium revision together. It fails
 with a specific remedy when the extra, browser binary, or host libraries are
 missing; using an arbitrary system Chrome is not a supported substitute.
+
+Under WSL, browser recording still uses the pinned Linux Chromium, but
+`action=watch` launches Windows Chrome or Edge with an isolated temporary
+profile. This keeps watch audio on the Windows host and avoids the WSLg audio
+bridge. The autoplay override is applied to that isolated host process.
 
 Published browser states and motion also require FFmpeg tools:
 
@@ -100,9 +105,10 @@ the directory containing the Python executable running OmegaFlow.
 
 ## Optional desktop tools
 
-`action=watch` requires a graphical environment because it launches OmegaFlow's
-isolated Chromium and starts the presentation with audio. `action=play` uses the
-default browser and remains available when managed autoplay is not needed.
+`action=watch` requires a graphical environment because it launches an isolated
+Chromium and starts the presentation with audio. Under WSL, Windows Chrome or
+Edge must be installed. `action=play` uses the default browser and remains
+available when managed autoplay is not needed.
 
 Interactive `action=output` uses `$PAGER`, defaulting to `less`. Redirecting
 the command to a file or pipe writes the captured output directly and does not

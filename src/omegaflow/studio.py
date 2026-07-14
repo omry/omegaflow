@@ -8,6 +8,7 @@ import html
 import http.server
 import io
 import json
+import ntpath
 import os
 import shutil
 import shlex
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import webbrowser
 from collections.abc import Callable
 from contextlib import redirect_stdout
@@ -1470,7 +1472,123 @@ class ManagedWatchBrowser:
                 pass
 
 
-def launch_managed_watch_browser(url: str) -> ManagedWatchBrowser:
+class ManagedWslHostBrowser:
+    def __init__(self, *, process: Any, profile_path: str) -> None:
+        self.process = process
+        self.profile_path = profile_path
+
+    def is_open(self) -> bool:
+        return bool(self.process is not None and self.process.poll() is None)
+
+    def close(self) -> None:
+        process = self.process
+        profile_path = self.profile_path
+        self.process = None
+        self.profile_path = ""
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            except OSError:
+                pass
+        if profile_path:
+            remove_windows_watch_profile(profile_path)
+
+
+def wsl_host_chromium_executable() -> Path | None:
+    candidates = (
+        Path("/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"),
+        Path("/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
+        Path("/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe"),
+        Path("/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
+    )
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+def windows_temporary_directory() -> str:
+    command = shutil.which("cmd.exe")
+    if command is None:
+        raise StudioError("watch under WSL requires Windows interoperability")
+    try:
+        completed = subprocess.run(
+            [command, "/d", "/c", "echo", "%TEMP%"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise StudioError(f"could not query the Windows environment: {exc}") from exc
+    value = completed.stdout.strip().strip("\r")
+    if completed.returncode != 0 or not value or value == "%TEMP%":
+        raise StudioError("could not resolve the Windows temporary directory")
+    return value.rstrip("\\/")
+
+
+def remove_windows_watch_profile(profile_path: str) -> None:
+    powershell = shutil.which("powershell.exe")
+    if powershell is None:
+        return
+    try:
+        subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                (
+                    "Remove-Item -LiteralPath "
+                    f"{quote_powershell_string(profile_path)} "
+                    "-Recurse -Force -ErrorAction SilentlyContinue"
+                ),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def launch_managed_wsl_host_browser(url: str) -> ManagedWslHostBrowser:
+    executable = wsl_host_chromium_executable()
+    if executable is None:
+        raise StudioError(
+            "watch under WSL requires Google Chrome or Microsoft Edge on Windows"
+        )
+    profile_path = ntpath.join(
+        windows_temporary_directory(),
+        f"omegaflow-watch-{uuid.uuid4().hex}",
+    )
+    try:
+        process = subprocess.Popen(
+            [
+                str(executable),
+                f"--user-data-dir={profile_path}",
+                "--autoplay-policy=no-user-gesture-required",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-mode",
+                "--new-window",
+                url,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        remove_windows_watch_profile(profile_path)
+        raise StudioError(f"could not open Windows watch browser: {exc}") from exc
+    return ManagedWslHostBrowser(process=process, profile_path=profile_path)
+
+
+def launch_managed_watch_browser(
+    url: str,
+) -> ManagedWatchBrowser | ManagedWslHostBrowser:
+    if running_under_wsl():
+        return launch_managed_wsl_host_browser(url)
     try:
         browser_runtime.pinned_browser_runtime()
     except browser_runtime.BrowserRuntimeError as exc:

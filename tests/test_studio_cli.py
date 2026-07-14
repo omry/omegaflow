@@ -1961,6 +1961,8 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
 def test_managed_watch_browser_enables_audible_autoplay(monkeypatch) -> None:
     observed: dict[str, object] = {}
 
+    monkeypatch.setattr(studio, "running_under_wsl", lambda: False)
+
     class FakePage:
         def goto(self, url, *, wait_until) -> None:
             observed["goto"] = (url, wait_until)
@@ -2040,6 +2042,90 @@ def test_managed_watch_browser_enables_audible_autoplay(monkeypatch) -> None:
     assert observed["context_closed"] is True
     assert observed["browser_closed"] is True
     assert observed["playwright_stopped"] is True
+
+
+def test_managed_watch_browser_uses_isolated_windows_chrome_under_wsl(
+    monkeypatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+        def terminate(self) -> None:
+            observed["terminated"] = True
+
+        def wait(self, *, timeout):
+            observed["wait_timeout"] = timeout
+            return 0
+
+    process = FakeProcess()
+
+    def fake_popen(command, **kwargs):
+        observed["command"] = command
+        observed["popen"] = kwargs
+        return process
+
+    monkeypatch.setattr(studio, "running_under_wsl", lambda: True)
+    monkeypatch.setattr(
+        studio,
+        "wsl_host_chromium_executable",
+        lambda: Path("/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"),
+    )
+    monkeypatch.setattr(
+        studio,
+        "windows_temporary_directory",
+        lambda: r"C:\Users\demo\AppData\Local\Temp",
+    )
+    monkeypatch.setattr(
+        studio.uuid,
+        "uuid4",
+        lambda: type("Id", (), {"hex": "abc123"})(),
+    )
+    monkeypatch.setattr(studio.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        studio,
+        "remove_windows_watch_profile",
+        lambda path: observed.setdefault("removed_profile", path),
+    )
+
+    session = studio.launch_managed_watch_browser("http://127.0.0.1:1234/player")
+
+    assert observed["command"] == [
+        "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
+        r"--user-data-dir=C:\Users\demo\AppData\Local\Temp\omegaflow-watch-abc123",
+        "--autoplay-policy=no-user-gesture-required",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-background-mode",
+        "--new-window",
+        "http://127.0.0.1:1234/player",
+    ]
+    assert observed["popen"] == {
+        "stdout": studio.subprocess.DEVNULL,
+        "stderr": studio.subprocess.DEVNULL,
+    }
+    assert session.is_open()
+    session.close()
+    assert observed["terminated"] is True
+    assert observed["wait_timeout"] == 5
+    assert observed["removed_profile"] == (
+        r"C:\Users\demo\AppData\Local\Temp\omegaflow-watch-abc123"
+    )
+
+
+def test_windows_watch_profile_cleanup_is_best_effort(monkeypatch) -> None:
+    monkeypatch.setattr(studio.shutil, "which", lambda _command: "powershell.exe")
+    monkeypatch.setattr(
+        studio.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            studio.subprocess.TimeoutExpired("powershell.exe", 10)
+        ),
+    )
+
+    studio.remove_windows_watch_profile(r"C:\Temp\omegaflow-watch-demo")
 
 
 def test_managed_watch_server_stops_when_browser_closes(monkeypatch, capsys) -> None:

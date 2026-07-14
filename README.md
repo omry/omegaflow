@@ -37,12 +37,16 @@ Linux recording workflow.
 ## Quick Start
 
 Install OmegaFlow and its managed-browser support in your project's Python
-environment, then install the pinned Chromium build used by `action=watch`:
+environment, then install the pinned Chromium build used for browser recording
+and by `action=watch` outside WSL:
 
 ```bash
 python -m pip install 'omegaflow[browser]'
 python -m playwright install chromium
 ```
+
+Under WSL, `action=watch` uses Windows Chrome or Edge with an isolated temporary
+profile so audio stays on the host instead of crossing the WSLg audio bridge.
 
 OmegaFlow requires Python 3.11+ and Bash. Supported Linux and macOS wheels
 include asciinema 3.x. Narrated recordings additionally require `ffmpeg` and

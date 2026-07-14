@@ -19,7 +19,9 @@ OmegaFlow launches Chromium with a temporary profile, so this does not change
 the autoplay policy or data in your normal browser profile. Close the browser
 window or press Ctrl-C to stop the local server.
 
-Watch requires the `browser` extra and OmegaFlow's pinned Chromium. See
+Under WSL, watch launches Windows Chrome or Edge so playback uses the host audio
+stack instead of WSLg audio. Native Linux and macOS use OmegaFlow's pinned
+Chromium and require the `browser` extra. See
 [Runtime Dependencies](/runtime-dependencies#browser-recording) for setup.
 
 Watch requires a recording id and a built presentation bundle. Use `play` to
