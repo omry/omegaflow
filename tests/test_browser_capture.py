@@ -16,6 +16,10 @@ from omegaflow.browser_capture import (
     resolve_browser_authentication,
 )
 from omegaflow.capture import CaptureContext
+from omegaflow.presentation_compiler import (
+    compile_browser_beat,
+    load_browser_capture_log,
+)
 from omegaflow.recording_plan import normalize_recording_plan
 
 
@@ -367,16 +371,6 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                                 },
                             },
                             {
-                                "id": "password",
-                                "fill": {
-                                    "target": {"label": "Password"},
-                                    "secret": {
-                                        "env": "DEMO_PASSWORD",
-                                        "presentation": "masked",
-                                    },
-                                },
-                            },
-                            {
                                 "id": "search",
                                 "type_keys": {
                                     "target": {"placeholder": "Search"},
@@ -401,6 +395,16 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                             {
                                 "id": "scroll-bottom",
                                 "scroll": {"target": {"text": "Bottom"}},
+                            },
+                            {
+                                "id": "password",
+                                "fill": {
+                                    "target": {"label": "Password"},
+                                    "secret": {
+                                        "env": "DEMO_PASSWORD",
+                                        "presentation": "masked",
+                                    },
+                                },
                             },
                             {
                                 "id": "fragile",
@@ -455,6 +459,7 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
             capture = runner.capture_beat(plan.beats[0])
             metadata = capture.metadata
             actions = metadata["actions"]
+            actions_by_id = {action["action_id"]: action for action in actions}
             old_seq = actions[0]["completion"]["response_seq"]
             created_seq = actions[2]["completion"]["response_seq"]
             assert created_seq > old_seq
@@ -465,6 +470,11 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
             assert all(check["passed"] for check in metadata["checks"])
             assert runner.secrets.values == {"private-password"}
             assert "private-password" not in json.dumps(dict(metadata))
+            assert metadata["runner_initial_state"]["media_type"] == "image/png"
+            assert actions_by_id["name"]["target"]["text_overlay"]["eligible"]
+            assert actions_by_id["password"]["target"]["text_overlay"]["eligible"]
+            assert actions_by_id["scroll"]["target"]["scroll"]["eligible"]
+            assert actions_by_id["scroll-bottom"]["visual"]["kind"] == "clip"
             runner.page.evaluate(
                 "value => console.log('secret=' + value)", "private-password"
             )
@@ -498,8 +508,28 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
         assert [record["seq"] for record in capture_records] == list(
             range(1, len(capture_records) + 1)
         )
+        private_capture = load_browser_capture_log(
+            tmp_path / "run" / "capture" / "browser.capture.jsonl"
+        )
+        compiled = compile_browser_beat(
+            plan.id,
+            plan.beats[0],
+            action_captures=private_capture.actions_by_beat["create"],
+            viewport=private_capture.viewport,
+            initial_state=private_capture.initial_state,
+            clip_assets=private_capture.clip_assets,
+        )
+        compiled_kinds = {event["kind"] for event in compiled.payload["events"]}
+        assert {"text", "scroll", "clip"} <= compiled_kinds
+        assert "private-password" not in json.dumps(dict(compiled.payload))
         capture_text = json.dumps(capture_records)
         assert "private-password" not in capture_text
+        assert any(
+            record["type"] == "diagnostic"
+            and record.get("kind") == "dynamic_fragment"
+            and record.get("action_id") == "scroll-bottom"
+            for record in capture_records
+        )
         console_text = (tmp_path / "run" / "diagnostics" / "console.jsonl").read_text(
             encoding="utf-8"
         )
@@ -763,7 +793,7 @@ def test_stable_states_are_content_addressed_and_deduplicated(
     assert states[0]["sha256"] == hashlib.sha256(content).hexdigest()
     assert state_path.name == f"{states[0]['sha256']}.png"
     assert states[0]["media_type"] == "image/png"
-    assert len(list(state_path.parent.glob("*.png"))) == 1
+    assert len(list(state_path.parent.glob("*.png"))) == 2
 
 
 def test_recording_wide_redaction_is_applied_to_stable_states(

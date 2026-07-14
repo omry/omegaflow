@@ -143,6 +143,12 @@
         color: var(--brand);
       }
 
+      .rate-button {
+        min-width: 2.6rem;
+        padding: 0 0.35rem;
+        font-variant-numeric: tabular-nums;
+      }
+
       .transport {
         display: flex;
         align-items: center;
@@ -173,6 +179,175 @@
       .stage .terminal {
         width: 100%;
         height: 100%;
+      }
+
+      .browser-stage,
+      .browser-renderer-host,
+      .browser-renderer {
+        position: absolute;
+        inset: 0;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .browser-renderer {
+        display: flex;
+        padding: clamp(0.4rem, 2vw, 1.5rem);
+        background: #0b0e14;
+      }
+
+      .browser-window {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        transform-origin: center;
+      }
+
+      .browser-window[data-mode="framed"] {
+        border: 1px solid #596273;
+        border-radius: 9px;
+        background: #202632;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.48);
+      }
+
+      .browser-window-titlebar,
+      .browser-chrome {
+        display: flex;
+        align-items: center;
+        flex: 0 0 auto;
+        gap: 0.75rem;
+        height: 30px;
+        padding: 0 0.7rem;
+        background: #303745;
+        color: #eef1f7;
+        font-size: 12px;
+      }
+
+      .browser-window-title {
+        flex: 1;
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-window-controls {
+        color: #aeb7c8;
+        letter-spacing: 0.15rem;
+      }
+
+      .browser-chrome {
+        height: 38px;
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        border-bottom: 1px solid #1e2430;
+        background: #252c38;
+      }
+
+      .browser-chrome[data-mode="minimal"] .browser-chrome-navigation {
+        display: none;
+      }
+
+      .browser-chrome-url {
+        flex: 1;
+        overflow: hidden;
+        border-radius: 6px;
+        padding: 0.28rem 0.65rem;
+        background: #151a22;
+        color: #d9deea;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-viewport-host {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: #080a0e;
+      }
+
+      .browser-viewport {
+        position: absolute;
+        overflow: hidden;
+        background: #fff;
+        transform-origin: top left;
+      }
+
+      .browser-state,
+      .browser-clip,
+      .browser-scroll-image {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: fill;
+      }
+
+      .browser-scroll-clip,
+      .browser-focus,
+      .browser-text-overlay,
+      .browser-pointer,
+      .browser-click-feedback,
+      .browser-key-feedback {
+        position: absolute;
+      }
+
+      .browser-scroll-clip {
+        overflow: hidden;
+      }
+
+      .browser-scroll-image {
+        width: auto;
+        height: auto;
+        max-width: none;
+      }
+
+      .browser-focus {
+        border: 2px solid rgba(89, 130, 246, 0.9);
+        border-radius: 4px;
+        box-shadow: 0 0 0 3px rgba(89, 130, 246, 0.24);
+        pointer-events: none;
+      }
+
+      .browser-text-overlay {
+        overflow: hidden;
+        background: transparent;
+        white-space: pre;
+      }
+
+      .browser-pointer {
+        z-index: 8;
+        width: 0;
+        height: 0;
+        border-top: 16px solid #fff;
+        border-right: 10px solid transparent;
+        filter: drop-shadow(1px 2px 1px rgba(0, 0, 0, 0.8));
+        transform-origin: top left;
+      }
+
+      .browser-click-feedback {
+        z-index: 7;
+        width: 34px;
+        height: 34px;
+        border: 3px solid rgba(139, 124, 255, 0.9);
+        border-radius: 50%;
+      }
+
+      .browser-key-feedback {
+        top: 50%;
+        left: 50%;
+        z-index: 9;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 8px;
+        padding: 0.45rem 0.75rem;
+        background: rgba(20, 24, 33, 0.82);
+        color: #fff;
+        font: 600 18px/1.2 ui-sans-serif, system-ui, sans-serif;
+        transform: translate(-50%, -50%);
       }
 
       .playback-flash {
@@ -550,6 +725,7 @@
       </div>
       <div class="stage">
         <pre class="terminal" id="terminal" aria-live="polite"></pre>
+        <div class="browser-stage" id="browser-stage" hidden></div>
         <div class="playback-flash" id="playback-flash" aria-hidden="true"></div>
         <div class="guide-modal" id="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title" hidden>
           <div class="guide-card" id="guide-card">
@@ -573,6 +749,7 @@
           <button class="icon-button" id="restart" type="button" aria-label="Restart" title="Restart" disabled></button>
           <button class="icon-button" id="next-section" type="button" aria-label="Next section" title="Next section" disabled></button>
           <button class="icon-button" id="guided" type="button" aria-label="Guided mode off" title="Guided mode"></button>
+          <button class="rate-button" id="rate" type="button" aria-label="Playback speed 1×" title="Playback speed">1×</button>
         </div>
         <div class="progress-wrap" id="progress-wrap">
           <input
@@ -618,6 +795,7 @@
       let titleText = params.get('title') || 'Terminal recording';
 
       const terminal = document.getElementById('terminal');
+      const browserStage = document.getElementById('browser-stage');
       const narration = document.getElementById('narration');
       const playButton = document.getElementById('play');
       const restartButton = document.getElementById('restart');
@@ -632,6 +810,7 @@
       const playbackFlash = document.getElementById('playback-flash');
       const voice = document.getElementById('voice');
       const guidedButton = document.getElementById('guided');
+      const rateButton = document.getElementById('rate');
       const guideModal = document.getElementById('guide');
       const guideCard = document.getElementById('guide-card');
       const guideTitle = document.getElementById('guide-title');
@@ -646,6 +825,9 @@
 
       let events = [];
       let presentationManifest = null;
+      let presentationShell = null;
+      let presentationAudioController = null;
+      let lastPresentationBeatIndex = null;
       let manifestBaseUrl = null;
       let castSeconds = 0;
       let totalSeconds = 0;
@@ -653,6 +835,7 @@
       let currentSeconds = 0;
       let startedAt = 0;
       let playing = false;
+      let playbackRate = 1;
       let timers = [];
       let progressTimer = null;
       let activeClass = '';
@@ -680,6 +863,7 @@
       let scrubbing = false;
       let playbackFlashTimers = [];
       const checkpointSnapSeconds = 3.0;
+      const playbackRates = [1, 1.25, 1.5, 2];
 
       const icons = {
         play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
@@ -761,6 +945,9 @@
         }
         if (value.startsWith('website/static/')) {
           return `/${value.slice('website/static/'.length)}`;
+        }
+        if (manifestBaseUrl) {
+          return new URL(value, manifestBaseUrl).toString();
         }
         return new URL(value, window.location.href).toString();
       }
@@ -1146,6 +1333,24 @@
             clamped >= segment.presentationStart &&
             clamped < segment.presentationEnd
           ));
+          const sourceSeconds = active
+            ? active.audioStart + (clamped - active.presentationStart)
+            : audioTimeForPresentation(clamped);
+          const sourceSegment = narrationSegments.find((segment) => (
+            sourceSeconds >= segment.offset &&
+            sourceSeconds < segment.offset + segment.duration
+          )) || [...narrationSegments].reverse().find(
+            (segment) => sourceSeconds >= segment.offset,
+          );
+          if (sourceSegment) {
+            return {
+              localSeconds: Math.max(
+                0,
+                Math.min(sourceSegment.duration, sourceSeconds - sourceSegment.offset),
+              ),
+              segment: sourceSegment,
+            };
+          }
           if (active) {
             return {
               localSeconds: (active.audioLocalStart || 0)
@@ -1314,9 +1519,24 @@
         updateNarrationScroll({animate: animateScroll});
       }
 
+      function livePlaybackSeconds() {
+        if (!playing) {
+          return currentSeconds;
+        }
+        return ((performance.now() - startedAt) / 1000) * playbackRate;
+      }
+
+      function resetPlaybackOrigin() {
+        startedAt = performance.now() - ((currentSeconds * 1000) / playbackRate);
+      }
+
+      function playbackDelay(milliseconds) {
+        return Math.max(0, milliseconds / playbackRate);
+      }
+
       function updateProgress() {
         if (playing) {
-          currentSeconds = (performance.now() - startedAt) / 1000;
+          currentSeconds = livePlaybackSeconds();
         }
         const clamped = Math.min(currentSeconds, totalSeconds);
         const percent = totalSeconds
@@ -1416,7 +1636,9 @@
 
       function updateTransportButtons() {
         const clamped = Math.min(currentSeconds, totalSeconds);
-        const ready = Boolean(events.length && totalSeconds);
+        const ready = Boolean(
+          (events.length || presentationManifest?.beats?.length) && totalSeconds,
+        );
         const playLabel = playing
           ? 'Pause'
           : pausedAtGuidedPoint
@@ -1432,6 +1654,9 @@
         guidedButton.dataset.active = guidedMode ? 'true' : 'false';
         guidedButton.setAttribute('aria-pressed', guidedMode ? 'true' : 'false');
         setIconButton(muteButton, muted ? 'muted' : 'volume', muted ? 'Unmute' : 'Mute');
+        rateButton.textContent = `${playbackRate}\u00d7`;
+        rateButton.setAttribute('aria-label', `Playback speed ${playbackRate}\u00d7`);
+        rateButton.title = `Playback speed: ${playbackRate}\u00d7`;
         playButton.disabled = !ready;
         restartButton.disabled = !ready;
         prevSectionButton.disabled = !ready || !hasPreviousSection(clamped);
@@ -1520,7 +1745,7 @@
           ? commands.length === 1
             ? 'Run this command in your terminal before continuing.'
             : 'Run these commands in your terminal before continuing.'
-          : 'Pause here and confirm your local terminal is in the same state.';
+          : 'Review this step before continuing.';
         guideCommand.hidden = !commandText;
         guideCopyButton.hidden = !commandText;
         guideCommand.textContent = commandText;
@@ -1609,7 +1834,7 @@
           return;
         }
         const liveSeconds = playing
-          ? (performance.now() - startedAt) / 1000
+          ? livePlaybackSeconds()
           : currentSeconds;
         const clamped = Math.max(0, Math.min(liveSeconds, totalSeconds));
         const active = currentSectionIndex(clamped);
@@ -1634,7 +1859,7 @@
           return;
         }
         const liveSeconds = playing
-          ? (performance.now() - startedAt) / 1000
+          ? livePlaybackSeconds()
           : currentSeconds;
         const rawTarget = Math.max(0, Math.min(liveSeconds + deltaSeconds, totalSeconds));
         const target = snapSeekSeconds(rawTarget);
@@ -1743,7 +1968,7 @@
         scrubbing = true;
         resumeAfterSeek = playing;
         if (playing) {
-          currentSeconds = (performance.now() - startedAt) / 1000;
+          currentSeconds = livePlaybackSeconds();
           playing = false;
           clearTimers();
           if (audio) {
@@ -1802,7 +2027,7 @@
 
       function scheduleEvents() {
         clearTimers();
-        startedAt = performance.now() - currentSeconds * 1000;
+        resetPlaybackOrigin();
         const guidedPausePoint = nextGuidedPausePoint(currentSeconds);
         while (eventIndex < events.length && events[eventIndex].time < currentSeconds) {
           eventIndex += 1;
@@ -1812,7 +2037,7 @@
           if (guidedPausePoint != null && event.time >= guidedPausePoint.time) {
             break;
           }
-          const delay = Math.max(0, (event.time - currentSeconds) * 1000);
+          const delay = playbackDelay((event.time - currentSeconds) * 1000);
           timers.push(setTimeout(() => {
             appendChunk(event.data);
             eventIndex = Math.max(eventIndex, index + 1);
@@ -1822,18 +2047,55 @@
           timers.push(
             setTimeout(
               () => pauseForGuidedPoint(guidedPausePoint),
-              Math.max(0, (guidedPausePoint.time - currentSeconds) * 1000),
+              playbackDelay((guidedPausePoint.time - currentSeconds) * 1000),
             ),
           );
         } else {
           timers.push(
             setTimeout(
               finishPlayback,
-              Math.max(0, (totalSeconds - currentSeconds) * 1000),
+              playbackDelay((totalSeconds - currentSeconds) * 1000),
             ),
           );
         }
-        progressTimer = setInterval(updateProgress, 250);
+        progressTimer = setInterval(() => {
+          if (playing) {
+            currentSeconds = Math.min(
+              totalSeconds,
+              livePlaybackSeconds(),
+            );
+          }
+          renderPresentationFrame(currentSeconds);
+          if (presentationAudioController) {
+            presentationAudioController.synchronize(currentSeconds * 1000, {
+              muted,
+              playbackRate,
+              playing,
+            });
+          }
+          updateProgress();
+        }, 33);
+      }
+
+      function renderPresentationFrame(seconds, force = false) {
+        if (!presentationShell || !presentationManifest) {
+          return;
+        }
+        const globalMs = seconds * 1000;
+        const index = CastPlayerCore.beatIndexForPresentation(
+          presentationManifest,
+          globalMs,
+        );
+        const beat = presentationManifest.beats[index];
+        if (!force && beat.renderer !== 'browser' && index === lastPresentationBeatIndex) {
+          return;
+        }
+        lastPresentationBeatIndex = index;
+        presentationShell.renderAt(globalMs).catch((error) => {
+          terminal.hidden = false;
+          browserStage.hidden = true;
+          terminal.textContent = error.message;
+        });
       }
 
       function renderAt(seconds) {
@@ -1851,6 +2113,7 @@
           eventIndex = index + 1;
         }
         currentSeconds = clamped;
+        renderPresentationFrame(clamped, true);
         if (audioReady && audio) {
           audio.currentTime = audioTimeForPresentation(clamped);
         }
@@ -1909,8 +2172,16 @@
           setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
           return;
         }
+        if (presentationAudioController) {
+          presentationAudioController.synchronize(currentSeconds * 1000, {
+            muted,
+            playbackRate,
+            playing,
+          });
+          return;
+        }
         if (playing) {
-          currentSeconds = (performance.now() - startedAt) / 1000;
+          currentSeconds = livePlaybackSeconds();
         }
         if (audioTimer) {
           clearTimeout(audioTimer);
@@ -1930,10 +2201,11 @@
             audio.currentTime = Math.max(0, targetTime);
           }
           audio.muted = muted;
+          audio.playbackRate = playbackRate;
           audio.play()
             .then(() => {
               if (playing) {
-                currentSeconds = (performance.now() - startedAt) / 1000;
+                currentSeconds = livePlaybackSeconds();
               }
               if (!playing || pausedAtGuidedPoint) {
                 audio.pause();
@@ -1954,7 +2226,7 @@
               if (segment) {
                 audioTimer = setTimeout(
                   () => advanceAudioBoundary(segment),
-                  Math.max(0, (segment.presentationEnd - currentSeconds) * 1000),
+                  playbackDelay((segment.presentationEnd - currentSeconds) * 1000),
                 );
               }
             })
@@ -1971,7 +2243,7 @@
           setVoiceStatus('voiceover waiting', 'waiting');
           audioTimer = setTimeout(
             startAudio,
-            Math.max(0, (next.presentationStart - currentSeconds) * 1000),
+            playbackDelay((next.presentationStart - currentSeconds) * 1000),
           );
         } else {
           setVoiceStatus('', 'ready', 'voiceover ready');
@@ -1982,11 +2254,11 @@
         if (!playing || pausedAtGuidedPoint) {
           return;
         }
-        currentSeconds = (performance.now() - startedAt) / 1000;
+        currentSeconds = livePlaybackSeconds();
         const advancedSeconds = audioTimeline().advanceBoundary(currentSeconds, segment);
         if (advancedSeconds !== currentSeconds) {
           currentSeconds = advancedSeconds;
-          startedAt = performance.now() - currentSeconds * 1000;
+          resetPlaybackOrigin();
         }
         startAudio();
       }
@@ -2003,6 +2275,34 @@
         updateMuteButton();
       }
 
+      function setPlaybackRate(rate) {
+        if (!Number.isFinite(rate) || rate <= 0) {
+          return;
+        }
+        if (playing) {
+          currentSeconds = livePlaybackSeconds();
+        }
+        playbackRate = rate;
+        if (presentationShell) {
+          presentationShell.setPlaybackRate(rate);
+        }
+        if (audio) {
+          audio.playbackRate = rate;
+        }
+        if (playing) {
+          scheduleEvents();
+          startAudio();
+        } else {
+          renderPresentationFrame(currentSeconds, true);
+          updateProgress();
+        }
+      }
+
+      function cyclePlaybackRate() {
+        const index = playbackRates.indexOf(playbackRate);
+        setPlaybackRate(playbackRates[(index + 1) % playbackRates.length]);
+      }
+
       async function loadAudioMeta() {
         if (!audioMetaUrl || explicitIntroSeconds) {
           return;
@@ -2012,6 +2312,56 @@
           throw new Error(`could not load audio metadata: ${response.status}`);
         }
         const metadata = await response.json();
+        if (metadata.version === 2 && Array.isArray(metadata.takes)) {
+          narrationSegments = [];
+          for (const take of metadata.takes) {
+            const sidecarResponse = await fetch(timestampUrl(take.timestamps));
+            if (!sidecarResponse.ok) {
+              throw new Error(`could not load narration timestamps: ${sidecarResponse.status}`);
+            }
+            const sidecar = await sidecarResponse.json();
+            const sidecarMembers = Array.isArray(sidecar.members) ? sidecar.members : [];
+            const sidecarWords = Array.isArray(sidecar.words) ? sidecar.words : [];
+            for (const member of Array.isArray(take.members) ? take.members : []) {
+              const timing = sidecarMembers.find((candidate) => (
+                candidate.beat_id === member.beat_id &&
+                candidate.text_start === member.text_start &&
+                candidate.text_end === member.text_end
+              ));
+              if (!timing) {
+                throw new Error(`narration timestamps missing member: ${member.beat_id}`);
+              }
+              const beat = presentationManifest?.beats?.find(
+                (candidate) => candidate.id === member.beat_id,
+              );
+              const sourceStartMs = Number(take.source_start_ms) + Number(timing.source_start_ms);
+              const sourceEndMs = Number(take.source_start_ms) + Number(timing.source_end_ms);
+              narrationSegments.push({
+                id: `${take.id}:${member.beat_id}`,
+                offset: sourceStartMs / 1000,
+                duration: Math.max(0, sourceEndMs - sourceStartMs) / 1000,
+                heading: String(beat?.heading || ''),
+                text: String(member.text || ''),
+                guide: normalizeGuide(beat?.guide),
+                pauseAfter: 0,
+                waits: [],
+                wordSpans: sidecarWords
+                  .filter((word) => (
+                    word.text_start >= member.text_start &&
+                    word.text_end <= member.text_end
+                  ))
+                  .map((word) => ({
+                    textStart: word.text_start - member.text_start,
+                    textEnd: word.text_end - member.text_start,
+                    start: Math.max(0, word.start_ms - timing.source_start_ms) / 1000,
+                    end: Math.max(0, word.end_ms - timing.source_start_ms) / 1000,
+                  })),
+              });
+            }
+          }
+          narrationSegments.sort((left, right) => left.offset - right.offset);
+          return;
+        }
         const segments = Array.isArray(metadata.segments) ? metadata.segments : [];
         narrationSegments = segments
           .map((segment) => ({
@@ -2245,7 +2595,11 @@
       }
 
       function play(options = {}) {
-        if (!events.length) {
+        if (!events.length && !presentationManifest?.beats?.length) {
+          return;
+        }
+        if (pausedAtGuidedPoint && currentSeconds >= totalSeconds) {
+          finishPlayback();
           return;
         }
         if (currentSeconds >= totalSeconds) {
@@ -2266,7 +2620,9 @@
         if (!playing) {
           return;
         }
-        currentSeconds = (performance.now() - startedAt) / 1000;
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
+        currentSeconds = livePlaybackSeconds();
         playing = false;
         clearTimers();
         if (audio) {
@@ -2309,8 +2665,8 @@
         if (presentationManifest) {
           const rawEvents = [];
           for (const beat of presentationManifest.beats) {
-            if (beat.renderer !== 'terminal') {
-              throw new Error(`renderer unavailable: ${beat.renderer}`);
+            if (beat.renderer === 'browser') {
+              continue;
             }
             const response = await fetch(new URL(beat.payload, manifestBaseUrl).href);
             if (!response.ok) {
@@ -2328,6 +2684,58 @@
             }
           }
           events = rawEvents.sort((left, right) => left.time - right.time);
+          presentationShell = CastPlayerCore.createPresentationShell({
+            manifest: presentationManifest,
+            rendererFactories: {
+              terminal: () => CastPlayerCore.createTerminalRendererAdapter({
+                reset() {
+                  resetTerminalBuffer();
+                  terminal.innerHTML = '';
+                },
+                applyEvent({event}) {
+                  if (event.type === 'o') {
+                    appendChunk(String(event.data || ''));
+                  }
+                },
+              }),
+              browser: () => CastPlayerCore.createBrowserDomRenderer(),
+            },
+            loadPayload: async (beat) => {
+              const response = await fetch(new URL(beat.payload, manifestBaseUrl).href);
+              if (!response.ok) {
+                throw new Error(`could not load ${beat.renderer} payload: ${response.status}`);
+              }
+              return beat.renderer === 'browser' ? response.json() : response.text();
+            },
+            createRendererContainer({beat, index}) {
+              if (beat.renderer === 'terminal') {
+                return terminal;
+              }
+              const host = document.createElement('div');
+              host.className = 'browser-renderer-host';
+              host.dataset.beatIndex = String(index);
+              host.hidden = true;
+              browserStage.append(host);
+              return host;
+            },
+            activateRenderer({beat, container}) {
+              const browserActive = beat.renderer === 'browser';
+              terminal.hidden = browserActive;
+              browserStage.hidden = !browserActive;
+              browserStage.querySelectorAll('.browser-renderer-host').forEach((host) => {
+                host.hidden = host !== container;
+              });
+            },
+            removeRendererContainer({container}) {
+              if (container && container !== terminal) {
+                container.remove();
+              }
+            },
+            resolveAsset(_assetId, asset) {
+              return new URL(asset.path, manifestBaseUrl).href;
+            },
+          });
+          presentationShell.setPlaybackRate(playbackRate);
           castSeconds = presentationManifest.recording.duration_ms / 1000;
           audioPlaybackSegments = presentationManifest.audio
             ? presentationManifest.audio.intervals.map((interval) => ({
@@ -2340,6 +2748,15 @@
           audioPresentationSeconds = audioPlaybackSegments.length
             ? Math.max(...audioPlaybackSegments.map((segment) => segment.presentationEnd))
             : 0;
+          guidedPausePoints = presentationManifest.beats
+            .filter((beat) => beat.guide)
+            .map((beat) => ({
+              time: (beat.offset_ms + beat.duration_ms) / 1000,
+              sectionStart: beat.offset_ms / 1000,
+              heading: beat.heading,
+              guide: normalizeGuide(beat.guide),
+              debugOnly: false,
+            }));
           updateTotalSeconds();
           return;
         }
@@ -2440,7 +2857,7 @@
         hideGuideModal();
         updateTransportButtons();
         if (playing) {
-          currentSeconds = (performance.now() - startedAt) / 1000;
+          currentSeconds = livePlaybackSeconds();
           scheduleEvents();
           startAudio();
         }
@@ -2452,7 +2869,9 @@
       prevSectionButton.addEventListener('click', () => jumpSection(-1));
       nextSectionButton.addEventListener('click', () => jumpSection(1));
       muteButton.addEventListener('click', toggleMute);
+      rateButton.addEventListener('click', cyclePlaybackRate);
       terminal.addEventListener('click', togglePlaybackFromTerminal);
+      browserStage.addEventListener('click', togglePlayPause);
       progressWrap.addEventListener('pointermove', showSectionTooltip);
       progressWrap.addEventListener('pointerleave', hideSectionTooltip);
       progress.addEventListener('pointerdown', beginScrub);
@@ -2479,6 +2898,22 @@
         scrubbing = false;
       });
       document.addEventListener('keydown', handleKeyboardShortcut);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden || !playing) {
+          return;
+        }
+        currentSeconds = Math.min(totalSeconds, livePlaybackSeconds());
+        renderPresentationFrame(currentSeconds, true);
+        scheduleEvents();
+        startAudio();
+      });
+      if (typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', () => {
+          if (presentationShell) {
+            presentationShell.dispose();
+          }
+        });
+      }
 
       updateTransportButtons();
 
@@ -2486,6 +2921,14 @@
         .then(loadAudioMeta)
         .then(() => Promise.all([loadCast(), loadAudio()]))
         .then(() => {
+          if (presentationManifest?.audio && audioReady && audio) {
+            presentationAudioController = CastPlayerCore.createPresentationAudioController({
+              audio,
+              intervals: presentationManifest.audio.intervals,
+              onPlayRejected: handleAudioPlaybackRejected,
+              onPlayStarted: handleAudioPlaybackStarted,
+            });
+          }
           updateTotalSeconds();
           resetPlayback();
         })

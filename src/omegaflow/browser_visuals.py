@@ -98,6 +98,18 @@ class BrowserVisualCapture:
         content = self._screenshot(extra_redactions)
         return self._store_state(content)
 
+    def capture_unredacted_state_once(self) -> dict[str, Any]:
+        """Capture the pristine initial page before any authored navigation."""
+
+        try:
+            content = self.page.screenshot(type="png")
+        except BaseException as exc:
+            raise BrowserVisualError(
+                "BROWSER_UNSUPPORTED_MOTION",
+                "could not capture initial browser visual state",
+            ) from exc
+        return self._store_state(content)
+
     def observe(
         self,
         *,

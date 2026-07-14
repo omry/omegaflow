@@ -324,3 +324,20 @@ class NarrationAudioMetadataV2:
     audio: str = ""
     duration_ms: int = 0
     takes: list[NarrationAudioTakeV2] = field(default_factory=list)
+
+
+@dataclass
+class PublishedSourceDependencyV1:
+    path: str = ""
+    sha256: str = ""
+
+
+@dataclass
+class PublishedRecordingMetadataV1:
+    version: int = 1
+    recording: str = ""
+    capture_fingerprint: str = ""
+    presentation_fingerprint: str = ""
+    dependencies: list[PublishedSourceDependencyV1] = field(default_factory=list)
+    versions: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)

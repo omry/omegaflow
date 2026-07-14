@@ -240,6 +240,7 @@ class PersistentBrowserRunner:
         self.page: Any = None
         self.video: Any = None
         self.visuals: BrowserVisualCapture | None = None
+        self.initial_visual_state: dict[str, Any] | None = None
         self.responses: list[ResponseObservation] = []
         self.warnings: list[BrowserWarning] = []
         self.secrets = SecretRegistry()
@@ -398,9 +399,20 @@ class PersistentBrowserRunner:
                 redaction_targets=redactions,
                 locator_factory=self._locator_without_count,
             )
+            pristine = self.page.evaluate(
+                """() => location.href === 'about:blank' &&
+                  document.body !== null && document.body.childElementCount === 0 &&
+                  document.body.textContent === ''"""
+            )
+            if pristine is not True:
+                raise BrowserCaptureError(
+                    "BROWSER_SCHEMA", "initial browser page is not pristine"
+                )
+            self.initial_visual_state = self.visuals.capture_unredacted_state_once()
             self._append_capture(
                 "run_start",
                 profile=asdict(self.profile),
+                initial_state=self.initial_visual_state,
             )
         except BrowserCaptureError:
             self._close_resources()
@@ -481,7 +493,11 @@ class PersistentBrowserRunner:
         return BeatCapture(
             beat_id=beat.id,
             artifacts=(self.capture_log_path,) if self.capture_log_path else (),
-            metadata={"actions": tuple(actions), "checks": tuple(checks)},
+            metadata={
+                "actions": tuple(actions),
+                "checks": tuple(checks),
+                "runner_initial_state": self.initial_visual_state,
+            },
         )
 
     def _execute_action(
@@ -545,6 +561,10 @@ class PersistentBrowserRunner:
                 locator, target_fact = self._strict_target(
                     payload.get("target"), beat_id=beat_id, action_id=action.id
                 )
+                target_fact["text_overlay"] = self._text_overlay_fact(
+                    locator,
+                    allow_password=payload.get("secret") is not None,
+                )
                 value, presentation = self._input_value(payload)
                 if action.kind == "fill":
                     locator.fill(value)
@@ -592,6 +612,13 @@ class PersistentBrowserRunner:
             execution_ended_ms = self._beat_elapsed_ms()
             force_dynamic = config.get("transition") == "captured" or (
                 action.kind == "open_page" and payload.get("loading", "hide") == "show"
+            ) or (
+                action.kind == "scroll"
+                and (
+                    target_fact is None
+                    or not isinstance(target_fact.get("scroll"), dict)
+                    or target_fact["scroll"].get("eligible") is not True
+                )
             )
             visual = self._require_visuals().observe(
                 beat_id=beat_id,
@@ -792,6 +819,73 @@ class PersistentBrowserRunner:
             )
         return float(value)
 
+    def _text_overlay_fact(
+        self, locator: Any, *, allow_password: bool
+    ) -> dict[str, Any]:
+        try:
+            fact = locator.evaluate(
+                """element => {
+                  const style = getComputedStyle(element);
+                  const rect = element.getBoundingClientRect();
+                  const number = (value, fallback = 0) => {
+                    const parsed = Number.parseFloat(value);
+                    return Number.isFinite(parsed) ? parsed : fallback;
+                  };
+                  const tag = element.tagName.toLowerCase();
+                  const inputType = tag === 'input' ? element.type.toLowerCase() : '';
+                  const supported = new Set([
+                    'text', 'search', 'email', 'tel', 'url', 'password'
+                  ]);
+                  const initialEmpty = typeof element.value === 'string' &&
+                    element.value.length === 0;
+                  return {
+                    eligible: tag === 'input' && supported.has(inputType) &&
+                      initialEmpty && rect.width > 0 && rect.height > 0,
+                    input_type: inputType,
+                    style: {
+                      font_family: style.fontFamily || 'sans-serif',
+                      font_size: number(style.fontSize, 16),
+                      font_weight: style.fontWeight || 'normal',
+                      font_style: style.fontStyle || 'normal',
+                      line_height: number(
+                        style.lineHeight,
+                        number(style.fontSize, 16) * 1.2
+                      ),
+                      letter_spacing: number(style.letterSpacing, 0),
+                      color: style.color || 'rgb(0, 0, 0)',
+                      text_align: style.textAlign || 'start',
+                      padding_top: number(style.paddingTop),
+                      padding_right: number(style.paddingRight),
+                      padding_bottom: number(style.paddingBottom),
+                      padding_left: number(style.paddingLeft),
+                      clipping_rect: {
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height
+                      },
+                      selection_start: Number.isInteger(element.selectionStart)
+                        ? element.selectionStart : null,
+                      selection_end: Number.isInteger(element.selectionEnd)
+                        ? element.selectionEnd : null,
+                      caret_visible: false
+                    }
+                  };
+                }"""
+            )
+        except BaseException as exc:
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA", "could not capture browser text presentation facts"
+            ) from exc
+        if not isinstance(fact, dict) or not isinstance(fact.get("style"), dict):
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA", "browser text presentation facts are invalid"
+            )
+        if fact.get("input_type") == "password" and not allow_password:
+            fact["eligible"] = False
+        fact.pop("input_type", None)
+        return fact
+
     def _require_visuals(self) -> BrowserVisualCapture:
         if self.visuals is None:
             raise BrowserCaptureError(
@@ -814,6 +908,7 @@ class PersistentBrowserRunner:
                 payload["target"], beat_id=beat_id, action_id=action_id
             )
             locator.scroll_into_view_if_needed()
+            fact["scroll"] = {"eligible": False}
             return fact
         offset = payload.get("by") if payload.get("by") is not None else payload.get("to")
         offset = _mapping(offset, field="browser scroll offset")
@@ -821,12 +916,71 @@ class PersistentBrowserRunner:
         point = {"x": int(offset.get("x", 0)), "y": int(offset.get("y", 0))}
         container = payload.get("container")
         if container is None:
+            start = self.page.evaluate("() => ({x: scrollX, y: scrollY})")
             self.page.evaluate(f"([x, y]) => window.{method}(x, y)", [point["x"], point["y"]])
-            return None
+            end = self.page.evaluate("() => ({x: scrollX, y: scrollY})")
+            viewport = self.page.viewport_size
+            if not isinstance(viewport, dict):
+                raise BrowserCaptureError(
+                    "BROWSER_SCHEMA", "browser viewport is unavailable"
+                )
+            return {
+                "bounds": {
+                    "x": 0,
+                    "y": 0,
+                    "width": viewport["width"],
+                    "height": viewport["height"],
+                },
+                "point": {
+                    "x": viewport["width"] / 2,
+                    "y": viewport["height"] / 2,
+                },
+                "scroll": {"eligible": False, "start": start, "end": end},
+            }
         locator, fact = self._strict_target(
             container, beat_id=beat_id, action_id=action_id
         )
+        classification = locator.evaluate(
+            """element => {
+              const descendants = [element, ...element.querySelectorAll('*')];
+              const hasMedia = descendants.some(node =>
+                node.matches && node.matches('video, canvas')
+              );
+              const hasPositioned = descendants.some(node => {
+                const position = getComputedStyle(node).position;
+                return position === 'sticky' || position === 'fixed';
+              });
+              const hasAnimation = descendants.some(node =>
+                typeof node.getAnimations === 'function' &&
+                  node.getAnimations().length > 0
+              );
+              const hasScrollTimeline = descendants.some(node => {
+                const style = getComputedStyle(node);
+                return (style.scrollTimelineName &&
+                    style.scrollTimelineName !== 'none') ||
+                  (style.animationTimeline && style.animationTimeline !== 'auto');
+              });
+              const suspiciousVirtualization =
+                element.hasAttribute('aria-rowcount') ||
+                element.querySelector('[aria-rowindex]') !== null ||
+                element.scrollHeight > Math.max(20000, element.clientHeight * 100);
+              return {
+                eligible: !hasMedia && !hasPositioned && !hasAnimation &&
+                  !hasScrollTimeline && !suspiciousVirtualization,
+                start: {x: element.scrollLeft, y: element.scrollTop}
+              };
+            }"""
+        )
         locator.evaluate(f"(element, [x, y]) => element.{method}(x, y)", [point["x"], point["y"]])
+        end = locator.evaluate(
+            "element => ({x: element.scrollLeft, y: element.scrollTop})"
+        )
+        if not isinstance(classification, dict):
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA", "browser scroll classification is invalid"
+            )
+        classification["end"] = end
+        fact["scroll"] = classification
         return fact
 
     def _wait_condition(

@@ -117,6 +117,7 @@ function element(id) {
 }
 
 const context = {
+  URL,
   URLSearchParams,
   window: {location: {search: '?cast=/casts/demo.cast&title=Demo'}},
   document: {
@@ -146,6 +147,7 @@ const context = {
     };
   },
   performance: {now: () => 0},
+  process,
   setTimeout: () => 0,
   clearTimeout() {},
   setInterval: () => 0,
@@ -311,6 +313,155 @@ if (narration.scrollTop !== 20) {
   console.error(JSON.stringify({scrollTop: narration.scrollTop}));
   process.exit(1);
 }
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_browser_only_manifest_can_play_without_terminal_events() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+presentationManifest = {
+  beats: [{id: 'browser', renderer: 'browser'}],
+};
+events = [];
+totalSeconds = 10;
+currentSeconds = 0;
+play();
+if (!playing || progressTimer == null) {
+  console.error(JSON.stringify({playing, progressTimer}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_continue_from_final_browser_checkpoint_finishes_without_replay() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+presentationManifest = {beats: [{id: 'browser', renderer: 'browser'}]};
+events = [];
+totalSeconds = 10;
+currentSeconds = 10;
+pausedAtGuidedPoint = true;
+play();
+if (playing || currentSeconds !== 10 || pausedAtGuidedPoint || !guideModal.hidden) {
+  console.error(JSON.stringify({playing, currentSeconds, pausedAtGuidedPoint, hidden: guideModal.hidden}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_applies_playback_rate_to_shell_audio_and_clock() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+let shellRate = 0;
+presentationShell = {setPlaybackRate(rate) { shellRate = rate; }, renderAt() { return Promise.resolve(); }};
+presentationManifest = {
+  recording: {duration_ms: 10000},
+  beats: [{id: 'browser', renderer: 'browser', offset_ms: 0, duration_ms: 10000}],
+};
+audio = new Audio('/audio.mp3');
+totalSeconds = 10;
+setPlaybackRate(1.5);
+if (
+  playbackRate !== 1.5 || shellRate !== 1.5 ||
+  audio.playbackRate !== 1.5 || rateButton.textContent !== '1.5×'
+) {
+  console.error(JSON.stringify({playbackRate, shellRate, audioRate: audio.playbackRate, label: rateButton.textContent}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_v2_narration_members_follow_manifest_audio_source_time() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+narrationSegments = [{
+  id: 'take:create', offset: 2, duration: 3, heading: 'Create', text: 'Create it', wordSpans: [],
+}];
+audioPlaybackSegments = [{
+  audioStart: 2, audioEnd: 5, presentationStart: 7, presentationEnd: 10,
+}];
+const active = narrationSegmentForSeconds(8.25);
+if (
+  active.segment.id !== 'take:create' ||
+  Math.abs(active.localSeconds - 1.25) > 0.0001
+) {
+  console.error(JSON.stringify(active));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_loads_v2_take_members_and_word_timestamps() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+audioMetaUrl = 'https://example.test/demo/audio.json';
+manifestBaseUrl = new URL('https://example.test/demo/');
+presentationManifest = {
+  beats: [{id: 'create', heading: 'Create', guide: {success_hint: 'Created.'}}],
+};
+fetch = async (url) => ({
+  ok: true,
+  status: 200,
+  async json() {
+    if (String(url).endsWith('audio.json')) {
+      return {
+        version: 2,
+        takes: [{
+          id: 'take', source_start_ms: 1000, source_end_ms: 2200,
+          timestamps: 'timestamps/take.json',
+          members: [{beat_id: 'create', text: 'Create it', text_start: 0, text_end: 9}],
+        }],
+      };
+    }
+    return {
+      members: [{
+        beat_id: 'create', text_start: 0, text_end: 9,
+        source_start_ms: 200, source_end_ms: 1200,
+      }],
+      words: [{text: 'Create', text_start: 0, text_end: 6, start_ms: 200, end_ms: 600}],
+    };
+  },
+});
+loadAudioMeta().then(() => {
+  const segment = narrationSegments[0];
+  if (
+    narrationSegments.length < 1 || segment.offset !== 1.2 || segment.duration !== 1 ||
+    segment.heading !== 'Create' || segment.guide.success_hint !== 'Created.' ||
+    segment.wordSpans[0].textStart !== 0 || segment.wordSpans[0].start !== 0 ||
+    segment.wordSpans[0].end !== 0.4
+  ) {
+    console.error(JSON.stringify(narrationSegments));
+    process.exit(1);
+  }
+}).catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
 `, context);
 """
     )
