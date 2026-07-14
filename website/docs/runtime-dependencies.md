@@ -100,9 +100,9 @@ the directory containing the Python executable running OmegaFlow.
 
 ## Optional desktop tools
 
-`action=watch` can open the local player in a graphical browser. A browser is
-not required on headless systems: OmegaFlow prints the local URL so it can be
-opened elsewhere.
+`action=watch` requires a graphical environment because it launches OmegaFlow's
+isolated Chromium and starts the presentation with audio. `action=play` uses the
+default browser and remains available when managed autoplay is not needed.
 
 Interactive `action=output` uses `$PAGER`, defaulting to `less`. Redirecting
 the command to a file or pipe writes the captured output directly and does not

@@ -7,24 +7,28 @@ slug: /omegaflow/actions/watch-play
 
 ## Watch the built presentation
 
-`watch` starts a temporary local HTTP server and opens OmegaFlow's browser
-player for the latest successful build:
+`watch` starts a temporary local HTTP server and opens the latest successful
+build in OmegaFlow's isolated, managed Chromium:
 
 ```bash
 omegaflow recording=demo action=watch
 ```
 
-The server exposes the built presentation assets without requiring them to live
-under the website's static directory. Press Ctrl-C to stop it. In an environment
-where OmegaFlow cannot open a graphical browser, open the printed URL manually.
+The player counts down from three and then starts with narration audio enabled.
+OmegaFlow launches Chromium with a temporary profile, so this does not change
+the autoplay policy or data in your normal browser profile. Close the browser
+window or press Ctrl-C to stop the local server.
 
-Watch requires a recording id and built artifacts. It does not accept
-`run_id` or `cast`; use `play` for preserved or arbitrary casts.
+Watch requires the `browser` extra and OmegaFlow's pinned Chromium. See
+[Runtime Dependencies](/runtime-dependencies#browser-recording) for setup.
+
+Watch requires a recording id and a built presentation bundle. Use `play` to
+select a preserved successful run.
 
 ## Play the latest build
 
-With a recording id, `play` replays the presentation-timed cast from the latest
-successful build:
+With a recording id, `play` opens the manifest player for the latest successful
+build:
 
 ```bash
 omegaflow recording=demo action=play
@@ -47,17 +51,5 @@ recordings:
 omegaflow action=play run_id=20260712-101530
 ```
 
-Without `run_id`, omitting `recording` selects the latest preserved playable
-run across the workspace. Preserved runs contain the fast captured cast, so
-this form is mainly useful for diagnosis.
-
-## Play a cast file directly
-
-`cast` bypasses run selection:
-
-```bash
-omegaflow action=play cast=path/to/recording.cast
-```
-
-Paths are resolved from the project root. Direct cast playback does not add
-narration or the browser player's presentation controls.
+Without `run_id`, omitting `recording` selects the latest playable presentation
+run across the workspace.

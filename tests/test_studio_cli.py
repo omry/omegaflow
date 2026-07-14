@@ -6,6 +6,7 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from omegaconf import OmegaConf
@@ -1863,13 +1864,204 @@ def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> No
         },
     }
     url_path, artifacts = studio.watch_player_url_path(spec, run_dir=run_dir)
+    countdown_url, _ = studio.watch_player_url_path(
+        spec,
+        run_dir=run_dir,
+        autoplay_countdown=True,
+    )
+
     assert "manifest=" in url_path
     assert "cast=" not in url_path
     assert "autoplay=" not in url_path
+    assert "autoplay=countdown" in countdown_url
     assert artifacts == {
         "beats/terminal.cast": beat.resolve(),
         "recording.presentation.json": manifest.resolve(),
     }
+
+
+def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
+    )
+
+    def fake_watch_player_url_path(
+        _spec,
+        *,
+        run_dir=None,
+        autoplay_countdown=False,
+    ):
+        requested["autoplay_countdown"] = autoplay_countdown
+        return "/cast-player.html?manifest=demo", {}
+
+    def fake_run_watch_server(
+        _cfg,
+        _url,
+        _artifacts,
+        *,
+        managed_browser=False,
+    ):
+        requested["managed_browser"] = managed_browser
+        return 0
+
+    monkeypatch.setattr(studio, "watch_player_url_path", fake_watch_player_url_path)
+    monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
+
+    status = studio.run_watch(
+        OmegaConf.create({"output_format": "text"}),
+        {"recording": "hello"},
+    )
+
+    assert status == 0
+    assert requested == {
+        "autoplay_countdown": True,
+        "managed_browser": True,
+    }
+
+
+def test_managed_watch_browser_enables_audible_autoplay(monkeypatch) -> None:
+    observed: dict[str, object] = {}
+
+    class FakePage:
+        def goto(self, url, *, wait_until) -> None:
+            observed["goto"] = (url, wait_until)
+
+        def is_closed(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            observed["page_closed"] = True
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self):
+            return self.page
+
+        def close(self) -> None:
+            observed["context_closed"] = True
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.context = FakeContext()
+
+        def new_context(self, **kwargs):
+            observed["context"] = kwargs
+            return self.context
+
+        def is_connected(self) -> bool:
+            return True
+
+        def close(self) -> None:
+            observed["browser_closed"] = True
+
+    class FakeChromium:
+        def __init__(self) -> None:
+            self.browser = FakeBrowser()
+
+        def launch(self, **kwargs):
+            observed["launch"] = kwargs
+            return self.browser
+
+    class FakePlaywright:
+        def __init__(self) -> None:
+            self.chromium = FakeChromium()
+
+        def stop(self) -> None:
+            observed["playwright_stopped"] = True
+
+    fake_playwright = FakePlaywright()
+    sync_api = ModuleType("playwright.sync_api")
+    sync_api.Error = RuntimeError
+    sync_api.sync_playwright = lambda: type(
+        "Starter", (), {"start": lambda _self: fake_playwright}
+    )()
+    playwright = ModuleType("playwright")
+    playwright.sync_api = sync_api
+    monkeypatch.setitem(sys.modules, "playwright", playwright)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+    monkeypatch.setattr(studio.browser_runtime, "pinned_browser_runtime", lambda: None)
+
+    session = studio.launch_managed_watch_browser("http://127.0.0.1:1234/player")
+
+    assert observed["launch"] == {
+        "headless": False,
+        "args": ["--autoplay-policy=no-user-gesture-required"],
+        "ignore_default_args": ["--mute-audio"],
+    }
+    assert observed["context"] == {"no_viewport": True}
+    assert observed["goto"] == (
+        "http://127.0.0.1:1234/player",
+        "domcontentloaded",
+    )
+    assert session.is_open()
+    session.close()
+    assert observed["page_closed"] is True
+    assert observed["context_closed"] is True
+    assert observed["browser_closed"] is True
+    assert observed["playwright_stopped"] is True
+
+
+def test_managed_watch_server_stops_when_browser_closes(monkeypatch, capsys) -> None:
+    observed: dict[str, object] = {}
+
+    class FakeServer:
+        server_port = 51234
+
+        def __init__(self, _address, _handler_factory) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> bool:
+            return False
+
+        def serve_forever(self) -> None:
+            observed["served"] = True
+
+        def shutdown(self) -> None:
+            observed["shutdown"] = True
+
+    class FakeBrowserSession:
+        def is_open(self) -> bool:
+            return False
+
+        def close(self) -> None:
+            observed["browser_closed"] = True
+
+    def fake_launch(url: str):
+        observed["url"] = url
+        return FakeBrowserSession()
+
+    monkeypatch.setattr(studio.http.server, "ThreadingHTTPServer", FakeServer)
+    monkeypatch.setattr(studio, "launch_managed_watch_browser", fake_launch)
+
+    status = studio.run_watch_server(
+        OmegaConf.create({"output_format": "text"}),
+        "/cast-player.html?manifest=demo&autoplay=countdown",
+        {},
+        managed_browser=True,
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert observed == {
+        "served": True,
+        "url": (
+            "http://127.0.0.1:51234/"
+            "cast-player.html?manifest=demo&autoplay=countdown"
+        ),
+        "browser_closed": True,
+        "shutdown": True,
+    }
+    assert "opened isolated watch browser" in output
+    assert "stopped local watch server" in output
 
 
 def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:

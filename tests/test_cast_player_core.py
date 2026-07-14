@@ -227,6 +227,11 @@ const renderer = core.createBrowserRendererAdapter({
     console.error(JSON.stringify(clip));
     process.exit(1);
   }
+  const earlyPointer = renderer.renderAt(150).pointer;
+  if (earlyPointer.x <= 0 || earlyPointer.x >= 15) {
+    console.error(JSON.stringify({earlyPointer}));
+    process.exit(1);
+  }
 })().catch((error) => {
   console.error(error.stack);
   process.exit(1);

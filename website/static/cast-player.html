@@ -380,6 +380,12 @@
         transform: translate(-50%, -50%) scale(2);
       }
 
+      .playback-flash[data-countdown="true"] {
+        color: var(--cue);
+        font: 700 2.4rem/1 ui-sans-serif, system-ui, sans-serif;
+        font-variant-numeric: tabular-nums;
+      }
+
       .playback-flash svg {
         width: 2.25rem;
         height: 2.25rem;
@@ -772,7 +778,6 @@
     <script src="cast-player-core.js"></script>
     <script>
       const params = new URLSearchParams(window.location.search);
-      const castUrl = params.get('cast');
       const manifestUrl = params.get('manifest');
       const autoplayCountdown = params.get('autoplay') === 'countdown';
       let audioUrl = null;
@@ -862,6 +867,9 @@
       let guideDrag = null;
       let scrubbing = false;
       let playbackFlashTimers = [];
+      let autoplayCountdownTimers = [];
+      let autoplayCountdownActive = false;
+      let audibleAutoplayPending = false;
       const checkpointSnapSeconds = 3.0;
       const playbackRates = [1, 1.25, 1.5, 2];
 
@@ -1617,11 +1625,38 @@
         playbackFlashTimers = [];
       }
 
+      function clearAudioUnlockPrompt() {
+        if (playbackFlash.dataset.audioUnlock !== 'true') {
+          return;
+        }
+        delete playbackFlash.dataset.audioUnlock;
+        playbackFlash.removeAttribute('data-visible');
+        playbackFlash.removeAttribute('data-fading');
+        playbackFlash.setAttribute('aria-hidden', 'true');
+        playbackFlash.removeAttribute('aria-label');
+      }
+
+      function showAudioUnlockPrompt() {
+        clearPlaybackFlashTimers();
+        playbackFlash.removeAttribute('data-countdown');
+        playbackFlash.innerHTML = icons.play;
+        playbackFlash.dataset.audioUnlock = 'true';
+        playbackFlash.dataset.visible = 'true';
+        playbackFlash.dataset.fading = 'false';
+        playbackFlash.setAttribute('aria-hidden', 'false');
+        playbackFlash.setAttribute(
+          'aria-label',
+          'Audio autoplay was blocked. Click play to start with audio.',
+        );
+      }
+
       function showPlaybackFlash(iconName) {
         if (!playbackFlash || !icons[iconName]) {
           return;
         }
+        clearAudioUnlockPrompt();
         clearPlaybackFlashTimers();
+        playbackFlash.removeAttribute('data-countdown');
         playbackFlash.innerHTML = icons[iconName];
         playbackFlash.dataset.visible = 'true';
         playbackFlash.dataset.fading = 'false';
@@ -1636,6 +1671,46 @@
             playbackFlash.removeAttribute('data-visible');
             playbackFlash.removeAttribute('data-fading');
           }, 700),
+        );
+      }
+
+      function cancelAutoplayCountdown() {
+        autoplayCountdownTimers.forEach((timer) => clearTimeout(timer));
+        autoplayCountdownTimers = [];
+        if (!autoplayCountdownActive) {
+          return;
+        }
+        autoplayCountdownActive = false;
+        playbackFlash.removeAttribute('data-countdown');
+        playbackFlash.removeAttribute('data-visible');
+        playbackFlash.removeAttribute('data-fading');
+      }
+
+      function showAutoplayCountdownValue(value) {
+        playbackFlash.textContent = String(value);
+        playbackFlash.dataset.countdown = 'true';
+        playbackFlash.dataset.visible = 'true';
+        playbackFlash.dataset.fading = 'false';
+      }
+
+      function startAutoplayCountdown() {
+        cancelAutoplayCountdown();
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
+        clearPlaybackFlashTimers();
+        autoplayCountdownActive = true;
+        showAutoplayCountdownValue(3);
+        for (const [delay, value] of [[1000, 2], [2000, 1]]) {
+          autoplayCountdownTimers.push(
+            setTimeout(() => showAutoplayCountdownValue(value), delay),
+          );
+        }
+        autoplayCountdownTimers.push(
+          setTimeout(() => {
+            autoplayCountdownActive = false;
+            autoplayCountdownTimers = [];
+            play({autoplay: true, feedback: true});
+          }, 3000),
         );
       }
 
@@ -2039,6 +2114,8 @@
       }
 
       function finishPlayback() {
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
         playing = false;
         currentSeconds = totalSeconds;
         if (audio) {
@@ -2051,6 +2128,8 @@
       }
 
       function pauseForGuidedPoint(point) {
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
         currentSeconds = point.time;
         playing = false;
         pausedAtGuidedPoint = true;
@@ -2163,6 +2242,8 @@
       }
 
       function resetPlayback() {
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
         clearTimers();
         if (audio) {
           audio.pause();
@@ -2181,6 +2262,8 @@
       }
 
       function seekTo(seconds, {resume = playing, openCheckpoint = false} = {}) {
+        audibleAutoplayPending = false;
+        clearAudioUnlockPrompt();
         const shouldResume = Boolean(resume);
         playing = false;
         clearTimers();
@@ -2203,6 +2286,34 @@
         } else {
           updateTransportButtons();
         }
+      }
+
+      function handleAudioPlaybackStarted() {
+        audibleAutoplayPending = false;
+      }
+
+      function handleAudioPlaybackRejected() {
+        if (!audibleAutoplayPending) {
+          setVoiceStatus('voiceover unavailable', 'unavailable');
+          return;
+        }
+        audibleAutoplayPending = false;
+        playing = false;
+        clearTimers();
+        pausedAtGuidedPoint = false;
+        hideGuideModal();
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+        renderAt(0);
+        setVoiceStatus(
+          'click play for audio',
+          'waiting',
+          'Audio autoplay was blocked. Click play to start with audio.',
+        );
+        showAudioUnlockPrompt();
+        updateProgress();
       }
 
       function startAudio() {
@@ -2246,6 +2357,7 @@
           audio.playbackRate = playbackRate;
           audio.play()
             .then(() => {
+              handleAudioPlaybackStarted();
               if (playing) {
                 currentSeconds = livePlaybackSeconds();
               }
@@ -2272,9 +2384,7 @@
                 );
               }
             })
-            .catch(() => {
-              setVoiceStatus('voiceover unavailable', 'unavailable');
-            });
+            .catch(handleAudioPlaybackRejected);
           return;
         }
 
@@ -2647,15 +2757,21 @@
         if (currentSeconds >= totalSeconds) {
           resetPlayback();
         }
+        if (options.autoplay === true) {
+          audibleAutoplayPending = Boolean(audioReady && audio && !muted);
+        } else {
+          audibleAutoplayPending = false;
+          clearAudioUnlockPrompt();
+        }
         pausedAtGuidedPoint = false;
         hideGuideModal();
         playing = true;
         updateTransportButtons();
         scheduleEvents();
-        startAudio();
         if (options.feedback === true) {
           showPlaybackFlash('play');
         }
+        startAudio();
       }
 
       function pause(options = {}) {
@@ -2688,6 +2804,7 @@
         ) {
           return;
         }
+        cancelAutoplayCountdown();
         if (playing) {
           pause({feedback: true});
         } else {
@@ -2696,6 +2813,7 @@
       }
 
       function togglePlayPause() {
+        cancelAutoplayCountdown();
         if (playing) {
           pause({feedback: true});
         } else {
@@ -2802,27 +2920,6 @@
           updateTotalSeconds();
           return;
         }
-        if (!castUrl) {
-        }
-        const response = await fetch(castUrl);
-        if (!response.ok) {
-          throw new Error(`could not load cast: ${response.status}`);
-        }
-        const lines = (await response.text()).trim().split('\n');
-        lines.shift();
-        let time = 0;
-        const rawEvents = lines
-          .map((line) => JSON.parse(line))
-          .filter((event) => event[1] === 'o')
-          .map((event) => {
-            time += Number(event[0]);
-            return {time, data: String(event[2] || '')};
-          });
-        events = buildPresentationEvents(rawEvents);
-        castSeconds = events.length
-          ? Math.max(...events.map((event) => event.time))
-          : time + introSeconds;
-        updateTotalSeconds();
       }
 
       async function loadPresentationManifest() {
@@ -2973,8 +3070,12 @@
           }
           updateTotalSeconds();
           resetPlayback();
+          if (autoplayCountdown) {
+            startAutoplayCountdown();
+          }
         })
         .catch((error) => {
+          cancelAutoplayCountdown();
           terminal.textContent = error.message;
           playButton.disabled = true;
           restartButton.disabled = true;

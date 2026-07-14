@@ -2,14 +2,11 @@
   'use strict';
 
   const observedAttributes = [
-    'audio',
-    'audio-meta',
     'intro',
     'intro-segment',
     'intro-seconds',
     'manifest',
     'player',
-    'src',
     'title',
   ];
 
@@ -25,12 +22,6 @@
     if (options.title) {
       params.set('title', options.title || 'Terminal recording');
     }
-    if (options.audio) {
-      params.set('audio', options.audio);
-    }
-    if (options.audioMeta) {
-      params.set('audioMeta', options.audioMeta);
-    }
     if (options.intro) {
       params.set('intro', options.intro);
     }
@@ -45,14 +36,11 @@
 
   function iframeOptionsFromElement(element) {
     return {
-      audio: optionalAttribute(element, 'audio'),
-      audioMeta: optionalAttribute(element, 'audio-meta'),
       intro: optionalAttribute(element, 'intro'),
       introSegment: optionalAttribute(element, 'intro-segment'),
       introSeconds: optionalAttribute(element, 'intro-seconds'),
       manifest: optionalAttribute(element, 'manifest'),
       player: optionalAttribute(element, 'player'),
-      src: optionalAttribute(element, 'src'),
       title: optionalAttribute(element, 'title'),
     };
   }

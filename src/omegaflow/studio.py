@@ -13,6 +13,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from collections.abc import Callable
@@ -25,6 +26,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 from . import audio
+from . import browser_runtime
 from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
@@ -1326,6 +1328,7 @@ def watch_player_url_path(
     spec: dict[str, Any],
     *,
     run_dir: Path | None = None,
+    autoplay_countdown: bool = False,
 ) -> tuple[str, dict[str, Path]]:
     resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
     if resolved_run_dir is None:
@@ -1348,7 +1351,10 @@ def watch_player_url_path(
     manifest_url = WATCH_ARTIFACT_PREFIX + quote(
         presentation_build.MANIFEST_FILE, safe="/"
     )
-    return "/cast-player.html?" + urlencode({"manifest": manifest_url}), artifacts
+    query = {"manifest": manifest_url}
+    if autoplay_countdown:
+        query["autoplay"] = "countdown"
+    return "/cast-player.html?" + urlencode(query), artifacts
 
 
 def configured_browser_command_name() -> str | None:
@@ -1427,10 +1433,100 @@ def open_watch_url(url: str) -> bool:
     return webbrowser.open(url)
 
 
+class ManagedWatchBrowser:
+    def __init__(
+        self,
+        *,
+        playwright: Any,
+        browser: Any,
+        browser_context: Any,
+        page: Any,
+    ) -> None:
+        self.playwright = playwright
+        self.browser = browser
+        self.browser_context = browser_context
+        self.page = page
+
+    def is_open(self) -> bool:
+        return bool(self.browser.is_connected() and not self.page.is_closed())
+
+    def close(self) -> None:
+        resources = (
+            ("page", self.page),
+            ("context", self.browser_context),
+            ("browser", self.browser),
+            ("playwright", self.playwright),
+        )
+        self.page = None
+        self.browser_context = None
+        self.browser = None
+        self.playwright = None
+        for name, resource in resources:
+            if resource is None:
+                continue
+            try:
+                resource.stop() if name == "playwright" else resource.close()
+            except BaseException:
+                pass
+
+
+def launch_managed_watch_browser(url: str) -> ManagedWatchBrowser:
+    try:
+        browser_runtime.pinned_browser_runtime()
+    except browser_runtime.BrowserRuntimeError as exc:
+        raise StudioError(str(exc)) from exc
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise StudioError(
+            "watch requires the browser extra; install OmegaFlow with "
+            "`pip install 'omegaflow[browser]'`"
+        ) from exc
+
+    playwright = None
+    browser = None
+    browser_context = None
+    page = None
+    try:
+        playwright = sync_playwright().start()
+        browser = playwright.chromium.launch(
+            headless=False,
+            args=["--autoplay-policy=no-user-gesture-required"],
+            ignore_default_args=["--mute-audio"],
+        )
+        browser_context = browser.new_context(no_viewport=True)
+        page = browser_context.new_page()
+        page.goto(url, wait_until="domcontentloaded")
+        return ManagedWatchBrowser(
+            playwright=playwright,
+            browser=browser,
+            browser_context=browser_context,
+            page=page,
+        )
+    except BaseException as exc:
+        ManagedWatchBrowser(
+            playwright=playwright,
+            browser=browser,
+            browser_context=browser_context,
+            page=page,
+        ).close()
+        if not isinstance(exc, Exception):
+            raise
+        message = (
+            browser_runtime.actionable_playwright_error(str(exc))
+            if isinstance(exc, PlaywrightError)
+            else str(exc)
+        )
+        raise StudioError(f"could not open managed watch browser: {message}") from exc
+
+
 def run_watch_server(
     cfg: DictConfig,
     url_path: str,
     artifacts: dict[str, Path],
+    *,
+    managed_browser: bool = False,
 ) -> int:
     static_root = studio_config_module.project_root() / "website" / "static"
 
@@ -1447,6 +1543,28 @@ def run_watch_server(
         if text_output_enabled(cfg):
             step_line("watch recording")
             pass_line(f"serving local watch server: {url}")
+        if managed_browser:
+            server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+            browser_session = None
+            try:
+                browser_session = launch_managed_watch_browser(url)
+                if text_output_enabled(cfg):
+                    info_line(
+                        "opened isolated watch browser; close it or press Ctrl-C to stop"
+                    )
+                while browser_session.is_open():
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                if browser_session is not None:
+                    browser_session.close()
+                server.shutdown()
+                server_thread.join()
+                if text_output_enabled(cfg):
+                    info_line("stopped local watch server")
+            return 0
         opened = open_watch_url(url)
         if text_output_enabled(cfg):
             if opened:
@@ -1471,8 +1589,8 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         )
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    url_path, artifacts = watch_player_url_path(spec)
-    return run_watch_server(cfg, url_path, artifacts)
+    url_path, artifacts = watch_player_url_path(spec, autoplay_countdown=True)
+    return run_watch_server(cfg, url_path, artifacts, managed_browser=True)
 
 
 def studio_tool_command(recording_id: str, *overrides: str) -> str:

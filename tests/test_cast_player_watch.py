@@ -119,7 +119,7 @@ function element(id) {
 const context = {
   URL,
   URLSearchParams,
-  window: {location: {search: '?cast=/casts/demo.cast&title=Demo'}},
+  window: {location: {search: '?manifest=/videos/demo/recording.presentation.json&title=Demo'}},
   document: {
     title: '',
     getElementById: element,
@@ -174,6 +174,134 @@ for (const script of scripts) {
         capture_output=True,
         check=False,
     )
+
+
+def test_watch_autoplay_counts_down_before_playing() -> None:
+    result = run_player_script(
+        r"""
+const countdownTimers = [];
+context.setTimeout = (callback, delay) => {
+  const timer = {callback, delay};
+  countdownTimers.push(timer);
+  return timer;
+};
+context.clearTimeout = () => {};
+vm.runInContext(`
+events = [{time: 1, data: 'done'}];
+totalSeconds = 1;
+startAutoplayCountdown();
+`, context);
+
+const initialTimers = countdownTimers.slice();
+const flash = element('playback-flash');
+if (flash.textContent !== '3') {
+  console.error(JSON.stringify({phase: 'three', text: flash.textContent}));
+  process.exit(1);
+}
+if (JSON.stringify(initialTimers.map((timer) => timer.delay)) !== '[1000,2000,3000]') {
+  console.error(JSON.stringify({delays: initialTimers.map((timer) => timer.delay)}));
+  process.exit(1);
+}
+
+initialTimers[0].callback();
+if (flash.textContent !== '2') {
+  console.error(JSON.stringify({phase: 'two', text: flash.textContent}));
+  process.exit(1);
+}
+initialTimers[1].callback();
+if (flash.textContent !== '1') {
+  console.error(JSON.stringify({phase: 'one', text: flash.textContent}));
+  process.exit(1);
+}
+initialTimers[2].callback();
+if (!vm.runInContext('playing', context) || !flash.innerHTML.includes('<svg')) {
+  console.error(JSON.stringify({
+    phase: 'play',
+    playing: vm.runInContext('playing', context),
+    html: flash.innerHTML,
+  }));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_watch_autoplay_rewinds_when_browser_blocks_audio() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+(async () => {
+  let allowAudio = false;
+  presentationManifest = {
+    recording: {duration_ms: 10000},
+    beats: [{id: 'terminal', renderer: 'terminal', offset_ms: 0, duration_ms: 10000}],
+  };
+  events = [{time: 10, data: 'done'}];
+  totalSeconds = 10;
+  audioReady = true;
+  audio = {
+    currentTime: 0,
+    duration: 10,
+    muted: false,
+    paused: true,
+    playbackRate: 1,
+    pause() { this.paused = true; },
+    play() {
+      if (!allowAudio) {
+        const error = new Error('audible autoplay is blocked');
+        error.name = 'NotAllowedError';
+        return Promise.reject(error);
+      }
+      this.paused = false;
+      return Promise.resolve();
+    },
+  };
+  presentationAudioController = CastPlayerCore.createPresentationAudioController({
+    audio,
+    intervals: [
+      {presentation_start_ms: 0, presentation_end_ms: 10000, source_start_ms: 0, source_end_ms: 10000},
+    ],
+    onPlayRejected: handleAudioPlaybackRejected,
+    onPlayStarted: handleAudioPlaybackStarted,
+  });
+
+  play({autoplay: true, feedback: true});
+  await Promise.resolve();
+  await Promise.resolve();
+  if (
+    playing || currentSeconds !== 0 || audio.currentTime !== 0 ||
+    playbackFlash.dataset.audioUnlock !== 'true' ||
+    playbackFlash.dataset.visible !== 'true' ||
+    voice.dataset.state !== 'waiting'
+  ) {
+    console.error(JSON.stringify({
+      phase: 'blocked', playing, currentSeconds, audioTime: audio.currentTime,
+      flash: playbackFlash.dataset, voice: voice.dataset,
+    }));
+    process.exit(1);
+  }
+
+  allowAudio = true;
+  play({feedback: true});
+  await Promise.resolve();
+  await Promise.resolve();
+  if (!playing || audio.paused || playbackFlash.dataset.audioUnlock === 'true') {
+    console.error(JSON.stringify({
+      phase: 'unlocked', playing, paused: audio.paused, flash: playbackFlash.dataset,
+    }));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_preview_seek_does_not_overwrite_scrubber_value() -> None:

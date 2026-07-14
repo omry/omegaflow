@@ -100,9 +100,7 @@ def test_cast_player_embed_does_not_recreate_same_iframe() -> None:
 const Element = context.customElements.get('cast-player-embed');
 const element = new Element();
 element.setAttribute('title', 'Demo Build');
-element.setAttribute('src', '/casts/demo.retimed.cast');
-element.setAttribute('audio', '/audio/casts/demo.mp3');
-element.setAttribute('audio-meta', '/audio/casts/demo.json');
+element.setAttribute('manifest', '/videos/demo/recording.presentation.json');
 element.setAttribute('intro-segment', 'overview');
 element.setAttribute('player', '/cast-player.html');
 
@@ -115,7 +113,7 @@ const secondIframe = element.children[0];
 if (
   element.children.length !== 1 ||
   firstIframe !== secondIframe ||
-  secondIframe.src !== 'https://example.test/cast-player.html?cast=%2Fcasts%2Fdemo.retimed.cast&title=Demo+Build&audio=%2Faudio%2Fcasts%2Fdemo.mp3&audioMeta=%2Faudio%2Fcasts%2Fdemo.json&introSegment=overview'
+  secondIframe.src !== 'https://example.test/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&title=Demo+Build&introSegment=overview'
 ) {
   console.error(JSON.stringify({
     children: element.children.length,
@@ -136,18 +134,18 @@ def test_cast_player_embed_updates_existing_iframe_when_url_changes() -> None:
 const Element = context.customElements.get('cast-player-embed');
 const element = new Element();
 element.setAttribute('title', 'Demo Build');
-element.setAttribute('src', '/casts/demo.retimed.cast');
+element.setAttribute('manifest', '/videos/demo/recording.presentation.json');
 element.setAttribute('player', '/cast-player.html');
 
 element.connectedCallback();
 const firstIframe = element.children[0];
-element.setAttribute('src', '/casts/other.retimed.cast');
+element.setAttribute('manifest', '/videos/other/recording.presentation.json');
 element.attributeChangedCallback();
 
 if (
   element.children.length !== 1 ||
   element.children[0] !== firstIframe ||
-  element.children[0].src !== '/cast-player.html?cast=%2Fcasts%2Fother.retimed.cast&title=Demo+Build'
+  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fother%2Frecording.presentation.json&title=Demo+Build'
 ) {
   console.error(JSON.stringify({
     children: element.children.length,

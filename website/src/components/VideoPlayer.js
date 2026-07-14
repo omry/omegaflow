@@ -2,20 +2,13 @@ import React, {useEffect} from 'react';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
 export default function VideoPlayer({
-  src,
   manifest,
   title,
-  audio,
-  audioMeta,
   intro,
   introSegment,
   introSeconds,
 }) {
-  const recordingSrc = useBaseUrl(manifest || src);
-  const castSrc = manifest ? null : recordingSrc;
-  const manifestSrc = manifest ? recordingSrc : null;
-  const audioSrc = audio ? useBaseUrl(audio) : null;
-  const audioMetaSrc = audioMeta ? useBaseUrl(audioMeta) : null;
+  const manifestSrc = useBaseUrl(manifest);
   const playerSrc = useBaseUrl('/cast-player.html');
   const embedScriptSrc = useBaseUrl('/cast-player-embed.js');
 
@@ -33,10 +26,7 @@ export default function VideoPlayer({
     <div className="video-player">
       <cast-player-embed
         title={title}
-        src={castSrc || undefined}
-        manifest={manifestSrc || undefined}
-        audio={audioSrc || undefined}
-        audio-meta={audioMetaSrc || undefined}
+        manifest={manifestSrc}
         intro={intro || undefined}
         intro-segment={introSegment || undefined}
         intro-seconds={introSeconds != null ? String(introSeconds) : undefined}

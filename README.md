@@ -36,10 +36,12 @@ Linux recording workflow.
 
 ## Quick Start
 
-Install OmegaFlow in your project's Python environment:
+Install OmegaFlow and its managed-browser support in your project's Python
+environment, then install the pinned Chromium build used by `action=watch`:
 
 ```bash
-python -m pip install omegaflow
+python -m pip install 'omegaflow[browser]'
+python -m playwright install chromium
 ```
 
 OmegaFlow requires Python 3.11+ and Bash. Supported Linux and macOS wheels
