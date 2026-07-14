@@ -26,9 +26,42 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-No active item.
+- [ ] `P1` Add Towncrier release notes and GitHub Releases to publishing.
+      PyPI publishing should produce a proper release artifact, not just upload
+      package files. Acceptance checks: add Towncrier fragments and a generated
+      changelog/release-notes workflow; require release notes for user-facing
+      changes before publishing; teach the publish workflow to create or update
+      a GitHub Release for the published version; attach or link the built
+      distributions where appropriate; avoid double-publishing PyPI files when a
+      tag or manual dispatch is repeated; and document the release procedure.
+
+- [ ] `P1` Update bootstrap quickstart so it does not create `hello.sh`.
+      The first generated recording should teach OmegaFlow's core authoring
+      model without feeling like a generic shell-script hello world. Acceptance
+      checks: redesign the bootstrap `quickstart` recording around a small
+      self-contained terminal flow that demonstrates narration anchors, command
+      synchronization, expected output checks, and the default HTML publish
+      surface; remove `recordings/quickstart/scripts/hello.sh` from generated
+      bootstrap output; update tests, docs, and the homepage demo recording
+      output to match the new generated files; and keep the bootstrap output
+      concise enough for a first-time user to scan.
 
 ## Release backlog
+
+- [ ] `P2` Add scripted interactive terminal capture for TUI sessions.
+      OmegaFlow should be able to record a real interactive terminal program,
+      including a Codex chat that invokes an installed Arbiter capability,
+      without reducing the session to buffered command output. Acceptance
+      checks: run the target command in a child PTY with the recording's fixed
+      terminal geometry; let recording scripts inject text, Enter, and named
+      control keys; stream ANSI and cursor updates into the existing asciinema
+      capture as they happen; provide deterministic synchronization using
+      explicit output matches and bounded terminal-idle waits; preserve action
+      timing, timeouts, exit validation, and reliable process-tree cleanup; add
+      tests for input injection, streaming output, synchronization failure, and
+      cleanup; and add a secret-safe reference recording that runs Codex with
+      inline terminal output, submits more than one chat turn, and demonstrates
+      a real Arbiter-backed operation.
 
 - [ ] `P2` Add selectable player color themes.
       Recordings should be able to choose a named color theme for the generated
