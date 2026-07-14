@@ -15,9 +15,7 @@ and publish it with the docs.
 <!-- studio:quickstart-demo:start -->
 <VideoPlayer
   title="Quickstart Demo"
-  src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
-  audio="/omegaflow-videos/quickstart-demo/audio.mp3"
-  audioMeta="/omegaflow-videos/quickstart-demo/audio.json"
+  manifest="/omegaflow-videos/quickstart-demo/presentation/recording.presentation.json"
 />
 <!-- studio:quickstart-demo:end -->
 

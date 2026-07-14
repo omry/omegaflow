@@ -1,0 +1,56 @@
+{
+  "audio": "audio.mp3",
+  "duration_ms": 61368,
+  "recording": "quickstart-demo",
+  "takes": [
+    {
+      "id": "__beat__:install",
+      "members": [
+        {
+          "beat_id": "install",
+          "text": "OmegaFlow turns scripted terminal and browser workflows into narrated, rebuildable videos. Start by adding the package to your project's Python environment. When installation finishes, you can run omegaflow from the command line.",
+          "text_end": 229,
+          "text_start": 0
+        }
+      ],
+      "source_end_ms": 14064,
+      "source_start_ms": 0,
+      "timestamps": "timestamps/__beat__-install.json"
+    },
+    {
+      "id": "__beat__:bootstrap",
+      "members": [
+        {
+          "beat_id": "bootstrap",
+          "text": "Next, from your repository root, run bootstrap to set up the recording workspace. The command creates the project settings, recording defaults, and workspace layout. The included quickstart is only a small example of that structure.",
+          "text_end": 232,
+          "text_start": 0
+        }
+      ],
+      "source_end_ms": 27864,
+      "source_start_ms": 14064,
+      "timestamps": "timestamps/__beat__-bootstrap.json"
+    },
+    {
+      "id": "build-and-browser",
+      "members": [
+        {
+          "beat_id": "build",
+          "text": "Then, build the sample recording. OmegaFlow runs the scripted workflow and creates a ready-to-watch player. When the build finishes, the command shows where to find the player.",
+          "text_end": 176,
+          "text_start": 0
+        },
+        {
+          "beat_id": "play-in-browser",
+          "text": "The narration continues as the recording moves from the terminal to the browser. The browser script opens the player created by the build. Next, the script starts playback and captures the result. A single narration take can span both recording types, keeping commands and browser actions synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
+          "text_end": 550,
+          "text_start": 177
+        }
+      ],
+      "source_end_ms": 61368,
+      "source_start_ms": 27864,
+      "timestamps": "timestamps/build-and-browser.json"
+    }
+  ],
+  "version": 2
+}

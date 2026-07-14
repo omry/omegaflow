@@ -1436,6 +1436,41 @@ beat:
     assert command == {"run": "printf 'hello\\n'"}
 
 
+def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player() -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "recordings"
+        / "quickstart-demo"
+        / "index.md"
+    ).read_text(encoding="utf-8")
+    beats = [
+        block["beat"]
+        for block in studio_directive_blocks(source)
+        if "beat" in block
+    ]
+    beats_by_id = {beat["id"]: beat for beat in beats}
+    browser_beat = beats_by_id["play-in-browser"]
+    actions = {action["id"]: action for action in browser_beat["actions"]}
+
+    assert beats_by_id["install"]["narration"].startswith("OmegaFlow")
+    assert all(
+        not beats_by_id[beat_id]["narration"].startswith("OmegaFlow")
+        for beat_id in ("bootstrap", "build", "play-in-browser")
+    )
+    assert beats_by_id["build"]["narration_take"] == "build-and-browser"
+    assert browser_beat["narration_take"] == "build-and-browser"
+    assert list(actions) == ["open_player", "play"]
+    assert "transition" not in actions["play"]
+
+    generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
+    generated_beat = next(
+        block["beat"]
+        for block in studio_directive_blocks(generated)
+        if "beat" in block
+    )
+    assert "viewer_hold" not in generated_beat
+
+
 def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     support_dir = recordings_dir / "hello"

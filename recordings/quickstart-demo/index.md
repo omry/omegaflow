@@ -4,7 +4,6 @@ title: Quickstart Demo
 capture:
   window_size: 90x24
   headless: true
-  baseline_compressed: true
 style:
   color: true
   typing: true
@@ -33,23 +32,48 @@ timing:
   post_command_pause: 0.55
   minimum_section_spacing: 0.6
 environment:
-  working_directory: /tmp
   path_prepend:
   - recordings/quickstart-demo/bin
+browser:
+  base_url: http://127.0.0.1:18474
+  viewport:
+    width: 1280
+    height: 720
+  context:
+    locale: en-US
+    timezone: UTC
+    color_scheme: dark
+    reduced_motion: reduce
+presentation:
+  browser:
+    window:
+      mode: framed
+      theme: kde-breeze
+      title: OmegaFlow Player
+      opening_transition: window-open
+    chrome:
+      mode: full
+    transitions:
+      default: cut
 audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
   env_file: .env
+setup:
+- name: start the generated-player preview server
+  run_file: scripts/start-demo-server.sh
 cleanup:
+- name: stop the generated-player preview server
+  run_file: scripts/stop-demo-server.sh
 - name: remove demo project
   run_file: scripts/cleanup-demo-project.sh
 ---
 
 # Quickstart Demo
 
-This is the short homepage demo. It is not the tutorial itself: it shows the
-bootstrap command creating the `quickstart` recording, builds that generated
-recording, then points to browser viewing and publishing options.
+This is the short homepage demo. It creates and builds a terminal quickstart,
+then switches to a scripted browser beat that operates the real generated
+player.
 
 ```yaml studio-directive
 scene: Quickstart Demo
@@ -60,10 +84,10 @@ beat:
   id: install
   heading: Install OmegaFlow
   narration: >-
-    OmegaFlow turns scripted terminal workflows into rebuildable videos with
-    generated voiceover. @install@ Install it in your project's Python
-    environment. @wait:install_command+200ms@ The omegaflow command is now
-    ready.
+    OmegaFlow turns scripted terminal and browser workflows into narrated,
+    rebuildable videos. Start by @install@ adding the package to your project's
+    Python environment. @wait:install_command+200ms@ When installation
+    finishes, you can run omegaflow from the command line.
   marker: install
   caption: Install OmegaFlow in a Python environment.
   actions:
@@ -91,9 +115,10 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    From your repository root, @bootstrap@ run bootstrap once.
-    @wait:bootstrap_run+200ms@ It creates the recording workspace and a small
-    quickstart example you can keep with your code.
+    Next, from your repository root, @bootstrap@ run bootstrap to set up the
+    recording workspace. @wait:bootstrap_run+200ms@ The command creates the
+    project settings, recording defaults, and workspace layout. The included
+    quickstart is only a small example of that structure.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -113,10 +138,12 @@ beat:
 beat:
   id: build
   heading: Build The Video
+  narration_take: build-and-browser
   narration: >-
-    @build@ Build the quickstart recording. OmegaFlow runs the scripted
-    workflow, synchronizes it with the narration, and writes a ready-to-watch
-    video. @wait:build_command+200ms@ The output shows where it was published.
+    Then, @build@ build the sample recording. OmegaFlow runs the scripted
+    workflow and creates a ready-to-watch player.
+    @wait:build_command+200ms@ When the build finishes, the command shows where
+    to find the player.
   marker: build
   caption: Build the generated quickstart recording.
   actions:
@@ -134,30 +161,37 @@ beat:
 
 ```yaml studio-directive
 beat:
-  id: view-and-publish
-  heading: Watch The Result
+  id: play-in-browser
+  medium: browser
+  heading: Play It In The Browser
+  narration_take: build-and-browser
   narration: >-
-    To review the result, @watch@ run the watch command. OmegaFlow opens the
-    recording in your browser exactly as viewers will see it.
-    @wait:watch_command+200ms@ Keep the script with your code, rebuild it when
-    the workflow changes, and publish the video with your docs.
-  marker: view-and-publish
-  caption: Watch the generated video in your browser.
+    The narration continues as the recording moves from the terminal to the
+    browser. @open_player@ The browser script opens the player created by the
+    build. @wait:open_player+300ms@ Next, @play@ the script starts playback and
+    captures the result. A single narration take can span both recording types,
+    keeping commands and browser actions synchronized with the voiceover. To
+    learn more, start the tutorial or read the docs.
+  marker: play-in-browser
+  caption: Script browser interaction with the generated player.
   actions:
-  - commands:
-    # This recording is captured in a headless terminal session, so launching
-    # the browser would be an external GUI side effect that the cast cannot
-    # show. Bootstrap and build above are real; only this browser-launch action
-    # and its concise confirmation are staged for the terminal-only demo.
-    - id: watch_command
-      run: ":"
-      display: omegaflow recording=quickstart action=watch
-      after: "@watch@"
-      output:
-        replace: |
-          pass  opened quickstart recording in browser
+  - id: open_player
+    after: "@open_player@"
+    open_page:
+      url: /cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&title=Quickstart
+      display_url: https://omegaflow.dev/videos/quickstart
+      ready:
+        visible:
+          role: button
+          name: Play
+          exact: true
+  - id: play
+    after: "@play@"
+    click:
+      target:
+        role: button
+        name: Play
+        exact: true
   guide:
-    commands:
-    - omegaflow recording=quickstart action=watch
-    success_hint: Publish the generated video alongside your documentation.
+    success_hint: The generated player is ready to publish with your docs.
 ```

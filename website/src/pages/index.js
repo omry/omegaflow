@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <Layout
       title="OmegaFlow"
-      description="Scripted terminal walkthroughs you can rebuild"
+      description="Scripted software demos you can rebuild"
     >
       <main>
         <section className="homeHero">
@@ -16,7 +16,7 @@ export default function Home() {
                 <span>Scripted. Synchronized. Rebuildable.</span>
               </div>
               <div className="homeHero__headline">
-                <h1>Rebuildable terminal demos.</h1>
+                <h1>Rebuildable product demos.</h1>
                 <img
                   className="homeHero__mascot"
                   src="/img/omegaflow-mascot-camera.svg"
@@ -24,8 +24,9 @@ export default function Home() {
                 />
               </div>
               <p className="homeHero__lede">
-                Write the terminal flow once, then rebuild the video whenever the docs change.
-                To learn more, start the tutorial or read the docs.
+                Script terminal and browser workflows once, then rebuild synchronized videos
+                whenever your product or documentation changes. To learn more, start the
+                tutorial or read the docs.
               </p>
               <div className="homeHero__actions">
                 <Link className="button button--primary button--lg" to="/tutorial/quickstart">
@@ -38,10 +39,8 @@ export default function Home() {
             </div>
             <div className="homeHero__video" aria-label="Quick start video">
               <VideoPlayer
-                title="Quickstart Demo"
-                src="/omegaflow-videos/quickstart-demo/recording.retimed.cast"
-                audio="/omegaflow-videos/quickstart-demo/audio.mp3"
-                audioMeta="/omegaflow-videos/quickstart-demo/audio.json"
+                title="OmegaFlow Overview"
+                manifest="/omegaflow-videos/quickstart-demo/presentation/recording.presentation.json"
               />
             </div>
           </div>
@@ -51,11 +50,11 @@ export default function Home() {
           <div className="container homeGrid">
             <article>
               <h2>Script</h2>
-              <p>Write the walkthrough as a versioned script.</p>
+              <p>Author terminal commands and browser interactions as a versioned workflow.</p>
             </article>
             <article>
               <h2>Build</h2>
-              <p>Turn the script into a synchronized, ready-to-publish video.</p>
+              <p>Turn the workflow into a synchronized, ready-to-publish presentation.</p>
             </article>
             <article>
               <h2>Publish</h2>
