@@ -205,3 +205,51 @@ def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path
         assert resized["width"] > initial["width"] * 1.4
         assert viewport["width"] > 0
         browser.close()
+
+
+def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    static_root = REPO_ROOT / "website" / "static"
+    manifest = (
+        "/omegaflow-videos/quickstart-demo/presentation/"
+        "recording.presentation.json"
+    )
+
+    with player_site(static_root) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 700})
+        failed_requests: list[str] = []
+        bad_responses: list[str] = []
+        page.on(
+            "requestfailed",
+            lambda request: failed_requests.append(request.url)
+            if not request.url.endswith("/audio.mp3")
+            else None,
+        )
+        page.on(
+            "response",
+            lambda response: bad_responses.append(
+                f"{response.status} {response.url}"
+            )
+            if response.status >= 400
+            else None,
+        )
+        page.goto(
+            f"{base_url}/cast-player.html?manifest={manifest}"
+            "&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#progress").evaluate(
+            "element => { element.value = '1000'; "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }"
+        )
+        page.locator(".browser-window").wait_for()
+
+        elapsed, total = page.locator("#clock").text_content().split(" / ")
+        assert elapsed == total
+        assert page.locator("#browser-stage").is_visible()
+        assert page.locator("#terminal").text_content() != "Failed to fetch"
+        assert failed_requests == []
+        assert bad_responses == []
+        browser.close()

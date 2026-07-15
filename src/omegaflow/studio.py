@@ -470,34 +470,31 @@ scene: {title}
 ```
 
 The scene is the title shown by the player. Beats are the steps in the video.
-This beat runs a small shell script kept in this video's `scripts/` directory.
+This beat runs one self-contained command and checks its output.
+
+When you enable audio, narration anchors can synchronize words and commands.
+For example, put `@run_demo@` in the narration, set the command's `after` field
+to `"@run_demo@"`, and add `@wait:show_message@` where narration should wait for
+the command to finish. The starter keeps audio disabled, so its runnable beat
+uses plain narration.
 
 ```yaml studio-directive
 beat:
-  id: hello
-  heading: Say Hello
-  narration: Run the support script and verify the terminal output.
-  caption: A one-command terminal recording.
+  id: show-message
+  heading: Run The Quickstart
+  narration: Run one inline command and verify its terminal output.
+  caption: A self-contained command with an expected output check.
   actions:
   - commands:
-    - run_file: scripts/hello.sh
-      display: bash scripts/hello.sh
+    - id: show_message
+      run: printf 'OmegaFlow quickstart\\n'
       expect:
         output_contains:
-        - hello from {recording_id}
+        - OmegaFlow quickstart
 ```
 
 Publish surfaces in the header let the same recording write a standalone HTML
 page. Add a docs surface when you want the build to update a documentation page.
-"""
-
-
-def bootstrap_support_script_text(recording_id: str) -> str:
-    return f"""\
-#!/usr/bin/env bash
-set -euo pipefail
-
-printf 'hello from {recording_id}\\n'
 """
 
 
@@ -515,7 +512,6 @@ def write_bootstrap_file(
     path: Path,
     text: str,
     *,
-    executable: bool = False,
     force: bool = False,
 ) -> str:
     existed = path.exists()
@@ -523,8 +519,6 @@ def write_bootstrap_file(
         return "exists"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    if executable:
-        path.chmod(path.stat().st_mode | 0o111)
     return "updated" if existed else "created"
 
 
@@ -581,18 +575,11 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         (
             bootstrap_project_root(workspace) / ".omegaflow" / "config.yaml",
             bootstrap_tool_config_text(workspace),
-            False,
         ),
-        (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG, False),
+        (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG),
         (
             workspace / recording_id / "index.md",
             bootstrap_recording_text(recording_id, title),
-            False,
-        ),
-        (
-            workspace / recording_id / "scripts" / "hello.sh",
-            bootstrap_support_script_text(recording_id),
-            True,
         ),
     ]
 
@@ -603,7 +590,7 @@ def run_bootstrap(config: dict[str, Any]) -> int:
             print(f"Recording workspace: {display_path(workspace)}")
             print()
             use_color = color_enabled()
-            for path, text, _executable in writes:
+            for path, text in writes:
                 diff = bootstrap_file_diff(path, text)
                 if diff:
                     diff = colorize_unified_diff(diff, enabled=use_color)
@@ -617,7 +604,7 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         print(f"Recording workspace: {display_path(workspace)}")
         print()
         print("Files:")
-        for path, _text, _executable in writes:
+        for path, _text in writes:
             status = "update" if path.exists() else "create"
             print(f"  {status:>6} {display_path(path)}")
         print()
@@ -625,11 +612,10 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         return 0
 
     print(f"workspace {display_path(workspace)}")
-    for path, text, executable in writes:
+    for path, text in writes:
         status = write_bootstrap_file(
             path,
             text,
-            executable=executable,
             force=force,
         )
         print(f"{status:>7} {display_path(path)}")

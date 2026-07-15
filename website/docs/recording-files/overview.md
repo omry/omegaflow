@@ -24,8 +24,6 @@ recordings/:           # Recording workspace
   config.yaml:         # Workspace defaults for recordings
   quickstart/:         # Bootstrap-created video directory
     index.md:          # Recording Markdown file for one video
-    scripts/:          # Per-video support scripts
-      hello.sh:        # Shell script used by index.md
   tutorial/:           # Optional grouping directory
     install/:          # Nested video directory, selected as tutorial/install
       index.md:        # Recording Markdown file for that video
@@ -56,13 +54,16 @@ scene: Quickstart
 
 ```yaml studio-directive
 beat:
-  id: hello
-  heading: Say Hello
-  narration: Print one line in the terminal.
+  id: show-message
+  heading: Run The Quickstart
+  narration: Run one inline command and verify its terminal output.
   actions:
   - commands:
-    - run_file: scripts/hello.sh
-      display: bash scripts/hello.sh
+    - id: show_message
+      run: printf 'OmegaFlow quickstart\\n'
+      expect:
+        output_contains:
+        - OmegaFlow quickstart
 ```
 ````
 

@@ -15,4 +15,6 @@ omegaflow project_root="$HOMEPAGE_DEMO_ROOT" action=bootstrap
 test -f .omegaflow/config.yaml
 test -f recordings/config.yaml
 test -f recordings/quickstart/index.md
-test -f recordings/quickstart/scripts/hello.sh
+test ! -e recordings/quickstart/scripts/hello.sh
+grep -Fq "run: printf 'OmegaFlow quickstart\\n'" recordings/quickstart/index.md
+grep -Fq -- '- OmegaFlow quickstart' recordings/quickstart/index.md

@@ -1,9 +1,9 @@
 {
-  "capture_fingerprint": "65b5797d3a60fda37cf0cb5cb9bd05901014fc54c5934805b8510c8a7a99bcb8",
+  "capture_fingerprint": "0735331ab9ff18aeecb63571ec214801824557c32cb6f6df5dfebbcd7e97e94d",
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "50383037b2e0be59a3f4e54fc2827eb74a1f1b56909535162feea1daab1305e7"
+      "sha256": "a14a375ec7eabe229af7b0f4c8ef3b642c44785e08db87afbe28b7d397beda0c"
     },
     {
       "path": "recordings/quickstart-demo/scripts/build-demo-project.sh",
@@ -15,7 +15,7 @@
     },
     {
       "path": "recordings/quickstart-demo/scripts/create-demo-project.sh",
-      "sha256": "75cd4f904e393ea8a2065ff612dc9b8bb29439473b75e08c145fa197ca236354"
+      "sha256": "984c6c5d66bf75fa72781fee86ec6f20a7d29086ea2f7aeabc58e8b06172f072"
     },
     {
       "path": "recordings/quickstart-demo/scripts/start-demo-server.sh",
@@ -26,7 +26,7 @@
       "sha256": "a9ddaad82044127698731c1e1ac2fa59c3f7d672b18bcce33eea5e5420a7ced5"
     }
   ],
-  "presentation_fingerprint": "48b320ae8329a509d9885b3e6607886d383f173de5bd711833e5a8bb8e5b652c",
+  "presentation_fingerprint": "627593d297279a86f61e5a17a423021594a29c463c5ed6af75e6c355bbd85e30",
   "recording": "quickstart-demo",
   "version": 1,
   "versions": {

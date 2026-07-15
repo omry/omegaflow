@@ -35,17 +35,6 @@ server, client, plugin, deployment, and product-security work.
       distributions where appropriate; avoid double-publishing PyPI files when a
       tag or manual dispatch is repeated; and document the release procedure.
 
-- [ ] `P1` Update bootstrap quickstart so it does not create `hello.sh`.
-      The first generated recording should teach OmegaFlow's core authoring
-      model without feeling like a generic shell-script hello world. Acceptance
-      checks: redesign the bootstrap `quickstart` recording around a small
-      self-contained terminal flow that demonstrates narration anchors, command
-      synchronization, expected output checks, and the default HTML publish
-      surface; remove `recordings/quickstart/scripts/hello.sh` from generated
-      bootstrap output; update tests, docs, and the homepage demo recording
-      output to match the new generated files; and keep the bootstrap output
-      concise enough for a first-time user to scan.
-
 ## Release backlog
 
 - [ ] `P2` Add scripted interactive terminal capture for TUI sessions.
@@ -194,6 +183,12 @@ server, client, plugin, deployment, and product-security work.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Update bootstrap quickstart so it does not create `hello.sh`.
+      Completed: `2026-07-15`. Replaced the generated support script with a
+      self-contained inline command and expected-output check, added concise
+      narration synchronization guidance, and updated tests, documentation,
+      and the rebuilt homepage demo.
 
 - [x] `P1` Let Space pause and resume terminal recording playback.
       Completed: `2026-07-13`. Space now toggles playback when the player surface

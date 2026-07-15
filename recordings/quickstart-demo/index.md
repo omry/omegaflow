@@ -118,8 +118,7 @@ beat:
     Next, from your repository root, @bootstrap@ run bootstrap to set up the
     recording workspace. @wait:bootstrap_run+200ms@ The command creates the
     project settings, recording defaults, and workspace layout. The generated
-    quickstart is ready to run, so you can try OmegaFlow immediately. It is also
-    the recording we will build next.
+    quickstart is ready to run, so you can try OmegaFlow immediately.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -167,13 +166,13 @@ beat:
   heading: Play It In The Browser
   narration_take: build-and-browser
   narration: >-
-    Next, @open_player@ OmegaFlow records the browser too, opening the player
-    created by the build. @wait:open_player+300ms@ Then, @play@ it starts the
-    video and @playback_complete@ captures playback through the end.
-    @wait:wait_for_playback+300ms@ A single OmegaFlow video can move between
-    terminal and browser beats, while one narration take keeps every action
-    synchronized with the voiceover. To learn more, start the tutorial or read
-    the docs.
+    OmegaFlow controls the browser during the recording. To demonstrate this,
+    @open_player@ we'll open the player for the video we just built,
+    @wait:open_player+300ms@ then @play@ play the video. @playback_complete@
+    A single OmegaFlow video can move between terminal and browser beats, while
+    one narration take keeps every action synchronized with the voiceover.
+    @wait:wait_for_playback+300ms@ To learn more, start the tutorial or read the
+    docs.
   marker: play-in-browser
   caption: Script browser interaction with the generated player.
   actions:
