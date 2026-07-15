@@ -10,7 +10,11 @@ from pathlib import Path
 import pytest
 
 import omegaflow.publish as publish_module
-from omegaflow.presentation import serialize_presentation_manifest
+from omegaflow.presentation import (
+    PresentationValidationError,
+    serialize_presentation_manifest,
+    validate_presentation_manifest,
+)
 from omegaflow.presentation_schema import (
     PresentationBeatV1,
     PresentationHeaderV1,
@@ -177,6 +181,47 @@ def test_public_staging_validates_v3_narration_metadata_and_sidecar(
     sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
     with pytest.raises(PublicBundleError, match="cover take"):
         validate_public_staging(root)
+
+
+@pytest.mark.parametrize("layer", ["presentation", "publish"])
+@pytest.mark.parametrize("mutation", ["bytes", "hash", "hashless-path"])
+def test_narration_audio_integrity_tampering_is_rejected_by_each_validation_layer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    layer: str,
+    mutation: str,
+) -> None:
+    root = add_narration_bundle(write_terminal_bundle(tmp_path / f"{layer}-{mutation}"))
+    metadata_path = root / "audio.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    take = metadata["takes"][0]
+    audio_path = root / take["src"]
+
+    if mutation == "bytes":
+        audio_path.write_bytes(b"tampered audio")
+    elif mutation == "hash":
+        take["sha256"] = "0" * 64
+    else:
+        renamed = root / "audio/take.mp3"
+        audio_path.rename(renamed)
+        take["src"] = renamed.relative_to(root).as_posix()
+
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    if layer == "presentation":
+        manifest = json.loads(
+            (root / "recording.presentation.json").read_text(encoding="utf-8")
+        )
+        with pytest.raises(PresentationValidationError, match="sha256|content hash"):
+            validate_presentation_manifest(manifest, manifest_dir=root)
+    else:
+        monkeypatch.setattr(
+            publish_module,
+            "validate_presentation_manifest",
+            lambda *_args, **_kwargs: None,
+        )
+        with pytest.raises(PublicBundleError, match="boundaries"):
+            validate_public_staging(root)
 
 
 @pytest.mark.parametrize("audio_name", ["audio/take.mp3", "audio/take.opus", "audio/take.wav"])
