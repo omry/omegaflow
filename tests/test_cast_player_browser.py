@@ -6,6 +6,7 @@ import threading
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -218,12 +219,19 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
     with player_site(static_root) as base_url, sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1000, "height": 700})
+        presentation_requests: list[str] = []
         failed_requests: list[str] = []
         bad_responses: list[str] = []
         page.on(
+            "request",
+            lambda request: presentation_requests.append(request.url)
+            if "/omegaflow-videos/quickstart-demo/presentation/" in request.url
+            else None,
+        )
+        page.on(
             "requestfailed",
             lambda request: failed_requests.append(request.url)
-            if not request.url.endswith("/audio.mp3")
+            if not urlparse(request.url).path.endswith(".mp3")
             else None,
         )
         page.on(
@@ -250,6 +258,18 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
         assert elapsed == total
         assert page.locator("#browser-stage").is_visible()
         assert page.locator("#terminal").text_content() != "Failed to fetch"
+        audio_metadata = json.loads(
+            (
+                static_root
+                / "omegaflow-videos/quickstart-demo/presentation/audio.json"
+            ).read_text(encoding="utf-8")
+        )
+        requested_paths = {urlparse(url).path for url in presentation_requests}
+        assert any(path.endswith("/recording.presentation.json") for path in requested_paths)
+        assert any(path.endswith("/audio.json") for path in requested_paths)
+        for take in audio_metadata["takes"]:
+            assert take["sha256"] in take["src"]
+            assert any(path.endswith("/" + take["src"]) for path in requested_paths)
         assert failed_requests == []
         assert bad_responses == []
         browser.close()

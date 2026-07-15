@@ -504,18 +504,20 @@ the old audio.
 
 ### Published audio metadata
 
-Audio generation produces one file per take and one concatenated recording
-audio file. `audio.json` becomes version 2 for manifest recordings:
+Audio generation publishes one content-addressed file per take. `audio.json`
+uses version 3 for manifest recordings and identifies every take file by path
+and SHA-256 digest:
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "recording": "create-project",
-  "audio": "audio.mp3",
   "duration_ms": 7800,
   "takes": [
     {
       "id": "__beat__:start-server",
+      "src": "audio/__beat__-start-server-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp3",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "source_start_ms": 0,
       "source_end_ms": 2600,
       "timestamps": "timestamps/start-server.json",
@@ -530,6 +532,8 @@ audio file. `audio.json` becomes version 2 for manifest recordings:
     },
     {
       "id": "project-creation",
+      "src": "audio/project-creation-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.mp3",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "source_start_ms": 2600,
       "source_end_ms": 7800,
       "timestamps": "timestamps/project-creation.json",
@@ -1053,7 +1057,6 @@ The published entry point is `recording.presentation.json`:
     }
   },
   "audio": {
-    "src": "audio.mp3",
     "metadata": "audio.json",
     "intervals": [
       {
@@ -1346,8 +1349,11 @@ A successful run uses this internal layout:
     recording.presentation.json
     beats/
     media/
+    audio/
+      <take-id>-<sha256>.<format>
+    audio.json
+    timestamps/
   audio/
-    recording.mp3
     audio.json
     timestamps/
   diagnostics/
@@ -1364,7 +1370,7 @@ Only these generated classes may be published:
 ```text
 recording.presentation.json
 recording.recording.json
-audio.mp3
+audio/*.<supported-audio-extension>
 audio.json
 timestamps/*.json
 beats/*.cast

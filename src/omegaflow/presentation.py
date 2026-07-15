@@ -540,7 +540,6 @@ def _validate_audio(
     mapping = _mapping(value, field=field)
     _reject_unknown(mapping, PresentationAudioV1, field=field)
     _require_fields(mapping, _allowed_fields(PresentationAudioV1), field=field)
-    source = validate_relative_presentation_path(mapping.get("src"), field=f"{field}.src")
     metadata_path = validate_relative_presentation_path(
         mapping.get("metadata"), field=f"{field}.metadata"
     )
@@ -550,20 +549,55 @@ def _validate_audio(
 
     source_duration_ms: int | None = None
     if root is not None:
-        _resolved_manifest_file(root, source, field=f"{field}.src")
         metadata_file = _resolved_manifest_file(
             root, metadata_path, field=f"{field}.metadata"
         )
         metadata = _load_json(metadata_file, field=f"{field}.metadata")
-        if metadata.get("version") != 2:
-            raise PresentationValidationError(f"{field}.metadata must use version 2")
-        if metadata.get("audio") != source:
-            raise PresentationValidationError(
-                f"{field}.metadata audio path does not match manifest audio src"
-            )
+        if metadata.get("version") != 3:
+            raise PresentationValidationError(f"{field}.metadata must use version 3")
         source_duration_ms = _integer(
             metadata.get("duration_ms"), field=f"{field}.metadata.duration_ms"
         )
+        takes = metadata.get("takes")
+        if not isinstance(takes, list) or not takes:
+            raise PresentationValidationError(f"{field}.metadata.takes must be non-empty")
+        expected_source_start = 0
+        take_ids: set[str] = set()
+        for index, take_value in enumerate(takes):
+            take_field = f"{field}.metadata.takes.{index}"
+            take = _mapping(take_value, field=take_field)
+            take_id = take.get("id")
+            if not isinstance(take_id, str) or not take_id or take_id in take_ids:
+                raise PresentationValidationError(f"{take_field}.id is invalid")
+            take_ids.add(take_id)
+            source_start = _integer(
+                take.get("source_start_ms"), field=f"{take_field}.source_start_ms"
+            )
+            source_end = _integer(
+                take.get("source_end_ms"), field=f"{take_field}.source_end_ms"
+            )
+            if source_start != expected_source_start or source_end <= source_start:
+                raise PresentationValidationError(f"{take_field} boundaries are invalid")
+            expected_source_start = source_end
+            take_source = validate_relative_presentation_path(
+                take.get("src"), field=f"{take_field}.src"
+            )
+            digest = take.get("sha256")
+            if not isinstance(digest, str) or SHA256_RE.fullmatch(digest) is None:
+                raise PresentationValidationError(f"{take_field}.sha256 is invalid")
+            source_file = _resolved_manifest_file(
+                root, take_source, field=f"{take_field}.src"
+            )
+            if hashlib.sha256(source_file.read_bytes()).hexdigest() != digest:
+                raise PresentationValidationError(f"{take_field}.sha256 does not match")
+            if digest not in take_source:
+                raise PresentationValidationError(
+                    f"{take_field}.src must contain its content hash"
+                )
+        if expected_source_start != source_duration_ms:
+            raise PresentationValidationError(
+                f"{field}.metadata takes do not cover narration source time"
+            )
 
     previous_presentation_end = 0
     previous_source_end = 0

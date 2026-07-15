@@ -81,6 +81,15 @@ def test_player_links_logo_in_a_separate_top_bar_column() -> None:
     assert 'aria-label="Open the OmegaFlow website"' in html
 
 
+def test_player_preloads_per_take_audio_for_seamless_handoff() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "element.preload = 'auto';" in html
+    assert "element.preload = 'metadata';" not in html
+
+
 def run_player_script(script_body: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:
@@ -775,7 +784,7 @@ if (playbackRate !== 2) {
     assert result.returncode == 0, result.stderr
 
 
-def test_v2_narration_members_follow_manifest_audio_source_time() -> None:
+def test_narration_members_follow_manifest_audio_source_time() -> None:
     result = run_player_script(
         r"""
 vm.runInContext(`
@@ -800,7 +809,7 @@ if (
     assert result.returncode == 0, result.stderr
 
 
-def test_player_loads_v2_take_members_and_word_timestamps() -> None:
+def test_player_loads_v3_take_audio_members_and_word_timestamps() -> None:
     result = run_player_script(
         r"""
 vm.runInContext(`
@@ -813,12 +822,14 @@ fetch = async (url) => ({
   ok: true,
   status: 200,
   async json() {
-    if (String(url).endsWith('audio.json')) {
-      return {
-        version: 2,
-        takes: [{
-          id: 'take', source_start_ms: 1000, source_end_ms: 2200,
-          timestamps: 'timestamps/take.json',
+    if (new URL(String(url)).pathname.endsWith('audio.json')) {
+        return {
+          version: 3,
+          takes: [{
+            id: 'take', source_start_ms: 1000, source_end_ms: 2200,
+            src: 'audio/take-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp3',
+            sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            timestamps: 'timestamps/take.json',
           members: [{beat_id: 'create', text: 'Create it', text_start: 0, text_end: 9}],
         }],
       };
@@ -835,7 +846,9 @@ fetch = async (url) => ({
 loadAudioMeta().then(() => {
   const segment = narrationSegments[0];
   if (
-    narrationSegments.length < 1 || segment.offset !== 1.2 || segment.duration !== 1 ||
+      narrationSegments.length < 1 || audioTakeDescriptors.length !== 1 ||
+      !audioTakeDescriptors[0].src.endsWith('.mp3') ||
+      segment.offset !== 1.2 || segment.duration !== 1 ||
     segment.heading !== 'Create' || segment.guide.success_hint !== 'Created.' ||
     segment.wordSpans[0].textStart !== 0 || segment.wordSpans[0].start !== 0 ||
     segment.wordSpans[0].end !== 0.4

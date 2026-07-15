@@ -74,7 +74,12 @@ def write_terminal_bundle(root: Path, *, output: str = "ok") -> Path:
 
 
 def add_narration_bundle(root: Path) -> Path:
-    (root / "audio.mp3").write_bytes(b"public audio fixture")
+    audio_content = b"public audio fixture"
+    audio_sha256 = hashlib.sha256(audio_content).hexdigest()
+    audio_dir = root / "audio"
+    audio_dir.mkdir()
+    audio_name = f"take-{audio_sha256}.mp3"
+    (audio_dir / audio_name).write_bytes(audio_content)
     (root / "timestamps").mkdir()
     (root / "timestamps/take.json").write_text(
         json.dumps(
@@ -109,13 +114,14 @@ def add_narration_bundle(root: Path) -> Path:
     (root / "audio.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "recording": "demo",
-                "audio": "audio.mp3",
                 "duration_ms": 1000,
                 "takes": [
                     {
                         "id": "take",
+                        "src": f"audio/{audio_name}",
+                        "sha256": audio_sha256,
                         "source_start_ms": 0,
                         "source_end_ms": 1000,
                         "timestamps": "timestamps/take.json",
@@ -136,7 +142,6 @@ def add_narration_bundle(root: Path) -> Path:
     manifest_path = root / "recording.presentation.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["audio"] = {
-        "src": "audio.mp3",
         "metadata": "audio.json",
         "intervals": [
             {
@@ -159,7 +164,7 @@ def test_public_staging_accepts_only_the_closed_reachable_bundle(tmp_path: Path)
     assert manifest["recording"]["id"] == "demo"
 
 
-def test_public_staging_validates_v2_narration_metadata_and_sidecar(
+def test_public_staging_validates_v3_narration_metadata_and_sidecar(
     tmp_path: Path,
 ) -> None:
     root = add_narration_bundle(write_terminal_bundle(tmp_path / "valid"))
@@ -174,7 +179,7 @@ def test_public_staging_validates_v2_narration_metadata_and_sidecar(
         validate_public_staging(root)
 
 
-@pytest.mark.parametrize("audio_name", ["audio.mp3", "audio.opus", "audio.wav"])
+@pytest.mark.parametrize("audio_name", ["audio/take.mp3", "audio/take.opus", "audio/take.wav"])
 def test_public_allowlist_retains_supported_audio_names(audio_name: str) -> None:
     assert publish_module._allowlisted_path(audio_name)
 

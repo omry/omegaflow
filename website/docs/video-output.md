@@ -27,7 +27,7 @@ presentation/
   beats/*.browser.json
   media/*.webp
   media/*.webm             # only when captured motion is required
-  audio.*                  # when narration is enabled
+  audio/*-<sha256>.*       # one content-addressed file per narration take
   audio.json
   timestamps/*.json
 ```

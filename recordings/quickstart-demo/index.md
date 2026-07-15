@@ -140,8 +140,8 @@ beat:
   heading: Build The Video
   narration_take: build-and-browser
   narration: >-
-    Then, @build@ build the sample recording. OmegaFlow runs the scripted
-    workflow and creates a ready-to-watch player.
+    @build@ Build the quickstart recording to turn the sample workflow into a
+    ready-to-watch Hello World video.
     @wait:build_command+200ms@ When the build finishes, the follow-up command
     shows how to watch the video.
   marker: build
@@ -166,9 +166,10 @@ beat:
   heading: Play It In The Browser
   narration_take: build-and-browser
   narration: >-
-    OmegaFlow controls the browser during the recording. To demonstrate this,
-    @open_player@ we'll open the player for the video we just built,
-    @wait:open_player+300ms@ then @play@ play the video. @playback_complete@
+    OmegaFlow can script and record browser workflows just as it does terminal
+    workflows. To demonstrate, this script @open_player@ opens a browser window
+    and @wait:open_player+300ms@ @play@ plays the video we just created.
+    @playback_complete@
     A single OmegaFlow video can move between terminal and browser beats, while
     one narration take keeps every action synchronized with the voiceover.
     @wait:wait_for_playback+300ms@ To learn more, start the tutorial or read the

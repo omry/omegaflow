@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from .presentation import (
     validate_relative_presentation_path,
 )
 from .presentation_schema import (
-    NarrationAudioMetadataV2,
+    NarrationAudioMetadataV3,
     NarrationTimestampSidecarV1,
     PublishedRecordingMetadataV1,
 )
@@ -34,14 +35,7 @@ class PublicBundleError(RuntimeError):
 T = TypeVar("T")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 WARNING_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
-PUBLIC_AUDIO_NAMES = {
-    "audio.aac",
-    "audio.flac",
-    "audio.mp3",
-    "audio.opus",
-    "audio.pcm",
-    "audio.wav",
-}
+PUBLIC_AUDIO_SUFFIXES = {".aac", ".flac", ".mp3", ".opus", ".pcm", ".wav"}
 GENERIC_PRIVATE_PATH_RE = re.compile(
     r"(?<![:A-Za-z0-9])(?:/(?:Users|home|tmp|private|var|etc|workspace)/|[A-Za-z]:\\)"
 )
@@ -167,22 +161,20 @@ def validate_public_staging(
 
     audio = manifest.get("audio")
     if audio is not None:
-        audio_path = root / audio["src"]
         audio_metadata_path = root / audio["metadata"]
-        referenced.update((audio_path, audio_metadata_path))
+        referenced.add(audio_metadata_path)
         audio_metadata = parsed_json.get(audio_metadata_path)
         if audio_metadata is None:
             raise PublicBundleError("narration audio metadata is missing")
         typed_audio = _structured(
             audio_metadata,
-            NarrationAudioMetadataV2,
-            required={"version", "recording", "audio", "duration_ms", "takes"},
+            NarrationAudioMetadataV3,
+            required={"version", "recording", "duration_ms", "takes"},
             field="narration audio metadata",
         )
         if (
-            typed_audio.version != 2
+            typed_audio.version != 3
             or typed_audio.recording != manifest["recording"]["id"]
-            or typed_audio.audio != audio["src"]
             or typed_audio.duration_ms < 0
         ):
             raise PublicBundleError("narration audio metadata identity is invalid")
@@ -190,15 +182,25 @@ def validate_public_staging(
         take_ids: set[str] = set()
         beat_ids = {beat["id"] for beat in manifest["beats"]}
         for take in typed_audio.takes:
+            relative_audio = _public_relative_path(
+                take.src, field=f"audio for take {take.id!r}"
+            )
+            take_audio_path = root / relative_audio
             if (
                 not take.id
                 or take.id in take_ids
+                or SHA256_RE.fullmatch(take.sha256) is None
+                or take.sha256 not in relative_audio
+                or take_audio_path not in files
+                or hashlib.sha256(take_audio_path.read_bytes()).hexdigest()
+                != take.sha256
                 or take.source_start_ms != expected_source_start
                 or take.source_end_ms < take.source_start_ms
                 or take.source_end_ms > typed_audio.duration_ms
                 or not take.members
             ):
                 raise PublicBundleError("narration audio take boundaries are invalid")
+            referenced.add(take_audio_path)
             take_ids.add(take.id)
             expected_source_start = take.source_end_ms
             text_cursor = 0
@@ -345,7 +347,7 @@ def _allowlisted_path(relative: str) -> bool:
         ("recording.presentation.json",),
         ("recording.recording.json",),
         ("audio.json",),
-    } or (len(path.parts) == 1 and path.name in PUBLIC_AUDIO_NAMES):
+    }:
         return True
     if len(path.parts) != 2:
         return False
@@ -356,6 +358,8 @@ def _allowlisted_path(relative: str) -> bool:
         return name.endswith(".cast") or name.endswith(".browser.json")
     if directory == "media":
         return name.endswith(".webp") or name.endswith(".webm")
+    if directory == "audio":
+        return path.suffix.lower() in PUBLIC_AUDIO_SUFFIXES
     return False
 
 

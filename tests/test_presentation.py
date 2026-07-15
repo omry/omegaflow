@@ -81,21 +81,34 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
     )
     audio = None
     if with_audio:
-        (tmp_path / "audio.mp3").write_bytes(b"audio")
+        audio_content = b"audio"
+        audio_sha256 = hashlib.sha256(audio_content).hexdigest()
+        audio_dir = tmp_path / "audio"
+        audio_dir.mkdir()
+        audio_name = f"take-{audio_sha256}.mp3"
+        (audio_dir / audio_name).write_bytes(audio_content)
         (tmp_path / "audio.json").write_text(
             json.dumps(
                 {
-                    "version": 2,
+                    "version": 3,
                     "recording": "demo",
-                    "audio": "audio.mp3",
                     "duration_ms": 400,
-                    "takes": [],
+                    "takes": [
+                        {
+                            "id": "take",
+                            "src": f"audio/{audio_name}",
+                            "sha256": audio_sha256,
+                            "source_start_ms": 0,
+                            "source_end_ms": 400,
+                            "timestamps": "timestamps/take.json",
+                            "members": [],
+                        }
+                    ],
                 }
             ),
             encoding="utf-8",
         )
         audio = PresentationAudioV1(
-            src="audio.mp3",
             metadata="audio.json",
             intervals=[
                 PresentationAudioIntervalV1(

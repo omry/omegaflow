@@ -1,6 +1,5 @@
 {
-  "audio": "audio.mp3",
-  "duration_ms": 60384,
+  "duration_ms": 60888,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -13,8 +12,10 @@
           "text_start": 0
         }
       ],
-      "source_end_ms": 14064,
+      "sha256": "18a5f73a2f514f79b0ada4907ef580d25934c22f1ba678b095ba0faa73c0dcee",
+      "source_end_ms": 13608,
       "source_start_ms": 0,
+      "src": "audio/__beat__-install-18a5f73a2f514f79b0ada4907ef580d25934c22f1ba678b095ba0faa73c0dcee.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -27,8 +28,10 @@
           "text_start": 0
         }
       ],
-      "source_end_ms": 29568,
-      "source_start_ms": 14064,
+      "sha256": "6b7db9eee8449fd5a9213ff92e84375a8b3dd939b14ced64ea2519c6d33d9aab",
+      "source_end_ms": 28728,
+      "source_start_ms": 13608,
+      "src": "audio/__beat__-bootstrap-6b7db9eee8449fd5a9213ff92e84375a8b3dd939b14ced64ea2519c6d33d9aab.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -36,21 +39,23 @@
       "members": [
         {
           "beat_id": "build",
-          "text": "Then, build the sample recording. OmegaFlow runs the scripted workflow and creates a ready-to-watch player. When the build finishes, the follow-up command shows how to watch the video.",
-          "text_end": 184,
+          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch Hello World video. When the build finishes, the follow-up command shows how to watch the video.",
+          "text_end": 176,
           "text_start": 0
         },
         {
           "beat_id": "play-in-browser",
-          "text": "OmegaFlow controls the browser during the recording. To demonstrate this, we'll open the player for the video we just built, then play the video. A single OmegaFlow video can move between terminal and browser beats, while one narration take keeps every action synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
-          "text_end": 529,
-          "text_start": 185
+          "text": "OmegaFlow can script and record browser workflows just as it does terminal workflows. To demonstrate, this script opens a browser window and plays the video we just created. A single OmegaFlow video can move between terminal and browser beats, while one narration take keeps every action synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
+          "text_end": 549,
+          "text_start": 177
         }
       ],
-      "source_end_ms": 60384,
-      "source_start_ms": 29568,
+      "sha256": "bf7214b9e1277b5112a2c915cac11fbf77310ed5cb93bd1c7f5db6dcb828e48f",
+      "source_end_ms": 60888,
+      "source_start_ms": 28728,
+      "src": "audio/build-and-browser-bf7214b9e1277b5112a2c915cac11fbf77310ed5cb93bd1c7f5db6dcb828e48f.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],
-  "version": 2
+  "version": 3
 }

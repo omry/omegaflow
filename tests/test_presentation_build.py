@@ -291,7 +291,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     assert list((destination / "media").glob("*.webp"))
 
 
-def test_prepare_narration_audio_writes_cross_beat_v2_metadata(
+def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
     tmp_path: Path, monkeypatch
 ) -> None:
     spec = {
@@ -341,19 +341,17 @@ def test_prepare_narration_audio_writes_cross_beat_v2_metadata(
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('{"words": []}\n', encoding="utf-8")
 
-    def fake_publish_audio(_items, output_path):
-        output_path.write_bytes(b"joined-audio")
-
     monkeypatch.setattr(studio.audio, "generate_audio", fake_generate_audio)
     monkeypatch.setattr(studio.audio, "generate_timestamps", fake_generate_timestamps)
-    monkeypatch.setattr(studio.audio, "publish_audio", fake_publish_audio)
     monkeypatch.setattr(studio.audio, "audio_duration_seconds", lambda _path: 2.0)
 
     artifacts = prepare_narration_audio(spec, plan, tmp_path / "run")
 
     assert artifacts is not None
     metadata = json.loads(artifacts.metadata.read_text(encoding="utf-8"))
-    assert metadata["version"] == 2
+    assert metadata["version"] == 3
+    assert metadata["takes"][0]["src"].startswith("audio/joined-")
+    assert metadata["takes"][0]["sha256"] in metadata["takes"][0]["src"]
     assert [member["beat_id"] for member in metadata["takes"][0]["members"]] == [
         "terminal",
         "browser",

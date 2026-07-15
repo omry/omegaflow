@@ -9,7 +9,8 @@ under `website/static/omegaflow-videos/<id>/presentation/`:
 - `recording.recording.json`
 - beat-local terminal `.cast` and browser `.json` payloads
 - referenced browser media
-- optional narration audio, metadata, and timestamp sidecars
+- optional per-take, content-addressed narration audio plus metadata and
+  timestamp sidecars
 
 The initial player assets are owned by the Python package under
 `omegaflow/player/static/`. A website target may receive copied player

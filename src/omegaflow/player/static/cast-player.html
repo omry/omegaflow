@@ -825,7 +825,6 @@
       playerRoot.dataset.layout = params.get('layout') || '';
       const manifestUrl = params.get('manifest');
       const autoplayCountdown = params.get('autoplay') === 'countdown';
-      let audioUrl = null;
       let audioMetaUrl = null;
       const introText = params.get('intro') || '';
       const explicitIntroSeconds = params.has('introSeconds');
@@ -843,6 +842,10 @@
       }
       const debugMode = params.get('debug') === '1' || parentDebugMode();
       let titleText = params.get('title') || 'Terminal recording';
+
+      function fetchPresentationAsset(reference, base = window.location.href) {
+        return fetch(new URL(reference, base).href, {cache: 'no-store'});
+      }
 
       const terminal = document.getElementById('terminal');
       const browserStage = document.getElementById('browser-stage');
@@ -903,6 +906,7 @@
       let narrationScrollTarget = 0;
       let narrationScrollAnimation = null;
       let audioPlaybackSegments = [];
+      let audioTakeDescriptors = [];
       let audioPresentationSeconds = 0;
       let audioTimer = null;
       let guidedMode = false;
@@ -1061,7 +1065,7 @@
           return;
         }
         try {
-          const response = await fetch(url);
+          const response = await fetchPresentationAsset(url);
           if (!response.ok) {
             return;
           }
@@ -2519,18 +2523,28 @@
       }
 
       async function loadAudioMeta() {
-        if (!audioMetaUrl || explicitIntroSeconds) {
+        if (!audioMetaUrl) {
           return;
         }
-        const response = await fetch(audioMetaUrl);
+        const response = await fetchPresentationAsset(audioMetaUrl);
         if (!response.ok) {
           throw new Error(`could not load audio metadata: ${response.status}`);
         }
         const metadata = await response.json();
-        if (metadata.version === 2 && Array.isArray(metadata.takes)) {
-          narrationSegments = [];
-          for (const take of metadata.takes) {
-            const sidecarResponse = await fetch(timestampUrl(take.timestamps));
+        if (metadata.version !== 3 || !Array.isArray(metadata.takes)) {
+          throw new Error('audio metadata must use version 3');
+        }
+        audioTakeDescriptors = metadata.takes.map((take) => ({
+          id: String(take.id || ''),
+          source_end_ms: Number(take.source_end_ms),
+          source_start_ms: Number(take.source_start_ms),
+          src: new URL(take.src, manifestBaseUrl).href,
+        }));
+        narrationSegments = [];
+        for (const take of metadata.takes) {
+            const sidecarResponse = await fetchPresentationAsset(
+              timestampUrl(take.timestamps),
+            );
             if (!sidecarResponse.ok) {
               throw new Error(`could not load narration timestamps: ${sidecarResponse.status}`);
             }
@@ -2573,44 +2587,8 @@
                   })),
               });
             }
-          }
-          narrationSegments.sort((left, right) => left.offset - right.offset);
-          return;
         }
-        const segments = Array.isArray(metadata.segments) ? metadata.segments : [];
-        narrationSegments = segments
-          .map((segment) => ({
-            id: String(segment.id || ''),
-            offset: Number(segment.offset || 0),
-            duration: Number(segment.duration || 0),
-            heading: String(segment.heading || ''),
-            text: String(segment.text || ''),
-            timestamps: String(segment.timestamps || ''),
-            guide: normalizeGuide(segment.guide),
-            pauseAfter: normalizePauseAfter(segment.pause_after),
-            waits: normalizePresentationWaits(segment.waits),
-            wordSpans: [],
-          }))
-          .filter(
-            (segment) =>
-              Number.isFinite(segment.offset) &&
-              Number.isFinite(segment.duration) &&
-              segment.duration >= 0,
-          );
-        await Promise.all(narrationSegments.map(loadSegmentTimestamps));
-        if (!introSegment) {
-          return;
-        }
-        const selected = segments.find((segment) => segment.id === introSegment);
-        if (!selected) {
-          throw new Error(`audio metadata missing intro segment: ${introSegment}`);
-        }
-        const offset = Number(selected.offset || 0);
-        const duration = Number(selected.duration || 0);
-        if (!Number.isFinite(offset) || !Number.isFinite(duration)) {
-          throw new Error('audio metadata contains invalid intro timing');
-        }
-        introSeconds = Math.max(0, offset + duration);
+        narrationSegments.sort((left, right) => left.offset - right.offset);
       }
 
       function normalizeGuide(value) {
@@ -2891,7 +2869,7 @@
             if (beat.renderer === 'browser') {
               continue;
             }
-            const response = await fetch(new URL(beat.payload, manifestBaseUrl).href);
+            const response = await fetchPresentationAsset(beat.payload, manifestBaseUrl);
             if (!response.ok) {
               throw new Error(`could not load terminal payload: ${response.status}`);
             }
@@ -2924,7 +2902,7 @@
               browser: () => CastPlayerCore.createBrowserDomRenderer(),
             },
             loadPayload: async (beat) => {
-              const response = await fetch(new URL(beat.payload, manifestBaseUrl).href);
+              const response = await fetchPresentationAsset(beat.payload, manifestBaseUrl);
               if (!response.ok) {
                 throw new Error(`could not load ${beat.renderer} payload: ${response.status}`);
               }
@@ -2989,7 +2967,7 @@
         if (!manifestUrl) {
           throw new Error('missing manifest parameter');
         }
-        const response = await fetch(manifestUrl);
+        const response = await fetchPresentationAsset(manifestUrl);
         if (!response.ok) {
           throw new Error(`could not load presentation manifest: ${response.status}`);
         }
@@ -3002,7 +2980,6 @@
           narration.textContent = titleText;
         }
         if (presentationManifest.audio) {
-          audioUrl = new URL(presentationManifest.audio.src, manifestBaseUrl).href;
           audioMetaUrl = new URL(
             presentationManifest.audio.metadata,
             manifestBaseUrl,
@@ -3011,34 +2988,36 @@
       }
 
       async function loadAudio() {
-        if (!audioUrl) {
+        if (!audioTakeDescriptors.length) {
           setVoiceStatus('voiceover unavailable', 'unavailable');
           updateMuteButton();
           return;
         }
-        audio = new Audio(audioUrl);
-        audio.preload = 'metadata';
+        const takes = audioTakeDescriptors.map((take) => {
+          const element = new Audio(take.src);
+          element.preload = 'auto';
+          return {...take, audio: element};
+        });
+        const ready = await Promise.all(takes.map((take) => new Promise((resolve) => {
+          take.audio.addEventListener('loadedmetadata', () => resolve(true), {once: true});
+          take.audio.addEventListener('error', () => resolve(false), {once: true});
+        })));
+        audioReady = ready.every(Boolean);
+        if (!audioReady) {
+          setVoiceStatus('voiceover unavailable', 'unavailable');
+          updateMuteButton();
+          updateTotalSeconds();
+          return;
+        }
+        audio = CastPlayerCore.createPresentationAudioDeck(takes);
         audio.addEventListener('ended', () => {
           if (playing && currentSeconds >= totalSeconds) {
             finishPlayback();
           }
         });
-        await new Promise((resolve) => {
-          audio.addEventListener('loadedmetadata', () => {
-            audioReady = true;
-            setVoiceStatus('', 'ready', 'voiceover ready');
-            updateMuteButton();
-            updateTotalSeconds();
-            resolve();
-          }, {once: true});
-          audio.addEventListener('error', () => {
-            audioReady = false;
-            setVoiceStatus('voiceover unavailable', 'unavailable');
-            updateMuteButton();
-            updateTotalSeconds();
-            resolve();
-          }, {once: true});
-        });
+        setVoiceStatus('', 'ready', 'voiceover ready');
+        updateMuteButton();
+        updateTotalSeconds();
       }
 
       playButton.addEventListener('click', togglePlayPause);

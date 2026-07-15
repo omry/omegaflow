@@ -103,6 +103,151 @@
     return {intervalAt, intervals: normalized, nextInterval, sourceTimeMs};
   }
 
+  function createPresentationAudioDeck(takes = []) {
+    if (!Array.isArray(takes) || takes.length === 0) {
+      throw new Error('presentation audio deck requires at least one take');
+    }
+    const normalized = takes.map((take) => ({
+      audio: take.audio,
+      id: String(take.id || ''),
+      sourceEndMs: Number(take.source_end_ms),
+      sourceStartMs: Number(take.source_start_ms),
+    }));
+    for (let index = 0; index < normalized.length; index += 1) {
+      const take = normalized[index];
+      const expectedStart = index === 0 ? 0 : normalized[index - 1].sourceEndMs;
+      if (
+        !take.audio || !take.id || !Number.isFinite(take.sourceStartMs) ||
+        !Number.isFinite(take.sourceEndMs) || take.sourceStartMs !== expectedStart ||
+        take.sourceEndMs <= take.sourceStartMs
+      ) {
+        throw new Error('presentation audio deck take is invalid');
+      }
+    }
+    let activeIndex = 0;
+    let muted = false;
+    let playbackRate = 1;
+    let playing = false;
+    const listeners = new Map();
+
+    function emit(type, event) {
+      for (const listener of listeners.get(type) || []) {
+        listener(event);
+      }
+    }
+
+    function continuePlayback() {
+      if (!playing) {
+        return;
+      }
+      try {
+        const result = normalized[activeIndex].audio.play();
+        if (result && typeof result.catch === 'function') {
+          result.catch(() => undefined);
+        }
+      } catch (_error) {
+        // The presentation audio controller retries rejected playback.
+      }
+    }
+
+    function select(globalSeconds) {
+      const sourceMs = Math.max(
+        0,
+        Math.min(Number(globalSeconds || 0) * 1000, normalized.at(-1).sourceEndMs),
+      );
+      const nextIndex = normalized.findIndex((take, index) => (
+        sourceMs >= take.sourceStartMs &&
+        (sourceMs < take.sourceEndMs || index === normalized.length - 1)
+      ));
+      const resolvedIndex = nextIndex < 0 ? normalized.length - 1 : nextIndex;
+      const changedTake = resolvedIndex !== activeIndex;
+      if (changedTake) {
+        normalized[activeIndex].audio.pause();
+        activeIndex = resolvedIndex;
+      }
+      const take = normalized[activeIndex];
+      const localSeconds = Math.max(
+        0,
+        Math.min(
+          (sourceMs - take.sourceStartMs) / 1000,
+          (take.sourceEndMs - take.sourceStartMs) / 1000,
+        ),
+      );
+      if (Math.abs(Number(take.audio.currentTime || 0) - localSeconds) > 0.001) {
+        take.audio.currentTime = localSeconds;
+      }
+      if (changedTake) {
+        continuePlayback();
+      }
+      return take;
+    }
+
+    normalized.forEach((take, index) => {
+      take.audio.addEventListener('ended', (event) => {
+        if (index === activeIndex && index + 1 < normalized.length) {
+          activeIndex += 1;
+          normalized[activeIndex].audio.currentTime = 0;
+          continuePlayback();
+        }
+        emit('ended', event);
+      });
+      take.audio.addEventListener('error', (event) => emit('error', event));
+    });
+
+    return {
+      addEventListener(type, listener) {
+        if (!listeners.has(type)) {
+          listeners.set(type, new Set());
+        }
+        listeners.get(type).add(listener);
+      },
+      get currentTime() {
+        const take = normalized[activeIndex];
+        return (take.sourceStartMs / 1000) + Number(take.audio.currentTime || 0);
+      },
+      set currentTime(seconds) {
+        select(seconds);
+      },
+      get duration() {
+        return normalized.at(-1).sourceEndMs / 1000;
+      },
+      get muted() {
+        return muted;
+      },
+      set muted(value) {
+        muted = Boolean(value);
+        for (const take of normalized) {
+          take.audio.muted = muted;
+        }
+      },
+      pause() {
+        playing = false;
+        for (const take of normalized) {
+          take.audio.pause();
+        }
+      },
+      get paused() {
+        return normalized[activeIndex].audio.paused;
+      },
+      play() {
+        playing = true;
+        return normalized[activeIndex].audio.play();
+      },
+      get playbackRate() {
+        return playbackRate;
+      },
+      set playbackRate(value) {
+        playbackRate = Number(value);
+        for (const take of normalized) {
+          take.audio.playbackRate = playbackRate;
+        }
+      },
+      state() {
+        return {activeTakeId: normalized[activeIndex].id};
+      },
+    };
+  }
+
   function createPresentationAudioController(options = {}) {
     const audio = options.audio;
     if (!audio) {
@@ -170,7 +315,7 @@
         cancelPendingPlay();
         audio.pause();
         const sourceMs = timeline.sourceTimeMs(presentationMs);
-        if (Math.abs(((audio.currentTime || 0) * 1000) - sourceMs) > toleranceMs) {
+        if (Math.abs(((audio.currentTime || 0) * 1000) - sourceMs) > 1) {
           audio.currentTime = sourceMs / 1000;
           correctionCount += 1;
         }
@@ -1190,6 +1335,7 @@
     browserWindowLayout,
     createBrowserRendererAdapter,
     createBrowserDomRenderer,
+    createPresentationAudioDeck,
     createPresentationAudioController,
     createPresentationAudioTimeline,
     createPresentationShell,

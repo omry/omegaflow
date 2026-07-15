@@ -213,7 +213,6 @@ class PresentationAudioIntervalV1:
 
 @dataclass
 class PresentationAudioV1:
-    src: str = ""
     metadata: str = ""
     intervals: list[PresentationAudioIntervalV1] = field(default_factory=list)
 
@@ -309,8 +308,10 @@ class NarrationTimestampSidecarV1:
 
 
 @dataclass
-class NarrationAudioTakeV2:
+class NarrationAudioTakeV3:
     id: str = ""
+    src: str = ""
+    sha256: str = ""
     source_start_ms: int = 0
     source_end_ms: int = 0
     timestamps: str = ""
@@ -318,12 +319,11 @@ class NarrationAudioTakeV2:
 
 
 @dataclass
-class NarrationAudioMetadataV2:
-    version: int = 2
+class NarrationAudioMetadataV3:
+    version: int = 3
     recording: str = ""
-    audio: str = ""
     duration_ms: int = 0
-    takes: list[NarrationAudioTakeV2] = field(default_factory=list)
+    takes: list[NarrationAudioTakeV3] = field(default_factory=list)
 
 
 @dataclass

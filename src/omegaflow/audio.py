@@ -24,8 +24,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from .presentation_schema import (
     NarrationAudioMemberV2,
-    NarrationAudioMetadataV2,
-    NarrationAudioTakeV2,
+    NarrationAudioMetadataV3,
+    NarrationAudioTakeV3,
     NarrationTimestampAnchorV1,
     NarrationTimestampMemberV1,
     NarrationTimestampSidecarV1,
@@ -737,6 +737,32 @@ def _timestamp_source_ms(
     return duration_ms
 
 
+def _wait_timestamp_source_ms(
+    text_offset: int,
+    words: list[NarrationTimestampWordV1],
+    *,
+    synthesis_text: str,
+    duration_ms: int,
+) -> int:
+    """Resolve waits inside inter-word silence, away from either word boundary."""
+    previous_word: NarrationTimestampWordV1 | None = None
+    for word in words:
+        if word.text_start < text_offset:
+            previous_word = word
+            continue
+        separator = synthesis_text[text_offset : word.text_start]
+        if all(character.isspace() for character in separator):
+            if previous_word is None:
+                return 0
+            return previous_word.end_ms + (
+                word.start_ms - previous_word.end_ms
+            ) // 2
+    trailing_text = synthesis_text[text_offset:]
+    if all(character.isspace() for character in trailing_text):
+        return duration_ms
+    return _timestamp_source_ms(text_offset, words, duration_ms=duration_ms)
+
+
 def narration_timestamp_sidecar_payload(
     take: NarrationTakePlan,
     *,
@@ -826,8 +852,11 @@ def narration_timestamp_sidecar_payload(
             beat_id=wait.beat_id,
             target=wait.target,
             text_offset=wait.text_offset,
-            source_ms=_timestamp_source_ms(
-                wait.text_offset, typed_words, duration_ms=duration_ms
+            source_ms=_wait_timestamp_source_ms(
+                wait.text_offset,
+                typed_words,
+                synthesis_text=take.synthesis_text,
+                duration_ms=duration_ms,
             ),
             gap_ms=wait.gap_ms,
         )
@@ -845,23 +874,30 @@ def narration_timestamp_sidecar_payload(
     )
 
 
-def narration_audio_metadata_v2_payload(
+def narration_audio_metadata_v3_payload(
     plan: RecordingPlan,
     *,
-    audio_path: str,
+    take_audio_paths: Mapping[str, str],
+    take_audio_sha256: Mapping[str, str],
     take_durations_ms: Mapping[str, int],
     timestamp_paths: Mapping[str, str],
 ) -> dict[str, Any]:
-    if not isinstance(audio_path, str) or not audio_path:
-        raise AudioError("narration audio path must be a non-empty string")
-    takes: list[NarrationAudioTakeV2] = []
+    takes: list[NarrationAudioTakeV3] = []
     source_offset = 0
     for take in plan.narration_takes:
         try:
+            audio_path = take_audio_paths[take.id]
+            audio_sha256 = take_audio_sha256[take.id]
             duration = take_durations_ms[take.id]
             timestamp_path = timestamp_paths[take.id]
         except KeyError as exc:
             raise AudioError(f"missing audio metadata for narration take {take.id!r}") from exc
+        if not isinstance(audio_path, str) or not audio_path:
+            raise AudioError(f"invalid audio path for narration take {take.id!r}")
+        if not isinstance(audio_sha256, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", audio_sha256
+        ):
+            raise AudioError(f"invalid audio hash for narration take {take.id!r}")
         if isinstance(duration, bool) or not isinstance(duration, int):
             raise AudioError(
                 f"audio duration for narration take {take.id!r} must be an integer"
@@ -871,8 +907,10 @@ def narration_audio_metadata_v2_payload(
         if not isinstance(timestamp_path, str) or not timestamp_path:
             raise AudioError(f"invalid timestamp path for narration take {take.id!r}")
         takes.append(
-            NarrationAudioTakeV2(
+            NarrationAudioTakeV3(
                 id=take.id,
+                src=audio_path,
+                sha256=audio_sha256,
                 source_start_ms=source_offset,
                 source_end_ms=source_offset + duration,
                 timestamps=timestamp_path,
@@ -889,9 +927,8 @@ def narration_audio_metadata_v2_payload(
         )
         source_offset += duration
     return _structured_payload(
-        NarrationAudioMetadataV2(
+        NarrationAudioMetadataV3(
             recording=plan.id,
-            audio=audio_path,
             duration_ms=source_offset,
             takes=takes,
         )

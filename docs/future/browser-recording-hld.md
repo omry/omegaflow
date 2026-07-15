@@ -534,9 +534,11 @@ A provisional generated bundle is:
     0002.webp
   clips/
     0001.webm
-  recording.mp3
-  recording.json
-  recording.<beat>.timestamps.json
+  audio/
+    <take-id>-<sha256>.mp3
+  audio.json
+  timestamps/
+    <take-id>.json
 ```
 
 Optional diagnostics remain outside published assets:

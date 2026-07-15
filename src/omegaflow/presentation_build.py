@@ -99,7 +99,6 @@ def project_root_from_spec(spec: Mapping[str, Any]) -> Path:
 
 @dataclass(frozen=True)
 class PresentationAudioArtifacts:
-    audio: Path
     metadata: Path
     timestamps: Mapping[str, Path]
     take_audio: Mapping[str, Path]
@@ -588,7 +587,7 @@ def prepare_narration_audio(
     *,
     force: bool = False,
 ) -> PresentationAudioArtifacts | None:
-    """Generate cached take audio and run-local v2 metadata."""
+    """Generate cached take audio and run-local v3 per-take metadata."""
 
     settings = audio.audio_settings(dict(spec))
     if not settings.enabled or not plan.narration_takes:
@@ -626,14 +625,20 @@ def prepare_narration_audio(
     )
     output_dir = run_paths(run_dir)["audio"]
     output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    output_path = output_dir / f"audio.{settings.format}"
-    audio.publish_audio(audio_items, output_path)
     timestamps_dir = output_dir / "timestamps"
     timestamps_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     take_durations: dict[str, int] = {}
+    take_audio_paths: dict[str, str] = {}
+    take_audio_sha256: dict[str, str] = {}
     timestamp_paths: dict[str, str] = {}
     timestamp_files: dict[str, Path] = {}
     for take_item, audio_item in zip(take_items, audio_items, strict=True):
+        content_sha256 = hashlib.sha256(audio_item.output_path.read_bytes()).hexdigest()
+        safe_id = audio.narration_take_filename_id(take_item.take.id)
+        take_audio_paths[take_item.take.id] = (
+            f"audio/{safe_id}-{content_sha256}.{settings.format}"
+        )
+        take_audio_sha256[take_item.take.id] = content_sha256
         duration_ms = round(audio.audio_duration_seconds(audio_item.output_path) * 1000)
         raw = json.loads(
             audio.timeline_path_for(audio_item).read_text(encoding="utf-8")
@@ -658,9 +663,10 @@ def prepare_narration_audio(
         timestamp_files[take_item.take.id] = timestamp_path
         audio.write_narration_take_index(take_item)
     metadata_path = output_dir / "audio.json"
-    metadata = audio.narration_audio_metadata_v2_payload(
+    metadata = audio.narration_audio_metadata_v3_payload(
         plan,
-        audio_path=output_path.name,
+        take_audio_paths=take_audio_paths,
+        take_audio_sha256=take_audio_sha256,
         take_durations_ms=take_durations,
         timestamp_paths=timestamp_paths,
     )
@@ -668,7 +674,6 @@ def prepare_narration_audio(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return PresentationAudioArtifacts(
-        audio=output_path,
         metadata=metadata_path,
         timestamps=timestamp_files,
         take_audio={
@@ -989,15 +994,20 @@ def compile_presentation_bundle(
 
         manifest_audio = None
         if audio_artifacts is not None:
-            audio_target = staging / audio_artifacts.audio.name
-            shutil.copy2(audio_artifacts.audio, audio_target)
             metadata_target = staging / "audio.json"
             shutil.copy2(audio_artifacts.metadata, metadata_target)
+            metadata = json.loads(audio_artifacts.metadata.read_text(encoding="utf-8"))
+            take_sources = {
+                take["id"]: take["src"] for take in metadata["takes"]
+            }
+            for take_id, source in audio_artifacts.take_audio.items():
+                audio_target = staging / take_sources[take_id]
+                audio_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, audio_target)
             (staging / "timestamps").mkdir()
             for path in audio_artifacts.timestamps.values():
                 shutil.copy2(path, staging / "timestamps" / path.name)
             manifest_audio = PresentationAudioV1(
-                src=audio_target.name,
                 metadata=metadata_target.name,
                 intervals=list(timing.audio_intervals),
             )

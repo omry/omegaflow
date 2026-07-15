@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 from omegaflow.audio import (
     AudioError,
     AudioSettings,
-    narration_audio_metadata_v2_payload,
+    narration_audio_metadata_v3_payload,
     narration_take_cache_key,
     narration_take_review_warning,
     narration_timestamp_sidecar_payload,
@@ -18,6 +18,10 @@ from omegaflow.audio import (
 from omegaflow.presentation_schema import BrowserPayloadV1, PresentationManifestV1
 from omegaflow.recording_plan import (
     BrowserActionPlan,
+    NarrationTakeAnchorPlan,
+    NarrationTakeMemberPlan,
+    NarrationTakePlan,
+    NarrationTakeWaitPlan,
     RecordingPlanError,
     normalize_recording_plan,
     validate_recording_modalities,
@@ -426,7 +430,7 @@ def test_take_cache_key_and_non_blocking_reorder_warning(tmp_path: Path) -> None
     }
 
 
-def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
+def test_timestamp_sidecar_and_per_take_audio_metadata_v3() -> None:
     spec = terminal_spec()
     spec["beats"] = [
         {
@@ -471,9 +475,10 @@ def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
             },
         ],
     )
-    metadata = narration_audio_metadata_v2_payload(
+    metadata = narration_audio_metadata_v3_payload(
         plan,
-        audio_path="audio.mp3",
+        take_audio_paths={"joined": "audio/joined-" + ("a" * 64) + ".mp3"},
+        take_audio_sha256={"joined": "a" * 64},
         take_durations_ms={"joined": 1500},
         timestamp_paths={"joined": "timestamps/joined.json"},
     )
@@ -482,9 +487,207 @@ def test_timestamp_sidecar_and_audio_metadata_v2() -> None:
     assert sidecar["members"][0]["source_start_ms"] == 0
     assert sidecar["members"][1]["source_start_ms"] == 950
     assert sidecar["members"][1]["source_end_ms"] == 1500
-    assert metadata["version"] == 2
+    assert metadata["version"] == 3
     assert metadata["duration_ms"] == 1500
+    assert metadata["takes"][0]["sha256"] == "a" * 64
     assert metadata["takes"][0]["members"][1]["beat_id"] == "two"
+
+
+@pytest.mark.parametrize(
+    ("synthesis_text", "wait_offset", "next_text_start"),
+    [
+        ("workspace. The", 10, 11),
+        ("workspace The", 9, 10),
+        ("workspace.   The", 10, 13),
+        ("workspace.\n\nThe", 10, 12),
+        ("workspace.   The", 12, 13),
+    ],
+)
+def test_timestamp_sidecar_places_wait_inside_inter_word_silence(
+    synthesis_text: str,
+    wait_offset: int,
+    next_text_start: int,
+) -> None:
+    take = NarrationTakePlan(
+        id="take",
+        explicit=True,
+        members=(
+            NarrationTakeMemberPlan(
+                beat_id="beat",
+                text=synthesis_text,
+                text_start=0,
+                text_end=len(synthesis_text),
+            ),
+        ),
+        synthesis_text=synthesis_text,
+        anchors=(
+            NarrationTakeAnchorPlan(
+                beat_id="beat", id="anchor", text_offset=wait_offset
+            ),
+        ),
+        waits=(
+            NarrationTakeWaitPlan(
+                beat_id="beat",
+                target="command",
+                text_offset=wait_offset,
+                gap_ms=200,
+            ),
+        ),
+    )
+    first_text_end = next(
+        (index for index, character in enumerate(synthesis_text) if character.isspace()),
+        len(synthesis_text),
+    )
+    first_text = synthesis_text[:first_text_end]
+    words = [
+        {
+            "text": first_text,
+            "text_start": 0,
+            "text_end": len(first_text),
+            "start_ms": 100,
+            "end_ms": 500,
+        },
+        {
+            "text": "The",
+            "text_start": next_text_start,
+            "text_end": next_text_start + 3,
+            "start_ms": 900,
+            "end_ms": 1100,
+        },
+    ]
+
+    sidecar = narration_timestamp_sidecar_payload(
+        take, duration_ms=1200, words=words
+    )
+
+    assert sidecar["waits"][0]["source_ms"] == 700
+    expected_anchor_ms = 500 if wait_offset == len(first_text) else 900
+    assert sidecar["anchors"][0]["source_ms"] == expected_anchor_ms
+
+
+def test_timestamp_sidecar_places_final_wait_at_take_duration() -> None:
+    take = NarrationTakePlan(
+        id="take",
+        explicit=True,
+        members=(
+            NarrationTakeMemberPlan(
+                beat_id="beat", text="Done.", text_start=0, text_end=5
+            ),
+        ),
+        synthesis_text="Done.",
+        anchors=(),
+        waits=(
+            NarrationTakeWaitPlan(
+                beat_id="beat", target="command", text_offset=5, gap_ms=200
+            ),
+        ),
+    )
+
+    sidecar = narration_timestamp_sidecar_payload(
+        take,
+        duration_ms=900,
+        words=[
+            {
+                "text": "Done.",
+                "text_start": 0,
+                "text_end": 5,
+                "start_ms": 100,
+                "end_ms": 500,
+            }
+        ],
+    )
+
+    assert sidecar["waits"][0]["source_ms"] == 900
+
+
+@pytest.mark.parametrize(
+    ("synthesis_text", "wait_offset", "word_text_start"),
+    [
+        ("Hello", 0, 0),
+        ("  Hello", 0, 2),
+        ("  Hello", 1, 2),
+        ("  Hello", 2, 2),
+    ],
+)
+def test_timestamp_sidecar_places_leading_wait_before_first_word(
+    synthesis_text: str,
+    wait_offset: int,
+    word_text_start: int,
+) -> None:
+    take = NarrationTakePlan(
+        id="take",
+        explicit=True,
+        members=(
+            NarrationTakeMemberPlan(
+                beat_id="beat",
+                text=synthesis_text,
+                text_start=0,
+                text_end=len(synthesis_text),
+            ),
+        ),
+        synthesis_text=synthesis_text,
+        anchors=(),
+        waits=(
+            NarrationTakeWaitPlan(
+                beat_id="beat",
+                target="command",
+                text_offset=wait_offset,
+                gap_ms=200,
+            ),
+        ),
+    )
+
+    sidecar = narration_timestamp_sidecar_payload(
+        take,
+        duration_ms=800,
+        words=[
+            {
+                "text": "Hello",
+                "text_start": word_text_start,
+                "text_end": word_text_start + 5,
+                "start_ms": 120,
+                "end_ms": 620,
+            }
+        ],
+    )
+
+    assert sidecar["waits"][0]["source_ms"] == 0
+
+
+def test_timestamp_sidecar_does_not_snap_markers_inside_a_word() -> None:
+    take = NarrationTakePlan(
+        id="take",
+        explicit=True,
+        members=(
+            NarrationTakeMemberPlan(
+                beat_id="beat", text="workspace", text_start=0, text_end=9
+            ),
+        ),
+        synthesis_text="workspace",
+        anchors=(NarrationTakeAnchorPlan(beat_id="beat", id="anchor", text_offset=4),),
+        waits=(
+            NarrationTakeWaitPlan(
+                beat_id="beat", target="command", text_offset=4, gap_ms=200
+            ),
+        ),
+    )
+
+    sidecar = narration_timestamp_sidecar_payload(
+        take,
+        duration_ms=1000,
+        words=[
+            {
+                "text": "workspace",
+                "text_start": 0,
+                "text_end": 9,
+                "start_ms": 100,
+                "end_ms": 900,
+            }
+        ],
+    )
+
+    assert sidecar["anchors"][0]["source_ms"] == 456
+    assert sidecar["waits"][0]["source_ms"] == 456
 
 
 def test_timestamp_sidecar_rejects_text_mismatch() -> None:
@@ -540,9 +743,12 @@ def test_audio_metadata_rejects_coerced_duration_types(duration: object) -> None
     plan = normalize_recording_plan(terminal_spec())
 
     with pytest.raises(AudioError, match="must be an integer"):
-        narration_audio_metadata_v2_payload(
+        narration_audio_metadata_v3_payload(
             plan,
-            audio_path="audio.mp3",
+            take_audio_paths={
+                plan.narration_takes[0].id: "audio/terminal-" + ("a" * 64) + ".mp3"
+            },
+            take_audio_sha256={plan.narration_takes[0].id: "a" * 64},
             take_durations_ms={plan.narration_takes[0].id: duration},
             timestamp_paths={plan.narration_takes[0].id: "timestamps/terminal.json"},
         )

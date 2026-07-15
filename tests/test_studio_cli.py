@@ -1465,7 +1465,12 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
     assert browser_beat["narration_take"] == "build-and-browser"
     assert browser_beat["narration"].startswith(
-        "OmegaFlow controls the browser during the recording"
+        "OmegaFlow can script and record browser workflows just as it does "
+        "terminal workflows"
+    )
+    assert (
+        "this script @open_player@ opens a browser window"
+        in browser_beat["narration"]
     )
     assert browser_beat["narration"].index("A single OmegaFlow video") < (
         browser_beat["narration"].index("@wait:wait_for_playback")

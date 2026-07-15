@@ -493,6 +493,7 @@ const controller = core.createPresentationAudioController({
 const first = controller.synchronize(300, {playing: true, playbackRate: 1.5, muted: true});
 audio.currentTime = 0.21;
 controller.synchronize(310, {playing: true, playbackRate: 1.5, muted: true});
+audio.currentTime = 0.35;
 const gap = controller.synchronize(600, {playing: true});
 const second = controller.synchronize(1100, {playing: false});
 if (
@@ -504,6 +505,94 @@ if (
   calls.filter((value) => value === 'play').length !== 1
 ) {
   console.error(JSON.stringify({audio, calls, first, gap, second, state: controller.state()}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_presentation_audio_deck_switches_content_addressed_takes() -> None:
+    result = run_core_script(
+        r"""
+function fakeAudio() {
+  const listeners = new Map();
+  return {
+    currentTime: 0,
+    muted: false,
+    paused: true,
+    playbackRate: 1,
+    addEventListener(type, listener) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(listener);
+    },
+    emit(type) { for (const listener of listeners.get(type) || []) listener({type}); },
+    pause() { this.paused = true; },
+    play() { this.paused = false; return Promise.resolve(); },
+  };
+}
+const first = fakeAudio();
+const second = fakeAudio();
+const deck = core.createPresentationAudioDeck([
+  {id: 'first', source_start_ms: 0, source_end_ms: 2000, audio: first},
+  {id: 'second', source_start_ms: 2000, source_end_ms: 3500, audio: second},
+]);
+deck.currentTime = 1.25;
+deck.muted = true;
+deck.playbackRate = 1.5;
+deck.play();
+deck.currentTime = 2.2;
+if (
+  first.currentTime !== 1.25 || !first.paused || second.currentTime !== 0.2 ||
+  deck.currentTime !== 2.2 || deck.duration !== 3.5 || deck.paused ||
+  !first.muted || !second.muted || first.playbackRate !== 1.5 ||
+  second.playbackRate !== 1.5 || deck.state().activeTakeId !== 'second'
+) {
+  console.error(JSON.stringify({first, second, state: deck.state(), time: deck.currentTime}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_presentation_audio_deck_continues_playing_at_take_boundary() -> None:
+    result = run_core_script(
+        r"""
+function fakeAudio() {
+  const listeners = new Map();
+  return {
+    currentTime: 0,
+    paused: true,
+    playCalls: 0,
+    addEventListener(type, listener) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(listener);
+    },
+    emit(type) { for (const listener of listeners.get(type) || []) listener({type}); },
+    pause() { this.paused = true; },
+    play() {
+      this.paused = false;
+      this.playCalls += 1;
+      return Promise.resolve();
+    },
+  };
+}
+const first = fakeAudio();
+const second = fakeAudio();
+const deck = core.createPresentationAudioDeck([
+  {id: 'first', source_start_ms: 0, source_end_ms: 2000, audio: first},
+  {id: 'second', source_start_ms: 2000, source_end_ms: 3500, audio: second},
+]);
+deck.play();
+first.emit('ended');
+if (
+  deck.state().activeTakeId !== 'second' || deck.paused ||
+  second.currentTime !== 0 || second.playCalls !== 1
+) {
+  console.error(JSON.stringify({first, second, state: deck.state()}));
   process.exit(1);
 }
 """
