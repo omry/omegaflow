@@ -88,7 +88,7 @@ audio:
 ```
 
 Enabling narration requires FFmpeg tools and OpenAI API access when generating
-new audio. See [Runtime Dependencies](../runtime-dependencies.md).
+new audio.
 
 ## Recording Frontmatter
 

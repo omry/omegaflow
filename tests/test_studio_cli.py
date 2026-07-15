@@ -7,7 +7,6 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from omegaconf import OmegaConf
@@ -2010,90 +2009,76 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
     }
 
 
-def test_managed_watch_browser_enables_audible_autoplay(monkeypatch) -> None:
+def test_managed_watch_browser_uses_isolated_system_browser(monkeypatch) -> None:
     observed: dict[str, object] = {}
 
     monkeypatch.setattr(studio, "running_under_wsl", lambda: False)
 
-    class FakePage:
-        def goto(self, url, *, wait_until) -> None:
-            observed["goto"] = (url, wait_until)
+    class FakeProcess:
+        def poll(self):
+            return None
 
-        def is_closed(self) -> bool:
-            return False
+        def terminate(self) -> None:
+            observed["terminated"] = True
 
-        def close(self) -> None:
-            observed["page_closed"] = True
+        def wait(self, *, timeout):
+            observed["wait_timeout"] = timeout
+            return 0
 
-    class FakeContext:
-        def __init__(self) -> None:
-            self.page = FakePage()
+    def fake_popen(command, **kwargs):
+        observed["command"] = command
+        observed["popen"] = kwargs
+        return FakeProcess()
 
-        def new_page(self):
-            return self.page
-
-        def close(self) -> None:
-            observed["context_closed"] = True
-
-    class FakeBrowser:
-        def __init__(self) -> None:
-            self.context = FakeContext()
-
-        def new_context(self, **kwargs):
-            observed["context"] = kwargs
-            return self.context
-
-        def is_connected(self) -> bool:
-            return True
-
-        def close(self) -> None:
-            observed["browser_closed"] = True
-
-    class FakeChromium:
-        def __init__(self) -> None:
-            self.browser = FakeBrowser()
-
-        def launch(self, **kwargs):
-            observed["launch"] = kwargs
-            return self.browser
-
-    class FakePlaywright:
-        def __init__(self) -> None:
-            self.chromium = FakeChromium()
-
-        def stop(self) -> None:
-            observed["playwright_stopped"] = True
-
-    fake_playwright = FakePlaywright()
-    sync_api = ModuleType("playwright.sync_api")
-    sync_api.Error = RuntimeError
-    sync_api.sync_playwright = lambda: type(
-        "Starter", (), {"start": lambda _self: fake_playwright}
-    )()
-    playwright = ModuleType("playwright")
-    playwright.sync_api = sync_api
-    monkeypatch.setitem(sys.modules, "playwright", playwright)
-    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
-    monkeypatch.setattr(studio.browser_runtime, "pinned_browser_runtime", lambda: None)
+    monkeypatch.setattr(
+        studio,
+        "native_system_chromium_executable",
+        lambda: Path("/usr/bin/google-chrome"),
+    )
+    monkeypatch.setattr(
+        studio.tempfile,
+        "mkdtemp",
+        lambda *, prefix: f"/tmp/{prefix}abc123",
+    )
+    monkeypatch.setattr(studio.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        studio,
+        "remove_native_watch_profile",
+        lambda path: observed.setdefault("removed_profile", path),
+    )
 
     session = studio.launch_managed_watch_browser("http://127.0.0.1:1234/player")
 
-    assert observed["launch"] == {
-        "headless": False,
-        "args": ["--autoplay-policy=no-user-gesture-required"],
-        "ignore_default_args": ["--mute-audio"],
-    }
-    assert observed["context"] == {"no_viewport": True}
-    assert observed["goto"] == (
+    assert observed["command"] == [
+        "/usr/bin/google-chrome",
+        "--user-data-dir=/tmp/omegaflow-watch-abc123",
+        "--autoplay-policy=no-user-gesture-required",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-background-mode",
+        "--new-window",
         "http://127.0.0.1:1234/player",
-        "domcontentloaded",
-    )
+    ]
+    assert observed["popen"] == {
+        "stdout": studio.subprocess.DEVNULL,
+        "stderr": studio.subprocess.DEVNULL,
+    }
     assert session.is_open()
     session.close()
-    assert observed["page_closed"] is True
-    assert observed["context_closed"] is True
-    assert observed["browser_closed"] is True
-    assert observed["playwright_stopped"] is True
+    assert observed["terminated"] is True
+    assert observed["wait_timeout"] == 5
+    assert observed["removed_profile"] == "/tmp/omegaflow-watch-abc123"
+
+
+def test_managed_watch_browser_reports_missing_system_browser(monkeypatch) -> None:
+    monkeypatch.setattr(studio, "running_under_wsl", lambda: False)
+    monkeypatch.setattr(studio, "native_system_chromium_executable", lambda: None)
+
+    with pytest.raises(
+        studio.StudioError,
+        match="installed system Chrome, Chromium, Edge, or Brave",
+    ):
+        studio.launch_managed_watch_browser("http://127.0.0.1:1234/player")
 
 
 def test_managed_watch_browser_uses_isolated_windows_chrome_under_wsl(
@@ -2233,7 +2218,7 @@ def test_managed_watch_server_stops_when_browser_closes(monkeypatch, capsys) -> 
         "browser_closed": True,
         "shutdown": True,
     }
-    assert "opened isolated watch browser" in output
+    assert "opened isolated system browser" in output
     assert "stopped local watch server" in output
 
 

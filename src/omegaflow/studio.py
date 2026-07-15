@@ -14,6 +14,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -28,7 +29,6 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 from . import audio
-from . import browser_runtime
 from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
@@ -1401,47 +1401,17 @@ def open_watch_url(url: str) -> bool:
     return webbrowser.open(url)
 
 
-class ManagedWatchBrowser:
+class ManagedSystemBrowser:
     def __init__(
         self,
         *,
-        playwright: Any,
-        browser: Any,
-        browser_context: Any,
-        page: Any,
+        process: Any,
+        profile_path: str,
+        remove_profile: Callable[[str], None],
     ) -> None:
-        self.playwright = playwright
-        self.browser = browser
-        self.browser_context = browser_context
-        self.page = page
-
-    def is_open(self) -> bool:
-        return bool(self.browser.is_connected() and not self.page.is_closed())
-
-    def close(self) -> None:
-        resources = (
-            ("page", self.page),
-            ("context", self.browser_context),
-            ("browser", self.browser),
-            ("playwright", self.playwright),
-        )
-        self.page = None
-        self.browser_context = None
-        self.browser = None
-        self.playwright = None
-        for name, resource in resources:
-            if resource is None:
-                continue
-            try:
-                resource.stop() if name == "playwright" else resource.close()
-            except BaseException:
-                pass
-
-
-class ManagedWslHostBrowser:
-    def __init__(self, *, process: Any, profile_path: str) -> None:
         self.process = process
         self.profile_path = profile_path
+        self.remove_profile = remove_profile
 
     def is_open(self) -> bool:
         return bool(self.process is not None and self.process.poll() is None)
@@ -1449,8 +1419,10 @@ class ManagedWslHostBrowser:
     def close(self) -> None:
         process = self.process
         profile_path = self.profile_path
+        remove_profile = self.remove_profile
         self.process = None
         self.profile_path = ""
+        self.remove_profile = lambda _path: None
         if process is not None and process.poll() is None:
             try:
                 process.terminate()
@@ -1461,7 +1433,61 @@ class ManagedWslHostBrowser:
             except OSError:
                 pass
         if profile_path:
-            remove_windows_watch_profile(profile_path)
+            remove_profile(profile_path)
+
+
+def native_system_chromium_executable() -> Path | None:
+    configured = os.environ.get("BROWSER")
+    if configured:
+        first_entry = configured.split(os.pathsep, 1)[0].strip()
+        try:
+            command = shlex.split(first_entry)[0]
+        except (IndexError, ValueError):
+            command = ""
+        if command:
+            configured_path = Path(command).expanduser()
+            resolved = None
+            if configured_path.is_file():
+                resolved = configured_path
+            elif found := shutil.which(command):
+                resolved = Path(found)
+            if resolved is not None and any(
+                name in resolved.name.lower()
+                for name in ("chrome", "chromium", "edge", "brave")
+            ):
+                return resolved
+
+    command_names = (
+        "google-chrome-stable",
+        "google-chrome",
+        "chromium",
+        "chromium-browser",
+        "microsoft-edge-stable",
+        "microsoft-edge",
+        "brave-browser-stable",
+        "brave-browser",
+    )
+    for command in command_names:
+        if executable := shutil.which(command):
+            return Path(executable)
+
+    if sys.platform == "darwin":
+        home = Path.home()
+        candidates = (
+            Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+            Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+            Path("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+            home
+            / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            home
+            / "Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            home / "Applications/Chromium.app/Contents/MacOS/Chromium",
+            home
+            / "Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        )
+        return next((candidate for candidate in candidates if candidate.is_file()), None)
+    return None
 
 
 def wsl_host_chromium_executable() -> Path | None:
@@ -1519,7 +1545,7 @@ def remove_windows_watch_profile(profile_path: str) -> None:
         pass
 
 
-def launch_managed_wsl_host_browser(url: str) -> ManagedWslHostBrowser:
+def launch_managed_wsl_host_browser(url: str) -> ManagedSystemBrowser:
     executable = wsl_host_chromium_executable()
     if executable is None:
         raise StudioError(
@@ -1547,62 +1573,55 @@ def launch_managed_wsl_host_browser(url: str) -> ManagedWslHostBrowser:
     except OSError as exc:
         remove_windows_watch_profile(profile_path)
         raise StudioError(f"could not open Windows watch browser: {exc}") from exc
-    return ManagedWslHostBrowser(process=process, profile_path=profile_path)
+    return ManagedSystemBrowser(
+        process=process,
+        profile_path=profile_path,
+        remove_profile=remove_windows_watch_profile,
+    )
+
+
+def remove_native_watch_profile(profile_path: str) -> None:
+    shutil.rmtree(profile_path, ignore_errors=True)
+
+
+def launch_managed_native_browser(url: str) -> ManagedSystemBrowser:
+    executable = native_system_chromium_executable()
+    if executable is None:
+        raise StudioError(
+            "watch requires an installed system Chrome, Chromium, Edge, or Brave browser"
+        )
+    profile_path = tempfile.mkdtemp(prefix="omegaflow-watch-")
+    try:
+        process = subprocess.Popen(
+            [
+                str(executable),
+                f"--user-data-dir={profile_path}",
+                "--autoplay-policy=no-user-gesture-required",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-mode",
+                "--new-window",
+                url,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        remove_native_watch_profile(profile_path)
+        raise StudioError(f"could not open system watch browser: {exc}") from exc
+    return ManagedSystemBrowser(
+        process=process,
+        profile_path=profile_path,
+        remove_profile=remove_native_watch_profile,
+    )
 
 
 def launch_managed_watch_browser(
     url: str,
-) -> ManagedWatchBrowser | ManagedWslHostBrowser:
+) -> ManagedSystemBrowser:
     if running_under_wsl():
         return launch_managed_wsl_host_browser(url)
-    try:
-        browser_runtime.pinned_browser_runtime()
-    except browser_runtime.BrowserRuntimeError as exc:
-        raise StudioError(str(exc)) from exc
-    try:
-        from playwright.sync_api import Error as PlaywrightError
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:
-        raise StudioError(
-            "watch requires the browser extra; install OmegaFlow with "
-            "`pip install 'omegaflow[browser]'`"
-        ) from exc
-
-    playwright = None
-    browser = None
-    browser_context = None
-    page = None
-    try:
-        playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(
-            headless=False,
-            args=["--autoplay-policy=no-user-gesture-required"],
-            ignore_default_args=["--mute-audio"],
-        )
-        browser_context = browser.new_context(no_viewport=True)
-        page = browser_context.new_page()
-        page.goto(url, wait_until="domcontentloaded")
-        return ManagedWatchBrowser(
-            playwright=playwright,
-            browser=browser,
-            browser_context=browser_context,
-            page=page,
-        )
-    except BaseException as exc:
-        ManagedWatchBrowser(
-            playwright=playwright,
-            browser=browser,
-            browser_context=browser_context,
-            page=page,
-        ).close()
-        if not isinstance(exc, Exception):
-            raise
-        message = (
-            browser_runtime.actionable_playwright_error(str(exc))
-            if isinstance(exc, PlaywrightError)
-            else str(exc)
-        )
-        raise StudioError(f"could not open managed watch browser: {message}") from exc
+    return launch_managed_native_browser(url)
 
 
 def run_watch_server(
@@ -1635,7 +1654,7 @@ def run_watch_server(
                 browser_session = launch_managed_watch_browser(url)
                 if text_output_enabled(cfg):
                     info_line(
-                        "opened isolated watch browser; close it or press Ctrl-C to stop"
+                        "opened isolated system browser; close it or press Ctrl-C to stop"
                     )
                 while browser_session.is_open():
                     time.sleep(0.2)
