@@ -28,7 +28,28 @@ server, client, plugin, deployment, and product-security work.
 
 No active release blockers.
 
+## Release backlog
+
+- [ ] `P1` Show useful progress throughout video builds.
+      Long-running builds should not appear stalled while OmegaFlow records the
+      workflow, generates narration audio and timestamps, or performs other
+      expensive processing. Acceptance checks: show clear progress for the
+      recording and audio phases; fold any other meaningfully slow build phases
+      into the same progress experience; report the current operation and
+      determinate totals when they are known; preserve readable non-interactive
+      logs; avoid long silent periods; and add coverage for successful, cached,
+      forced, and failed builds.
+
 ## Post-release
+
+- [ ] `P2` Support narration-synchronized text highlighting in terminal beats.
+      Recording authors should be able to emphasize existing terminal text at
+      a narration cue so the viewer can follow the exact output being
+      discussed. Acceptance checks: declare the target text and timing from the
+      recording script; show and clear the highlight without changing terminal
+      output; keep highlighting deterministic across playback, seeking, and
+      replay; report missing or ambiguous targets clearly; and add player and
+      synchronization tests.
 
 - [ ] `P2` Add scripted interactive terminal capture for TUI sessions.
       OmegaFlow should be able to record a real interactive terminal program,
