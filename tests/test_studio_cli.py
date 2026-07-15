@@ -64,7 +64,7 @@ def load_hatch_build_module():
 
 
 def test_version_is_available() -> None:
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.9.0"
 
 
 def test_command_output_replace_selects_replacement_mode() -> None:

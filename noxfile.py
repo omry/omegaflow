@@ -36,6 +36,7 @@ def ci(session: nox.Session) -> None:
         "website/scripts/update_recording_schema_docs.py",
         "--check",
     )
+    validate_release_notes(session)
 
 
 @nox.session(venv_backend="none")
@@ -45,6 +46,12 @@ def schema_docs(session: nox.Session) -> None:
         "website/scripts/update_recording_schema_docs.py",
         "--check",
     )
+
+
+@nox.session(venv_backend="none")
+def release_notes(session: nox.Session) -> None:
+    version = session.posargs[0] if session.posargs else None
+    validate_release_notes(session, version=version)
 
 
 @nox.session(venv_backend="none")
@@ -85,6 +92,23 @@ def website(session: nox.Session) -> None:
 def clean_vendored_recorder() -> None:
     for path in VENDORED_RECORDER_PATHS:
         path.unlink(missing_ok=True)
+
+
+def validate_release_notes(
+    session: nox.Session,
+    *,
+    version: str | None = None,
+) -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    session.run(
+        sys.executable,
+        "-m",
+        "towncrier",
+        "build",
+        "--draft",
+        "--version",
+        version or pyproject["project"]["version"],
+    )
 
 
 def verify_release_artifacts() -> None:
