@@ -26,16 +26,9 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-- [ ] `P1` Add Towncrier release notes and GitHub Releases to publishing.
-      PyPI publishing should produce a proper release artifact, not just upload
-      package files. Acceptance checks: add Towncrier fragments and a generated
-      changelog/release-notes workflow; require release notes for user-facing
-      changes before publishing; teach the publish workflow to create or update
-      a GitHub Release for the published version; attach or link the built
-      distributions where appropriate; avoid double-publishing PyPI files when a
-      tag or manual dispatch is repeated; and document the release procedure.
+No active release blockers.
 
-## Release backlog
+## Post-release
 
 - [ ] `P2` Add scripted interactive terminal capture for TUI sessions.
       OmegaFlow should be able to record a real interactive terminal program,
@@ -63,24 +56,6 @@ server, client, plugin, deployment, and product-security work.
       terminal, and browser presentation surfaces; update the homepage combined
       demo to use different outer and recorded-player themes; add configuration
       and rendering tests; and manually verify contrast and readability.
-
-- [x] `P2` Evaluate browser recording support with Playwright.
-      OmegaFlow may eventually support browser demos alongside terminal demos.
-      The design should preserve the core value of generated narration,
-      synchronization markers, and rebuildable scripts. Acceptance checks:
-      evaluate whether Playwright's video, trace, screenshots, or a custom
-      event timeline is the right capture layer; sketch a browser-action schema
-      for navigation, clicks, typing, keyboard shortcuts, waits, and assertions;
-      define how narration anchors and waits synchronize with browser actions;
-      explore realistic mouse movement and keyboard pacing instead of terminal
-      typing animation; identify requirements for deterministic viewport,
-      network, assets, auth, and secrets handling; and recommend whether this
-      should share the existing player/publish surfaces or use a dedicated
-      browser-demo rendering path.
-      Implemented as a semantic mixed-modality timeline with Playwright
-      capture, beat-local terminal/browser payloads, a shared player shell,
-      dedicated renderers, and closed atomic presentation bundles. Physical
-      iOS/Android device validation remains a later release-stage gate.
 
 - [ ] `P2` Add support for selecting a thumbnail frame.
       Published videos need a stable preview image for docs, GitHub fallbacks,
@@ -142,8 +117,6 @@ server, client, plugin, deployment, and product-security work.
       once the player already has focus; add tests for the supported case; and
       defer explicitly if the behavior is too browser-dependent to make robust.
 
-## Post-release
-
 - [ ] Explore Reploy-backed recording and processing environments without
       replacing local mode. Reploy could provide two complementary isolation
       layers: a reusable processing environment containing OmegaFlow,
@@ -183,6 +156,18 @@ server, client, plugin, deployment, and product-security work.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Add Towncrier release notes and GitHub Releases to publishing.
+      Completed: `2026-07-15`. Added generated and validated release notes,
+      duplicate-publication protection, exact version/tag checks, trusted PyPI
+      publishing, GitHub Release creation with the built distributions, and a
+      maintainer release procedure.
+
+- [x] `P2` Evaluate browser recording support with Playwright.
+      Completed: `2026-07-15`. Implemented semantic browser capture with
+      deterministic actions, narration synchronization, mixed terminal/browser
+      playback, dedicated rendering, and closed presentation bundles. Physical
+      iOS/Android validation remains deferred.
 
 - [x] `P1` Update bootstrap quickstart so it does not create `hello.sh`.
       Completed: `2026-07-15`. Replaced the generated support script with a
