@@ -8,7 +8,7 @@ import tomllib
 import nox
 
 
-nox.options.sessions = ["tests", "schema_docs", "package"]
+nox.options.sessions = ["ci"]
 
 RELEASE_PLATFORMS = (
     "linux-x86_64",
@@ -25,6 +25,17 @@ VENDORED_RECORDER_PATHS = (
 @nox.session(venv_backend="none")
 def tests(session: nox.Session) -> None:
     session.run(sys.executable, "-m", "pytest", *session.posargs)
+
+
+@nox.session(venv_backend="none")
+def ci(session: nox.Session) -> None:
+    """Run the repository checks required by the Python CI job."""
+    session.run(sys.executable, "-m", "pytest", *session.posargs)
+    session.run(
+        sys.executable,
+        "website/scripts/update_recording_schema_docs.py",
+        "--check",
+    )
 
 
 @nox.session(venv_backend="none")

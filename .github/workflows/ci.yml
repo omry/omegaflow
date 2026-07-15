@@ -25,13 +25,18 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install package and test dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,browser]"
 
-      - name: Run tests
-        run: pytest
+      - name: Install Chromium and browser system dependencies
+        run: python -m playwright install --with-deps chromium
 
-      - name: Check generated schema docs
-        run: python website/scripts/update_recording_schema_docs.py --check
+      - name: Install browser media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+
+      - name: Run canonical CI checks
+        run: nox -s ci
 
       - name: Summary
         if: always()
@@ -39,9 +44,9 @@ jobs:
           {
             echo "## Python tests"
             echo ""
-            echo "- Installed package with dev dependencies."
-            echo "- Ran \`pytest\`."
-            echo "- Checked generated recording schema docs."
+            echo "- Installed the package with dev and browser dependencies."
+            echo "- Installed pinned Chromium, FFmpeg, and FFprobe."
+            echo "- Ran \`nox -s ci\` (tests and generated schema docs)."
             echo "- Job status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -127,7 +132,9 @@ jobs:
           cd "$project"
           omegaflow action=bootstrap
           omegaflow recording=quickstart action=build force=true
-          test -s recordings/.omegaflow/videos/quickstart/recording.retimed.cast
+          test -s recordings/.omegaflow/videos/quickstart/presentation/recording.presentation.json
+          test -s recordings/.omegaflow/videos/quickstart/presentation/recording.recording.json
+          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/show-message.cast
           test -s recordings/.omegaflow/videos/quickstart/index.html
 
       - name: Upload recording artifacts
