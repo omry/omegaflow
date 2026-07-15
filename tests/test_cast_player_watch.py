@@ -34,6 +34,40 @@ def test_player_uses_night_studio_brand_without_replacing_ansi_colors() -> None:
     assert ".ansi-white { color: var(--ansi-white); }" in html
 
 
+def test_browser_pointer_uses_an_upright_cursor_silhouette() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "polygon(0 0, 0 20px" in html
+    assert "border-top: 16px solid #fff" not in html
+
+
+def test_browser_window_uses_a_contrasting_desktop_surface() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "radial-gradient(circle at 50% 35%, #34405a" in html
+    assert "align-items: center" in html
+    assert "justify-content: center" in html
+
+
+def test_embedded_player_preserves_browser_stage_ratio() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "playerRoot.dataset.embedded = String(params.get('embed') === '1')" in html
+    )
+    assert "playerRoot.dataset.layout = params.get('layout') || ''" in html
+    assert '.player[data-layout="wide-browser"]' in html
+    assert 'grid-template-rows: max(60px, 16%) 1fr max(80px, 20.4%);' in html
+    assert '.player[data-embedded="true"] .status' in html
+    assert '.player[data-embedded="true"] .progress-wrap' in html
+
+
 def test_player_links_logo_in_a_separate_top_bar_column() -> None:
     html = (
         REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
@@ -64,6 +98,7 @@ const documentListeners = new Map();
 
 function element(id) {
   if (!elements.has(id)) {
+    const listeners = new Map();
     const item = {
       id,
       children: [],
@@ -104,7 +139,16 @@ function element(id) {
         add() {},
         remove() {},
       },
-      addEventListener() {},
+      addEventListener(type, listener) {
+        const handlers = listeners.get(type) || [];
+        handlers.push(listener);
+        listeners.set(type, handlers);
+      },
+      dispatchEvent(event) {
+        for (const listener of listeners.get(event.type) || []) {
+          listener(event);
+        }
+      },
       setAttribute() {},
       removeAttribute() {},
       getBoundingClientRect() {
@@ -220,6 +264,92 @@ if (!vm.runInContext('playing', context) || !flash.innerHTML.includes('<svg')) {
     playing: vm.runInContext('playing', context),
     html: flash.innerHTML,
   }));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_scrubbing_cancels_watch_autoplay_countdown() -> None:
+    result = run_player_script(
+        r"""
+const countdownTimers = [];
+const clearedTimers = [];
+context.setTimeout = (callback, delay) => {
+  const timer = {callback, delay};
+  countdownTimers.push(timer);
+  return timer;
+};
+context.clearTimeout = (timer) => { clearedTimers.push(timer); };
+vm.runInContext(`
+totalSeconds = 10;
+startAutoplayCountdown();
+beginScrub();
+if (
+  autoplayCountdownActive || autoplayCountdownTimers.length !== 0 ||
+  !scrubbing || playing
+) {
+  console.error(JSON.stringify({
+    autoplayCountdownActive,
+    timerCount: autoplayCountdownTimers.length,
+    scrubbing,
+    playing,
+  }));
+  process.exit(1);
+}
+`, context);
+if (clearedTimers.length !== 3) {
+  console.error(JSON.stringify({cleared: clearedTimers.length}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_keyboard_seek_cancels_watch_autoplay_countdown() -> None:
+    result = run_player_script(
+        r"""
+const countdownTimers = [];
+const clearedTimers = [];
+context.setTimeout = (callback, delay) => {
+  const timer = {callback, delay};
+  countdownTimers.push(timer);
+  return timer;
+};
+context.clearTimeout = (timer) => { clearedTimers.push(timer); };
+vm.runInContext(`
+totalSeconds = 20;
+events = [{time: 20, data: 'done'}];
+startAutoplayCountdown();
+progress.dispatchEvent({
+  type: 'keydown',
+  key: 'ArrowRight',
+  target: progress,
+  defaultPrevented: false,
+  altKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  shiftKey: false,
+  preventDefault() { this.defaultPrevented = true; },
+});
+if (
+  autoplayCountdownActive || autoplayCountdownTimers.length !== 0 ||
+  currentSeconds !== 10
+) {
+  console.error(JSON.stringify({
+    autoplayCountdownActive,
+    timerCount: autoplayCountdownTimers.length,
+    currentSeconds,
+  }));
+  process.exit(1);
+}
+`, context);
+if (clearedTimers.length !== 3) {
+  console.error(JSON.stringify({cleared: clearedTimers.length}));
   process.exit(1);
 }
 """
@@ -592,6 +722,50 @@ if (
   audio.playbackRate !== 1.5 || rateButton.textContent !== '1.5×'
 ) {
   console.error(JSON.stringify({playbackRate, shellRate, audioRate: audio.playbackRate, label: rateButton.textContent}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_suppresses_context_menu_and_right_click_decreases_rate() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+let prevented = 0;
+rateButton.dispatchEvent({type: 'click', target: rateButton});
+if (playbackRate !== 1.25) {
+  console.error(JSON.stringify({phase: 'left', playbackRate}));
+  process.exit(1);
+}
+playerRoot.dispatchEvent({
+  type: 'contextmenu',
+  target: rateButton,
+  preventDefault() { prevented += 1; },
+});
+if (playbackRate !== 1 || prevented !== 1) {
+  console.error(JSON.stringify({phase: 'rate-context', playbackRate, prevented}));
+  process.exit(1);
+}
+playerRoot.dispatchEvent({
+  type: 'contextmenu',
+  target: terminal,
+  preventDefault() { prevented += 1; },
+});
+if (playbackRate !== 1 || prevented !== 2) {
+  console.error(JSON.stringify({phase: 'player-context', playbackRate, prevented}));
+  process.exit(1);
+}
+if (!rateButton.title.includes('right-click previous')) {
+  console.error(JSON.stringify({phase: 'title', title: rateButton.title}));
+  process.exit(1);
+}
+cyclePlaybackRate(-1);
+if (playbackRate !== 2) {
+  console.error(JSON.stringify({phase: 'reverse-wrap', playbackRate}));
   process.exit(1);
 }
 `, context);

@@ -1,5 +1,6 @@
-import json
 import importlib.util
+import io
+import json
 import os
 import subprocess
 import sys
@@ -1443,6 +1444,10 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         / "quickstart-demo"
         / "index.md"
     ).read_text(encoding="utf-8")
+    spec = recording_from_script(
+        "quickstart-demo",
+        recording_dir=Path(__file__).resolve().parents[1] / "recordings",
+    )
     beats = [
         block["beat"]
         for block in studio_directive_blocks(source)
@@ -1459,7 +1464,9 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     )
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
     assert browser_beat["narration_take"] == "build-and-browser"
-    assert list(actions) == ["open_player", "play"]
+    assert spec["browser"]["viewport"]["width"] == 1152
+    assert spec["browser"]["viewport"]["height"] == 360
+    assert list(actions) == ["open_player", "play", "wait_for_playback"]
     assert "transition" not in actions["play"]
 
     generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
@@ -1715,9 +1722,22 @@ def test_success_followups_show_user_facing_actions(capsys) -> None:
     studio.print_success_followups(cfg)
 
     output = capsys.readouterr().out
-    assert "omegaflow recording=quickstart-demo action=play" in output
+    assert "next follow-up command" in output
+    assert "action=play" not in output
     assert "omegaflow recording=quickstart-demo action=watch" in output
     assert "action=inspect" not in output
+
+
+def test_play_is_not_a_public_action() -> None:
+    assert "play" not in studio.PUBLIC_ACTIONS
+
+    with pytest.raises(studio.StudioError, match="unknown action: play") as exc_info:
+        studio.validate_action("play")
+
+    help_line = str(exc_info.value).splitlines()[1]
+    assert help_line.startswith("user-facing actions:")
+    assert "play" not in help_line
+    assert "watch" in help_line
 
 
 def minimal_recording_spec(run_dir, *, data_dir: Path | None = None) -> dict[str, object]:
@@ -1913,6 +1933,38 @@ def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> No
         "beats/terminal.cast": beat.resolve(),
         "recording.presentation.json": manifest.resolve(),
     }
+
+
+@pytest.mark.parametrize("error_type", [BrokenPipeError, ConnectionResetError])
+@pytest.mark.parametrize("byte_range", [None, (0, 3)])
+def test_watch_copyfile_ignores_disconnected_client(
+    error_type: type[OSError],
+    byte_range: tuple[int, int] | None,
+) -> None:
+    handler = studio.StudioWatchRequestHandler.__new__(
+        studio.StudioWatchRequestHandler
+    )
+    if byte_range is not None:
+        handler._response_byte_range = byte_range
+
+    class DisconnectedOutput:
+        def write(self, _chunk: bytes) -> None:
+            raise error_type()
+
+    handler.copyfile(io.BytesIO(b"data"), DisconnectedOutput())
+
+
+def test_watch_copyfile_does_not_hide_unrelated_errors() -> None:
+    handler = studio.StudioWatchRequestHandler.__new__(
+        studio.StudioWatchRequestHandler
+    )
+
+    class InvalidOutput:
+        def write(self, _chunk: bytes) -> None:
+            raise RuntimeError("unexpected write failure")
+
+    with pytest.raises(RuntimeError, match="unexpected write failure"):
+        handler.copyfile(io.BytesIO(b"data"), InvalidOutput())
 
 
 def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:

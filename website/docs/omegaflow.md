@@ -34,7 +34,6 @@ omegaflow recording=quickstart-demo
 | Build a recording | `omegaflow recording=demo` |
 | Watch in a browser | `omegaflow recording=demo action=watch` |
 | Verify generated artifacts | `omegaflow recording=demo action=check` |
-| Play in the terminal | `omegaflow recording=demo action=play` |
 | Preview the build plan | `omegaflow recording=demo dry_run=true` |
 | Troubleshoot runs | `omegaflow action=runs` |
 | See available recordings | `omegaflow action=list` |

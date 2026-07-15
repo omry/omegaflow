@@ -41,6 +41,7 @@ export default function Home() {
               <VideoPlayer
                 title="OmegaFlow Overview"
                 manifest="/omegaflow-videos/quickstart-demo/presentation/recording.presentation.json"
+                layout="wide-browser"
               />
             </div>
           </div>

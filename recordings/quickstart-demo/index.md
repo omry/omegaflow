@@ -37,8 +37,8 @@ environment:
 browser:
   base_url: http://127.0.0.1:18474
   viewport:
-    width: 1280
-    height: 450
+    width: 1152
+    height: 360
   context:
     locale: en-US
     timezone: UTC
@@ -117,8 +117,9 @@ beat:
   narration: >-
     Next, from your repository root, @bootstrap@ run bootstrap to set up the
     recording workspace. @wait:bootstrap_run+200ms@ The command creates the
-    project settings, recording defaults, and workspace layout. The included
-    quickstart is only a small example of that structure.
+    project settings, recording defaults, and workspace layout. The generated
+    quickstart is ready to run, so you can try OmegaFlow immediately. It is also
+    the recording we will build next.
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -142,8 +143,8 @@ beat:
   narration: >-
     Then, @build@ build the sample recording. OmegaFlow runs the scripted
     workflow and creates a ready-to-watch player.
-    @wait:build_command+200ms@ When the build finishes, the command shows where
-    to find the player.
+    @wait:build_command+200ms@ When the build finishes, the follow-up command
+    shows how to watch the video.
   marker: build
   caption: Build the generated quickstart recording.
   actions:
@@ -166,12 +167,13 @@ beat:
   heading: Play It In The Browser
   narration_take: build-and-browser
   narration: >-
-    The narration continues as the recording moves from the terminal to the
-    browser. @open_player@ The browser script opens the player created by the
-    build. @wait:open_player+300ms@ Next, @play@ the script starts playback and
-    captures the result. A single narration take can span both recording types,
-    keeping commands and browser actions synchronized with the voiceover. To
-    learn more, start the tutorial or read the docs.
+    Next, @open_player@ OmegaFlow records the browser too, opening the player
+    created by the build. @wait:open_player+300ms@ Then, @play@ it starts the
+    video and @playback_complete@ captures playback through the end.
+    @wait:wait_for_playback+300ms@ A single OmegaFlow video can move between
+    terminal and browser beats, while one narration take keeps every action
+    synchronized with the voiceover. To learn more, start the tutorial or read
+    the docs.
   marker: play-in-browser
   caption: Script browser interaction with the generated player.
   actions:
@@ -191,6 +193,13 @@ beat:
       target:
         role: button
         name: Play
+        exact: true
+  - id: wait_for_playback
+    after: "@playback_complete@"
+    wait_for:
+      visible:
+        role: button
+        name: Play again
         exact: true
   guide:
     success_hint: The generated player is ready to publish with your docs.

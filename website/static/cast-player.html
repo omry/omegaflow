@@ -192,18 +192,31 @@
 
       .browser-renderer {
         display: flex;
+        align-items: center;
+        justify-content: center;
         padding: clamp(0.4rem, 2vw, 1.5rem);
-        background: #0b0e14;
+        background:
+          radial-gradient(circle at 50% 35%, #34405a 0, #242d40 52%, #171d2a 100%);
+      }
+
+      .browser-window-layout {
+        position: relative;
+        flex: 0 0 auto;
+        min-width: 0;
+        min-height: 0;
+        transform-origin: center;
       }
 
       .browser-window {
+        position: absolute;
+        inset: 0;
         display: flex;
-        flex: 1;
         flex-direction: column;
+        box-sizing: border-box;
         min-width: 0;
         min-height: 0;
         overflow: hidden;
-        transform-origin: center;
+        transform-origin: top left;
       }
 
       .browser-window[data-mode="framed"] {
@@ -217,6 +230,7 @@
       .browser-chrome {
         display: flex;
         align-items: center;
+        box-sizing: border-box;
         flex: 0 0 auto;
         gap: 0.75rem;
         height: 30px;
@@ -263,7 +277,7 @@
 
       .browser-viewport-host {
         position: relative;
-        flex: 1;
+        flex: 0 0 auto;
         min-width: 0;
         min-height: 0;
         overflow: hidden;
@@ -321,11 +335,16 @@
 
       .browser-pointer {
         z-index: 8;
-        width: 0;
-        height: 0;
-        border-top: 16px solid #fff;
-        border-right: 10px solid transparent;
-        filter: drop-shadow(1px 2px 1px rgba(0, 0, 0, 0.8));
+        width: 18px;
+        height: 24px;
+        background: #fff;
+        clip-path:
+          polygon(0 0, 0 20px, 5px 15px, 9px 23px, 13px 21px, 9px 13px, 18px 13px);
+        filter:
+          drop-shadow(-1px 0 0 #111)
+          drop-shadow(1px 0 0 #111)
+          drop-shadow(0 -1px 0 #111)
+          drop-shadow(0 1px 0 #111);
         transform-origin: top left;
       }
 
@@ -706,6 +725,29 @@
       .ansi-bright-cyan { color: var(--cyan); }
       .ansi-bright-white { color: #ffffff; }
 
+      .player[data-layout="wide-browser"] {
+        /*
+         * Preserve the browser stage ratio inside a 16:10 iframe. The 63.6%
+         * middle row, together with the renderer's 2vw padding, matches the
+         * 1152x360 viewport plus its uniformly scaled window decoration.
+         */
+        grid-template-rows: max(60px, 16%) 1fr max(80px, 20.4%);
+      }
+
+      .player[data-embedded="true"] .bar {
+        height: auto;
+      }
+
+      .player[data-embedded="true"] .status {
+        min-height: 0;
+        flex-wrap: wrap;
+      }
+
+      .player[data-embedded="true"] .progress-wrap {
+        order: 3;
+        flex-basis: 100%;
+      }
+
       @media (max-width: 620px) {
         .status {
           flex-wrap: wrap;
@@ -719,7 +761,7 @@
     </style>
   </head>
   <body>
-    <main class="player">
+    <main class="player" id="player">
       <div class="bar">
         <a class="player-logo-link" href="https://omegaflow.dev/" target="_blank" rel="noopener noreferrer" aria-label="Open the OmegaFlow website" title="OmegaFlow">
           <svg viewBox="0 0 256 256" aria-hidden="true">
@@ -778,6 +820,9 @@
     <script src="cast-player-core.js"></script>
     <script>
       const params = new URLSearchParams(window.location.search);
+      const playerRoot = document.getElementById('player');
+      playerRoot.dataset.embedded = String(params.get('embed') === '1');
+      playerRoot.dataset.layout = params.get('layout') || '';
       const manifestUrl = params.get('manifest');
       const autoplayCountdown = params.get('autoplay') === 'countdown';
       let audioUrl = null;
@@ -1771,8 +1816,12 @@
         guidedButton.setAttribute('aria-pressed', guidedMode ? 'true' : 'false');
         setIconButton(muteButton, muted ? 'muted' : 'volume', muted ? 'Unmute' : 'Mute');
         rateButton.textContent = `${playbackRate}\u00d7`;
-        rateButton.setAttribute('aria-label', `Playback speed ${playbackRate}\u00d7`);
-        rateButton.title = `Playback speed: ${playbackRate}\u00d7`;
+        rateButton.setAttribute(
+          'aria-label',
+          `Playback speed ${playbackRate}\u00d7. Left click for next; right click for previous.`,
+        );
+        rateButton.title =
+          `Playback speed: ${playbackRate}\u00d7 (left-click next, right-click previous)`;
         playButton.disabled = !ready;
         restartButton.disabled = !ready;
         prevSectionButton.disabled = !ready || !hasPreviousSection(clamped);
@@ -2082,6 +2131,7 @@
       }
 
       function beginScrub() {
+        cancelAutoplayCountdown();
         scrubbing = true;
         resumeAfterSeek = playing;
         if (playing) {
@@ -2262,6 +2312,7 @@
       }
 
       function seekTo(seconds, {resume = playing, openCheckpoint = false} = {}) {
+        cancelAutoplayCountdown();
         audibleAutoplayPending = false;
         clearAudioUnlockPrompt();
         const shouldResume = Boolean(resume);
@@ -2450,9 +2501,21 @@
         }
       }
 
-      function cyclePlaybackRate() {
+      function cyclePlaybackRate(direction = 1) {
         const index = playbackRates.indexOf(playbackRate);
-        setPlaybackRate(playbackRates[(index + 1) % playbackRates.length]);
+        const step = direction < 0 ? -1 : 1;
+        const nextIndex = (index + step + playbackRates.length) % playbackRates.length;
+        setPlaybackRate(playbackRates[nextIndex]);
+      }
+
+      function handlePlayerContextMenu(event) {
+        event.preventDefault();
+        if (
+          event.target === rateButton ||
+          (typeof rateButton.contains === 'function' && rateButton.contains(event.target))
+        ) {
+          cyclePlaybackRate(-1);
+        }
       }
 
       async function loadAudioMeta() {
@@ -3008,7 +3071,8 @@
       prevSectionButton.addEventListener('click', () => jumpSection(-1));
       nextSectionButton.addEventListener('click', () => jumpSection(1));
       muteButton.addEventListener('click', toggleMute);
-      rateButton.addEventListener('click', cyclePlaybackRate);
+      rateButton.addEventListener('click', () => cyclePlaybackRate(1));
+      playerRoot.addEventListener('contextmenu', handlePlayerContextMenu);
       terminal.addEventListener('click', togglePlaybackFromTerminal);
       browserStage.addEventListener('click', togglePlayPause);
       progressWrap.addEventListener('pointermove', showSectionTooltip);

@@ -172,3 +172,36 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
             "https://public.example/finished"
         )
         browser.close()
+
+
+def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 500})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&embed=1&layout=wide-browser"
+        )
+        page.locator(".browser-window[data-mode='framed']").wait_for()
+
+        player = page.locator("#player")
+        assert player.get_attribute("data-embedded") == "true"
+        assert player.get_attribute("data-layout") == "wide-browser"
+        initial = page.locator(".browser-window-layout").bounding_box()
+        assert initial is not None
+
+        page.set_viewport_size({"width": 1200, "height": 750})
+        page.wait_for_function(
+            "minimum => document.querySelector('.browser-window-layout')"
+            ".getBoundingClientRect().width > minimum",
+            arg=initial["width"] * 1.4,
+        )
+        resized = page.locator(".browser-window-layout").bounding_box()
+        viewport = page.locator(".browser-viewport").bounding_box()
+        assert resized is not None and viewport is not None
+        assert resized["width"] > initial["width"] * 1.4
+        assert viewport["width"] > 0
+        browser.close()

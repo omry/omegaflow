@@ -1140,19 +1140,24 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
         return source
 
     def copyfile(self, source: Any, outputfile: Any) -> None:
-        byte_range = getattr(self, "_response_byte_range", None)
-        if byte_range is None:
-            super().copyfile(source, outputfile)
+        try:
+            byte_range = getattr(self, "_response_byte_range", None)
+            if byte_range is None:
+                super().copyfile(source, outputfile)
+                return
+            start, end = byte_range
+            source.seek(start)
+            remaining = end - start + 1
+            while remaining > 0:
+                chunk = source.read(min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                outputfile.write(chunk)
+                remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            # Browsers routinely cancel in-flight media requests while seeking,
+            # reloading, or closing. The response has no remaining client.
             return
-        start, end = byte_range
-        source.seek(start)
-        remaining = end - start + 1
-        while remaining > 0:
-            chunk = source.read(min(64 * 1024, remaining))
-            if not chunk:
-                break
-            outputfile.write(chunk)
-            remaining -= len(chunk)
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -1285,45 +1290,6 @@ def run_publish_surface(
     if path is not None and text_output_enabled(cfg):
         step_line("publish surface")
         pass_line(f"wrote publish surface: {display_path(path)}")
-
-
-def run_play(cfg: DictConfig, config: dict[str, Any]) -> int:
-    run_id = config.get("run_id")
-    recording_id = recording_id_from_value(config.get("recording"))
-    if recording_id is None:
-        try:
-            run_dir = (
-                record.find_run_dir_by_id(
-                    run_id,
-                    data_dir=studio_data_dir_from_config(config),
-                )
-                if isinstance(run_id, str) and run_id
-                else record.find_latest_run_dir(
-                    artifact="success",
-                    data_dir=studio_data_dir_from_config(config),
-                )
-            )
-        except record.RecordingError as exc:
-            raise StudioError(str(exc)) from exc
-        manifest = presentation_build.run_paths(run_dir)["manifest"]
-        if not manifest.is_file():
-            raise StudioError(f"presentation manifest not found: {display_path(manifest)}")
-        url_path, artifacts = watch_player_url_path({}, run_dir=run_dir)
-        return run_watch_server(cfg, url_path, artifacts)
-
-    spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    run_dir = None
-    if isinstance(run_id, str) and run_id:
-        try:
-            run_dir = record.run_dir_for_optional_id(spec, run_id, artifact="success")
-        except record.RecordingError as exc:
-            raise StudioError(str(exc)) from exc
-        if not presentation_build.run_paths(run_dir)["manifest"].is_file():
-            raise StudioError(
-                "selected run has no presentation manifest; run a build first"
-            )
-    url_path, artifacts = watch_player_url_path(spec, run_dir=run_dir)
-    return run_watch_server(cfg, url_path, artifacts)
 
 
 def watch_player_url_path(
@@ -1701,10 +1667,7 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
     if run_id is not None or recording_id is None:
-        raise StudioError(
-            "watch requires a recording id and built presentation artifacts; "
-            "use action=play to select a preserved presentation run"
-        )
+        raise StudioError("watch requires a recording id and does not accept run_id")
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
     url_path, artifacts = watch_player_url_path(spec, autoplay_countdown=True)
@@ -1724,13 +1687,7 @@ def print_success_followups(cfg: DictConfig) -> None:
     if not isinstance(recording_id, str) or not recording_id:
         return
     print()
-    print(color_text("next", ANSI_CYAN_BOLD) + " follow-up commands")
-    print(
-        "  "
-        + color_text("play   ", ANSI_GREEN_BOLD)
-        + " "
-        + studio_tool_command(recording_id, "action=play")
-    )
+    print(color_text("next", ANSI_CYAN_BOLD) + " follow-up command")
     print(
         "  "
         + color_text("watch  ", ANSI_GREEN_BOLD)
@@ -1912,8 +1869,6 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         return run_build(cfg)
     if action == "check":
         return run_check(cfg)
-    if action == "play":
-        return run_play(cfg, config)
     if action == "watch":
         return run_watch(cfg, config)
 

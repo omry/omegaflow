@@ -45,7 +45,7 @@ module.exports = {
           items: [
             'cli/actions/build-check',
             'cli/actions/bootstrap',
-            'cli/actions/watch-play',
+            'cli/actions/watch',
             'cli/actions/list-clean',
             'cli/actions/runs-inspect-output',
           ],

@@ -1,6 +1,6 @@
 {
   "audio": "audio.mp3",
-  "duration_ms": 59088,
+  "duration_ms": 63696,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -22,12 +22,12 @@
       "members": [
         {
           "beat_id": "bootstrap",
-          "text": "Next, from your repository root, run bootstrap to set up the recording workspace. The command creates the project settings, recording defaults, and workspace layout. The included quickstart is only a small example of that structure.",
-          "text_end": 232,
+          "text": "Next, from your repository root, run bootstrap to set up the recording workspace. The command creates the project settings, recording defaults, and workspace layout. The generated quickstart is ready to run, so you can try OmegaFlow immediately. It is also the recording we will build next.",
+          "text_end": 290,
           "text_start": 0
         }
       ],
-      "source_end_ms": 27120,
+      "source_end_ms": 30576,
       "source_start_ms": 13512,
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
@@ -36,19 +36,19 @@
       "members": [
         {
           "beat_id": "build",
-          "text": "Then, build the sample recording. OmegaFlow runs the scripted workflow and creates a ready-to-watch player. When the build finishes, the command shows where to find the player.",
-          "text_end": 176,
+          "text": "Then, build the sample recording. OmegaFlow runs the scripted workflow and creates a ready-to-watch player. When the build finishes, the follow-up command shows how to watch the video.",
+          "text_end": 184,
           "text_start": 0
         },
         {
           "beat_id": "play-in-browser",
-          "text": "The narration continues as the recording moves from the terminal to the browser. The browser script opens the player created by the build. Next, the script starts playback and captures the result. A single narration take can span both recording types, keeping commands and browser actions synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
-          "text_end": 550,
-          "text_start": 177
+          "text": "Next, OmegaFlow records the browser too, opening the player created by the build. Then, it starts the video and captures playback through the end. A single OmegaFlow video can move between terminal and browser beats, while one narration take keeps every action synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
+          "text_end": 530,
+          "text_start": 185
         }
       ],
-      "source_end_ms": 59088,
-      "source_start_ms": 27120,
+      "source_end_ms": 63696,
+      "source_start_ms": 30576,
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

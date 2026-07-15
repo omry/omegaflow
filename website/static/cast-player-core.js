@@ -590,6 +590,35 @@
     };
   }
 
+  function browserWindowLayout(availableWidth, availableHeight, viewport, decoration = {}) {
+    const borderWidth = decoration.borderWidth || 0;
+    const titlebarHeight = decoration.titlebarHeight || 0;
+    const chromeHeight = decoration.chromeHeight || 0;
+    if (
+      !Number.isFinite(borderWidth) || borderWidth < 0 ||
+      !Number.isFinite(titlebarHeight) || titlebarHeight < 0 ||
+      !Number.isFinite(chromeHeight) || chromeHeight < 0
+    ) {
+      throw new Error('browser window decoration is invalid');
+    }
+    const horizontalDecoration = borderWidth * 2;
+    const verticalDecoration = (borderWidth * 2) + titlebarHeight + chromeHeight;
+    const nativeWidth = viewport.width + horizontalDecoration;
+    const nativeHeight = viewport.height + verticalDecoration;
+    const windowLayout = browserViewportLayout(
+      availableWidth,
+      availableHeight,
+      {width: nativeWidth, height: nativeHeight},
+    );
+    return {
+      ...windowLayout,
+      contentWidth: viewport.width * windowLayout.scale,
+      contentHeight: viewport.height * windowLayout.scale,
+      nativeWidth,
+      nativeHeight,
+    };
+  }
+
   function browserSceneAt(payload, localMs) {
     if (!payload || payload.payload_version !== 1 || !Array.isArray(payload.events)) {
       throw new Error('browser payload is invalid');
@@ -747,6 +776,10 @@
     let playbackRate = 1;
     let decodedAssetBytes = 0;
     let preloadedImages = [];
+    let entryTransitionStartMs = 0;
+    let windowDecoration = {};
+    let resizeObserver = null;
+    let lastScene = null;
 
     function element(tag, className) {
       const value = documentObject.createElement(tag);
@@ -797,6 +830,19 @@
     function reducedMotion() {
       return typeof global.matchMedia === 'function' &&
         global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function rendererContentBox() {
+      let width = elements.root.clientWidth;
+      let height = elements.root.clientHeight;
+      if (typeof global.getComputedStyle === 'function') {
+        const style = global.getComputedStyle(elements.root);
+        width -= (Number.parseFloat(style.paddingLeft) || 0) +
+          (Number.parseFloat(style.paddingRight) || 0);
+        height -= (Number.parseFloat(style.paddingTop) || 0) +
+          (Number.parseFloat(style.paddingBottom) || 0);
+      }
+      return {width: Math.max(0, width), height: Math.max(0, height)};
     }
 
     function renderVisual(scene) {
@@ -898,22 +944,57 @@
 
     function applyEntryTransition(scene) {
       const transition = context.beat.transition_in;
-      const progress = clampUnit(scene.localMs / 300);
-      if (reducedMotion() || transition === null || transition === 'cut') {
-        elements.window.style.opacity = '1';
-        elements.window.style.transform = 'none';
-      } else if (transition === 'fade') {
-        elements.window.style.opacity = String(progress);
-        elements.window.style.transform = 'none';
-      } else if (transition === 'window-open') {
-        elements.window.style.opacity = String(progress);
-        elements.window.style.transform = `scale(${0.92 + (0.08 * progress)})`;
+      const animatedEntry = transition === 'fade' || transition === 'window-open';
+      if (animatedEntry && scene.localMs < entryTransitionStartMs) {
+        elements.layout.style.opacity = '0';
+        elements.layout.style.transform = 'none';
+        return;
       }
+      const progress = clampUnit((scene.localMs - entryTransitionStartMs) / 300);
+      if (reducedMotion() || transition === null || transition === 'cut') {
+        elements.layout.style.opacity = '1';
+        elements.layout.style.transform = 'none';
+      } else if (transition === 'fade') {
+        elements.layout.style.opacity = String(progress);
+        elements.layout.style.transform = 'none';
+      } else if (transition === 'window-open') {
+        elements.layout.style.opacity = String(progress);
+        elements.layout.style.transform = `scale(${0.92 + (0.08 * progress)})`;
+      }
+    }
+
+    function renderBrowserScene(scene) {
+      const available = rendererContentBox();
+      const layout = browserWindowLayout(
+        available.width,
+        available.height,
+        scene.viewport,
+        windowDecoration,
+      );
+      elements.layout.style.width = `${layout.width}px`;
+      elements.layout.style.height = `${layout.height}px`;
+      elements.window.style.width = `${layout.nativeWidth}px`;
+      elements.window.style.height = `${layout.nativeHeight}px`;
+      elements.window.style.transform = `scale(${layout.scale})`;
+      elements.host.style.width = `${scene.viewport.width}px`;
+      elements.host.style.height = `${scene.viewport.height}px`;
+      elements.viewport.style.width = `${scene.viewport.width}px`;
+      elements.viewport.style.height = `${scene.viewport.height}px`;
+      elements.viewport.style.left = '0px';
+      elements.viewport.style.top = '0px';
+      elements.viewport.style.transform = 'none';
+      renderVisual(scene);
+      renderOverlay(scene);
+      applyEntryTransition(scene);
     }
 
     const adapter = createBrowserRendererAdapter({
       async load(nextContext) {
         context = nextContext;
+        const firstVisualEvent = nextContext.payload.events.find(
+          (event) => ['state', 'clip', 'scroll'].includes(event.kind),
+        );
+        entryTransitionStartMs = firstVisualEvent ? firstVisualEvent.at_ms : 0;
         const viewportConfig = nextContext.payload.viewport;
         const scale = viewportConfig.device_scale_factor || 1;
         decodedAssetBytes = Math.round(
@@ -922,7 +1003,13 @@
         const browserPresentation = nextContext.presentation.browser || {};
         const windowConfig = browserPresentation.window || {mode: 'none'};
         const chromeConfig = browserPresentation.chrome || {mode: 'hidden'};
+        windowDecoration = {
+          borderWidth: windowConfig.mode === 'framed' ? 1 : 0,
+          titlebarHeight: windowConfig.mode === 'framed' ? 30 : 0,
+          chromeHeight: chromeConfig.mode === 'hidden' ? 0 : 38,
+        };
         const root = element('div', 'browser-renderer');
+        const windowLayout = element('div', 'browser-window-layout');
         const windowFrame = element('div', 'browser-window');
         windowFrame.dataset.mode = windowConfig.mode || 'none';
         windowFrame.dataset.theme = windowConfig.theme || 'kde-breeze';
@@ -976,10 +1063,12 @@
         );
         host.append(viewport);
         windowFrame.append(titlebar, chrome, host);
-        root.append(windowFrame);
+        windowLayout.append(windowFrame);
+        root.append(windowLayout);
         nextContext.container.replaceChildren(root);
         elements = {
           root,
+          layout: windowLayout,
           window: windowFrame,
           chrome,
           url,
@@ -996,23 +1085,18 @@
           click,
           key,
         };
+        if (typeof global.ResizeObserver === 'function') {
+          resizeObserver = new global.ResizeObserver(() => {
+            if (lastScene) {
+              renderBrowserScene(lastScene);
+            }
+          });
+          resizeObserver.observe(root);
+        }
       },
       render({scene}) {
-        const availableWidth = elements.host.clientWidth;
-        const availableHeight = elements.host.clientHeight;
-        const layout = browserViewportLayout(
-          availableWidth,
-          availableHeight,
-          scene.viewport,
-        );
-        elements.viewport.style.width = `${scene.viewport.width}px`;
-        elements.viewport.style.height = `${scene.viewport.height}px`;
-        elements.viewport.style.left = `${layout.left}px`;
-        elements.viewport.style.top = `${layout.top}px`;
-        elements.viewport.style.transform = `scale(${layout.scale})`;
-        renderVisual(scene);
-        renderOverlay(scene);
-        applyEntryTransition(scene);
+        lastScene = scene;
+        renderBrowserScene(scene);
       },
       setPlaybackRate(rate) {
         playbackRate = rate;
@@ -1075,6 +1159,9 @@
         await Promise.all([...imageLoads, ...clipLoads]);
       },
       dispose() {
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+        }
         if (elements) {
           for (const clip of elements.clips.values()) {
             clip.pause();
@@ -1085,6 +1172,10 @@
         elements = null;
         decodedAssetBytes = 0;
         preloadedImages = [];
+        entryTransitionStartMs = 0;
+        windowDecoration = {};
+        resizeObserver = null;
+        lastScene = null;
       },
       state: () => ({decodedAssetBytes}),
     });
@@ -1096,6 +1187,7 @@
     browserSceneAt,
     browserDecodedAssetBudgetBytes,
     browserViewportLayout,
+    browserWindowLayout,
     createBrowserRendererAdapter,
     createBrowserDomRenderer,
     createPresentationAudioController,

@@ -75,17 +75,6 @@ server, client, plugin, deployment, and product-security work.
       demo to use different outer and recorded-player themes; add configuration
       and rendering tests; and manually verify contrast and readability.
 
-- [ ] `P2` Clarify and polish the distinction between `play` and `watch`.
-      Both actions currently open the recording in a browser, and their
-      different purpose and process lifecycle are not obvious from the user
-      experience. Acceptance checks: confirm the intended contract for each
-      action, including browser launch, server lifetime, source monitoring, and
-      rebuild behavior; decide whether both commands provide enough distinct
-      value to retain; make command output, help, and documentation explain the
-      distinction; cover browser-launch and rebuild behavior in tests; preserve
-      a usable printed URL on headless systems; and manually confirm the final
-      workflow from a generated recording.
-
 - [x] `P2` Evaluate browser recording support with Playwright.
       OmegaFlow may eventually support browser demos alongside terminal demos.
       The design should preserve the core value of generated narration,

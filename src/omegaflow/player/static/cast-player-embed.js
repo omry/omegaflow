@@ -5,6 +5,7 @@
     'intro',
     'intro-segment',
     'intro-seconds',
+    'layout',
     'manifest',
     'player',
     'title',
@@ -19,6 +20,10 @@
     const player = options.player || 'cast-player.html';
     const params = new URLSearchParams();
     params.set('manifest', options.manifest || '');
+    params.set('embed', '1');
+    if (options.layout) {
+      params.set('layout', options.layout);
+    }
     if (options.title) {
       params.set('title', options.title || 'Terminal recording');
     }
@@ -39,6 +44,7 @@
       intro: optionalAttribute(element, 'intro'),
       introSegment: optionalAttribute(element, 'intro-segment'),
       introSeconds: optionalAttribute(element, 'intro-seconds'),
+      layout: optionalAttribute(element, 'layout'),
       manifest: optionalAttribute(element, 'manifest'),
       player: optionalAttribute(element, 'player'),
       title: optionalAttribute(element, 'title'),

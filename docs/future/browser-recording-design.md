@@ -1382,7 +1382,7 @@ manifest is replaced last; a reader therefore observes either the previous or
 new complete reference graph. A failed publish preserves the previous public
 bundle.
 
-## Build, check, play, and clean
+## Build, check, watch, and clean
 
 `omegaflow action=build` for every recording runs:
 
@@ -1396,8 +1396,8 @@ bundle.
 
 `action=record` stops after successful private capture and fingerprints.
 `action=check` validates source plus the freshest available capture and
-presentation artifacts. `action=play` and watch mode require a run-local
-presentation manifest. `action=clean` removes
+presentation artifacts. `action=watch` requires a run-local presentation
+manifest. `action=clean` removes
 generated presentation artifacts but retains narration cache and preserved run
 diagnostics under the existing retention policy.
 

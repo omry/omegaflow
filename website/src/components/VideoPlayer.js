@@ -7,6 +7,7 @@ export default function VideoPlayer({
   intro,
   introSegment,
   introSeconds,
+  layout,
 }) {
   const manifestSrc = useBaseUrl(manifest);
   const playerSrc = useBaseUrl('/cast-player.html');
@@ -30,6 +31,7 @@ export default function VideoPlayer({
         intro={intro || undefined}
         intro-segment={introSegment || undefined}
         intro-seconds={introSeconds != null ? String(introSeconds) : undefined}
+        layout={layout || undefined}
         player={playerSrc}
       />
     </div>

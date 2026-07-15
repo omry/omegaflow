@@ -3,37 +3,43 @@
     {
       "beat_id": "build",
       "id": "build",
-      "source_ms": 291,
+      "source_ms": 312,
       "text_offset": 5
     },
     {
       "beat_id": "play-in-browser",
       "id": "open_player",
-      "source_ms": 14938,
-      "text_offset": 257
+      "source_ms": 11873,
+      "text_offset": 190
     },
     {
       "beat_id": "play-in-browser",
       "id": "play",
-      "source_ms": 18658,
-      "text_offset": 321
+      "source_ms": 16997,
+      "text_offset": 272
+    },
+    {
+      "beat_id": "play-in-browser",
+      "id": "playback_complete",
+      "source_ms": 18497,
+      "text_offset": 296
     }
   ],
-  "duration_ms": 31968,
+  "duration_ms": 33120,
   "members": [
     {
       "beat_id": "build",
-      "source_end_ms": 10230,
+      "source_end_ms": 11498,
       "source_start_ms": 0,
-      "text_end": 176,
+      "text_end": 184,
       "text_start": 0
     },
     {
       "beat_id": "play-in-browser",
-      "source_end_ms": 31968,
-      "source_start_ms": 10288,
-      "text_end": 550,
-      "text_start": 177
+      "source_end_ms": 33120,
+      "source_start_ms": 11561,
+      "text_end": 530,
+      "text_start": 185
     }
   ],
   "take_id": "build-and-browser",
@@ -42,627 +48,613 @@
     {
       "beat_id": "build",
       "gap_ms": 200,
-      "source_ms": 6219,
+      "source_ms": 6686,
       "target": "build_command",
       "text_offset": 107
     },
     {
       "beat_id": "play-in-browser",
       "gap_ms": 300,
-      "source_ms": 18309,
+      "source_ms": 16622,
       "target": "open_player",
-      "text_offset": 315
+      "text_offset": 266
+    },
+    {
+      "beat_id": "play-in-browser",
+      "gap_ms": 300,
+      "source_ms": 20684,
+      "target": "wait_for_playback",
+      "text_offset": 331
     }
   ],
   "words": [
     {
-      "end_ms": 291,
+      "end_ms": 312,
       "start_ms": 0,
       "text": "Then,",
       "text_end": 5,
       "text_start": 0
     },
     {
-      "end_ms": 639,
-      "start_ms": 349,
+      "end_ms": 687,
+      "start_ms": 375,
       "text": "build",
       "text_end": 11,
       "text_start": 6
     },
     {
-      "end_ms": 872,
-      "start_ms": 697,
+      "end_ms": 937,
+      "start_ms": 750,
       "text": "the",
       "text_end": 15,
       "text_start": 12
     },
     {
-      "end_ms": 1279,
-      "start_ms": 930,
+      "end_ms": 1375,
+      "start_ms": 1000,
       "text": "sample",
       "text_end": 22,
       "text_start": 16
     },
     {
-      "end_ms": 1918,
-      "start_ms": 1337,
+      "end_ms": 2062,
+      "start_ms": 1437,
       "text": "recording.",
       "text_end": 33,
       "text_start": 23
     },
     {
-      "end_ms": 2499,
-      "start_ms": 1976,
+      "end_ms": 2687,
+      "start_ms": 2125,
       "text": "OmegaFlow",
       "text_end": 43,
       "text_start": 34
     },
     {
-      "end_ms": 2790,
-      "start_ms": 2557,
+      "end_ms": 3000,
+      "start_ms": 2750,
       "text": "runs",
       "text_end": 48,
       "text_start": 44
     },
     {
-      "end_ms": 3022,
-      "start_ms": 2848,
+      "end_ms": 3250,
+      "start_ms": 3062,
       "text": "the",
       "text_end": 52,
       "text_start": 49
     },
     {
-      "end_ms": 3546,
-      "start_ms": 3081,
+      "end_ms": 3812,
+      "start_ms": 3312,
       "text": "scripted",
       "text_end": 61,
       "text_start": 53
     },
     {
-      "end_ms": 4069,
-      "start_ms": 3604,
+      "end_ms": 4374,
+      "start_ms": 3874,
       "text": "workflow",
       "text_end": 70,
       "text_start": 62
     },
     {
-      "end_ms": 4301,
-      "start_ms": 4127,
+      "end_ms": 4624,
+      "start_ms": 4437,
       "text": "and",
       "text_end": 74,
       "text_start": 71
     },
     {
-      "end_ms": 4766,
-      "start_ms": 4359,
+      "end_ms": 5124,
+      "start_ms": 4687,
       "text": "creates",
       "text_end": 82,
       "text_start": 75
     },
     {
-      "end_ms": 4882,
-      "start_ms": 4824,
+      "end_ms": 5249,
+      "start_ms": 5187,
       "text": "a",
       "text_end": 84,
       "text_start": 83
     },
     {
-      "end_ms": 5754,
-      "start_ms": 4941,
+      "end_ms": 6187,
+      "start_ms": 5312,
       "text": "ready-to-watch",
       "text_end": 99,
       "text_start": 85
     },
     {
-      "end_ms": 6219,
-      "start_ms": 5812,
+      "end_ms": 6686,
+      "start_ms": 6249,
       "text": "player.",
       "text_end": 107,
       "text_start": 100
     },
     {
-      "end_ms": 6510,
-      "start_ms": 6277,
+      "end_ms": 6999,
+      "start_ms": 6749,
       "text": "When",
       "text_end": 112,
       "text_start": 108
     },
     {
-      "end_ms": 6742,
-      "start_ms": 6568,
+      "end_ms": 7249,
+      "start_ms": 7061,
       "text": "the",
       "text_end": 116,
       "text_start": 113
     },
     {
-      "end_ms": 7091,
-      "start_ms": 6800,
+      "end_ms": 7624,
+      "start_ms": 7311,
       "text": "build",
       "text_end": 122,
       "text_start": 117
     },
     {
-      "end_ms": 7672,
-      "start_ms": 7149,
+      "end_ms": 8249,
+      "start_ms": 7686,
       "text": "finishes,",
       "text_end": 132,
       "text_start": 123
     },
     {
-      "end_ms": 7905,
-      "start_ms": 7730,
+      "end_ms": 8499,
+      "start_ms": 8311,
       "text": "the",
       "text_end": 136,
       "text_start": 133
     },
     {
-      "end_ms": 8370,
-      "start_ms": 7963,
-      "text": "command",
-      "text_end": 144,
+      "end_ms": 9124,
+      "start_ms": 8561,
+      "text": "follow-up",
+      "text_end": 146,
       "text_start": 137
     },
     {
-      "end_ms": 8719,
-      "start_ms": 8428,
+      "end_ms": 9624,
+      "start_ms": 9186,
+      "text": "command",
+      "text_end": 154,
+      "text_start": 147
+    },
+    {
+      "end_ms": 9998,
+      "start_ms": 9686,
       "text": "shows",
-      "text_end": 150,
-      "text_start": 145
+      "text_end": 160,
+      "text_start": 155
     },
     {
-      "end_ms": 9067,
-      "start_ms": 8777,
-      "text": "where",
-      "text_end": 156,
-      "text_start": 151
-    },
-    {
-      "end_ms": 9242,
-      "start_ms": 9125,
-      "text": "to",
-      "text_end": 159,
-      "text_start": 157
-    },
-    {
-      "end_ms": 9532,
-      "start_ms": 9300,
-      "text": "find",
+      "end_ms": 10248,
+      "start_ms": 10061,
+      "text": "how",
       "text_end": 164,
-      "text_start": 160
+      "text_start": 161
     },
     {
-      "end_ms": 9765,
-      "start_ms": 9590,
-      "text": "the",
-      "text_end": 168,
+      "end_ms": 10436,
+      "start_ms": 10311,
+      "text": "to",
+      "text_end": 167,
       "text_start": 165
     },
     {
-      "end_ms": 10230,
-      "start_ms": 9823,
-      "text": "player.",
-      "text_end": 176,
-      "text_start": 169
+      "end_ms": 10811,
+      "start_ms": 10498,
+      "text": "watch",
+      "text_end": 173,
+      "text_start": 168
     },
     {
-      "end_ms": 10462,
-      "start_ms": 10288,
-      "text": "The",
-      "text_end": 180,
-      "text_start": 177
+      "end_ms": 11061,
+      "start_ms": 10873,
+      "text": "the",
+      "text_end": 177,
+      "text_start": 174
     },
     {
-      "end_ms": 11043,
-      "start_ms": 10520,
-      "text": "narration",
+      "end_ms": 11498,
+      "start_ms": 11123,
+      "text": "video.",
+      "text_end": 184,
+      "text_start": 178
+    },
+    {
+      "end_ms": 11873,
+      "start_ms": 11561,
+      "text": "Next,",
       "text_end": 190,
-      "text_start": 181
+      "text_start": 185
     },
     {
-      "end_ms": 11625,
-      "start_ms": 11102,
-      "text": "continues",
+      "end_ms": 12498,
+      "start_ms": 11936,
+      "text": "OmegaFlow",
       "text_end": 200,
       "text_start": 191
     },
     {
-      "end_ms": 11799,
-      "start_ms": 11683,
-      "text": "as",
-      "text_end": 203,
+      "end_ms": 12998,
+      "start_ms": 12561,
+      "text": "records",
+      "text_end": 208,
       "text_start": 201
     },
     {
-      "end_ms": 12032,
-      "start_ms": 11857,
+      "end_ms": 13248,
+      "start_ms": 13061,
       "text": "the",
-      "text_end": 207,
-      "text_start": 204
+      "text_end": 212,
+      "text_start": 209
     },
     {
-      "end_ms": 12613,
-      "start_ms": 12090,
-      "text": "recording",
-      "text_end": 217,
-      "text_start": 208
-    },
-    {
-      "end_ms": 12962,
-      "start_ms": 12671,
-      "text": "moves",
-      "text_end": 223,
-      "text_start": 218
-    },
-    {
-      "end_ms": 13252,
-      "start_ms": 13020,
-      "text": "from",
-      "text_end": 228,
-      "text_start": 224
-    },
-    {
-      "end_ms": 13485,
+      "end_ms": 13748,
       "start_ms": 13310,
+      "text": "browser",
+      "text_end": 220,
+      "text_start": 213
+    },
+    {
+      "end_ms": 14060,
+      "start_ms": 13810,
+      "text": "too,",
+      "text_end": 225,
+      "text_start": 221
+    },
+    {
+      "end_ms": 14560,
+      "start_ms": 14123,
+      "text": "opening",
+      "text_end": 233,
+      "text_start": 226
+    },
+    {
+      "end_ms": 14810,
+      "start_ms": 14623,
       "text": "the",
-      "text_end": 232,
-      "text_start": 229
+      "text_end": 237,
+      "text_start": 234
     },
     {
-      "end_ms": 14008,
-      "start_ms": 13543,
-      "text": "terminal",
-      "text_end": 241,
-      "text_start": 233
-    },
-    {
-      "end_ms": 14182,
-      "start_ms": 14066,
-      "text": "to",
+      "end_ms": 15248,
+      "start_ms": 14873,
+      "text": "player",
       "text_end": 244,
-      "text_start": 242
+      "text_start": 238
     },
     {
-      "end_ms": 14415,
-      "start_ms": 14240,
-      "text": "the",
-      "text_end": 248,
+      "end_ms": 15748,
+      "start_ms": 15310,
+      "text": "created",
+      "text_end": 252,
       "text_start": 245
     },
     {
-      "end_ms": 14938,
-      "start_ms": 14473,
-      "text": "browser.",
-      "text_end": 257,
-      "text_start": 249
+      "end_ms": 15935,
+      "start_ms": 15810,
+      "text": "by",
+      "text_end": 255,
+      "text_start": 253
     },
     {
-      "end_ms": 15170,
-      "start_ms": 14996,
-      "text": "The",
-      "text_end": 261,
-      "text_start": 258
+      "end_ms": 16185,
+      "start_ms": 15998,
+      "text": "the",
+      "text_end": 259,
+      "text_start": 256
     },
     {
-      "end_ms": 15635,
-      "start_ms": 15228,
-      "text": "browser",
-      "text_end": 269,
-      "text_start": 262
+      "end_ms": 16622,
+      "start_ms": 16248,
+      "text": "build.",
+      "text_end": 266,
+      "text_start": 260
     },
     {
-      "end_ms": 16042,
-      "start_ms": 15693,
-      "text": "script",
-      "text_end": 276,
-      "text_start": 270
+      "end_ms": 16997,
+      "start_ms": 16685,
+      "text": "Then,",
+      "text_end": 272,
+      "text_start": 267
     },
     {
-      "end_ms": 16391,
-      "start_ms": 16100,
-      "text": "opens",
+      "end_ms": 17185,
+      "start_ms": 17060,
+      "text": "it",
+      "text_end": 275,
+      "text_start": 273
+    },
+    {
+      "end_ms": 17622,
+      "start_ms": 17247,
+      "text": "starts",
       "text_end": 282,
-      "text_start": 277
+      "text_start": 276
     },
     {
-      "end_ms": 16623,
-      "start_ms": 16449,
+      "end_ms": 17872,
+      "start_ms": 17685,
       "text": "the",
       "text_end": 286,
       "text_start": 283
     },
     {
-      "end_ms": 17030,
-      "start_ms": 16681,
-      "text": "player",
-      "text_end": 293,
+      "end_ms": 18247,
+      "start_ms": 17935,
+      "text": "video",
+      "text_end": 292,
       "text_start": 287
     },
     {
-      "end_ms": 17495,
-      "start_ms": 17088,
-      "text": "created",
-      "text_end": 301,
-      "text_start": 294
-    },
-    {
-      "end_ms": 17670,
-      "start_ms": 17553,
-      "text": "by",
-      "text_end": 304,
-      "text_start": 302
-    },
-    {
-      "end_ms": 17902,
-      "start_ms": 17728,
-      "text": "the",
-      "text_end": 308,
-      "text_start": 305
-    },
-    {
-      "end_ms": 18309,
-      "start_ms": 17960,
-      "text": "build.",
-      "text_end": 315,
-      "text_start": 309
-    },
-    {
-      "end_ms": 18658,
-      "start_ms": 18367,
-      "text": "Next,",
-      "text_end": 321,
-      "text_start": 316
-    },
-    {
-      "end_ms": 18890,
-      "start_ms": 18716,
-      "text": "the",
-      "text_end": 325,
-      "text_start": 322
-    },
-    {
-      "end_ms": 19297,
-      "start_ms": 18948,
-      "text": "script",
-      "text_end": 332,
-      "text_start": 326
-    },
-    {
-      "end_ms": 19704,
-      "start_ms": 19355,
-      "text": "starts",
-      "text_end": 339,
-      "text_start": 333
-    },
-    {
-      "end_ms": 20227,
-      "start_ms": 19762,
-      "text": "playback",
-      "text_end": 348,
-      "text_start": 340
-    },
-    {
-      "end_ms": 20460,
-      "start_ms": 20285,
+      "end_ms": 18497,
+      "start_ms": 18310,
       "text": "and",
-      "text_end": 352,
-      "text_start": 349
+      "text_end": 296,
+      "text_start": 293
     },
     {
-      "end_ms": 20983,
-      "start_ms": 20518,
+      "end_ms": 19060,
+      "start_ms": 18560,
       "text": "captures",
-      "text_end": 361,
-      "text_start": 353
+      "text_end": 305,
+      "text_start": 297
     },
     {
-      "end_ms": 21215,
-      "start_ms": 21041,
+      "end_ms": 19622,
+      "start_ms": 19122,
+      "text": "playback",
+      "text_end": 314,
+      "text_start": 306
+    },
+    {
+      "end_ms": 20122,
+      "start_ms": 19685,
+      "text": "through",
+      "text_end": 322,
+      "text_start": 315
+    },
+    {
+      "end_ms": 20372,
+      "start_ms": 20184,
       "text": "the",
-      "text_end": 365,
-      "text_start": 362
+      "text_end": 326,
+      "text_start": 323
     },
     {
-      "end_ms": 21680,
-      "start_ms": 21273,
-      "text": "result.",
+      "end_ms": 20684,
+      "start_ms": 20434,
+      "text": "end.",
+      "text_end": 331,
+      "text_start": 327
+    },
+    {
+      "end_ms": 20809,
+      "start_ms": 20747,
+      "text": "A",
+      "text_end": 333,
+      "text_start": 332
+    },
+    {
+      "end_ms": 21247,
+      "start_ms": 20872,
+      "text": "single",
+      "text_end": 340,
+      "text_start": 334
+    },
+    {
+      "end_ms": 21872,
+      "start_ms": 21309,
+      "text": "OmegaFlow",
+      "text_end": 350,
+      "text_start": 341
+    },
+    {
+      "end_ms": 22247,
+      "start_ms": 21934,
+      "text": "video",
+      "text_end": 356,
+      "text_start": 351
+    },
+    {
+      "end_ms": 22497,
+      "start_ms": 22309,
+      "text": "can",
+      "text_end": 360,
+      "text_start": 357
+    },
+    {
+      "end_ms": 22809,
+      "start_ms": 22559,
+      "text": "move",
+      "text_end": 365,
+      "text_start": 361
+    },
+    {
+      "end_ms": 23309,
+      "start_ms": 22872,
+      "text": "between",
       "text_end": 373,
       "text_start": 366
     },
     {
-      "end_ms": 21796,
-      "start_ms": 21738,
-      "text": "A",
-      "text_end": 375,
+      "end_ms": 23871,
+      "start_ms": 23371,
+      "text": "terminal",
+      "text_end": 382,
       "text_start": 374
     },
     {
-      "end_ms": 22203,
-      "start_ms": 21854,
-      "text": "single",
-      "text_end": 382,
-      "text_start": 376
-    },
-    {
-      "end_ms": 22784,
-      "start_ms": 22261,
-      "text": "narration",
-      "text_end": 392,
+      "end_ms": 24121,
+      "start_ms": 23934,
+      "text": "and",
+      "text_end": 386,
       "text_start": 383
     },
     {
-      "end_ms": 23075,
-      "start_ms": 22843,
-      "text": "take",
-      "text_end": 397,
-      "text_start": 393
+      "end_ms": 24621,
+      "start_ms": 24184,
+      "text": "browser",
+      "text_end": 394,
+      "text_start": 387
     },
     {
-      "end_ms": 23308,
-      "start_ms": 23133,
-      "text": "can",
+      "end_ms": 25059,
+      "start_ms": 24684,
+      "text": "beats,",
       "text_end": 401,
-      "text_start": 398
+      "text_start": 395
     },
     {
-      "end_ms": 23598,
-      "start_ms": 23366,
-      "text": "span",
-      "text_end": 406,
+      "end_ms": 25434,
+      "start_ms": 25121,
+      "text": "while",
+      "text_end": 407,
       "text_start": 402
     },
     {
-      "end_ms": 23889,
-      "start_ms": 23656,
-      "text": "both",
+      "end_ms": 25684,
+      "start_ms": 25496,
+      "text": "one",
       "text_end": 411,
-      "text_start": 407
+      "text_start": 408
     },
     {
-      "end_ms": 24470,
-      "start_ms": 23947,
-      "text": "recording",
+      "end_ms": 26309,
+      "start_ms": 25746,
+      "text": "narration",
       "text_end": 421,
       "text_start": 412
     },
     {
-      "end_ms": 24877,
-      "start_ms": 24528,
-      "text": "types,",
-      "text_end": 428,
+      "end_ms": 26621,
+      "start_ms": 26371,
+      "text": "take",
+      "text_end": 426,
       "text_start": 422
     },
     {
-      "end_ms": 25342,
-      "start_ms": 24935,
-      "text": "keeping",
-      "text_end": 436,
-      "text_start": 429
+      "end_ms": 26996,
+      "start_ms": 26683,
+      "text": "keeps",
+      "text_end": 432,
+      "text_start": 427
     },
     {
-      "end_ms": 25865,
-      "start_ms": 25400,
-      "text": "commands",
+      "end_ms": 27371,
+      "start_ms": 27058,
+      "text": "every",
+      "text_end": 438,
+      "text_start": 433
+    },
+    {
+      "end_ms": 27808,
+      "start_ms": 27433,
+      "text": "action",
       "text_end": 445,
-      "text_start": 437
+      "text_start": 439
     },
     {
-      "end_ms": 26098,
-      "start_ms": 25923,
-      "text": "and",
-      "text_end": 449,
+      "end_ms": 28621,
+      "start_ms": 27871,
+      "text": "synchronized",
+      "text_end": 458,
       "text_start": 446
     },
     {
-      "end_ms": 26563,
-      "start_ms": 26156,
-      "text": "browser",
-      "text_end": 457,
-      "text_start": 450
-    },
-    {
-      "end_ms": 27027,
-      "start_ms": 26621,
-      "text": "actions",
-      "text_end": 465,
-      "text_start": 458
-    },
-    {
-      "end_ms": 27783,
-      "start_ms": 27086,
-      "text": "synchronized",
-      "text_end": 478,
-      "text_start": 466
-    },
-    {
-      "end_ms": 28074,
-      "start_ms": 27841,
+      "end_ms": 28933,
+      "start_ms": 28683,
       "text": "with",
-      "text_end": 483,
+      "text_end": 463,
+      "text_start": 459
+    },
+    {
+      "end_ms": 29183,
+      "start_ms": 28996,
+      "text": "the",
+      "text_end": 467,
+      "text_start": 464
+    },
+    {
+      "end_ms": 29870,
+      "start_ms": 29246,
+      "text": "voiceover.",
+      "text_end": 478,
+      "text_start": 468
+    },
+    {
+      "end_ms": 30058,
+      "start_ms": 29933,
+      "text": "To",
+      "text_end": 481,
       "text_start": 479
     },
     {
-      "end_ms": 28306,
-      "start_ms": 28132,
-      "text": "the",
+      "end_ms": 30433,
+      "start_ms": 30120,
+      "text": "learn",
       "text_end": 487,
-      "text_start": 484
+      "text_start": 482
     },
     {
-      "end_ms": 28946,
-      "start_ms": 28364,
-      "text": "voiceover.",
-      "text_end": 498,
+      "end_ms": 30808,
+      "start_ms": 30495,
+      "text": "more,",
+      "text_end": 493,
       "text_start": 488
     },
     {
-      "end_ms": 29120,
-      "start_ms": 29004,
-      "text": "To",
-      "text_end": 501,
-      "text_start": 499
-    },
-    {
-      "end_ms": 29469,
-      "start_ms": 29178,
-      "text": "learn",
-      "text_end": 507,
-      "text_start": 502
-    },
-    {
-      "end_ms": 29817,
-      "start_ms": 29527,
-      "text": "more,",
-      "text_end": 513,
-      "text_start": 508
-    },
-    {
-      "end_ms": 30166,
-      "start_ms": 29876,
+      "end_ms": 31183,
+      "start_ms": 30870,
       "text": "start",
-      "text_end": 519,
-      "text_start": 514
+      "text_end": 499,
+      "text_start": 494
     },
     {
-      "end_ms": 30399,
-      "start_ms": 30224,
+      "end_ms": 31433,
+      "start_ms": 31245,
       "text": "the",
-      "text_end": 523,
-      "text_start": 520
+      "text_end": 503,
+      "text_start": 500
     },
     {
-      "end_ms": 30922,
-      "start_ms": 30457,
+      "end_ms": 31995,
+      "start_ms": 31495,
       "text": "tutorial",
-      "text_end": 532,
-      "text_start": 524
+      "text_end": 512,
+      "text_start": 504
     },
     {
-      "end_ms": 31096,
-      "start_ms": 30980,
+      "end_ms": 32183,
+      "start_ms": 32058,
       "text": "or",
-      "text_end": 535,
-      "text_start": 533
+      "text_end": 515,
+      "text_start": 513
     },
     {
-      "end_ms": 31387,
-      "start_ms": 31154,
+      "end_ms": 32495,
+      "start_ms": 32245,
       "text": "read",
-      "text_end": 540,
-      "text_start": 536
+      "text_end": 520,
+      "text_start": 516
     },
     {
-      "end_ms": 31619,
-      "start_ms": 31445,
+      "end_ms": 32745,
+      "start_ms": 32558,
       "text": "the",
-      "text_end": 544,
-      "text_start": 541
+      "text_end": 524,
+      "text_start": 521
     },
     {
-      "end_ms": 31968,
-      "start_ms": 31677,
+      "end_ms": 33120,
+      "start_ms": 32808,
       "text": "docs.",
-      "text_end": 550,
-      "text_start": 545
+      "text_end": 530,
+      "text_start": 525
     }
   ]
 }

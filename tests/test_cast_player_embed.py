@@ -113,7 +113,7 @@ const secondIframe = element.children[0];
 if (
   element.children.length !== 1 ||
   firstIframe !== secondIframe ||
-  secondIframe.src !== 'https://example.test/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&title=Demo+Build&introSegment=overview'
+  secondIframe.src !== 'https://example.test/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&embed=1&title=Demo+Build&introSegment=overview'
 ) {
   console.error(JSON.stringify({
     children: element.children.length,
@@ -145,7 +145,7 @@ element.attributeChangedCallback();
 if (
   element.children.length !== 1 ||
   element.children[0] !== firstIframe ||
-  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fother%2Frecording.presentation.json&title=Demo+Build'
+  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fother%2Frecording.presentation.json&embed=1&title=Demo+Build'
 ) {
   console.error(JSON.stringify({
     children: element.children.length,
@@ -167,12 +167,13 @@ const Element = context.customElements.get('cast-player-embed');
 const element = new Element();
 element.setAttribute('title', 'Browser Demo');
 element.setAttribute('manifest', '/videos/demo/recording.presentation.json');
+element.setAttribute('layout', 'wide-browser');
 element.setAttribute('player', '/cast-player.html');
 element.connectedCallback();
 
 if (
   element.children.length !== 1 ||
-  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&title=Browser+Demo'
+  element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&embed=1&layout=wide-browser&title=Browser+Demo'
 ) {
   console.error(JSON.stringify({src: element.children[0] && element.children[0].src}));
   process.exit(1);

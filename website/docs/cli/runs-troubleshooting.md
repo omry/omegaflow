@@ -25,12 +25,10 @@ When a build fails, start with the follow-up commands printed by OmegaFlow:
 ```bash
 omegaflow recording=demo action=output run_id=<run-id>
 omegaflow recording=demo action=inspect run_id=<run-id>
-omegaflow recording=demo action=play run_id=<run-id>
 ```
 
 - `output` shows the captured output associated with the failure.
 - `inspect` enters the preserved shell state and working directory.
-- `play` replays the successful or partial cast to show what a viewer saw.
 
 Use `action=runs` when the run id has scrolled out of view:
 
@@ -84,5 +82,4 @@ studio:
   data_dir: .cache/omegaflow
 ```
 
-The `runs`, `inspect`, `output`, and preserved-run `play` actions all use that
-configured directory.
+The `runs`, `inspect`, and `output` actions all use that configured directory.

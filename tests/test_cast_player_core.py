@@ -10,6 +10,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_published_core_matches_packaged_core() -> None:
+    packaged = REPO_ROOT / "src/omegaflow/player/static/cast-player-core.js"
+    published = REPO_ROOT / "website/static/cast-player-core.js"
+
+    assert published.read_bytes() == packaged.read_bytes()
+
+
 def run_core_script(script: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:
@@ -260,6 +267,34 @@ if (
     assert result.returncode == 0, result.stderr
 
 
+def test_browser_window_layout_scales_page_and_decorations_uniformly() -> None:
+    result = run_core_script(
+        r"""
+function close(left, right) { return Math.abs(left - right) < 0.000001; }
+const viewport = {width: 1280, height: 450};
+const decoration = {borderWidth: 1, titlebarHeight: 30, chromeHeight: 38};
+const wide = core.browserWindowLayout(1600, 900, viewport, decoration);
+const short = core.browserWindowLayout(800, 300, viewport, decoration);
+if (
+  !close(wide.width, 1600) || !close(wide.height, 648.9859594383776) ||
+  !close(wide.contentWidth, 1597.5039001560062) ||
+  !close(wide.contentHeight, 561.6224648985959) ||
+  !close(wide.top, 125.50702028081122) ||
+  wide.nativeWidth !== 1282 || wide.nativeHeight !== 520 ||
+  !close(short.height, 300) || !close(short.width, 739.6153846153845) ||
+  !close(short.contentHeight, 259.6153846153846) ||
+  !close(short.contentWidth, 738.4615384615383) ||
+  !close(short.left, 30.192307692307736)
+) {
+  console.error(JSON.stringify({wide, short}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_dom_renderer_materializes_framing_overlays_scroll_and_clip() -> None:
     result = run_core_script(
         r"""
@@ -310,29 +345,72 @@ const assets = {
   initial: {path: 'initial.webp'}, final: {path: 'final.webp'},
   scrolled: {path: 'scrolled.webp'}, clip: {path: 'clip.webm'},
 };
+const resizeObservers = [];
+global.ResizeObserver = class {
+  constructor(callback) {
+    this.callback = callback;
+    this.disconnected = false;
+    resizeObservers.push(this);
+  }
+  observe(target) { this.target = target; }
+  disconnect() { this.disconnected = true; }
+};
 (async () => {
   const renderer = core.createBrowserDomRenderer({document});
   await renderer.load({
     assets, beat: {id: 'browser', transition_in: 'window-open'}, container, payload,
     presentation: {browser: {window: {mode: 'framed', theme: 'kde-breeze', title: 'Demo'}, chrome: {mode: 'full'}}},
   });
-  renderer.renderAt(250);
+  renderer.renderAt(50);
   const root = container.children[0];
+  const layoutBox = find(root, 'browser-window-layout');
   const frame = find(root, 'browser-window');
+  if (
+    layoutBox.style.opacity !== '0' || layoutBox.style.transform !== 'none' ||
+    frame.style.transform !== 'scale(1.9900497512437811)'
+  ) {
+    console.error(JSON.stringify({layoutBox, frame}));
+    process.exit(1);
+  }
+  renderer.renderAt(250);
   const chrome = find(root, 'browser-chrome');
   const url = find(root, 'browser-chrome-url');
   const text = find(root, 'browser-text-overlay');
   const primary = find(root, 'browser-state-primary');
+  const viewportElement = find(root, 'browser-viewport');
+  const viewportHost = find(root, 'browser-viewport-host');
   if (
     frame.dataset.mode !== 'framed' || chrome.dataset.mode !== 'full' || chrome.hidden ||
     url.textContent !== 'https://public.test/safe' || text.textContent !== 's' ||
-    primary.style.opacity !== '0.75' || frame.style.transform !== 'scale(0.9866666666666667)'
+    primary.style.opacity !== '0.75' || layoutBox.style.opacity !== '0.5' ||
+    layoutBox.style.transform !== 'scale(0.9600000000000001)' ||
+    layoutBox.style.width !== '800px' ||
+    layoutBox.style.height !== '537.3134328358209px' ||
+    frame.style.transform !== 'scale(1.9900497512437811)' ||
+    frame.style.width !== '402px' || frame.style.height !== '270px' ||
+    viewportHost.style.width !== '400px' || viewportHost.style.height !== '200px' ||
+    viewportElement.style.left !== '0px' || viewportElement.style.top !== '0px' ||
+    viewportElement.style.transform !== 'none'
   ) {
     console.error(JSON.stringify({frame, chrome, url: url.textContent, text: text.textContent, opacity: primary.style.opacity}));
     process.exit(1);
   }
   if (renderer.state().decodedAssetBytes !== 400 * 200 * 4 * 4) {
     console.error(JSON.stringify(renderer.state()));
+    process.exit(1);
+  }
+  const firstResizeObserver = resizeObservers[0];
+  root.clientWidth = 1000;
+  root.clientHeight = 600;
+  firstResizeObserver.callback();
+  if (
+    firstResizeObserver.target !== root ||
+    layoutBox.style.width !== '893.3333333333334px' ||
+    layoutBox.style.height !== '600px' ||
+    frame.style.transform !== 'scale(2.2222222222222223)' ||
+    primary.style.opacity !== '0.75'
+  ) {
+    console.error(JSON.stringify({layoutBox, frame, opacity: primary.style.opacity}));
     process.exit(1);
   }
   renderer.renderAt(500);
@@ -359,6 +437,28 @@ const assets = {
       time: clip.currentTime, fallbackHidden: primary.hidden,
       fallback: primary.getAttribute('src'), opacity: clip.style.opacity,
     }));
+    process.exit(1);
+  }
+  const cutContainer = node('container');
+  const cutRenderer = core.createBrowserDomRenderer({document});
+  await cutRenderer.load({
+    assets, beat: {id: 'browser', transition_in: 'cut'}, container: cutContainer, payload,
+    presentation: {browser: {window: {mode: 'framed'}, chrome: {mode: 'full'}}},
+  });
+  cutRenderer.renderAt(50);
+  const cutLayoutBox = find(cutContainer.children[0], 'browser-window-layout');
+  const cutFrame = find(cutContainer.children[0], 'browser-window');
+  if (
+    cutLayoutBox.style.opacity !== '1' || cutLayoutBox.style.transform !== 'none' ||
+    cutFrame.style.transform !== 'scale(1.9900497512437811)'
+  ) {
+    console.error(JSON.stringify({cutLayoutBox, cutFrame}));
+    process.exit(1);
+  }
+  renderer.dispose();
+  cutRenderer.dispose();
+  if (!firstResizeObserver.disconnected || !resizeObservers[1].disconnected) {
+    console.error(JSON.stringify({resizeObservers}));
     process.exit(1);
   }
 })().catch((error) => {

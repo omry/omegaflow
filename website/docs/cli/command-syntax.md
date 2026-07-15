@@ -37,8 +37,8 @@ omegaflow recording=tutorial/install
 ```
 
 Actions that operate across recordings do not require a selection. `list` and
-`runs` are the common examples. `inspect`, `output`, and preserved-run `play`
-can also work without `recording` when a `run_id` uniquely identifies a run.
+`runs` are the common examples. `inspect` and `output` can also work without
+`recording` when a `run_id` uniquely identifies a run.
 
 ## Select an action
 
@@ -50,8 +50,8 @@ omegaflow recording=demo
 omegaflow recording=demo action=build
 ```
 
-The public actions are `bootstrap`, `build`, `check`, `clean`, `watch`, `play`,
-`list`, `runs`, `inspect`, and `output`.
+The public actions are `bootstrap`, `build`, `check`, `clean`, `watch`, `list`,
+`runs`, `inspect`, and `output`.
 
 ## Override values
 

@@ -12,7 +12,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
-| `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `watch`, `play`, `inspect`, `output`, `runs`, or `list`. |
+| `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `watch`, `inspect`, `output`, `runs`, or `list`. |
 | `recording` | `null` | most actions | Recording id under `studio.recording_dir`. Required by `build`, `check`, `clean`, and `watch`; optional where run-wide selection is supported. |
 | `output_format` | `text` | `runs`, `clean`, build preview | Use `json` for machine-readable output from supported operations. |
 | `verbose` | `false` | `build` | Show detailed freshness and artifact information. |
@@ -21,11 +21,11 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `headed` | `false` | `build` | Override headless capture and show the recorder terminal. |
 | `surface` | `null` | `build` | Publish only the named configured surface. |
 
-## Run and playback fields
+## Run selection fields
 
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
-| `run_id` | `null` | `play`, `inspect`, `output` | Timestamped preserved run id. Add `recording` if the id is ambiguous. |
+| `run_id` | `null` | `inspect`, `output` | Timestamped preserved run id. Add `recording` if the id is ambiguous. |
 | `runs_since` | `null` | `runs` | Age filter such as `30m`, `2h`, or `1d`; `null`/`all` means no age limit. |
 | `runs_limit` | `10` | `runs` | Maximum rows to return; use a positive integer or `null`. |
 

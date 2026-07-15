@@ -107,8 +107,7 @@ the directory containing the Python executable running OmegaFlow.
 
 `action=watch` requires a graphical environment because it launches an isolated
 Chromium and starts the presentation with audio. Under WSL, Windows Chrome or
-Edge must be installed. `action=play` uses the default browser and remains
-available when managed autoplay is not needed.
+Edge must be installed.
 
 Interactive `action=output` uses `$PAGER`, defaulting to `less`. Redirecting
 the command to a file or pipe writes the captured output directly and does not
