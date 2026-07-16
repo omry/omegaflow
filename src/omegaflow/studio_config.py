@@ -254,6 +254,7 @@ class StudioConfig:
     dry_run: Any = False
     headed: bool = False
     force: bool = False
+    open: bool = True
     run_id: str | None = None
     runs_since: str | None = None
     runs_limit: int | None = 10

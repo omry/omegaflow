@@ -20,6 +20,14 @@ temporary profile and an audible-autoplay override. This does not change the
 autoplay policy or data in your normal browser profile. Close the browser window
 or press Ctrl-C to stop the local server.
 
+To start the watch server without opening a browser, use:
+
+```bash
+omegaflow recording=demo action=watch open=false
+```
+
+OmegaFlow prints the local player URL and serves it until you press Ctrl-C.
+
 Under WSL, watch launches Windows Chrome or Edge so playback uses the host audio
 stack instead of WSLg audio. Native Linux and macOS also use an installed system
 browser; watch does not use OmegaFlow's pinned recording browser or require the

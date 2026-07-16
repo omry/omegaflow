@@ -1617,6 +1617,7 @@ def run_watch_server(
     artifacts: dict[str, Path],
     *,
     managed_browser: bool = False,
+    open_browser: bool = True,
 ) -> int:
     static_root = studio_config_module.project_root() / "website" / "static"
 
@@ -1655,7 +1656,7 @@ def run_watch_server(
                 if text_output_enabled(cfg):
                     info_line("stopped local watch server")
             return 0
-        opened = open_watch_url(url)
+        opened = open_watch_url(url) if open_browser else False
         if text_output_enabled(cfg):
             if opened:
                 info_line("opened browser; press Ctrl-C to stop")
@@ -1677,7 +1678,14 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
 
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
     url_path, artifacts = watch_player_url_path(spec, autoplay_countdown=True)
-    return run_watch_server(cfg, url_path, artifacts, managed_browser=True)
+    open_browser = bool_config(config, "open", True)
+    return run_watch_server(
+        cfg,
+        url_path,
+        artifacts,
+        managed_browser=open_browser,
+        open_browser=open_browser,
+    )
 
 
 def studio_tool_command(recording_id: str, *overrides: str) -> str:

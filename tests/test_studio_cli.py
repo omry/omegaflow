@@ -1054,6 +1054,16 @@ def test_compose_accepts_nested_rec_overrides() -> None:
     assert config["rec"]["capture"]["headless"] is False
 
 
+def test_compose_accepts_watch_open_override() -> None:
+    config = compose_studio_config(
+        "quickstart-demo",
+        overrides=("action=watch", "open=false"),
+    )
+
+    assert config["action"] == "watch"
+    assert config["open"] is False
+
+
 def test_cli_rec_overrides_are_normalized_for_hydra() -> None:
     assert studio.normalize_cli_rec_overrides(
         [
@@ -2013,8 +2023,10 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         _artifacts,
         *,
         managed_browser=False,
+        open_browser=True,
     ):
         requested["managed_browser"] = managed_browser
+        requested["open_browser"] = open_browser
         return 0
 
     monkeypatch.setattr(studio, "watch_player_url_path", fake_watch_player_url_path)
@@ -2029,6 +2041,50 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
     assert requested == {
         "autoplay_countdown": True,
         "managed_browser": True,
+        "open_browser": True,
+    }
+
+
+def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_player_url_path",
+        lambda _spec, *, run_dir=None, autoplay_countdown=False: (
+            "/cast-player.html?manifest=demo",
+            {},
+        ),
+    )
+
+    def fake_run_watch_server(
+        _cfg,
+        _url,
+        _artifacts,
+        *,
+        managed_browser=False,
+        open_browser=True,
+    ):
+        requested["managed_browser"] = managed_browser
+        requested["open_browser"] = open_browser
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
+
+    status = studio.run_watch(
+        OmegaConf.create({"output_format": "text"}),
+        {"recording": "hello", "open": False},
+    )
+
+    assert status == 0
+    assert requested == {
+        "managed_browser": False,
+        "open_browser": False,
     }
 
 
@@ -2274,4 +2330,46 @@ def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
     assert status == 0
     assert "serving local watch server: http://127.0.0.1:51234/" in output
     assert "opened browser; press Ctrl-C to stop" in output
+    assert "stopped local watch server" in output
+
+
+def test_watch_server_can_serve_without_calling_browser_opener(
+    monkeypatch, capsys
+) -> None:
+    observed: dict[str, object] = {}
+
+    class FakeServer:
+        server_port = 51234
+
+        def __init__(self, _address, _handler_factory) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> bool:
+            return False
+
+        def serve_forever(self) -> None:
+            observed["served"] = True
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(studio.http.server, "ThreadingHTTPServer", FakeServer)
+    monkeypatch.setattr(
+        studio,
+        "open_watch_url",
+        lambda _url: (_ for _ in ()).throw(AssertionError("browser opener called")),
+    )
+
+    status = studio.run_watch_server(
+        OmegaConf.create({"output_format": "text"}),
+        "/cast-player.html?manifest=/__studio_artifacts__/recording.presentation.json",
+        {},
+        open_browser=False,
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert observed == {"served": True}
+    assert "open the URL in a browser; press Ctrl-C to stop" in output
     assert "stopped local watch server" in output
