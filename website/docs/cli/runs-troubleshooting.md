@@ -51,26 +51,32 @@ ids are safer in notes and automation.
 
 ## Retention
 
-After a successful build, OmegaFlow removes run directories whose filesystem
-modification time is older than the configured maximum age. The current run is
-always protected.
+After a successful build, OmegaFlow removes run directories that exceed either
+the configured age or per-recording count. The current run is always protected.
 
 ```yaml
 studio:
   run_gc:
     enabled: true
     max_age_days: 30
-    dry_run: false
+    max_runs_per_recording: 10
+    preserve_latest_failure: true
 ```
 
-Preview retention without deleting runs:
+The current build is always protected. When `preserve_latest_failure` is true,
+the newest failed run is also protected. These protected runs can exceed the
+configured count when `max_runs_per_recording` is smaller than the number of
+protected runs.
+
+Preview retention across all recordings without deleting runs:
 
 ```bash
-omegaflow recording=demo studio.run_gc.dry_run=true
+omegaflow action=gc dry_run=true
 ```
 
-This preview occurs when the successful build reaches its retention stage.
-`action=clean` does not remove preserved runs.
+Add `recording=demo` to limit the preview or cleanup to one recording. Omit
+`dry_run=true` to remove the reported runs. Automatic retention still runs
+after each successful build. `action=clean` does not remove preserved runs.
 
 ## Moving run state
 

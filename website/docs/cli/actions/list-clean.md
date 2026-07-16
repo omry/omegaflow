@@ -1,9 +1,9 @@
 ---
-sidebar_label: List and Clean
+sidebar_label: List, Clean, and GC
 slug: /omegaflow/actions/list-clean
 ---
 
-# List and Clean
+# List, Clean, and GC
 
 ## List recordings
 
@@ -43,6 +43,24 @@ omegaflow recording=demo action=clean output_format=json
 
 The JSON result has `removed` and `retained` lists.
 
-Run retention is separate from `clean`. Old preserved runs are managed after a
-successful build by `studio.run_gc`; see
+Run retention is separate from `clean`. Preserved runs are bounded by age and
+per-recording count after a successful build.
+
+## Preview or run garbage collection
+
+Preview cleanup across all recordings:
+
+```bash
+omegaflow action=gc dry_run=true
+```
+
+Remove the reported runs:
+
+```bash
+omegaflow action=gc
+```
+
+Add `recording=demo` to target one recording. Automatic post-build cleanup
+protects the current build; both automatic and explicit cleanup protect the
+newest failed run when configured to do so. See
 [Runs and Troubleshooting](../runs-troubleshooting.md#retention).

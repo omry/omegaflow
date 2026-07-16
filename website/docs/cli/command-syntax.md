@@ -50,8 +50,8 @@ omegaflow recording=demo
 omegaflow recording=demo action=build
 ```
 
-The public actions are `bootstrap`, `build`, `check`, `clean`, `watch`, `list`,
-`runs`, `inspect`, and `output`.
+The public actions are `bootstrap`, `build`, `check`, `clean`, `gc`, `watch`,
+`list`, `runs`, `inspect`, and `output`.
 
 ## Override values
 

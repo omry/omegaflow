@@ -201,6 +201,7 @@ class StudioAction(str, Enum):
     build = "build"
     check = "check"
     clean = "clean"
+    gc = "gc"
     watch = "watch"
     inspect = "inspect"
     output = "output"
@@ -226,7 +227,8 @@ class RecordingMedium(str, Enum):
 class RunGarbageCollectionConfig:
     enabled: bool = True
     max_age_days: int = 30
-    dry_run: bool = False
+    max_runs_per_recording: int = 10
+    preserve_latest_failure: bool = True
 
 
 @dataclass

@@ -67,9 +67,10 @@ output, and env-file paths are resolved from that root.
 | `studio.recording_dir` | Directory containing `config.yaml` plus one directory per video. Each video directory contains `index.md`. |
 | `studio.data_dir` | Directory for generated run state, scratch output, caches, and generated artifacts. Defaults to `recordings/.omegaflow`. |
 | `studio.keep_output_dir` | Keeps Hydra's output directory metadata when a run is created. |
-| `studio.run_gc.enabled` | Removes old recording runs after a successful build. Defaults to `true`. |
-| `studio.run_gc.max_age_days` | Retains successful, failed, and incomplete runs modified within this many days. Defaults to `30`. |
-| `studio.run_gc.dry_run` | Reports runs that retention would remove without deleting them. Defaults to `false`. |
+| `studio.run_gc.enabled` | Removes excess recording runs after a successful build and enables explicit `action=gc`. Defaults to `true`. |
+| `studio.run_gc.max_age_days` | Retains successful, failed, and incomplete runs modified within this many days unless protected. Defaults to `30`. |
+| `studio.run_gc.max_runs_per_recording` | Bounds retained runs independently for each recording, subject to protected-run exceptions. Defaults to `10`. |
+| `studio.run_gc.preserve_latest_failure` | Protects the newest failed run for each recording. Defaults to `true`. |
 | `load_env_file` | Enables loading a process-level `.env` file before running actions. |
 | `env_file` | Path to the process-level `.env` file, resolved from the project root. |
 | `env_override` | Allows values from `env_file` to replace existing environment variables. |

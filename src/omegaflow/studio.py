@@ -439,7 +439,8 @@ studio:
   run_gc:
     enabled: true
     max_age_days: 30
-    dry_run: false
+    max_runs_per_recording: 10
+    preserve_latest_failure: true
 """
 
 
@@ -664,6 +665,7 @@ def garbage_collect_recording_runs(
     *,
     current_run_dir: Path,
     report: bool = True,
+    dry_run: bool = False,
 ) -> list[Path]:
     config = spec.get("_studio_config", {})
     if not isinstance(config, dict):
@@ -675,14 +677,21 @@ def garbage_collect_recording_runs(
     if not isinstance(run_gc, dict):
         raise StudioError("studio.run_gc must be a mapping")
     enabled = run_gc.get("enabled", True)
-    dry_run = run_gc.get("dry_run", False)
     if not isinstance(enabled, bool):
         raise StudioError("studio.run_gc.enabled must be a boolean")
-    if not isinstance(dry_run, bool):
-        raise StudioError("studio.run_gc.dry_run must be a boolean")
     if not enabled:
         return []
+    runs_dir = record.recording_runs_dir(spec)
+    return garbage_collect_run_directory(
+        runs_dir,
+        run_gc=run_gc,
+        current_run_dir=current_run_dir,
+        report=report,
+        dry_run=dry_run,
+    )
 
+
+def run_gc_policy(run_gc: dict[str, Any]) -> tuple[int, int, bool]:
     max_age_days = run_gc.get("max_age_days", 30)
     if (
         isinstance(max_age_days, bool)
@@ -690,18 +699,68 @@ def garbage_collect_recording_runs(
         or max_age_days < 1
     ):
         raise StudioError("studio.run_gc.max_age_days must be a positive integer")
-    runs_dir = record.recording_runs_dir(spec)
+    max_runs = run_gc.get("max_runs_per_recording", 10)
+    if isinstance(max_runs, bool) or not isinstance(max_runs, int) or max_runs < 1:
+        raise StudioError(
+            "studio.run_gc.max_runs_per_recording must be a positive integer"
+        )
+    preserve_failure = run_gc.get("preserve_latest_failure", True)
+    if not isinstance(preserve_failure, bool):
+        raise StudioError("studio.run_gc.preserve_latest_failure must be a boolean")
+    return max_age_days, max_runs, preserve_failure
+
+
+def garbage_collect_run_directory(
+    runs_dir: Path,
+    *,
+    run_gc: dict[str, Any],
+    current_run_dir: Path | None = None,
+    report: bool = True,
+    dry_run: bool = False,
+) -> list[Path]:
+    if not isinstance(dry_run, bool):
+        raise StudioError("dry_run must be a boolean")
+    max_age_days, max_runs, preserve_failure = run_gc_policy(run_gc)
     if not runs_dir.is_dir():
         return []
-    protected = current_run_dir.resolve()
+    run_dirs = [path for path in runs_dir.iterdir() if path.is_dir()]
+    newest_first = sorted(
+        run_dirs,
+        key=lambda path: (path.name, path.stat().st_mtime_ns),
+        reverse=True,
+    )
+    protected: set[Path] = set()
+    if current_run_dir is not None:
+        protected.add(current_run_dir.resolve())
+    if preserve_failure:
+        latest_failure = next(
+            (
+                path
+                for path in newest_first
+                if (path / "failure.json").is_file()
+                or (path / "failed.cast").is_file()
+            ),
+            None,
+        )
+        if latest_failure is not None:
+            protected.add(latest_failure.resolve())
+
+    retained = set(protected)
+    for run_dir in newest_first:
+        if len(retained) >= max_runs:
+            break
+        retained.add(run_dir.resolve())
+
     cutoff = time.time() - (max_age_days * 24 * 60 * 60)
-    candidates: list[Path] = []
-    for run_dir in runs_dir.iterdir():
-        if not run_dir.is_dir() or run_dir.resolve() == protected:
-            continue
-        if run_dir.stat().st_mtime < cutoff:
-            candidates.append(run_dir)
-    candidates.sort()
+    candidates = sorted(
+        run_dir
+        for run_dir in run_dirs
+        if run_dir.resolve() not in protected
+        and (
+            run_dir.stat().st_mtime < cutoff
+            or run_dir.resolve() not in retained
+        )
+    )
 
     action = "would remove" if dry_run else "removed"
     removed_count = 0
@@ -722,8 +781,58 @@ def garbage_collect_recording_runs(
             print(f"run gc {action}: {display_path(run_dir)}")
     if report and candidates:
         suffix = " (dry run)" if dry_run else ""
-        print(f"run gc: {action} {removed_count} old run(s){suffix}")
+        print(f"run gc: {action} {removed_count} run(s){suffix}")
     return candidates
+
+
+def run_gc_action(config: dict[str, Any]) -> int:
+    studio_config = config.get("studio", {})
+    if not isinstance(studio_config, dict):
+        raise StudioError("studio must be a mapping")
+    run_gc = studio_config.get("run_gc", {})
+    if not isinstance(run_gc, dict):
+        raise StudioError("studio.run_gc must be a mapping")
+    enabled = run_gc.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise StudioError("studio.run_gc.enabled must be a boolean")
+    if not enabled:
+        info_line("run gc is disabled")
+        return 0
+    dry_run = bool_config(config, "dry_run")
+    runs_root = studio_config_module.studio_data_dir_from_config(config) / "runs"
+    recording_id = recording_id_from_value(config.get("recording"))
+    if recording_id is not None:
+        resolved_runs_root = runs_root.resolve()
+        recording_dir = (runs_root / recording_id).resolve()
+        try:
+            recording_dir.relative_to(resolved_runs_root)
+        except ValueError as exc:
+            raise StudioError(
+                "recording must resolve inside the configured runs directory"
+            ) from exc
+        recording_dirs = [recording_dir]
+    elif runs_root.is_dir():
+        recording_dirs = sorted(
+            {
+                path.parent
+                for path in runs_root.rglob("*")
+                if path.is_dir()
+                and record.parse_run_id_timestamp(path.name) is not None
+                and ".scratch" not in path.relative_to(runs_root).parts
+            }
+        )
+    else:
+        recording_dirs = []
+    for recording_dir in recording_dirs:
+        garbage_collect_run_directory(
+            recording_dir,
+            run_gc=run_gc,
+            report=True,
+            dry_run=dry_run,
+        )
+    if not recording_dirs:
+        info_line("no recording runs to clean")
+    return 0
 
 
 def publish_config(spec: dict[str, Any]) -> dict[str, Any]:
@@ -1852,6 +1961,9 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
 
     if step is None and action == "bootstrap":
         return run_bootstrap(config)
+
+    if step is None and action == "gc":
+        return run_gc_action(config)
 
     recording_required = step is not None or action in {
         "build",

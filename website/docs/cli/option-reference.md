@@ -12,11 +12,11 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
-| `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `watch`, `inspect`, `output`, `runs`, or `list`. |
+| `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `gc`, `watch`, `inspect`, `output`, `runs`, or `list`. |
 | `recording` | `null` | most actions | Recording id under `studio.recording_dir`. Required by `build`, `check`, `clean`, and `watch`; optional where run-wide selection is supported. |
 | `output_format` | `text` | `runs`, `clean`, build preview | Use `json` for machine-readable output from supported operations. |
 | `verbose` | `false` | `build` | Show detailed freshness and artifact information. |
-| `dry_run` | `false` | `build`, `bootstrap` | `true` previews a build or lists bootstrap files. Bootstrap also accepts `diff`. |
+| `dry_run` | `false` | `build`, `bootstrap`, `gc` | `true` previews a build, lists bootstrap files, or reports runs that GC would remove. Bootstrap also accepts `diff`. |
 | `force` | `false` | `build`, `bootstrap` | Rebuild reusable stages or replace bootstrap-created targets. |
 | `headed` | `false` | `build` | Override headless capture and show the recorder terminal. |
 | `open` | `true` | `watch` | Open an isolated browser. Set `false` to serve the player without opening one. |
@@ -55,9 +55,10 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `studio.data_dir` | `recordings/.omegaflow` | Local run state, scratch data, caches, and generated runtime artifacts. |
 | `studio.keep_output_dir` | `true` | Preserve OmegaFlow's Hydra output directory after the recording session. |
 | `studio.asciinema_path` | `null` | Explicit asciinema 3.x executable. When unset, OmegaFlow uses its bundled recorder when available, then `asciinema` on `PATH`. |
-| `studio.run_gc.enabled` | `true` | Run age-based garbage collection after successful builds. |
+| `studio.run_gc.enabled` | `true` | Run garbage collection after successful builds and allow explicit `action=gc`. |
 | `studio.run_gc.max_age_days` | `30` | Remove run directories whose filesystem modification time is older than this many days. |
-| `studio.run_gc.dry_run` | `false` | Report what retention would remove without deleting it. |
+| `studio.run_gc.max_runs_per_recording` | `10` | Retain at most this many runs per recording, subject to protected-run exceptions. |
+| `studio.run_gc.preserve_latest_failure` | `true` | Protect the newest failed run for each recording so its diagnostics remain available. |
 
 ## Internal build-stage fields
 
