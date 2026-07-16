@@ -1,0 +1,1 @@
+Align captured browser fragment boundaries against their actual video states, including delayed start frames and exact end frames inside video-clock lag, preventing build failures and content from appearing, rewinding, and appearing again at action boundaries.

@@ -1267,6 +1267,91 @@ def write_repeated_end_state_video(tmp_path: Path) -> tuple[str, Path, Path]:
     return ffmpeg, source, end_state
 
 
+def write_lagged_small_change_video(
+    tmp_path: Path,
+) -> tuple[str, Path, Path, Path]:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is unavailable")
+    source = tmp_path / "lagged-small-change.webm"
+    start_state = tmp_path / "lagged-small-change-start.png"
+    end_state = tmp_path / "lagged-small-change.png"
+    base = "color=c=black:s=192x60:r=25"
+    distinct_start = "color=c=#404040:s=192x60:r=25"
+    first_box = "drawbox=x=20:y=20:w=4:h=4:color=white:t=fill"
+    second_box = "drawbox=x=30:y=20:w=4:h=4:color=white:t=fill"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"{base}:d=0.88",
+            "-f",
+            "lavfi",
+            "-i",
+            f"{distinct_start}:d=0.12",
+            "-f",
+            "lavfi",
+            "-i",
+            f"{base}:d=0.04,{first_box}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"{base}:d=0.4,{first_box},{second_box}",
+            "-filter_complex",
+            "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0[v]",
+            "-map",
+            "[v]",
+            "-c:v",
+            "libvpx",
+            "-lossless",
+            "1",
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            distinct_start,
+            "-frames:v",
+            "1",
+            str(start_state),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"{base},{first_box}",
+            "-frames:v",
+            "1",
+            str(end_state),
+        ],
+        check=True,
+    )
+    return ffmpeg, source, start_state, end_state
+
+
 def test_dynamic_fragment_uses_first_stable_end_state_match(tmp_path: Path) -> None:
     ffmpeg, source, end_state = write_repeated_end_state_video(tmp_path)
 
@@ -1277,7 +1362,104 @@ def test_dynamic_fragment_uses_first_stable_end_state_match(tmp_path: Path) -> N
         minimum_ms=1500,
     )
 
-    assert 2440 <= matched_end_ms <= 2700
+    # Three consecutive matches confirm that the end state is stable, but the
+    # retained clip must end after the first matching frame. Keeping the two
+    # confirmation frames can expose newer page content before the renderer
+    # cuts back to the captured end-state screenshot.
+    assert 2440 <= matched_end_ms <= 2500
+
+
+def test_dynamic_fragment_finds_single_exact_state_before_lagged_video_clock(
+    tmp_path: Path,
+) -> None:
+    ffmpeg, source, _start_state, end_state = write_lagged_small_change_video(
+        tmp_path
+    )
+
+    matched_end_ms = browser_visuals._matching_end_frame_ms(
+        ffmpeg,
+        source,
+        end_state,
+        minimum_ms=1120,
+        lookback_ms=120,
+    )
+
+    assert 1000 <= matched_end_ms <= 1080
+
+
+def test_dynamic_fragment_aligns_states_when_video_lags_authored_interval(
+    tmp_path: Path,
+) -> None:
+    _ffmpeg, source, start_state, end_state = write_lagged_small_change_video(
+        tmp_path
+    )
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.append(
+        DynamicFragmentRequest(
+            beat_id="dynamic",
+            action_id="lagged-small-change",
+            source_start_ms=120,
+            source_end_ms=1120,
+            start_state_path=start_state,
+            end_state_path=end_state,
+            explicit_dynamic=True,
+        )
+    )
+
+    (asset,) = visuals.finalize_dynamic_fragments(source)
+
+    assert 880 <= asset.source_start_ms <= 960
+    assert 1000 <= asset.source_end_ms <= 1080
+
+
+def test_dynamic_fragment_alignment_error_identifies_beat_and_action(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ffmpeg, source, _start_state, end_state = write_lagged_small_change_video(
+        tmp_path
+    )
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.append(
+        DynamicFragmentRequest(
+            beat_id="browser-demo",
+            action_id="play",
+            source_start_ms=0,
+            source_end_ms=100,
+            end_state_path=end_state,
+        )
+    )
+    monkeypatch.setattr(
+        browser_visuals,
+        "_matching_end_frame_ms",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            BrowserVisualError(
+                "BROWSER_UNSUPPORTED_MOTION",
+                "could not align a dynamic fragment with its completed browser frame",
+            )
+        ),
+    )
+
+    with pytest.raises(
+        BrowserVisualError,
+        match="beat 'browser-demo', action 'play'.*could not align",
+    ):
+        visuals.finalize_dynamic_fragments(source)
 
 
 def test_dynamic_fragment_finalization_extends_to_the_matching_end_state(

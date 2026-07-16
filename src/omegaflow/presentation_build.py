@@ -68,7 +68,7 @@ from .terminal_capture import PersistentTerminalRunner
 CAPTURE_POLICY_VERSIONS = {
     "coordinator": "capture-v1",
     "terminal": "persistent-terminal-v4",
-    "browser": "playwright-capture-v6-frame-aligned",
+    "browser": "playwright-capture-v7-visual-state-aligned",
     "stability": "stable-v1",
     "redaction": "capture-mask-v1",
 }

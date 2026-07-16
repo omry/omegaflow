@@ -29,6 +29,9 @@ FRAME_MATCH_HEIGHT = 60
 FRAME_MATCH_RATE = 25
 FRAME_MATCH_DURATION_MS = 1000 // FRAME_MATCH_RATE
 FRAME_MATCH_MAX_MAD = 4.0
+FRAME_MATCH_MAX_PRECISE_MAD = 1.0
+FRAME_MATCH_OUTLIER_DELTA = 8
+FRAME_MATCH_MAX_OUTLIER_RATIO = 0.0007
 FRAME_MATCH_CONSECUTIVE_FRAMES = 3
 FRAME_MATCH_START_LOOKBACK_MS = 2000
 
@@ -226,20 +229,37 @@ class BrowserVisualCapture:
         ffprobe = media.ffprobe
         assets: list[DynamicFragmentAsset] = []
         for index, request in enumerate(self.dynamic_requests, 1):
-            source_start_ms = request.source_start_ms
-            if request.start_state_path is not None:
-                source_start_ms = _matching_start_frame_ms(
+            # Playwright's video can lag the authored action clock, and that
+            # lag can grow during a recording. Align the end state first, then
+            # search through that actual boundary for the final start-state
+            # run immediately before the captured motion.
+            try:
+                source_end_ms = _matching_end_frame_ms(
                     ffmpeg,
                     source_video,
-                    request.start_state_path,
-                    maximum_ms=request.source_start_ms,
+                    request.end_state_path,
+                    minimum_ms=request.source_end_ms,
+                    lookback_ms=(
+                        FRAME_MATCH_START_LOOKBACK_MS
+                        if request.start_state_path is not None
+                        else 0
+                    ),
                 )
-            source_end_ms = _matching_end_frame_ms(
-                ffmpeg,
-                source_video,
-                request.end_state_path,
-                minimum_ms=request.source_end_ms,
-            )
+                source_start_ms = request.source_start_ms
+                if request.start_state_path is not None:
+                    source_start_ms = _matching_start_frame_ms(
+                        ffmpeg,
+                        source_video,
+                        request.start_state_path,
+                        reference_ms=request.source_start_ms,
+                        maximum_ms=source_end_ms,
+                    )
+            except BrowserVisualError as exc:
+                detail = str(exc).split(": ", 1)[-1]
+                raise BrowserVisualError(
+                    exc.code,
+                    f"beat {request.beat_id!r}, action {request.action_id!r}: {detail}",
+                ) from exc
             duration_ms = source_end_ms - source_start_ms
             if (
                 not request.explicit_dynamic
@@ -468,11 +488,12 @@ def _matching_start_frame_ms(
     source_video: Path,
     start_state: Path,
     *,
+    reference_ms: int,
     maximum_ms: int,
 ) -> int:
     frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
     target = _normalized_state_frame(ffmpeg, start_state, boundary="start")
-    search_start_ms = max(0, maximum_ms - FRAME_MATCH_START_LOOKBACK_MS)
+    search_start_ms = max(0, reference_ms - FRAME_MATCH_START_LOOKBACK_MS)
     process = subprocess.Popen(
         [
             ffmpeg,
@@ -515,11 +536,22 @@ def _matching_start_frame_ms(
                 "BROWSER_UNSUPPORTED_MOTION",
                 "dynamic fragment started with a partial frame",
             )
-        score = sum(
+        differences = tuple(
             abs(target_value - frame_value)
             for target_value, frame_value in zip(target, frame, strict=True)
-        ) / frame_size
-        if score <= FRAME_MATCH_MAX_MAD:
+        )
+        score = sum(differences) / frame_size
+        outlier_ratio = (
+            sum(
+                difference > FRAME_MATCH_OUTLIER_DELTA
+                for difference in differences
+            )
+            / frame_size
+        )
+        if (
+            score <= FRAME_MATCH_MAX_MAD
+            and outlier_ratio <= FRAME_MATCH_MAX_OUTLIER_RATIO
+        ):
             consecutive_matches += 1
             if consecutive_matches >= FRAME_MATCH_CONSECUTIVE_FRAMES:
                 match_index = index - FRAME_MATCH_CONSECUTIVE_FRAMES + 1
@@ -542,9 +574,11 @@ def _matching_end_frame_ms(
     end_state: Path,
     *,
     minimum_ms: int,
+    lookback_ms: int = 0,
 ) -> int:
     frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
     target = _normalized_state_frame(ffmpeg, end_state, boundary="end")
+    search_start_ms = max(0, minimum_ms - lookback_ms)
     process = subprocess.Popen(
         [
             ffmpeg,
@@ -554,7 +588,7 @@ def _matching_end_frame_ms(
             "-i",
             str(source_video),
             "-ss",
-            f"{minimum_ms / 1000:.3f}",
+            f"{search_start_ms / 1000:.3f}",
             "-vf",
             f"fps={FRAME_MATCH_RATE},"
             f"scale={FRAME_MATCH_WIDTH}:{FRAME_MATCH_HEIGHT}:flags=area,format=gray",
@@ -572,6 +606,7 @@ def _matching_end_frame_ms(
             "could not inspect a dynamic fragment end state",
         )
     match_index: int | None = None
+    precise_lookback_match_index: int | None = None
     consecutive_matches = 0
     index = 0
     while True:
@@ -585,30 +620,62 @@ def _matching_end_frame_ms(
                 "BROWSER_UNSUPPORTED_MOTION",
                 "dynamic fragment ended with a partial frame",
             )
-        score = sum(
+        differences = tuple(
             abs(target_value - frame_value)
             for target_value, frame_value in zip(target, frame, strict=True)
-        ) / frame_size
+        )
+        score = sum(differences) / frame_size
+        outlier_ratio = (
+            sum(
+                difference > FRAME_MATCH_OUTLIER_DELTA
+                for difference in differences
+            )
+            / frame_size
+        )
+        frame_end_ms = search_start_ms + (index + 1) * FRAME_MATCH_DURATION_MS
         if match_index is None:
-            if score <= FRAME_MATCH_MAX_MAD:
+            if frame_end_ms <= minimum_ms:
+                consecutive_matches = 0
+            elif (
+                score <= FRAME_MATCH_MAX_MAD
+                and outlier_ratio <= FRAME_MATCH_MAX_OUTLIER_RATIO
+            ):
                 consecutive_matches += 1
             else:
                 consecutive_matches = 0
             if consecutive_matches >= FRAME_MATCH_CONSECUTIVE_FRAMES:
-                match_index = index
+                match_index = index - FRAME_MATCH_CONSECUTIVE_FRAMES + 1
+        # The screenshot and Playwright video clocks can differ slightly. If
+        # the exact captured state occurs inside that measured lag window,
+        # prefer its closest frame even when animation changes the next frame.
+        # Outside the lag window, require the stable run above so an earlier or
+        # later transient cannot become the fragment boundary.
+        if (
+            lookback_ms > 0
+            and frame_end_ms <= minimum_ms
+            and score <= FRAME_MATCH_MAX_PRECISE_MAD
+            and outlier_ratio == 0
+        ):
+            precise_lookback_match_index = index
         index += 1
     stderr = process.stderr.read()
     returncode = process.wait()
     if (
         returncode != 0
         or stderr
-        or match_index is None
+        or (precise_lookback_match_index is None and match_index is None)
     ):
         raise BrowserVisualError(
             "BROWSER_UNSUPPORTED_MOTION",
             "could not align a dynamic fragment with its completed browser frame",
         )
-    return minimum_ms + (match_index + 1) * FRAME_MATCH_DURATION_MS
+    selected_index = (
+        precise_lookback_match_index
+        if precise_lookback_match_index is not None
+        else match_index
+    )
+    assert selected_index is not None
+    return search_start_ms + (selected_index + 1) * FRAME_MATCH_DURATION_MS
 
 
 def _probe_video(ffprobe: str, path: Path) -> dict[str, Any]:
