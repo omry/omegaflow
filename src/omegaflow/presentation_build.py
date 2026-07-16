@@ -67,13 +67,13 @@ from .terminal_capture import PersistentTerminalRunner
 
 CAPTURE_POLICY_VERSIONS = {
     "coordinator": "capture-v1",
-    "terminal": "persistent-terminal-v3",
-    "browser": "playwright-capture-v1",
+    "terminal": "persistent-terminal-v4",
+    "browser": "playwright-capture-v4",
     "stability": "stable-v1",
     "redaction": "capture-mask-v1",
 }
 PRESENTATION_POLICY_VERSIONS = {
-    "compiler": "presentation-v1",
+    "compiler": "presentation-v2",
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",

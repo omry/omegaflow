@@ -1018,7 +1018,6 @@ def _capture_action_value(action: TerminalActionPlan | BrowserActionPlan) -> Any
 def _strip_terminal_presentation_fields(value: dict[str, Any]) -> None:
     for field in (
         "after",
-        "follow_along",
         "timing",
     ):
         value.pop(field, None)
@@ -1862,6 +1861,20 @@ def _compile_browser_action(
             }
         )
         cursor += clip_duration
+        end_state = _mapping_value(
+            visual.get("end_state"), field=f"browser clip {action.id} end state"
+        )
+        end_asset = _register_state_asset(end_state, assets)
+        events.append(
+            {
+                "kind": "state",
+                "action_id": action.id,
+                "at_ms": cursor,
+                "end_ms": cursor,
+                "asset": end_asset,
+                "transition": "cut",
+            }
+        )
     elif visual_kind != "state":
         raise PresentationCompileError(
             "PRESENTATION_SCHEMA",

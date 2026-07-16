@@ -184,6 +184,11 @@ Step fields:
 Command entries also accept `id`, `follow_along`, `show_prompt_after`,
 `timing`, and pre/post command pause fields.
 
+Command output is buffered until the command finishes by default. Set
+`follow_along: true` to stream real stdout and stderr into the recording while
+the command runs, preserving visible delays between output updates. Output
+replacement and suppression remain non-streaming.
+
 ### Browser beats
 
 Browser actions operate one persistent Playwright page shared by every browser
@@ -251,6 +256,15 @@ has an application-specific readiness condition. `loading: show` includes the
 loading stage in the presentation; the default `hide` starts the visible action
 at the ready state. `display_url` changes only the safe URL shown in browser
 chrome and never changes navigation.
+
+Actions use short automatic transitions by default. Set
+`transition: captured` when the recorded browser motion itself should remain in
+the video. On a `wait_for` action, the captured segment continues until the
+authored condition succeeds. Automatic dynamic segments retain a three-second
+safety limit, including any final-frame alignment. Explicit captured segments
+use the action's timeout for the authored condition, then may retain additional
+video through the rendered frame where that condition completed.
+All captured segments remain subject to the encoded-size limit.
 
 ### Narration takes across beats
 

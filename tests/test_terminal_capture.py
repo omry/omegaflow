@@ -760,6 +760,66 @@ def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
     assert all(text != "abcde" for _, text in typed_events)
 
 
+def test_terminal_beat_follow_along_streams_output_during_command(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "follow-output",
+            "beats": [
+                {
+                    "id": "follow",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "count",
+                                    "run": (
+                                        "printf '1\\n'; sleep 0.25; "
+                                        "printf '2\\n'; sleep 0.25; "
+                                        "printf '3\\n'"
+                                    ),
+                                    "display": "count slowly",
+                                    "follow_along": True,
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    source = tmp_path / "run/capture/terminal-beats/follow.cast"
+    absolute_ms = 0
+    output_times: dict[str, int] = {}
+    for line in source.read_text(encoding="utf-8").splitlines()[1:]:
+        event = json.loads(line)
+        absolute_ms += round(float(event[0]) * 1000)
+        if event[1] != "o":
+            continue
+        text = str(event[2]).strip()
+        if text in {"1", "2", "3"}:
+            output_times[text] = absolute_ms
+
+    assert list(output_times) == ["1", "2", "3"]
+    assert output_times["2"] - output_times["1"] >= 150
+    assert output_times["3"] - output_times["2"] >= 150
+
+
 def _cast_output(cast: str) -> str:
     return "".join(json.loads(line)[2] for line in cast.splitlines()[1:])
 

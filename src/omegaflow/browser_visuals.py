@@ -19,11 +19,16 @@ STABLE_SAMPLE_INTERVAL_MS = 60
 STABLE_CONSECUTIVE_FRAMES = 3
 STABLE_TIMEOUT_MS = 1200
 DYNAMIC_MINIMUM_WINDOW_MS = 300
-DYNAMIC_MAX_DURATION_MS = 3000
+IMPLICIT_DYNAMIC_MAX_DURATION_MS = 3000
 DYNAMIC_MAX_ENCODED_BYTES = 2_000_000
 DYNAMIC_CRF = 10
 DYNAMIC_BITRATE = "2M"
 REDACTION_COLOR = "#111827"
+FRAME_MATCH_WIDTH = 192
+FRAME_MATCH_HEIGHT = 60
+FRAME_MATCH_RATE = 25
+FRAME_MATCH_DURATION_MS = 1000 // FRAME_MATCH_RATE
+FRAME_MATCH_MAX_MAD = 4.0
 
 
 class BrowserVisualError(RuntimeError):
@@ -38,6 +43,8 @@ class DynamicFragmentRequest:
     action_id: str
     source_start_ms: int
     source_end_ms: int
+    end_state_path: Path
+    explicit_dynamic: bool = False
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,7 @@ class BrowserVisualCapture:
         video_end_ms: Callable[[], int],
         extra_redactions: tuple[Mapping[str, Any], ...] = (),
         force_dynamic: bool = False,
+        explicit_dynamic: bool = False,
     ) -> dict[str, Any]:
         samples: list[bytes] = []
         hashes: list[str] = []
@@ -159,22 +167,32 @@ class BrowserVisualCapture:
         remaining = DYNAMIC_MINIMUM_WINDOW_MS - (current_end - video_start_ms)
         if remaining > 0:
             self.page.wait_for_timeout(remaining)
-            current_end = video_end_ms()
+        end_content = self._screenshot(extra_redactions)
+        # Screenshots synchronize with a rendered browser frame and may block
+        # while Playwright's video pipeline catches up. Take the trim boundary
+        # after that synchronization so the frame represented by end_state is
+        # actually present in the retained video.
+        current_end = video_end_ms()
+        samples.append(end_content)
+        hashes.append(hashlib.sha256(end_content).hexdigest())
         duration = current_end - video_start_ms
-        if duration > DYNAMIC_MAX_DURATION_MS:
+        if not explicit_dynamic and duration > IMPLICIT_DYNAMIC_MAX_DURATION_MS:
             raise BrowserVisualError(
                 "BROWSER_UNSUPPORTED_MOTION",
-                f"action {action_id!r} dynamic window exceeds {DYNAMIC_MAX_DURATION_MS} ms",
+                f"action {action_id!r} dynamic window exceeds "
+                f"{IMPLICIT_DYNAMIC_MAX_DURATION_MS} ms",
             )
         self._store_stability_diagnostics(beat_id, action_id, samples, hashes)
+        end_state = self._store_state(end_content)
         request = DynamicFragmentRequest(
             beat_id=beat_id,
             action_id=action_id,
             source_start_ms=video_start_ms,
             source_end_ms=current_end,
+            end_state_path=self.run_dir / end_state["path"],
+            explicit_dynamic=explicit_dynamic,
         )
         self.dynamic_requests.append(request)
-        end_state = self._store_state(samples[-1])
         return {
             "kind": "clip",
             "policy": "playwright-video-v1",
@@ -203,7 +221,22 @@ class BrowserVisualCapture:
         ffprobe = media.ffprobe
         assets: list[DynamicFragmentAsset] = []
         for index, request in enumerate(self.dynamic_requests, 1):
-            duration_ms = request.source_end_ms - request.source_start_ms
+            source_end_ms = _matching_end_frame_ms(
+                ffmpeg,
+                source_video,
+                request.end_state_path,
+                minimum_ms=request.source_end_ms,
+            )
+            duration_ms = source_end_ms - request.source_start_ms
+            if (
+                not request.explicit_dynamic
+                and duration_ms > IMPLICIT_DYNAMIC_MAX_DURATION_MS
+            ):
+                raise BrowserVisualError(
+                    "BROWSER_UNSUPPORTED_MOTION",
+                    f"action {request.action_id!r} dynamic window exceeds "
+                    f"{IMPLICIT_DYNAMIC_MAX_DURATION_MS} ms",
+                )
             temporary = self.fragments_dir / f".fragment-{index}.webm"
             if temporary.exists() or temporary.is_symlink():
                 raise BrowserVisualError(
@@ -293,7 +326,7 @@ class BrowserVisualCapture:
                     codec=probe["codec"],
                     has_audio=False,
                     source_start_ms=request.source_start_ms,
-                    source_end_ms=request.source_end_ms,
+                    source_end_ms=source_end_ms,
                 )
             )
         return tuple(assets)
@@ -382,6 +415,105 @@ def _png_dimensions(content: bytes) -> tuple[int, int]:
     if len(content) < 24 or content[:8] != b"\x89PNG\r\n\x1a\n":
         raise BrowserVisualError("BROWSER_SCHEMA", "captured state is not a PNG")
     return struct.unpack(">II", content[16:24])
+
+
+def _matching_end_frame_ms(
+    ffmpeg: str,
+    source_video: Path,
+    end_state: Path,
+    *,
+    minimum_ms: int,
+) -> int:
+    if end_state.is_symlink() or not end_state.is_file():
+        raise BrowserVisualError(
+            "BROWSER_SCHEMA", "dynamic fragment end state is unavailable"
+        )
+    frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
+    target = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(end_state),
+            "-vf",
+            f"scale={FRAME_MATCH_WIDTH}:{FRAME_MATCH_HEIGHT}:flags=area,format=gray",
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if target.returncode != 0 or len(target.stdout) != frame_size:
+        raise BrowserVisualError(
+            "BROWSER_UNSUPPORTED_MOTION",
+            "could not normalize a dynamic fragment end state",
+        )
+    process = subprocess.Popen(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_video),
+            "-ss",
+            f"{minimum_ms / 1000:.3f}",
+            "-vf",
+            f"fps={FRAME_MATCH_RATE},"
+            f"scale={FRAME_MATCH_WIDTH}:{FRAME_MATCH_HEIGHT}:flags=area,format=gray",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        raise BrowserVisualError(
+            "BROWSER_UNSUPPORTED_MOTION",
+            "could not inspect a dynamic fragment end state",
+        )
+    best_index: int | None = None
+    best_score = float("inf")
+    index = 0
+    while True:
+        frame = process.stdout.read(frame_size)
+        if not frame:
+            break
+        if len(frame) != frame_size:
+            process.kill()
+            process.wait()
+            raise BrowserVisualError(
+                "BROWSER_UNSUPPORTED_MOTION",
+                "dynamic fragment ended with a partial frame",
+            )
+        score = sum(
+            abs(target_value - frame_value)
+            for target_value, frame_value in zip(target.stdout, frame, strict=True)
+        ) / frame_size
+        if score < best_score:
+            best_score = score
+            best_index = index
+        index += 1
+    stderr = process.stderr.read()
+    returncode = process.wait()
+    if (
+        returncode != 0
+        or stderr
+        or best_index is None
+        or best_score > FRAME_MATCH_MAX_MAD
+    ):
+        raise BrowserVisualError(
+            "BROWSER_UNSUPPORTED_MOTION",
+            "could not align a dynamic fragment with its completed browser frame",
+        )
+    return minimum_ms + (best_index + 1) * FRAME_MATCH_DURATION_MS
 
 
 def _probe_video(ffprobe: str, path: Path) -> dict[str, Any]:

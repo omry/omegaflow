@@ -487,10 +487,11 @@ beat:
   actions:
   - commands:
     - id: show_message
-      run: printf 'OmegaFlow quickstart\\n'
+      follow_along: true
+      run: for n in 1 2 3 4 5; do printf '%s\\n' "$n"; sleep 1; done; printf 'hello world\\n'
       expect:
         output_contains:
-        - OmegaFlow quickstart
+        - hello world
 ```
 
 Publish surfaces in the header let the same recording write a standalone HTML

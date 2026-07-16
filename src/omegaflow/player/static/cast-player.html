@@ -1628,6 +1628,9 @@
       }
 
       function updateProgress() {
+        if (presentationShell && typeof presentationShell.setPlaying === 'function') {
+          presentationShell.setPlaying(playing);
+        }
         if (playing) {
           currentSeconds = livePlaybackSeconds();
         }
@@ -2175,6 +2178,7 @@
         if (audio) {
           audio.pause();
         }
+        renderPresentationFrame(totalSeconds, true);
         setVoiceStatus('', audioReady ? 'ready' : 'unavailable', audioReady ? 'voiceover ready' : 'voiceover unavailable');
         pausedAtGuidedPoint = false;
         hideGuideModal();
@@ -2266,6 +2270,9 @@
           return;
         }
         lastPresentationBeatIndex = index;
+        if (typeof presentationShell.setPlaying === 'function') {
+          presentationShell.setPlaying(playing);
+        }
         presentationShell.renderAt(globalMs).catch((error) => {
           terminal.hidden = false;
           browserStage.hidden = true;

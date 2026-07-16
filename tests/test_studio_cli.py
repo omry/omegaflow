@@ -1482,6 +1482,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert spec["browser"]["viewport"]["height"] == 360
     assert list(actions) == ["open_player", "play", "wait_for_playback"]
     assert "transition" not in actions["play"]
+    assert actions["wait_for_playback"]["transition"] == "captured"
 
     generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
     generated_beat = next(
@@ -1576,11 +1577,15 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert "This Markdown file is the source for one generated terminal video." in recording
     assert "fenced `studio-directive` blocks tell" in recording
     assert "id: show_message" in recording
-    assert "run: printf 'OmegaFlow quickstart\\n'" in recording
+    assert (
+        "run: for n in 1 2 3 4 5; do printf '%s\\n' \"$n\"; sleep 1; "
+        "done; printf 'hello world\\n'"
+    ) in recording
+    assert "follow_along: true" in recording
     assert "@run_demo@" in recording
     assert "@wait:show_message@" in recording
     assert "output_contains:" in recording
-    assert "- OmegaFlow quickstart" in recording
+    assert "- hello world" in recording
     assert not support_dir.exists()
 
 
@@ -1605,7 +1610,7 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
 
     assert "id: quickstart" in recording
     assert "title: Quickstart" in recording
-    assert "- OmegaFlow quickstart" in recording
+    assert "- hello world" in recording
     assert not support_dir.exists()
 
 
@@ -1657,7 +1662,10 @@ def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
     assert "+  recording_dir: recordings" in output
     assert "+  data_dir: recordings/.omegaflow" in output
     assert "+id: quickstart" in output
-    assert "+      run: printf 'OmegaFlow quickstart\\n'" in output
+    assert (
+        "+      run: for n in 1 2 3 4 5; do printf '%s\\n' \"$n\"; sleep 1; "
+        "done; printf 'hello world\\n'"
+    ) in output
     assert "No files were written." in output
     assert not (tmp_path / ".omegaflow").exists()
     assert not workspace.exists()
@@ -1721,7 +1729,7 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
 
     assert "id: tutorial/recording-file" in recording
     assert "title: Recording File" in recording
-    assert "- OmegaFlow quickstart" in recording
+    assert "- hello world" in recording
     assert not support_dir.exists()
 
 

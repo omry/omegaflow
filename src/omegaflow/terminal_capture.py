@@ -332,13 +332,15 @@ omegaflow_run_step() {
   local output_mode="$4"
   local replacement_output="$5"
   local show_prompt_after="$6"
-  local pre_command_pause="$7"
-  local pre_enter_pause="$8"
-  local post_enter_pause="$9"
-  local post_command_pause="${10}"
+  local follow_along="$7"
+  local pre_command_pause="$8"
+  local pre_enter_pause="$9"
+  local post_enter_pause="${10}"
+  local post_command_pause="${11}"
   local stdout_start
   local stderr_start
   local status
+  local output_followed=false
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
@@ -347,14 +349,49 @@ omegaflow_run_step() {
   omegaflow_pause "$pre_command_pause"
   omegaflow_print_command "$display" "$pre_enter_pause"
   OMEGAFLOW_PROMPT_VISIBLE=0
-  omegaflow_run_user_command \
-    "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
-  status=$?
+  if [[ "$follow_along" == "true" && "$output_mode" == "real" ]]; then
+    local command_runner_pid
+    local stdout_offset="$stdout_start"
+    local stderr_offset="$stderr_start"
+    local stdout_end
+    local stderr_end
+    omegaflow_run_user_command \
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" &
+    command_runner_pid=$!
+    while kill -0 "$command_runner_pid" 2>/dev/null; do
+      stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
+      stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
+      if [[ "$stdout_end" -gt "$stdout_offset" ]]; then
+        omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_offset"
+        stdout_offset="$stdout_end"
+      fi
+      if [[ "$stderr_end" -gt "$stderr_offset" ]]; then
+        omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_offset" >&2
+        stderr_offset="$stderr_end"
+      fi
+      sleep 0.05
+    done
+    wait "$command_runner_pid"
+    status=$?
+    stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
+    stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
+    if [[ "$stdout_end" -gt "$stdout_offset" ]]; then
+      omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_offset"
+    fi
+    if [[ "$stderr_end" -gt "$stderr_offset" ]]; then
+      omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_offset" >&2
+    fi
+    output_followed=true
+  else
+    omegaflow_run_user_command \
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
+    status=$?
+  fi
   if [[ -z "$post_enter_pause" ]]; then
     post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
   fi
   omegaflow_pause "$post_enter_pause"
-  if [[ "$output_mode" == "real" ]]; then
+  if [[ "$output_mode" == "real" && "$output_followed" != "true" ]]; then
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_start"
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_start" >&2
   elif [[ "$output_mode" == "replace" && -n "$replacement_output" ]]; then
@@ -1068,6 +1105,9 @@ def _validated_step_script(
     show_prompt_after = step.get("show_prompt_after", True)
     if not isinstance(show_prompt_after, bool):
         raise TerminalCaptureError("terminal step show_prompt_after must be a boolean")
+    follow_along = step.get("follow_along", False)
+    if not isinstance(follow_along, bool):
+        raise TerminalCaptureError("terminal step follow_along must be a boolean")
     pauses = tuple(
         _optional_pause(step, field)
         for field in (
@@ -1086,6 +1126,7 @@ def _validated_step_script(
             output["mode"],
             output["replace"],
             "true" if show_prompt_after else "false",
+            "true" if follow_along else "false",
             *pauses,
         )
     )

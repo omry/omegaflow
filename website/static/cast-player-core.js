@@ -407,6 +407,7 @@
     const loaded = new Map();
     const loading = new Map();
     let playbackRate = 1;
+    let playing = false;
     let disposed = false;
     let currentIndex = null;
     let renderGeneration = 0;
@@ -463,6 +464,9 @@
             renderer.__presentationContainer = rendererContainer;
             if (typeof renderer.setPlaybackRate === 'function') {
               renderer.setPlaybackRate(playbackRate);
+            }
+            if (typeof renderer.setPlaying === 'function') {
+              renderer.setPlaying(playing);
             }
             loaded.set(index, renderer);
             if (decodedResidencyBytes() > decodedAssetBudget) {
@@ -560,6 +564,15 @@
       }
     }
 
+    function setPlaying(nextPlaying) {
+      playing = Boolean(nextPlaying);
+      for (const renderer of loaded.values()) {
+        if (typeof renderer.setPlaying === 'function') {
+          renderer.setPlaying(playing);
+        }
+      }
+    }
+
     function dispose() {
       if (disposed) {
         return;
@@ -589,12 +602,14 @@
       )),
       renderAt,
       setPlaybackRate,
+      setPlaying,
       state: () => ({
         currentIndex,
         decodedAssetBudgetBytes: decodedAssetBudget,
         decodedAssetBytes: decodedResidencyBytes(),
         disposed,
         playbackRate,
+        playing,
       }),
     };
   }
@@ -856,6 +871,7 @@
     let context = null;
     let payload = null;
     let playbackRate = 1;
+    let playing = false;
     let disposed = false;
 
     return {
@@ -878,7 +894,7 @@
         }
         const scene = browserSceneAt(payload, localMs);
         if (typeof options.render === 'function') {
-          options.render({...context, playbackRate, scene});
+          options.render({...context, playbackRate, playing, scene});
         }
         return scene;
       },
@@ -886,6 +902,12 @@
         playbackRate = rate;
         if (typeof options.setPlaybackRate === 'function') {
           options.setPlaybackRate(rate);
+        }
+      },
+      setPlaying(nextPlaying) {
+        playing = Boolean(nextPlaying);
+        if (typeof options.setPlaying === 'function') {
+          options.setPlaying(playing);
         }
       },
       async preload() {
@@ -906,7 +928,7 @@
       },
       state() {
         const extra = typeof options.state === 'function' ? options.state() : {};
-        return {disposed, playbackRate, ...extra};
+        return {disposed, playbackRate, playing, ...extra};
       },
     };
   }
@@ -919,12 +941,14 @@
     let context = null;
     let elements = null;
     let playbackRate = 1;
+    let playing = false;
     let decodedAssetBytes = 0;
     let preloadedImages = [];
     let entryTransitionStartMs = 0;
     let windowDecoration = {};
     let resizeObserver = null;
     let lastScene = null;
+    let activeClipAsset = null;
 
     function element(tag, className) {
       const value = documentObject.createElement(tag);
@@ -994,11 +1018,19 @@
       const visual = scene.visual;
       elements.primary.hidden = true;
       elements.secondary.hidden = true;
-      for (const clip of elements.clips.values()) {
-        clip.hidden = true;
+      for (const [assetId, clip] of elements.clips.entries()) {
+        const active = visual.kind === 'clip' && visual.asset === assetId;
+        const hidden = !active;
+        if (clip.hidden !== hidden) {
+          clip.hidden = hidden;
+        }
+        if (!active && !clip.paused) {
+          clip.pause();
+        }
       }
       elements.scrollClip.hidden = true;
       if (visual.kind === 'state') {
+        activeClipAsset = null;
         setImage(elements.primary, visual.asset);
         elements.primary.hidden = false;
         elements.primary.style.opacity = '1';
@@ -1024,19 +1056,37 @@
         clip.muted = true;
         clip.playsInline = true;
         clip.playbackRate = playbackRate;
-        clip.hidden = false;
         clip.style.opacity = !Number.isFinite(clip.readyState) || clip.readyState >= 2
           ? '1'
           : '0';
         const targetSeconds = visual.mediaMs / 1000;
+        const enteringClip = activeClipAsset !== visual.asset;
+        const clipPlaying = playing && visual.progress < 1 && !clip.ended;
+        const driftToleranceSeconds = clipPlaying ? 0.15 : 0.04;
+        const seekTargetSeconds = Number.isFinite(clip.duration)
+          ? Math.min(Math.max(0, clip.duration - 0.001), targetSeconds)
+          : targetSeconds;
         if (
           Number.isFinite(clip.duration) &&
-          Math.abs((clip.currentTime || 0) - targetSeconds) > 0.04
+          !clip.seeking &&
+          (enteringClip ||
+            Math.abs((clip.currentTime || 0) - seekTargetSeconds) > driftToleranceSeconds)
         ) {
-          clip.currentTime = Math.min(clip.duration, targetSeconds);
+          clip.currentTime = seekTargetSeconds;
         }
-        clip.pause();
+        activeClipAsset = visual.asset;
+        if (clipPlaying && !clip.seeking) {
+          if (clip.paused) {
+            const playResult = clip.play();
+            if (playResult && typeof playResult.catch === 'function') {
+              playResult.catch(() => {});
+            }
+          }
+        } else if (!clip.paused) {
+          clip.pause();
+        }
       } else if (visual.kind === 'scroll') {
+        activeClipAsset = null;
         const asset = visual.progress >= 1 ? visual.endAsset : visual.startAsset;
         setImage(elements.primary, asset);
         elements.primary.hidden = false;
@@ -1251,6 +1301,16 @@
           }
         }
       },
+      setPlaying(nextPlaying) {
+        playing = Boolean(nextPlaying);
+        if (!playing && elements) {
+          for (const clip of elements.clips.values()) {
+            if (!clip.paused) {
+              clip.pause();
+            }
+          }
+        }
+      },
       async preload({payload}) {
         const imageAssets = new Set([payload.initial_state]);
         for (const event of payload.events) {
@@ -1321,6 +1381,7 @@
         windowDecoration = {};
         resizeObserver = null;
         lastScene = null;
+        activeClipAsset = null;
       },
       state: () => ({decodedAssetBytes}),
     });

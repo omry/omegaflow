@@ -610,7 +610,8 @@ class PersistentBrowserRunner:
                     action.kind, payload
                 )
             execution_ended_ms = self._beat_elapsed_ms()
-            force_dynamic = config.get("transition") == "captured" or (
+            explicit_dynamic = config.get("transition") == "captured"
+            force_dynamic = explicit_dynamic or (
                 action.kind == "open_page" and payload.get("loading", "hide") == "show"
             ) or (
                 action.kind == "scroll"
@@ -627,6 +628,7 @@ class PersistentBrowserRunner:
                 video_end_ms=self._video_elapsed_ms,
                 extra_redactions=extra_redactions,
                 force_dynamic=force_dynamic,
+                explicit_dynamic=explicit_dynamic,
             )
             current_secret = self._current_secret_redaction(action.kind, payload)
             if current_secret:

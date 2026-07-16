@@ -472,20 +472,17 @@ def fingerprint_plan(
     command: str = "printf one",
     display: str | None = None,
     pre_command_pause: float | None = None,
+    follow_along: bool = False,
     viewer_hold: float = 0,
 ) -> object:
+    command_config: dict[str, object] = {"run": command}
     if pre_command_pause is not None:
-        command_config: dict[str, object] = {
-            "run": command,
-            "pre_command_pause": pre_command_pause,
-        }
-        if display is not None:
-            command_config["display"] = display
-        action: dict[str, object] = {"commands": [command_config]}
-    else:
-        action = {"run": command}
-        if display is not None:
-            action["display"] = display
+        command_config["pre_command_pause"] = pre_command_pause
+    if follow_along:
+        command_config["follow_along"] = True
+    if display is not None:
+        command_config["display"] = display
+    action: dict[str, object] = {"commands": [command_config]}
     return normalize_recording_plan(
         {
             "id": "fingerprint",
@@ -514,6 +511,7 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
     pause_change = artifact_fingerprints(
         fingerprint_plan(pre_command_pause=0.5)
     )
+    follow_change = artifact_fingerprints(fingerprint_plan(follow_along=True))
     asset_change = artifact_fingerprints(fingerprint_plan(), asset="b")
 
     assert original.capture_fingerprint == presentation_change.capture_fingerprint
@@ -524,6 +522,7 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
     assert original.capture_fingerprint != capture_change.capture_fingerprint
     assert original.capture_fingerprint != display_change.capture_fingerprint
     assert original.capture_fingerprint != pause_change.capture_fingerprint
+    assert original.capture_fingerprint != follow_change.capture_fingerprint
     assert original.presentation_fingerprint != asset_change.presentation_fingerprint
 
 
@@ -825,7 +824,11 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
             "kind": "press",
             "target": {"bounds": bounds, "point": {"x": 120, "y": 36}},
             "completion": {"kind": "action"},
-            "visual": {"kind": "clip", "request": {}},
+            "visual": {
+                "kind": "clip",
+                "request": {},
+                "end_state": state_asset("5"),
+            },
         },
     ]
     clip = {
@@ -869,13 +872,27 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
     assert compiled.action_starts_ms["name"] == compiled.action_completions_ms[
         "click"
     ]
-    assert len(compiled.assets) == 6
+    assert len(compiled.assets) == 7
     assert compiled.payload["initial_state"] == "state-" + "0" * 64
     assert [
         event["value"]
         for event in compiled.payload["events"]
         if event["kind"] == "display_url"
     ] == ["https://demo.example/", "https://demo.example/project"]
+    shortcut_visuals = [
+        event
+        for event in compiled.payload["events"]
+        if event["action_id"] == "shortcut" and event["kind"] in {"clip", "state"}
+    ]
+    assert [event["kind"] for event in shortcut_visuals] == ["clip", "state"]
+    assert shortcut_visuals[1] == {
+        "kind": "state",
+        "action_id": "shortcut",
+        "at_ms": shortcut_visuals[0]["end_ms"],
+        "end_ms": shortcut_visuals[0]["end_ms"],
+        "asset": "state-" + "5" * 64,
+        "transition": "cut",
+    }
 
 
 def test_pointer_and_text_animation_are_deterministic() -> None:

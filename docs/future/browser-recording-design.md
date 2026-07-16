@@ -274,7 +274,13 @@ remain beat-scoped for compatibility with current terminal recordings, so an
 action resolves `after` only against narration authored in the same beat.
 `hold_after_ms` is a non-negative presentation hold and does not sleep during
 capture. `transition` is one of `cut`, `fade`, or `captured`; `captured`
-requires a captured dynamic fragment.
+retains the action's dynamic fragment through action completion. On a
+`wait_for` action, that means capture continues until the authored condition
+succeeds; the condition itself is bounded by its timeout. The final screenshot
+synchronizes the retained video boundary with the completed browser frame.
+Automatically selected dynamic fragments retain the short safety limit;
+explicitly captured fragments may exceed it and remain subject to the
+encoded-size budget.
 
 `display_url_after` is optional public presentation metadata for an action that
 changes the visible application route, such as a click that navigates. It does
@@ -813,8 +819,11 @@ WebM and no audio. Action windows are frame-accurately trimmed to a new VP8
 WebM whose first frame is independently decodable. CDP JPEG screencast frames
 are diagnostic-only: the reference capture used about 8 MB for roughly 130
 JPEG frames versus about 230 KB for the trimmed, seekable 1.4-second Playwright
-video. Phase 1 limits clips to 3 seconds and 2 MB encoded. The compiler
-interface remains:
+video. Phase 1 limits automatically selected clips to 3 seconds and every clip
+to 2 MB encoded. An explicit `transition: captured` may exceed 3 seconds because
+its action completion and timeout provide the primary duration bound. Capturing
+the synchronized final frame may extend the retained boundary beyond action
+completion. The compiler interface remains:
 
 ```text
 ClipAsset
@@ -1182,9 +1191,11 @@ playback-rate changes, and mobile tab suspension.
 The shell keeps the current and next beat payload ready. It disposes older
 browser images and clips under the decoded-asset memory budget owned by the
 versioned browser-renderer policy. This is not an authoring setting in Phase 1.
-The Phase 0 policy sets 3-second and 2 MB encoded clip limits and proposes a
-provisional 64 MiB decoded-asset budget. Content-addressed assets may remain in
-the browser HTTP cache.
+The Phase 0 policy measured 3-second and 2 MB encoded clip limits. Phase 1 keeps
+the 3-second limit for automatically selected clips, allows explicitly captured
+clips to follow their action completion timeout, and keeps the 2 MB limit for
+all encoded clips. It proposes a provisional 64 MiB decoded-asset budget.
+Content-addressed assets may remain in the browser HTTP cache.
 
 The memory-budget candidate passes real-device playback validation at the
 Phase 1 release gate only when the

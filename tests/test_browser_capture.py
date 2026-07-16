@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import subprocess
 import threading
 import time
 from contextlib import contextmanager
@@ -10,10 +12,16 @@ from pathlib import Path
 
 import pytest
 
+import omegaflow.browser_visuals as browser_visuals
 from omegaflow.browser_capture import (
     BrowserCaptureError,
     PersistentBrowserRunner,
     resolve_browser_authentication,
+)
+from omegaflow.browser_visuals import (
+    BrowserVisualCapture,
+    BrowserVisualError,
+    DynamicFragmentRequest,
 )
 from omegaflow.capture import CaptureContext
 from omegaflow.presentation_compiler import (
@@ -29,6 +37,8 @@ FIXTURE_HTML = b"""<!doctype html>
   <p id="loading" hidden>Loading</p>
   <button id="open">Open dialog</button>
   <button id="noop">Noop</button>
+  <button id="delayed-completion">Start delayed completion</button>
+  <p id="delayed-status">Ready</p>
   <div role="dialog" aria-label="Create project" hidden>
     <label>Project name <input id="project"></label>
     <label>Password <input id="password" type="password"></label>
@@ -46,6 +56,11 @@ FIXTURE_HTML = b"""<!doctype html>
         document.querySelector('[role=dialog]').hidden = false;
         document.querySelector('[data-testid=status]').textContent = 'Created';
       });
+    });
+    document.querySelector('#delayed-completion').addEventListener('click', () => {
+      setTimeout(() => {
+        document.querySelector('#delayed-status').textContent = 'Complete';
+      }, 3600);
     });
     addEventListener('keydown', (event) => {
       if (event.ctrlKey && event.key.toLowerCase() === 'k') {
@@ -890,9 +905,259 @@ def test_retained_loading_is_trimmed_to_muted_content_addressed_webm(
     assert fragment["source_start_ms"] == (
         action["visual"]["request"]["source_start_ms"]
     )
-    assert fragment["source_end_ms"] == (
+    assert fragment["source_end_ms"] >= (
         action["visual"]["request"]["source_end_ms"]
     )
+
+
+def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
+    tmp_path: Path,
+) -> None:
+    with fixture_site() as base_url:
+        plan = normalize_recording_plan(
+            {
+                "id": "condition-bounded-fragment",
+                "browser": {"base_url": base_url},
+                "beats": [
+                    {
+                        "id": "dynamic",
+                        "medium": "browser",
+                        "actions": [
+                            {"id": "open", "open_page": {"url": "/"}},
+                            {
+                                "id": "start",
+                                "click": {
+                                    "target": {
+                                        "role": "button",
+                                        "name": "Start delayed completion",
+                                    }
+                                },
+                            },
+                            {
+                                "id": "await-completion",
+                                "transition": "captured",
+                                "wait_for": {
+                                    "visible": {"text": "Complete", "exact": True},
+                                    "timeout_ms": 5000,
+                                },
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        runner = PersistentBrowserRunner(plan.browser)
+        runner.start(capture_context(tmp_path))
+        try:
+            actions = runner.capture_beat(plan.beats[0]).metadata["actions"]
+        finally:
+            runner.close()
+        runner.complete()
+
+    wait = actions[2]
+    assert wait["completion"] == {"kind": "visible"}
+    assert wait["visual"]["kind"] == "clip"
+    fragment = next(
+        record
+        for record in capture_records(tmp_path)
+        if record["type"] == "diagnostic"
+        and record.get("kind") == "dynamic_fragment"
+        and record.get("action_id") == "await-completion"
+    )
+    request = wait["visual"]["request"]
+    authored_duration_ms = (
+        request["source_end_ms"] - request["source_start_ms"]
+    )
+    assert 3000 < authored_duration_ms <= 5000
+    assert fragment["duration_ms"] >= authored_duration_ms
+    assert fragment["encoded_bytes"] <= 2_000_000
+
+
+def test_implicit_dynamic_fragment_keeps_short_duration_limit(tmp_path: Path) -> None:
+    class StaticPage:
+        def screenshot(self, **_kwargs: object) -> bytes:
+            return PNG_1X1
+
+        def wait_for_timeout(self, _duration_ms: int) -> None:
+            return
+
+    visuals = BrowserVisualCapture(
+        StaticPage(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+
+    with pytest.raises(BrowserVisualError, match="dynamic window exceeds 3000 ms"):
+        visuals.observe(
+            beat_id="dynamic",
+            action_id="implicit",
+            video_start_ms=0,
+            video_end_ms=lambda: 3001,
+            force_dynamic=True,
+        )
+
+
+def test_dynamic_fragment_boundary_includes_the_final_screenshot_capture(
+    tmp_path: Path,
+) -> None:
+    class AdvancingPage:
+        def __init__(self) -> None:
+            self.elapsed_ms = 0
+            self.screenshot_calls = 0
+            self.waits: list[int] = []
+
+        def screenshot(self, **_kwargs: object) -> bytes:
+            self.screenshot_calls += 1
+            content = PNG_1X1 + f"frame-{self.screenshot_calls}".encode()
+            self.elapsed_ms += 20
+            return content
+
+        def wait_for_timeout(self, duration_ms: int) -> None:
+            self.waits.append(duration_ms)
+            self.elapsed_ms += duration_ms
+
+    page = AdvancingPage()
+    visuals = BrowserVisualCapture(
+        page,
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+
+    visual = visuals.observe(
+        beat_id="dynamic",
+        action_id="minimum-window",
+        video_start_ms=0,
+        video_end_ms=lambda: page.elapsed_ms,
+        force_dynamic=True,
+    )
+
+    assert page.screenshot_calls == 2
+    assert page.waits == [280]
+    assert visual["request"]["source_end_ms"] == page.elapsed_ms
+    assert visual["end_state"]["sha256"] == hashlib.sha256(
+        PNG_1X1 + b"frame-2"
+    ).hexdigest()
+
+
+def write_color_transition_video(
+    tmp_path: Path, *, frame_rate: int = 25
+) -> tuple[str, Path, Path]:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is unavailable")
+    source = tmp_path / "source.webm"
+    end_state = tmp_path / "end.png"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=black:s=160x90:d=2:r={frame_rate}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=white:s=160x90:d=2:r={frame_rate}",
+            "-filter_complex",
+            "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+            "-map",
+            "[v]",
+            "-c:v",
+            "libvpx",
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=white:s=160x90",
+            "-frames:v",
+            "1",
+            str(end_state),
+        ],
+        check=True,
+    )
+    return ffmpeg, source, end_state
+
+
+def test_dynamic_fragment_finalization_extends_to_the_matching_end_state(
+    tmp_path: Path,
+) -> None:
+    _ffmpeg, source, end_state = write_color_transition_video(
+        tmp_path, frame_rate=50
+    )
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.append(
+        DynamicFragmentRequest(
+            beat_id="dynamic",
+            action_id="lagged-end",
+            source_start_ms=0,
+            source_end_ms=1500,
+            end_state_path=end_state,
+            explicit_dynamic=True,
+        )
+    )
+
+    (asset,) = visuals.finalize_dynamic_fragments(source)
+
+    assert 2000 <= asset.source_end_ms <= 2100
+    assert 2000 <= asset.duration_ms <= 2100
+
+
+def test_implicit_dynamic_fragment_rechecks_limit_after_frame_alignment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ffmpeg, source, end_state = write_color_transition_video(tmp_path)
+    monkeypatch.setattr(browser_visuals, "IMPLICIT_DYNAMIC_MAX_DURATION_MS", 1800)
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.append(
+        DynamicFragmentRequest(
+            beat_id="dynamic",
+            action_id="implicit-lagged-end",
+            source_start_ms=0,
+            source_end_ms=1500,
+            end_state_path=end_state,
+        )
+    )
+
+    with pytest.raises(BrowserVisualError, match="dynamic window exceeds 1800 ms"):
+        visuals.finalize_dynamic_fragments(source)
 
 
 def test_dynamic_fragment_with_required_redaction_fails_closed(

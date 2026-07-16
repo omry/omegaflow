@@ -16,5 +16,6 @@ test -f .omegaflow/config.yaml
 test -f recordings/config.yaml
 test -f recordings/quickstart/index.md
 test ! -e recordings/quickstart/scripts/hello.sh
-grep -Fq "run: printf 'OmegaFlow quickstart\\n'" recordings/quickstart/index.md
-grep -Fq -- '- OmegaFlow quickstart' recordings/quickstart/index.md
+grep -Fq "run: for n in 1 2 3 4 5; do printf '%s\\n' \"\$n\"; sleep 1; done; printf 'hello world\\n'" recordings/quickstart/index.md
+grep -Fq 'follow_along: true' recordings/quickstart/index.md
+grep -Fq -- '- hello world' recordings/quickstart/index.md

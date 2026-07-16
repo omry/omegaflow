@@ -54,6 +54,7 @@ function factory() {
     async load(context) { beat = context.beat; calls.push(`load:${beat.id}`); },
     renderAt(localMs) { calls.push(`render:${beat.id}:${localMs}`); },
     setPlaybackRate(rate) { calls.push(`rate:${beat ? beat.id : 'new'}:${rate}`); },
+    setPlaying(playing) { calls.push(`playing:${beat ? beat.id : 'new'}:${playing}`); },
     async preload() { calls.push(`preload:${beat.id}`); },
     dispose() { calls.push(`dispose:${beat.id}`); },
   };
@@ -65,11 +66,13 @@ function factory() {
     loadPayload: async (beat) => beat.payload,
   });
   await shell.renderAt(500);
+  shell.setPlaying(true);
   await shell.renderAt(1200);
   shell.setPlaybackRate(1.5);
   shell.dispose();
   const required = [
     'load:one', 'render:one:500', 'load:two', 'preload:two',
+    'playing:one:true', 'playing:two:true',
     'render:two:200', 'rate:two:1.5',
     'dispose:one', 'dispose:two',
   ];
@@ -300,15 +303,28 @@ def test_browser_dom_renderer_materializes_framing_overlays_scroll_and_clip() ->
         r"""
 function node(tag) {
   return {
-    tag, children: [], className: '', dataset: {}, hidden: false, textContent: '',
-    clientWidth: 800, clientHeight: 600, currentTime: 0, duration: 10,
+    tag, children: [], className: '', dataset: {}, _hidden: false,
+    hiddenTransitions: 0, hiddenWrites: 0, textContent: '',
+    clientWidth: 800, clientHeight: 600, _currentTime: 0, duration: 10,
+    paused: true, ended: false, seeking: false,
+    playCalls: 0, pauseCalls: 0, seekCalls: 0,
     muted: false, playsInline: false, playbackRate: 1,
     attributes: new Map(), style: {},
+    get hidden() { return this._hidden; },
+    set hidden(value) {
+      this.hiddenWrites += 1;
+      if (this._hidden !== value) this.hiddenTransitions += 1;
+      this._hidden = value;
+    },
+    get currentTime() { return this._currentTime; },
+    set currentTime(value) { this._currentTime = value; this.seekCalls += 1; },
     append(...items) { this.children.push(...items); },
     replaceChildren(...items) { this.children = items; },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; },
-    pause() {}, remove() { this.removed = true; },
+    pause() { this.paused = true; this.pauseCalls += 1; },
+    play() { this.paused = false; this.playCalls += 1; return Promise.resolve(); },
+    remove() { this.removed = true; },
   };
 }
 function find(root, className) {
@@ -437,6 +453,84 @@ global.ResizeObserver = class {
       time: clip.currentTime, fallbackHidden: primary.hidden,
       fallback: primary.getAttribute('src'), opacity: clip.style.opacity,
     }));
+    process.exit(1);
+  }
+  const pausedSeekCalls = clip.seekCalls;
+  const pausedPauseCalls = clip.pauseCalls;
+  const activeHiddenTransitions = clip.hiddenTransitions;
+  const activeHiddenWrites = clip.hiddenWrites;
+  clip._currentTime = 0.32;
+  renderer.setPlaying(true);
+  renderer.renderAt(740);
+  renderer.renderAt(760);
+  await Promise.resolve();
+  if (
+    clip.playCalls !== 1 || clip.pauseCalls !== pausedPauseCalls ||
+    clip.seekCalls !== pausedSeekCalls ||
+    clip.hiddenTransitions !== activeHiddenTransitions ||
+    clip.hiddenWrites !== activeHiddenWrites
+  ) {
+    console.error(JSON.stringify({
+      playCalls: clip.playCalls, pauseCalls: clip.pauseCalls,
+      seekCalls: clip.seekCalls, pausedSeekCalls, pausedPauseCalls,
+      hiddenTransitions: clip.hiddenTransitions, activeHiddenTransitions,
+      hiddenWrites: clip.hiddenWrites, activeHiddenWrites,
+    }));
+    process.exit(1);
+  }
+  const beforeEndedScrub = {
+    playCalls: clip.playCalls,
+    pauseCalls: clip.pauseCalls,
+    seekCalls: clip.seekCalls,
+  };
+  clip._currentTime = 0.499;
+  clip.paused = true;
+  clip.ended = true;
+  renderer.renderAt(700);
+  if (
+    !clip.paused ||
+    clip.playCalls !== beforeEndedScrub.playCalls ||
+    clip.pauseCalls !== beforeEndedScrub.pauseCalls ||
+    clip.seekCalls !== beforeEndedScrub.seekCalls + 1 ||
+    Math.abs(clip.currentTime - 0.3) > 0.001
+  ) {
+    console.error(JSON.stringify({
+      beforeEndedScrub, playCalls: clip.playCalls, pauseCalls: clip.pauseCalls,
+      seekCalls: clip.seekCalls, paused: clip.paused, time: clip.currentTime,
+    }));
+    process.exit(1);
+  }
+  clip.ended = false;
+  clip.paused = false;
+  clip.duration = 0.5;
+  clip._currentTime = 0.04;
+  renderer.renderAt(800);
+  const completedState = {
+    playCalls: clip.playCalls,
+    pauseCalls: clip.pauseCalls,
+    seekCalls: clip.seekCalls,
+  };
+  renderer.renderAt(900);
+  if (
+    clip.playCalls !== 1 || !clip.paused ||
+    clip.pauseCalls !== pausedPauseCalls + 1 ||
+    clip.seekCalls !== pausedSeekCalls + 2 ||
+    Math.abs(clip.currentTime - 0.499) > 0.0001 ||
+    JSON.stringify(completedState) !== JSON.stringify({
+      playCalls: clip.playCalls,
+      pauseCalls: clip.pauseCalls,
+      seekCalls: clip.seekCalls,
+    })
+  ) {
+    console.error(JSON.stringify({
+      completedState, playCalls: clip.playCalls, pauseCalls: clip.pauseCalls,
+      seekCalls: clip.seekCalls, paused: clip.paused,
+    }));
+    process.exit(1);
+  }
+  renderer.setPlaying(false);
+  if (!clip.paused || clip.pauseCalls !== pausedPauseCalls + 1) {
+    console.error(JSON.stringify({paused: clip.paused, pauseCalls: clip.pauseCalls}));
     process.exit(1);
   }
   const cutContainer = node('container');

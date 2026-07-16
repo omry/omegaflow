@@ -196,6 +196,7 @@ beat:
         exact: true
   - id: wait_for_playback
     after: "@playback_complete@"
+    transition: captured
     wait_for:
       visible:
         role: button

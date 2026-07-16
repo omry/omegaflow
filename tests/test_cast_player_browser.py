@@ -208,6 +208,47 @@ def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path
         browser.close()
 
 
+def test_playback_completion_renders_the_exact_final_browser_state(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    payload_path = tmp_path / "beats/browser.browser.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["events"].append(
+        {
+            "kind": "display_url",
+            "action_id": "complete",
+            "at_ms": 1200,
+            "end_ms": 1200,
+            "value": "https://public.example/complete",
+        }
+    )
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 500})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#play").click()
+        page.wait_for_function(
+            "document.querySelector('#clock').textContent.trim() === '0:01 / 0:01'"
+        )
+        page.wait_for_function(
+            "document.querySelector('.browser-chrome-url').textContent === "
+            "'https://public.example/complete'"
+        )
+
+        assert page.locator(".browser-chrome-url").text_content() == (
+            "https://public.example/complete"
+        )
+        browser.close()
+
+
 def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
     sync_api = pytest.importorskip("playwright.sync_api")
     static_root = REPO_ROOT / "website" / "static"
@@ -247,6 +288,129 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             "&embed=1&layout=wide-browser"
         )
         page.wait_for_function("!document.querySelector('#play').disabled")
+        manifest_data = json.loads(
+            (static_root / manifest.removeprefix("/")).read_text(encoding="utf-8")
+        )
+        browser_beat = next(
+            beat for beat in manifest_data["beats"] if beat["renderer"] == "browser"
+        )
+        browser_payload = json.loads(
+            (static_root / "omegaflow-videos/quickstart-demo/presentation"
+             / browser_beat["payload"]).read_text(encoding="utf-8")
+        )
+        first_clip = next(
+            event for event in browser_payload["events"] if event["kind"] == "clip"
+        )
+        clip_start_ms = browser_beat["offset_ms"] + first_clip["at_ms"] + 100
+        progress_value = round(
+            clip_start_ms / manifest_data["recording"]["duration_ms"] * 1000
+        )
+        page.locator("#progress").evaluate(
+            "(element, value) => { element.value = String(value); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }",
+            progress_value,
+        )
+        active_clip = page.locator(".browser-clip:not([hidden])")
+        active_clip.wait_for()
+        active_clip.evaluate(
+            "clip => { "
+            "clip.__testMediaEvents = {play: 0, pause: 0, seeking: 0}; "
+            "for (const name of ['play', 'pause', 'seeking']) { "
+            "clip.addEventListener(name, () => clip.__testMediaEvents[name] += 1); "
+            "} }"
+        )
+        captured_clips = page.locator(".browser-clip")
+        assert captured_clips.count() == 2
+        continuation_clip = captured_clips.nth(1)
+        continuation_clip.evaluate(
+            "clip => { "
+            "clip.__testMediaEvents = {play: 0, pause: 0, seeking: 0}; "
+            "clip.__testHiddenMutations = 0; "
+            "new MutationObserver(records => { "
+            "clip.__testHiddenMutations += records.length; "
+            "}).observe(clip, {attributes: true, attributeFilter: ['hidden']}); "
+            "for (const name of ['play', 'pause', 'seeking']) { "
+            "clip.addEventListener(name, () => clip.__testMediaEvents[name] += 1); "
+            "} }"
+        )
+        initial_clip_time = active_clip.evaluate("clip => clip.currentTime")
+        page.locator("#play").click()
+        page.wait_for_function(
+            "initial => document.querySelector('.browser-clip:not([hidden])')"
+            ".currentTime > initial + 0.2",
+            arg=initial_clip_time,
+        )
+        clip_playback = active_clip.evaluate(
+            "clip => ({paused: clip.paused, currentTime: clip.currentTime, "
+            "events: clip.__testMediaEvents})"
+        )
+        assert clip_playback["paused"] is False
+        assert clip_playback["events"]["play"] == 1
+        assert clip_playback["events"]["pause"] == 0
+        assert clip_playback["events"]["seeking"] <= 1
+        page.wait_for_function(
+            "() => { const clips = document.querySelectorAll('.browser-clip'); "
+            "return clips.length === 2 && !clips[1].hidden && "
+            "clips[1].currentTime > 0.5; }",
+            timeout=4000,
+        )
+        continuation_playback = continuation_clip.evaluate(
+            "clip => ({hidden: clip.hidden, paused: clip.paused, "
+            "currentTime: clip.currentTime, events: {...clip.__testMediaEvents}, "
+            "hiddenMutations: clip.__testHiddenMutations})"
+        )
+        assert continuation_playback["hidden"] is False
+        assert continuation_playback["paused"] is False
+        assert continuation_playback["events"]["play"] == 1
+        assert continuation_playback["events"]["pause"] == 0
+        assert continuation_playback["events"]["seeking"] <= 1
+        assert continuation_playback["hiddenMutations"] <= 1
+        early_frame = continuation_clip.screenshot()
+        page.wait_for_function(
+            "() => document.querySelectorAll('.browser-clip')[1].currentTime > 2.5",
+            timeout=4000,
+        )
+        later_frame = continuation_clip.screenshot()
+        assert later_frame != early_frame
+
+        final_clip = next(
+            event for event in reversed(browser_payload["events"])
+            if event["kind"] == "clip"
+        )
+        final_clip_element = continuation_clip.element_handle()
+        assert final_clip_element is not None
+        page.wait_for_function(
+            "() => document.querySelectorAll('.browser-clip')[1].hidden",
+            timeout=9000,
+        )
+        completed_clip = final_clip_element.evaluate(
+            "clip => ({hidden: clip.hidden, paused: clip.paused, "
+            "events: {...clip.__testMediaEvents}, "
+            "hiddenMutations: clip.__testHiddenMutations})"
+        )
+        page.wait_for_timeout(400)
+        held_clip = final_clip_element.evaluate(
+            "clip => ({hidden: clip.hidden, paused: clip.paused, "
+            "events: {...clip.__testMediaEvents}, "
+            "hiddenMutations: clip.__testHiddenMutations})"
+        )
+        final_clip_index = browser_payload["events"].index(final_clip)
+        final_state = browser_payload["events"][final_clip_index + 1]
+        assert final_state["kind"] == "state"
+        final_state_path = manifest_data["assets"][final_state["asset"]]["path"]
+        visible_state = page.locator(".browser-state-primary:not([hidden])")
+        assert urlparse(visible_state.get_attribute("src")).path.endswith(
+            "/omegaflow-videos/quickstart-demo/presentation/" + final_state_path
+        )
+        assert completed_clip["hidden"] is True
+        assert completed_clip["paused"] is True
+        assert held_clip == completed_clip
+        assert completed_clip["events"]["play"] == 1
+        assert completed_clip["events"]["pause"] <= 1
+        assert completed_clip["events"]["seeking"] <= 2
+        assert completed_clip["hiddenMutations"] <= 2
+
         page.locator("#progress").evaluate(
             "element => { element.value = '1000'; "
             "element.dispatchEvent(new Event('input', {bubbles: true})); "
