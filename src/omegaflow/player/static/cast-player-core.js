@@ -324,7 +324,11 @@
       const sourceMs = active.sourceStartMs +
         (presentationMs - active.presentationStartMs);
       const driftMs = ((audio.currentTime || 0) * 1000) - sourceMs;
-      if (!Number.isFinite(driftMs) || Math.abs(driftMs) > toleranceMs) {
+      const positioning = !state.playing || (audio.paused && !playPending);
+      if (
+        positioning &&
+        (!Number.isFinite(driftMs) || Math.abs(driftMs) > toleranceMs)
+      ) {
         audio.currentTime = sourceMs / 1000;
         correctionCount += 1;
       }
@@ -1070,7 +1074,10 @@
           Number.isFinite(clip.duration) &&
           !clip.seeking &&
           (enteringClip ||
-            Math.abs((clip.currentTime || 0) - seekTargetSeconds) > driftToleranceSeconds)
+            (!clipPlaying &&
+              Math.abs((clip.currentTime || 0) - seekTargetSeconds) > driftToleranceSeconds) ||
+            (clipPlaying &&
+              (clip.currentTime || 0) < seekTargetSeconds - driftToleranceSeconds))
         ) {
           clip.currentTime = seekTargetSeconds;
         }

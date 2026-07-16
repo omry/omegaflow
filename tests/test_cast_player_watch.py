@@ -740,6 +740,52 @@ if (
     assert result.returncode == 0, result.stderr
 
 
+def test_presentation_shell_is_the_only_terminal_event_renderer() -> None:
+    result = run_player_script(
+        r"""
+const scheduled = [];
+context.setTimeout = (callback, delay) => {
+  scheduled.push({callback, delay});
+  return scheduled.length;
+};
+context.scheduled = scheduled;
+vm.runInContext(`
+let legacyAppends = 0;
+let shellRenders = 0;
+appendChunk = () => { legacyAppends += 1; };
+presentationManifest = {
+  recording: {duration_ms: 2000},
+  beats: [{id: 'terminal', renderer: 'terminal', offset_ms: 0, duration_ms: 2000}],
+};
+presentationShell = {
+  renderAt() { shellRenders += 1; return Promise.resolve(); },
+  setPlaying() {},
+};
+events = [{time: 1, data: 'typed once'}];
+totalSeconds = 2;
+currentSeconds = 0;
+renderAt(1);
+renderPresentationFrame(1.1);
+renderPresentationFrame(1.2);
+currentSeconds = 0;
+scheduleEvents();
+if (
+  legacyAppends !== 0 || shellRenders !== 3 ||
+  scheduled.some((timer) => timer.delay === 1000)
+) {
+  console.error(JSON.stringify({
+    legacyAppends, shellRenders,
+    delays: scheduled.map((timer) => timer.delay),
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_player_suppresses_context_menu_and_right_click_decreases_rate() -> None:
     result = run_player_script(
         r"""

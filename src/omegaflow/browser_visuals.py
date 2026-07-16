@@ -29,6 +29,8 @@ FRAME_MATCH_HEIGHT = 60
 FRAME_MATCH_RATE = 25
 FRAME_MATCH_DURATION_MS = 1000 // FRAME_MATCH_RATE
 FRAME_MATCH_MAX_MAD = 4.0
+FRAME_MATCH_CONSECUTIVE_FRAMES = 3
+FRAME_MATCH_START_LOOKBACK_MS = 2000
 
 
 class BrowserVisualError(RuntimeError):
@@ -44,6 +46,7 @@ class DynamicFragmentRequest:
     source_start_ms: int
     source_end_ms: int
     end_state_path: Path
+    start_state_path: Path | None = None
     explicit_dynamic: bool = False
 
 
@@ -125,6 +128,7 @@ class BrowserVisualCapture:
         action_id: str,
         video_start_ms: int,
         video_end_ms: Callable[[], int],
+        start_state_path: Path | None = None,
         extra_redactions: tuple[Mapping[str, Any], ...] = (),
         force_dynamic: bool = False,
         explicit_dynamic: bool = False,
@@ -190,6 +194,7 @@ class BrowserVisualCapture:
             source_start_ms=video_start_ms,
             source_end_ms=current_end,
             end_state_path=self.run_dir / end_state["path"],
+            start_state_path=start_state_path,
             explicit_dynamic=explicit_dynamic,
         )
         self.dynamic_requests.append(request)
@@ -221,13 +226,21 @@ class BrowserVisualCapture:
         ffprobe = media.ffprobe
         assets: list[DynamicFragmentAsset] = []
         for index, request in enumerate(self.dynamic_requests, 1):
+            source_start_ms = request.source_start_ms
+            if request.start_state_path is not None:
+                source_start_ms = _matching_start_frame_ms(
+                    ffmpeg,
+                    source_video,
+                    request.start_state_path,
+                    maximum_ms=request.source_start_ms,
+                )
             source_end_ms = _matching_end_frame_ms(
                 ffmpeg,
                 source_video,
                 request.end_state_path,
                 minimum_ms=request.source_end_ms,
             )
-            duration_ms = source_end_ms - request.source_start_ms
+            duration_ms = source_end_ms - source_start_ms
             if (
                 not request.explicit_dynamic
                 and duration_ms > IMPLICIT_DYNAMIC_MAX_DURATION_MS
@@ -250,7 +263,7 @@ class BrowserVisualCapture:
                     "-loglevel",
                     "error",
                     "-ss",
-                    f"{request.source_start_ms / 1000:.3f}",
+                    f"{source_start_ms / 1000:.3f}",
                     "-i",
                     str(source_video),
                     "-t",
@@ -325,7 +338,7 @@ class BrowserVisualCapture:
                     encoded_bytes=encoded_bytes,
                     codec=probe["codec"],
                     has_audio=False,
-                    source_start_ms=request.source_start_ms,
+                    source_start_ms=source_start_ms,
                     source_end_ms=source_end_ms,
                 )
             )
@@ -417,16 +430,10 @@ def _png_dimensions(content: bytes) -> tuple[int, int]:
     return struct.unpack(">II", content[16:24])
 
 
-def _matching_end_frame_ms(
-    ffmpeg: str,
-    source_video: Path,
-    end_state: Path,
-    *,
-    minimum_ms: int,
-) -> int:
-    if end_state.is_symlink() or not end_state.is_file():
+def _normalized_state_frame(ffmpeg: str, state: Path, *, boundary: str) -> bytes:
+    if state.is_symlink() or not state.is_file():
         raise BrowserVisualError(
-            "BROWSER_SCHEMA", "dynamic fragment end state is unavailable"
+            "BROWSER_SCHEMA", f"dynamic fragment {boundary} state is unavailable"
         )
     frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
     target = subprocess.run(
@@ -436,7 +443,7 @@ def _matching_end_frame_ms(
             "-loglevel",
             "error",
             "-i",
-            str(end_state),
+            str(state),
             "-vf",
             f"scale={FRAME_MATCH_WIDTH}:{FRAME_MATCH_HEIGHT}:flags=area,format=gray",
             "-frames:v",
@@ -451,8 +458,93 @@ def _matching_end_frame_ms(
     if target.returncode != 0 or len(target.stdout) != frame_size:
         raise BrowserVisualError(
             "BROWSER_UNSUPPORTED_MOTION",
-            "could not normalize a dynamic fragment end state",
+            f"could not normalize a dynamic fragment {boundary} state",
         )
+    return target.stdout
+
+
+def _matching_start_frame_ms(
+    ffmpeg: str,
+    source_video: Path,
+    start_state: Path,
+    *,
+    maximum_ms: int,
+) -> int:
+    frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
+    target = _normalized_state_frame(ffmpeg, start_state, boundary="start")
+    search_start_ms = max(0, maximum_ms - FRAME_MATCH_START_LOOKBACK_MS)
+    process = subprocess.Popen(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{search_start_ms / 1000:.3f}",
+            "-i",
+            str(source_video),
+            "-t",
+            f"{(maximum_ms - search_start_ms) / 1000:.3f}",
+            "-vf",
+            f"fps={FRAME_MATCH_RATE},"
+            f"scale={FRAME_MATCH_WIDTH}:{FRAME_MATCH_HEIGHT}:flags=area,format=gray",
+            "-f",
+            "rawvideo",
+            "-",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        raise BrowserVisualError(
+            "BROWSER_UNSUPPORTED_MOTION",
+            "could not inspect a dynamic fragment start state",
+        )
+    match_index: int | None = None
+    consecutive_matches = 0
+    index = 0
+    while True:
+        frame = process.stdout.read(frame_size)
+        if not frame:
+            break
+        if len(frame) != frame_size:
+            process.kill()
+            process.wait()
+            raise BrowserVisualError(
+                "BROWSER_UNSUPPORTED_MOTION",
+                "dynamic fragment started with a partial frame",
+            )
+        score = sum(
+            abs(target_value - frame_value)
+            for target_value, frame_value in zip(target, frame, strict=True)
+        ) / frame_size
+        if score <= FRAME_MATCH_MAX_MAD:
+            consecutive_matches += 1
+            if consecutive_matches >= FRAME_MATCH_CONSECUTIVE_FRAMES:
+                match_index = index - FRAME_MATCH_CONSECUTIVE_FRAMES + 1
+        else:
+            consecutive_matches = 0
+        index += 1
+    stderr = process.stderr.read()
+    returncode = process.wait()
+    if returncode != 0 or stderr or match_index is None:
+        raise BrowserVisualError(
+            "BROWSER_UNSUPPORTED_MOTION",
+            "could not align a dynamic fragment with its initial browser frame",
+        )
+    return search_start_ms + match_index * FRAME_MATCH_DURATION_MS
+
+
+def _matching_end_frame_ms(
+    ffmpeg: str,
+    source_video: Path,
+    end_state: Path,
+    *,
+    minimum_ms: int,
+) -> int:
+    frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
+    target = _normalized_state_frame(ffmpeg, end_state, boundary="end")
     process = subprocess.Popen(
         [
             ffmpeg,
@@ -479,8 +571,8 @@ def _matching_end_frame_ms(
             "BROWSER_UNSUPPORTED_MOTION",
             "could not inspect a dynamic fragment end state",
         )
-    best_index: int | None = None
-    best_score = float("inf")
+    match_index: int | None = None
+    consecutive_matches = 0
     index = 0
     while True:
         frame = process.stdout.read(frame_size)
@@ -495,25 +587,28 @@ def _matching_end_frame_ms(
             )
         score = sum(
             abs(target_value - frame_value)
-            for target_value, frame_value in zip(target.stdout, frame, strict=True)
+            for target_value, frame_value in zip(target, frame, strict=True)
         ) / frame_size
-        if score < best_score:
-            best_score = score
-            best_index = index
+        if match_index is None:
+            if score <= FRAME_MATCH_MAX_MAD:
+                consecutive_matches += 1
+            else:
+                consecutive_matches = 0
+            if consecutive_matches >= FRAME_MATCH_CONSECUTIVE_FRAMES:
+                match_index = index
         index += 1
     stderr = process.stderr.read()
     returncode = process.wait()
     if (
         returncode != 0
         or stderr
-        or best_index is None
-        or best_score > FRAME_MATCH_MAX_MAD
+        or match_index is None
     ):
         raise BrowserVisualError(
             "BROWSER_UNSUPPORTED_MOTION",
             "could not align a dynamic fragment with its completed browser frame",
         )
-    return minimum_ms + (best_index + 1) * FRAME_MATCH_DURATION_MS
+    return minimum_ms + (match_index + 1) * FRAME_MATCH_DURATION_MS
 
 
 def _probe_video(ffprobe: str, path: Path) -> dict[str, Any]:

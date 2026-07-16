@@ -2208,19 +2208,21 @@
         clearTimers();
         resetPlaybackOrigin();
         const guidedPausePoint = nextGuidedPausePoint(currentSeconds);
-        while (eventIndex < events.length && events[eventIndex].time < currentSeconds) {
-          eventIndex += 1;
-        }
-        for (let index = eventIndex; index < events.length; index += 1) {
-          const event = events[index];
-          if (guidedPausePoint != null && event.time >= guidedPausePoint.time) {
-            break;
+        if (!presentationShell) {
+          while (eventIndex < events.length && events[eventIndex].time < currentSeconds) {
+            eventIndex += 1;
           }
-          const delay = playbackDelay((event.time - currentSeconds) * 1000);
-          timers.push(setTimeout(() => {
-            appendChunk(event.data);
-            eventIndex = Math.max(eventIndex, index + 1);
-          }, delay));
+          for (let index = eventIndex; index < events.length; index += 1) {
+            const event = events[index];
+            if (guidedPausePoint != null && event.time >= guidedPausePoint.time) {
+              break;
+            }
+            const delay = playbackDelay((event.time - currentSeconds) * 1000);
+            timers.push(setTimeout(() => {
+              appendChunk(event.data);
+              eventIndex = Math.max(eventIndex, index + 1);
+            }, delay));
+          }
         }
         if (guidedPausePoint != null) {
           timers.push(
@@ -2265,10 +2267,6 @@
           presentationManifest,
           globalMs,
         );
-        const beat = presentationManifest.beats[index];
-        if (!force && beat.renderer !== 'browser' && index === lastPresentationBeatIndex) {
-          return;
-        }
         lastPresentationBeatIndex = index;
         if (typeof presentationShell.setPlaying === 'function') {
           presentationShell.setPlaying(playing);
@@ -2282,17 +2280,19 @@
 
       function renderAt(seconds) {
         const clamped = Math.max(0, Math.min(seconds, totalSeconds));
-        resetTerminalBuffer();
-        introActive = Boolean(introText && introSeconds > 0);
-        terminal.innerHTML = '';
-        eventIndex = 0;
-        for (let index = 0; index < events.length; index += 1) {
-          const event = events[index];
-          if (event.time > clamped) {
-            break;
+        if (!presentationShell) {
+          resetTerminalBuffer();
+          introActive = Boolean(introText && introSeconds > 0);
+          terminal.innerHTML = '';
+          eventIndex = 0;
+          for (let index = 0; index < events.length; index += 1) {
+            const event = events[index];
+            if (event.time > clamped) {
+              break;
+            }
+            appendChunk(event.data);
+            eventIndex = index + 1;
           }
-          appendChunk(event.data);
-          eventIndex = index + 1;
         }
         currentSeconds = clamped;
         renderPresentationFrame(clamped, true);
@@ -2871,27 +2871,7 @@
 
       async function loadCast() {
         if (presentationManifest) {
-          const rawEvents = [];
-          for (const beat of presentationManifest.beats) {
-            if (beat.renderer === 'browser') {
-              continue;
-            }
-            const response = await fetchPresentationAsset(beat.payload, manifestBaseUrl);
-            if (!response.ok) {
-              throw new Error(`could not load terminal payload: ${response.status}`);
-            }
-            const decoded = CastPlayerCore.decodeAsciinemaCast(await response.text());
-            rawEvents.push({time: beat.offset_ms / 1000, data: '\u001b[2J\u001b[H'});
-            for (const event of decoded.events) {
-              if (event.type === 'o') {
-                rawEvents.push({
-                  time: (beat.offset_ms + event.atMs) / 1000,
-                  data: String(event.data || ''),
-                });
-              }
-            }
-          }
-          events = rawEvents.sort((left, right) => left.time - right.time);
+          events = [];
           presentationShell = CastPlayerCore.createPresentationShell({
             manifest: presentationManifest,
             rendererFactories: {

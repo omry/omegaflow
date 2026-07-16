@@ -351,9 +351,9 @@ class PersistentBrowserRunner:
                     ),
                 },
             )
-            self._video_origin_ns = time.monotonic_ns()
             self.page = self.browser_context.new_page()
             self.video = self.page.video
+            self._calibrate_video_origin()
             self.page.on("response", self._observe_response)
             self.page.on("console", self._observe_console)
             self.page.on("pageerror", self._observe_page_error)
@@ -626,6 +626,11 @@ class PersistentBrowserRunner:
                 action_id=action.id,
                 video_start_ms=video_started_ms,
                 video_end_ms=self._video_elapsed_ms,
+                start_state_path=(
+                    self._require_visuals().run_dir / before_state["path"]
+                    if before_state is not None
+                    else None
+                ),
                 extra_redactions=extra_redactions,
                 force_dynamic=force_dynamic,
                 explicit_dynamic=explicit_dynamic,
@@ -899,6 +904,25 @@ class PersistentBrowserRunner:
         if not self._video_origin_ns:
             raise BrowserCaptureError("BROWSER_SCHEMA", "browser video is not started")
         return round((time.monotonic_ns() - self._video_origin_ns) / 1_000_000)
+
+    def _calibrate_video_origin(self) -> None:
+        if self.page is None:
+            raise BrowserCaptureError("BROWSER_SCHEMA", "browser page is not started")
+        sample_started_ns = time.monotonic_ns()
+        page_elapsed_ms = self.page.evaluate("performance.now()")
+        sample_ended_ns = time.monotonic_ns()
+        if (
+            isinstance(page_elapsed_ms, bool)
+            or not isinstance(page_elapsed_ms, (int, float))
+            or page_elapsed_ms < 0
+        ):
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA", "browser video has no valid time origin"
+            )
+        sample_midpoint_ns = (sample_started_ns + sample_ended_ns) // 2
+        self._video_origin_ns = sample_midpoint_ns - round(
+            float(page_elapsed_ms) * 1_000_000
+        )
 
     def _scroll(
         self, payload: Mapping[str, Any], *, beat_id: str, action_id: str

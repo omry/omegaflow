@@ -85,6 +85,25 @@ ASSET_HTML = b"""<!doctype html>
 BROKEN_ASSET_HTML = b"""<!doctype html>
 <html><body><img src="/missing.png" width="24" height="24"></body></html>"""
 
+ANIMATED_CAPTURE_HTML = b"""<!doctype html>
+<html><head><style>
+html, body { margin: 0; width: 100%; height: 100%; background: rgb(255, 0, 0); }
+</style></head><body>
+  <button id="animate">Animate</button>
+  <script>
+    document.querySelector('#animate').addEventListener('click', () => {
+      document.body.style.background = 'rgb(0, 255, 0)';
+      let value = '';
+      const target = 'for n in 1 2 3 4 5';
+      const timer = setInterval(() => {
+        value += target[value.length];
+        document.querySelector('#animate').textContent = value;
+        if (value.length === target.length) clearInterval(timer);
+      }, 20);
+    });
+  </script>
+</body></html>"""
+
 PNG_1X1 = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c02"
     "0000000b4944415478da6364f80f00010501012718e3660000000049454e44ae426082"
@@ -113,6 +132,13 @@ class FixtureHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(BROKEN_ASSET_HTML)))
             self.end_headers()
             self.wfile.write(BROKEN_ASSET_HTML)
+            return
+        if self.path == "/animated-capture":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(ANIMATED_CAPTURE_HTML)))
+            self.end_headers()
+            self.wfile.write(ANIMATED_CAPTURE_HTML)
             return
         if self.path == "/delayed.png":
             time.sleep(0.15)
@@ -910,6 +936,78 @@ def test_retained_loading_is_trimmed_to_muted_content_addressed_webm(
     )
 
 
+def test_dynamic_fragment_retains_the_frame_before_animation_starts(
+    tmp_path: Path,
+) -> None:
+    with fixture_site() as base_url:
+        plan = normalize_recording_plan(
+            {
+                "id": "dynamic-fragment-start",
+                "browser": {"base_url": base_url},
+                "beats": [
+                    {
+                        "id": "dynamic",
+                        "medium": "browser",
+                        "actions": [
+                            {"id": "open", "open_page": {"url": "/animated-capture"}},
+                            {
+                                "id": "animate",
+                                "transition": "captured",
+                                "click": {
+                                    "target": {"role": "button", "name": "Animate"}
+                                },
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        runner = PersistentBrowserRunner(plan.browser)
+        runner.start(capture_context(tmp_path))
+        try:
+            actions = runner.capture_beat(plan.beats[0]).metadata["actions"]
+        finally:
+            runner.close()
+        runner.complete()
+
+    fragment = next(
+        record
+        for record in capture_records(tmp_path)
+        if record["type"] == "diagnostic"
+        and record.get("kind") == "dynamic_fragment"
+        and record.get("action_id") == "animate"
+    )
+    source = tmp_path / "run" / fragment["path"]
+    media = browser_visuals.require_browser_media_runtime(require_vp8=True)
+    first_pixel = subprocess.run(
+        [
+            media.ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source),
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=1:1",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+
+    assert actions[1]["visual"]["kind"] == "clip"
+    assert len(first_pixel) == 3
+    red, green, _blue = first_pixel
+    assert red > 200
+    assert green < 80
+
+
 def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
     tmp_path: Path,
 ) -> None:
@@ -1098,6 +1196,88 @@ def write_color_transition_video(
         check=True,
     )
     return ffmpeg, source, end_state
+
+
+def write_repeated_end_state_video(tmp_path: Path) -> tuple[str, Path, Path]:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is unavailable")
+    source = tmp_path / "repeated-end-state.webm"
+    end_state = tmp_path / "repeated-end-state.png"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=160x90:d=2:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=white:s=160x90:d=0.04:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=160x90:d=0.4:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=#fdfdfd:s=160x90:d=0.4:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=160x90:d=0.4:r=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=white:s=160x90:d=0.4:r=25",
+            "-filter_complex",
+            "[0:v][1:v][2:v][3:v][4:v][5:v]concat=n=6:v=1:a=0[v]",
+            "-map",
+            "[v]",
+            "-c:v",
+            "libvpx",
+            "-lossless",
+            "1",
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=white:s=160x90",
+            "-frames:v",
+            "1",
+            str(end_state),
+        ],
+        check=True,
+    )
+    return ffmpeg, source, end_state
+
+
+def test_dynamic_fragment_uses_first_stable_end_state_match(tmp_path: Path) -> None:
+    ffmpeg, source, end_state = write_repeated_end_state_video(tmp_path)
+
+    matched_end_ms = browser_visuals._matching_end_frame_ms(
+        ffmpeg,
+        source,
+        end_state,
+        minimum_ms=1500,
+    )
+
+    assert 2440 <= matched_end_ms <= 2700
 
 
 def test_dynamic_fragment_finalization_extends_to_the_matching_end_state(

@@ -478,6 +478,22 @@ global.ResizeObserver = class {
     }));
     process.exit(1);
   }
+  const beforeAheadRender = {
+    time: clip.currentTime,
+    seekCalls: clip.seekCalls,
+  };
+  clip._currentTime = 0.8;
+  renderer.renderAt(760);
+  if (
+    clip.seekCalls !== beforeAheadRender.seekCalls ||
+    clip.currentTime !== 0.8
+  ) {
+    console.error(JSON.stringify({
+      phase: 'active-clip-ahead', beforeAheadRender,
+      time: clip.currentTime, seekCalls: clip.seekCalls,
+    }));
+    process.exit(1);
+  }
   const beforeEndedScrub = {
     playCalls: clip.playCalls,
     pauseCalls: clip.pauseCalls,
@@ -599,6 +615,80 @@ if (
   calls.filter((value) => value === 'play').length !== 1
 ) {
   console.error(JSON.stringify({audio, calls, first, gap, second, state: controller.state()}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_presentation_audio_controller_does_not_seek_during_continuous_playback() -> None:
+    result = run_core_script(
+        r"""
+let currentTime = 0;
+let seekCalls = 0;
+const audio = {
+  muted: false,
+  paused: true,
+  playbackRate: 1,
+  get currentTime() { return currentTime; },
+  set currentTime(value) { currentTime = value; seekCalls += 1; },
+  pause() { this.paused = true; },
+  play() { this.paused = false; return Promise.resolve(); },
+};
+const controller = core.createPresentationAudioController({
+  audio,
+  intervals: [
+    {presentation_start_ms: 0, presentation_end_ms: 2000, source_start_ms: 0, source_end_ms: 2000},
+  ],
+});
+controller.synchronize(0, {playing: true});
+currentTime = 0.05;
+const behind = controller.synchronize(250, {playing: true});
+currentTime = 0.55;
+const ahead = controller.synchronize(300, {playing: true});
+if (
+  seekCalls !== 0 || controller.state().correctionCount !== 0 ||
+  behind.driftMs !== -200 || ahead.driftMs !== 250
+) {
+  console.error(JSON.stringify({seekCalls, behind, ahead, state: controller.state()}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_presentation_audio_controller_does_not_reseek_while_play_is_pending() -> None:
+    result = run_core_script(
+        r"""
+let currentTime = 0;
+let seekCalls = 0;
+const audio = {
+  muted: false,
+  paused: true,
+  playbackRate: 1,
+  get currentTime() { return currentTime; },
+  set currentTime(value) { currentTime = value; seekCalls += 1; },
+  pause() { this.paused = true; },
+  play() { return new Promise(() => {}); },
+};
+const controller = core.createPresentationAudioController({
+  audio,
+  intervals: [
+    {presentation_start_ms: 0, presentation_end_ms: 2000, source_start_ms: 0, source_end_ms: 2000},
+  ],
+});
+controller.synchronize(500, {playing: true});
+currentTime = 0.1;
+controller.synchronize(700, {playing: true});
+if (
+  seekCalls !== 1 || currentTime !== 0.1 ||
+  controller.state().correctionCount !== 1 || !controller.state().playPending
+) {
+  console.error(JSON.stringify({seekCalls, currentTime, state: controller.state()}));
   process.exit(1);
 }
 """
