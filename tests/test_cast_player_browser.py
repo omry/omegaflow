@@ -408,6 +408,31 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
         assert held_clip == completed_clip
         assert completed_clip["events"]["play"] == 1
         assert completed_clip["events"]["pause"] <= 1
+        diagnostics = page.evaluate(
+            "() => window.__omegaflowMediaDiagnostics"
+        )
+        beat_diagnostics = [
+            clip
+            for clip in diagnostics["clips"]
+            if clip["beatId"] == browser_beat["id"]
+        ]
+        assert diagnostics["version"] == 1
+        assert len(beat_diagnostics) == 2
+        assert all(clip["sampleCount"] > 0 for clip in beat_diagnostics)
+        attempted = [clip for clip in beat_diagnostics if clip["playAttempts"]]
+        assert attempted, [
+            (clip["assetId"], clip["sampleCount"], clip["playAttempts"])
+            for clip in beat_diagnostics
+        ]
+        assert all(
+            clip["playResolutions"] == clip["playAttempts"]
+            for clip in attempted
+        ), [
+            (clip["playAttempts"], clip["playResolutions"])
+            for clip in attempted
+        ]
+        assert all(not clip["playRejections"] for clip in beat_diagnostics)
+        assert beat_diagnostics[-1]["last"]["hidden"] is True
         assert completed_clip["events"]["seeking"] <= 2
         assert completed_clip["hiddenMutations"] <= 2
 

@@ -4,6 +4,8 @@
   const defaultAudioBoundaryEpsilonSeconds = 0.05;
   const defaultAudioDriftToleranceMs = 150;
   const browserDecodedAssetBudgetBytes = 64 * 1024 * 1024;
+  const browserMediaDiagnosticEventLimit = 200;
+  const browserMediaDiagnosticSampleLimit = 600;
 
   function createCastAudioTimeline(segments = [], options = {}) {
     const audioBoundaryEpsilonSeconds = Number.isFinite(options.audioBoundaryEpsilonSeconds)
@@ -953,6 +955,154 @@
     let resizeObserver = null;
     let lastScene = null;
     let activeClipAsset = null;
+    const clipDiagnostics = new Map();
+
+    function diagnosticNowMs() {
+      if (global.performance && typeof global.performance.now === 'function') {
+        return Math.round(global.performance.now());
+      }
+      return Date.now();
+    }
+
+    function diagnosticRoot() {
+      const existing = global.__omegaflowMediaDiagnostics;
+      if (
+        existing && existing.version === 1 && Array.isArray(existing.clips)
+      ) {
+        return existing;
+      }
+      const created = {version: 1, clips: [], nextClipId: 1};
+      global.__omegaflowMediaDiagnostics = created;
+      return created;
+    }
+
+    function mediaError(error) {
+      if (!error) {
+        return null;
+      }
+      return {
+        code: Number.isFinite(error.code) ? error.code : null,
+        message: String(error.message || ''),
+        name: String(error.name || ''),
+      };
+    }
+
+    function clipState(clip, extra = {}) {
+      return {
+        atMs: diagnosticNowMs(),
+        currentTime: Number(clip.currentTime || 0),
+        duration: Number.isFinite(clip.duration) ? clip.duration : null,
+        ended: Boolean(clip.ended),
+        error: mediaError(clip.error),
+        hidden: Boolean(clip.hidden),
+        networkState: Number.isFinite(clip.networkState) ? clip.networkState : null,
+        paused: Boolean(clip.paused),
+        playbackRate: Number(clip.playbackRate || 1),
+        readyState: Number.isFinite(clip.readyState) ? clip.readyState : null,
+        seeking: Boolean(clip.seeking),
+        ...extra,
+      };
+    }
+
+    function appendLimited(items, value, limit) {
+      items.push(value);
+      if (items.length > limit) {
+        items.splice(0, items.length - limit);
+      }
+    }
+
+    function recordClipEvent(diagnostic, clip, type, detail = {}) {
+      const state = clipState(clip, {type, ...detail});
+      diagnostic.last = state;
+      appendLimited(
+        diagnostic.mediaEvents,
+        state,
+        browserMediaDiagnosticEventLimit,
+      );
+    }
+
+    function recordClipSample(diagnostic, clip, detail) {
+      diagnostic.sampleCount += 1;
+      const state = clipState(clip, detail);
+      diagnostic.last = state;
+      appendLimited(
+        diagnostic.samples,
+        state,
+        browserMediaDiagnosticSampleLimit,
+      );
+    }
+
+    function registerClipDiagnostic(assetId, clip, source) {
+      const root = diagnosticRoot();
+      const diagnostic = {
+        id: root.nextClipId,
+        assetId,
+        beatId: String(context?.beat?.id || context?.payload?.beat_id || ''),
+        createdAtMs: diagnosticNowMs(),
+        disposed: false,
+        mediaEvents: [],
+        playAttempts: 0,
+        playRejections: [],
+        playResolutions: 0,
+        sampleCount: 0,
+        samples: [],
+        source,
+        last: null,
+      };
+      root.nextClipId += 1;
+      root.clips.push(diagnostic);
+      clipDiagnostics.set(assetId, diagnostic);
+      if (typeof clip.addEventListener === 'function') {
+        for (const type of [
+          'canplay', 'ended', 'error', 'loadeddata', 'pause', 'play', 'playing',
+          'seeked', 'seeking', 'stalled', 'suspend', 'waiting',
+        ]) {
+          clip.addEventListener(type, () => {
+            recordClipEvent(diagnostic, clip, type);
+          });
+        }
+      }
+      recordClipEvent(diagnostic, clip, 'created');
+      return diagnostic;
+    }
+
+    function playClip(clip, diagnostic) {
+      diagnostic.playAttempts += 1;
+      recordClipEvent(diagnostic, clip, 'play-attempt');
+      let playResult;
+      try {
+        playResult = clip.play();
+      } catch (error) {
+        const rejection = {
+          atMs: diagnosticNowMs(),
+          ...mediaError(error),
+        };
+        appendLimited(
+          diagnostic.playRejections,
+          rejection,
+          browserMediaDiagnosticEventLimit,
+        );
+        recordClipEvent(diagnostic, clip, 'play-rejected', {rejection});
+        throw error;
+      }
+      if (playResult && typeof playResult.then === 'function') {
+        playResult.then(() => {
+          diagnostic.playResolutions += 1;
+          recordClipEvent(diagnostic, clip, 'play-resolved');
+        }).catch((error) => {
+          const rejection = {
+            atMs: diagnosticNowMs(),
+            ...mediaError(error),
+          };
+          appendLimited(
+            diagnostic.playRejections,
+            rejection,
+            browserMediaDiagnosticEventLimit,
+          );
+          recordClipEvent(diagnostic, clip, 'play-rejected', {rejection});
+        });
+      }
+    }
 
     function element(tag, className) {
       const value = documentObject.createElement(tag);
@@ -1027,6 +1177,10 @@
         const hidden = !active;
         if (clip.hidden !== hidden) {
           clip.hidden = hidden;
+          const diagnostic = clipDiagnostics.get(assetId);
+          if (diagnostic) {
+            recordClipEvent(diagnostic, clip, hidden ? 'hidden' : 'shown');
+          }
         }
         if (!active && !clip.paused) {
           clip.pause();
@@ -1064,6 +1218,7 @@
           ? '1'
           : '0';
         const targetSeconds = visual.mediaMs / 1000;
+        const diagnostic = clipDiagnostics.get(visual.asset);
         const enteringClip = activeClipAsset !== visual.asset;
         const clipPlaying = playing && visual.progress < 1 && !clip.ended;
         const driftToleranceSeconds = clipPlaying ? 0.15 : 0.04;
@@ -1082,12 +1237,17 @@
           clip.currentTime = seekTargetSeconds;
         }
         activeClipAsset = visual.asset;
+        if (diagnostic) {
+          recordClipSample(diagnostic, clip, {
+            clipPlaying,
+            enteringClip,
+            presentationMs: visual.mediaMs,
+            targetSeconds,
+          });
+        }
         if (clipPlaying && !clip.seeking) {
           if (clip.paused) {
-            const playResult = clip.play();
-            if (playResult && typeof playResult.catch === 'function') {
-              playResult.catch(() => {});
-            }
+            playClip(clip, diagnostic);
           }
         } else if (!clip.paused) {
           clip.pause();
@@ -1248,8 +1408,10 @@
           clip.setAttribute('muted', '');
           clip.setAttribute('playsinline', '');
           clip.setAttribute('preload', 'auto');
-          clip.setAttribute('src', assetSource(event.asset));
+          const source = assetSource(event.asset);
+          clip.setAttribute('src', source);
           clips.set(event.asset, clip);
+          registerClipDiagnostic(event.asset, clip, source);
         }
         const scrollClip = element('div', 'browser-scroll-clip');
         const scrollImage = element('img', 'browser-scroll-image');
@@ -1389,6 +1551,10 @@
         resizeObserver = null;
         lastScene = null;
         activeClipAsset = null;
+        for (const diagnostic of clipDiagnostics.values()) {
+          diagnostic.disposed = true;
+        }
+        clipDiagnostics.clear();
       },
       state: () => ({decodedAssetBytes}),
     });

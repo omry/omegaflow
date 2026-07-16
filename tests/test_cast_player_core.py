@@ -323,7 +323,12 @@ function node(tag) {
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; },
     pause() { this.paused = true; this.pauseCalls += 1; },
-    play() { this.paused = false; this.playCalls += 1; return Promise.resolve(); },
+    play() {
+      this.playCalls += 1;
+      if (this.playError) return Promise.reject(this.playError);
+      this.paused = false;
+      return Promise.resolve();
+    },
     remove() { this.removed = true; },
   };
 }
@@ -359,7 +364,7 @@ const payload = {
 };
 const assets = {
   initial: {path: 'initial.webp'}, final: {path: 'final.webp'},
-  scrolled: {path: 'scrolled.webp'}, clip: {path: 'clip.webm'},
+  scrolled: {path: 'scrolled.webp'}, clip: {path: 'clip.mp4'},
 };
 const resizeObservers = [];
 global.ResizeObserver = class {
@@ -563,6 +568,34 @@ global.ResizeObserver = class {
     cutFrame.style.transform !== 'scale(1.9900497512437811)'
   ) {
     console.error(JSON.stringify({cutLayoutBox, cutFrame}));
+    process.exit(1);
+  }
+  clip.ended = false;
+  clip.paused = true;
+  clip.duration = 10;
+  clip.playError = Object.assign(new Error('embedded playback blocked'), {
+    name: 'NotAllowedError',
+  });
+  renderer.setPlaying(true);
+  renderer.renderAt(740);
+  await Promise.resolve();
+  await Promise.resolve();
+  renderer.renderAt(760);
+  await Promise.resolve();
+  renderer.renderAt(900);
+  const diagnostics = global.__omegaflowMediaDiagnostics;
+  const clipDiagnostic = diagnostics?.clips?.find(
+    (entry) => entry.beatId === 'browser' && entry.assetId === 'clip',
+  );
+  const rejection = clipDiagnostic?.playRejections?.at(-1);
+  if (
+    diagnostics?.version !== 1 || !clipDiagnostic ||
+    rejection?.name !== 'NotAllowedError' ||
+    rejection?.message !== 'embedded playback blocked' ||
+    clipDiagnostic.samples.length < 2 ||
+    clipDiagnostic.last?.paused !== true
+  ) {
+    console.error(JSON.stringify({diagnostics}));
     process.exit(1);
   }
   renderer.dispose();
