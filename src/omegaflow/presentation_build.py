@@ -78,7 +78,7 @@ PRESENTATION_POLICY_VERSIONS = {
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
     "typing": "natural-v1",
-    "clip": "playwright-video-v1-vp8",
+    "clip": "playwright-video-v2-h264",
 }
 FINGERPRINT_FILE = "recording.fingerprint.json"
 PRESENTATION_DIRECTORY = "presentation"
@@ -971,8 +971,8 @@ def compile_presentation_bundle(
         if all_sources:
             try:
                 media_runtime = require_browser_media_runtime(
-                    require_vp8=any(
-                        source.path.suffix.lower() == ".webm"
+                    require_h264=any(
+                        source.path.suffix.lower() == ".mp4"
                         for source in all_sources.values()
                     )
                 )
@@ -1186,7 +1186,7 @@ def _bundle_ffprobe(root: Path) -> str | None:
         return None
     try:
         return require_browser_media_runtime(
-            require_vp8=any(root.glob("media/*.webm"))
+            require_h264=any(root.glob("media/*.mp4"))
         ).ffprobe
     except BrowserRuntimeError as exc:
         raise PresentationBuildError(str(exc)) from exc
@@ -1307,12 +1307,12 @@ def _publish_media_asset(
         else:
             temporary.replace(target)
         return target, "image/webp"
-    if source.suffix.lower() == ".webm":
+    if source.suffix.lower() == ".mp4":
         content = source.read_bytes()
-        target = staging / "media" / f"{hashlib.sha256(content).hexdigest()}.webm"
+        target = staging / "media" / f"{hashlib.sha256(content).hexdigest()}.mp4"
         if not target.exists():
             target.write_bytes(content)
-        return target, "video/webm"
+        return target, "video/mp4"
     raise PresentationBuildError(f"unsupported captured media class: {source.suffix}")
 
 

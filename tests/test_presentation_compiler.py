@@ -832,9 +832,9 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         },
     ]
     clip = {
-        "path": "capture/fragments/" + "a" * 64 + ".webm",
+        "path": "capture/fragments/" + "a" * 64 + ".mp4",
         "sha256": "a" * 64,
-        "media_type": "video/webm",
+        "media_type": "video/mp4",
         "width": 1440,
         "height": 900,
         "duration_ms": 400,

@@ -1,16 +1,16 @@
 {
   "assets": {
-    "clip-472a2445cce341c38026241af2567a6c6b74eb899f69d98a68f5845cb03afddf": {
-      "bytes": 373775,
-      "media_type": "video/webm",
-      "path": "media/472a2445cce341c38026241af2567a6c6b74eb899f69d98a68f5845cb03afddf.webm",
-      "sha256": "472a2445cce341c38026241af2567a6c6b74eb899f69d98a68f5845cb03afddf"
+    "clip-b915da43708480061e00c717d232b6657306fd07bc4c27316fc46b9f79472326": {
+      "bytes": 40123,
+      "media_type": "video/mp4",
+      "path": "media/b915da43708480061e00c717d232b6657306fd07bc4c27316fc46b9f79472326.mp4",
+      "sha256": "b915da43708480061e00c717d232b6657306fd07bc4c27316fc46b9f79472326"
     },
-    "clip-d857cbf8f0139347375a59e437e430505ab8ae19c27cb288ffadacdb6c7f827a": {
-      "bytes": 44815,
-      "media_type": "video/webm",
-      "path": "media/d857cbf8f0139347375a59e437e430505ab8ae19c27cb288ffadacdb6c7f827a.webm",
-      "sha256": "d857cbf8f0139347375a59e437e430505ab8ae19c27cb288ffadacdb6c7f827a"
+    "clip-e4825de072d18441665c4972dc8b0e46c1a201707061f2783642e282c4f38e7d": {
+      "bytes": 94351,
+      "media_type": "video/mp4",
+      "path": "media/e4825de072d18441665c4972dc8b0e46c1a201707061f2783642e282c4f38e7d.mp4",
+      "sha256": "e4825de072d18441665c4972dc8b0e46c1a201707061f2783642e282c4f38e7d"
     },
     "state-00f01e21acf6158b0f01569141e555690fb9ee56c78f6a68609dcd85a54aede0": {
       "bytes": 60,
@@ -24,11 +24,11 @@
       "path": "media/89080347c053bf4a04ddb8f6b66c3c87896055509270adbd1bf789f9ed575c96.webp",
       "sha256": "89080347c053bf4a04ddb8f6b66c3c87896055509270adbd1bf789f9ed575c96"
     },
-    "state-47cfc61413b27da988e80c74cf397de8af67114d2582a56ef6851edb1c6f7e86": {
-      "bytes": 7990,
+    "state-15a2f10154b38e5a702fb23a6845d8104be4585c35e6356d58e12a13c3a2e7b4": {
+      "bytes": 8040,
       "media_type": "image/webp",
-      "path": "media/bbded3504c798f5af50d89a4aee36235c027dca09b9eb5d7344951fce87b9d41.webp",
-      "sha256": "bbded3504c798f5af50d89a4aee36235c027dca09b9eb5d7344951fce87b9d41"
+      "path": "media/c92f6cd4044bfc6fcb53b8e65bc79a86ba0fe2a3785bd3b1e443a399b08b1817.webp",
+      "sha256": "c92f6cd4044bfc6fcb53b8e65bc79a86ba0fe2a3785bd3b1e443a399b08b1817"
     },
     "state-c2629d271acf589fd50eb95bfce5d8491811f30f32d9c33baa275461488ce941": {
       "bytes": 16240,
@@ -70,20 +70,20 @@
         "source_start_ms": 28632
       },
       {
-        "presentation_end_ms": 54486,
-        "presentation_start_ms": 41334,
+        "presentation_end_ms": 54822,
+        "presentation_start_ms": 41670,
         "source_end_ms": 47786,
         "source_start_ms": 34634
       },
       {
-        "presentation_end_ms": 65345,
-        "presentation_start_ms": 54486,
+        "presentation_end_ms": 65681,
+        "presentation_start_ms": 54822,
         "source_end_ms": 58645,
         "source_start_ms": 47786
       },
       {
-        "presentation_end_ms": 68452,
-        "presentation_start_ms": 65345,
+        "presentation_end_ms": 68878,
+        "presentation_start_ms": 65771,
         "source_end_ms": 61752,
         "source_start_ms": 58645
       }
@@ -116,7 +116,7 @@
       "transition_in": null
     },
     {
-      "duration_ms": 17378,
+      "duration_ms": 17714,
       "guide": {
         "success_hint": "The generated video is ready to play."
       },
@@ -128,13 +128,13 @@
       "transition_in": null
     },
     {
-      "duration_ms": 22442,
+      "duration_ms": 22532,
       "guide": {
         "success_hint": "The generated player is ready to publish with your docs."
       },
       "heading": "Play It In The Browser",
       "id": "play-in-browser",
-      "offset_ms": 46010,
+      "offset_ms": 46346,
       "payload": "beats/play-in-browser.browser.json",
       "renderer": "browser",
       "transition_in": "window-open"
@@ -154,7 +154,7 @@
     }
   },
   "recording": {
-    "duration_ms": 68452,
+    "duration_ms": 68878,
     "id": "quickstart-demo",
     "title": "Quickstart Demo"
   },

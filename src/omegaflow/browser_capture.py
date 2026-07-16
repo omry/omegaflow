@@ -1402,7 +1402,7 @@ class PersistentBrowserRunner:
                         action_id=asset.action_id,
                         path=asset.path.relative_to(visuals.run_dir).as_posix(),
                         sha256=asset.sha256,
-                        media_type="video/webm",
+                        media_type="video/mp4",
                         width=asset.width,
                         height=asset.height,
                         duration_ms=asset.duration_ms,

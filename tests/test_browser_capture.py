@@ -878,7 +878,7 @@ def test_recording_wide_redaction_is_applied_to_stable_states(
     assert actions[1]["visual"]["state"]["path"] == state["path"]
 
 
-def test_retained_loading_is_trimmed_to_muted_content_addressed_webm(
+def test_retained_loading_is_trimmed_to_muted_content_addressed_mp4(
     tmp_path: Path,
 ) -> None:
     plan = normalize_recording_plan(
@@ -920,11 +920,14 @@ def test_retained_loading_is_trimmed_to_muted_content_addressed_webm(
     )
     path = tmp_path / "run" / fragment["path"]
     content = path.read_bytes()
-    assert path.name == f"{hashlib.sha256(content).hexdigest()}.webm"
+    assert path.name == f"{hashlib.sha256(content).hexdigest()}.mp4"
     assert fragment["sha256"] == hashlib.sha256(content).hexdigest()
-    assert fragment["media_type"] == "video/webm"
-    assert fragment["codec"] == "vp8"
+    assert fragment["media_type"] == "video/mp4"
+    assert fragment["codec"] == "h264"
     assert fragment["has_audio"] is False
+    moov = content.find(b"moov")
+    mdat = content.find(b"mdat")
+    assert 0 <= moov < mdat
     assert (fragment["width"], fragment["height"]) == (1440, 900)
     assert 0 < fragment["duration_ms"] <= 3_000
     assert fragment["encoded_bytes"] == len(content) <= 2_000_000
@@ -978,7 +981,7 @@ def test_dynamic_fragment_retains_the_frame_before_animation_starts(
         and record.get("action_id") == "animate"
     )
     source = tmp_path / "run" / fragment["path"]
-    media = browser_visuals.require_browser_media_runtime(require_vp8=True)
+    media = browser_visuals.require_browser_media_runtime(require_h264=True)
     first_pixel = subprocess.run(
         [
             media.ffmpeg,

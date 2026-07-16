@@ -367,7 +367,7 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
     (root / "beats").mkdir(parents=True)
     (root / "media").mkdir()
     state = root / "media/state.webp"
-    clip = root / "media/clip.webm"
+    clip = root / "media/clip.mp4"
     subprocess.run(
         [
             ffmpeg,
@@ -394,9 +394,13 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
             "color=c=red:s=32x18:d=0.5",
             "-an",
             "-c:v",
-            "libvpx",
-            "-deadline",
-            "realtime",
+            "libx264",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
             str(clip),
         ],
         check=True,
@@ -428,7 +432,7 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
     assets = {}
     for asset_id, path, media_type in (
         ("state", state, "image/webp"),
-        ("clip", clip, "video/webm"),
+        ("clip", clip, "video/mp4"),
     ):
         content = path.read_bytes()
         assets[asset_id] = {

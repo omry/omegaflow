@@ -117,7 +117,7 @@ def validate_public_staging(
                 expected_media_suffixes.setdefault(event["asset"], set()).add(".webp")
             elif kind == "clip":
                 asset_ids.add(event["asset"])
-                expected_media_suffixes.setdefault(event["asset"], set()).add(".webm")
+                expected_media_suffixes.setdefault(event["asset"], set()).add(".mp4")
             elif kind == "scroll":
                 asset_ids.update((event["start_asset"], event["end_asset"]))
                 expected_media_suffixes.setdefault(event["start_asset"], set()).add(".webp")
@@ -144,14 +144,19 @@ def validate_public_staging(
             raise PublicBundleError(
                 f"asset {asset_id!r} is shared across incompatible browser viewports"
             )
-        if dimensions and asset_path.suffix.lower() in {".webp", ".webm"}:
+        if dimensions and asset_path.suffix.lower() in {".webp", ".mp4"}:
             probe = _probe_public_media(asset_path, ffprobe=ffprobe)
             if (probe["width"], probe["height"]) != next(iter(dimensions)):
                 raise PublicBundleError(f"asset {asset_id!r} dimensions do not match its viewport")
-            if asset_path.suffix.lower() == ".webm":
-                if probe["has_audio"] or probe["codec"] != "vp8":
+            if asset_path.suffix.lower() == ".mp4":
+                if (
+                    probe["has_audio"]
+                    or probe["codec"] != "h264"
+                    or "mp4" not in probe["format_name"].split(",")
+                    or probe["pixel_format"] != "yuv420p"
+                ):
                     raise PublicBundleError(
-                        f"clip asset {asset_id!r} must be muted VP8 WebM"
+                        f"clip asset {asset_id!r} must be muted H.264 MP4"
                     )
                 required_duration = clip_requirements.get(asset_id, (0, 0, 0))[2]
                 if probe["duration_ms"] < required_duration:
@@ -357,7 +362,7 @@ def _allowlisted_path(relative: str) -> bool:
     if directory == "beats":
         return name.endswith(".cast") or name.endswith(".browser.json")
     if directory == "media":
-        return name.endswith(".webp") or name.endswith(".webm")
+        return name.endswith(".webp") or name.endswith(".mp4")
     if directory == "audio":
         return path.suffix.lower() in PUBLIC_AUDIO_SUFFIXES
     return False
@@ -525,7 +530,7 @@ def _probe_public_media(path: Path, *, ffprobe: str | None) -> dict[str, Any]:
             "-v",
             "error",
             "-show_entries",
-            "stream=codec_name,codec_type,width,height:format=duration",
+            "stream=codec_name,codec_type,pix_fmt,width,height:format=duration,format_name",
             "-of",
             "json",
             str(path),
@@ -544,6 +549,8 @@ def _probe_public_media(path: Path, *, ffprobe: str | None) -> dict[str, Any]:
         duration_ms = round(float(raw_duration) * 1000) if raw_duration is not None else 0
         return {
             "codec": visual["codec_name"],
+            "format_name": str(payload.get("format", {}).get("format_name", "")),
+            "pixel_format": visual["pix_fmt"],
             "width": int(visual["width"]),
             "height": int(visual["height"]),
             "duration_ms": duration_ms,

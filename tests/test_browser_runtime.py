@@ -44,21 +44,21 @@ def test_media_runtime_reports_missing_tools_and_codecs() -> None:
             which=lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None
         )
 
-    def run_without_vp8(*args, **kwargs):
+    def run_without_h264(*args, **kwargs):
         command = args[0]
         output = " V..... libwebp WebP image\n" if "-encoders" in command else "ffprobe"
         return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
-    with pytest.raises(BrowserRuntimeError, match="libvpx"):
+    with pytest.raises(BrowserRuntimeError, match="libx264"):
         require_browser_media_runtime(
-            require_vp8=True,
+            require_h264=True,
             which=lambda name: f"/usr/bin/{name}",
-            run=run_without_vp8,
+            run=run_without_h264,
         )
 
 
 def test_installed_media_runtime_has_selected_encoders() -> None:
-    runtime = require_browser_media_runtime(require_vp8=True)
+    runtime = require_browser_media_runtime(require_h264=True)
 
     assert runtime.webp_encoder == "libwebp"
-    assert runtime.vp8_encoder == "libvpx"
+    assert runtime.h264_encoder == "libx264"

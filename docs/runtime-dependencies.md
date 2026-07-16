@@ -9,7 +9,7 @@ Reploy provides the recording and processing environments.
 | --- | --- |
 | OmegaFlow CLI | Python 3.11 or newer |
 | Terminal recording | Linux or macOS, Bash, and asciinema 3.x |
-| Browser recording | `omegaflow[browser]`, OmegaFlow's pinned Playwright Chromium, `ffmpeg`, and `ffprobe` |
+| Browser recording | `omegaflow[browser]`, OmegaFlow's pinned Playwright Chromium, `ffmpeg` with `libwebp` and `libx264`, and `ffprobe` |
 | Watching a build | An installed Chrome, Chromium, Edge, or Brave browser; under WSL, Windows Chrome or Edge |
 | Reusing narration | `ffmpeg` and `ffprobe` |
 | Generating narration | The narration tools above plus OpenAI API access |

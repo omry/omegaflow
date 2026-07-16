@@ -21,8 +21,7 @@ STABLE_TIMEOUT_MS = 1200
 DYNAMIC_MINIMUM_WINDOW_MS = 300
 IMPLICIT_DYNAMIC_MAX_DURATION_MS = 3000
 DYNAMIC_MAX_ENCODED_BYTES = 2_000_000
-DYNAMIC_CRF = 10
-DYNAMIC_BITRATE = "2M"
+DYNAMIC_CRF = 18
 REDACTION_COLOR = "#111827"
 FRAME_MATCH_WIDTH = 192
 FRAME_MATCH_HEIGHT = 60
@@ -219,7 +218,7 @@ class BrowserVisualCapture:
         if not self.dynamic_requests:
             return ()
         try:
-            media = require_browser_media_runtime(require_vp8=True)
+            media = require_browser_media_runtime(require_h264=True)
         except BrowserRuntimeError as exc:
             raise BrowserVisualError(
                 "BROWSER_UNSUPPORTED_MOTION",
@@ -270,7 +269,7 @@ class BrowserVisualCapture:
                     f"action {request.action_id!r} dynamic window exceeds "
                     f"{IMPLICIT_DYNAMIC_MAX_DURATION_MS} ms",
                 )
-            temporary = self.fragments_dir / f".fragment-{index}.webm"
+            temporary = self.fragments_dir / f".fragment-{index}.mp4"
             if temporary.exists() or temporary.is_symlink():
                 raise BrowserVisualError(
                     "BROWSER_SCHEMA", "temporary dynamic fragment path is unsafe"
@@ -290,15 +289,17 @@ class BrowserVisualCapture:
                     f"{duration_ms / 1000:.3f}",
                     "-an",
                     "-c:v",
-                    "libvpx",
-                    "-deadline",
-                    "good",
-                    "-cpu-used",
-                    "4",
+                    "libx264",
+                    "-preset",
+                    "medium",
                     "-crf",
                     str(DYNAMIC_CRF),
-                    "-b:v",
-                    DYNAMIC_BITRATE,
+                    "-profile:v",
+                    "baseline",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
                     str(temporary),
                 ],
                 capture_output=True,
@@ -311,7 +312,12 @@ class BrowserVisualCapture:
                     f"could not trim dynamic fragment for action {request.action_id!r}",
                 )
             probe = _probe_video(ffprobe, temporary)
-            if probe["codec"] != "vp8" or probe["has_audio"]:
+            if (
+                probe["codec"] != "h264"
+                or "mp4" not in probe["format_name"].split(",")
+                or probe["pixel_format"] != "yuv420p"
+                or probe["has_audio"]
+            ):
                 raise BrowserVisualError(
                     "BROWSER_UNSUPPORTED_MOTION",
                     f"dynamic fragment for action {request.action_id!r} has an unsupported stream",
@@ -330,7 +336,7 @@ class BrowserVisualCapture:
                 )
             content = temporary.read_bytes()
             digest = hashlib.sha256(content).hexdigest()
-            destination = self.fragments_dir / f"{digest}.webm"
+            destination = self.fragments_dir / f"{digest}.mp4"
             if destination.is_symlink():
                 raise BrowserVisualError(
                     "BROWSER_SCHEMA",
@@ -685,7 +691,7 @@ def _probe_video(ffprobe: str, path: Path) -> dict[str, Any]:
             "-v",
             "error",
             "-show_entries",
-            "stream=codec_name,width,height:format=duration",
+            "stream=codec_name,pix_fmt,width,height:format=duration,format_name",
             "-of",
             "json",
             str(path),
@@ -722,6 +728,8 @@ def _probe_video(ffprobe: str, path: Path) -> dict[str, Any]:
         audio_streams = json.loads(audio.stdout).get("streams", [])
         return {
             "codec": stream["codec_name"],
+            "format_name": str(payload.get("format", {}).get("format_name", "")),
+            "pixel_format": stream["pix_fmt"],
             "width": int(stream["width"]),
             "height": int(stream["height"]),
             "duration_seconds": float(payload.get("format", {}).get("duration", 0)),

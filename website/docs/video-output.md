@@ -12,7 +12,7 @@ Every recording uses a semantic presentation manifest. Each beat has its own
 zero-based payload and the manifest assigns its offset in the whole recording.
 Terminal beats use text-based asciinema payloads. Browser beats contain a
 deterministic event timeline plus lossless WebP page states and, only when a
-stable state cannot reproduce motion, muted VP8 WebM fragments. This is not a
+stable state cannot reproduce motion, muted H.264 MP4 fragments. This is not a
 live DOM replay and not one opaque full-video recording.
 
 ## Asset contract
@@ -26,7 +26,7 @@ presentation/
   beats/*.cast
   beats/*.browser.json
   media/*.webp
-  media/*.webm             # only when captured motion is required
+  media/*.mp4              # only when captured motion is required
   audio/*-<sha256>.*       # one content-addressed file per narration take
   audio.json
   timestamps/*.json

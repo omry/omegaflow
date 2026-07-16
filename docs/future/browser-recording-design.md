@@ -814,16 +814,16 @@ lossless WebP for publication. The published filename is the SHA-256 of the
 encoded bytes. Equal states therefore deduplicate across actions and beats.
 
 Dynamic content is represented by the manifest's generic `clip` asset kind.
-Phase 0 selected Playwright context video as `playwright-video-v1`, with VP8 in
-WebM and no audio. Action windows are frame-accurately trimmed to a new VP8
-WebM whose first frame is independently decodable. CDP JPEG screencast frames
-are diagnostic-only: the reference capture used about 8 MB for roughly 130
-JPEG frames versus about 230 KB for the trimmed, seekable 1.4-second Playwright
-video. Phase 1 limits automatically selected clips to 3 seconds and every clip
-to 2 MB encoded. An explicit `transition: captured` may exceed 3 seconds because
-its action completion and timeout provide the primary duration bound. Capturing
-the synchronized final frame may extend the retained boundary beyond action
-completion. The compiler interface remains:
+Playwright's private VP8/WebM context video is retained as the capture source.
+Action windows are frame-accurately re-encoded as muted H.264/MP4 clips with
+fast-start metadata for broad player and embedded-webview compatibility. CDP
+JPEG screencast frames are diagnostic-only: the reference capture used about 8
+MB for roughly 130 JPEG frames versus about 230 KB for the trimmed, seekable
+1.4-second Playwright video. Phase 1 limits automatically selected clips to 3
+seconds and every clip to 2 MB encoded. An explicit `transition: captured` may
+exceed 3 seconds because its action completion and timeout provide the primary
+duration bound. Capturing the synchronized final frame may extend the retained
+boundary beyond action completion. The compiler interface remains:
 
 ```text
 ClipAsset

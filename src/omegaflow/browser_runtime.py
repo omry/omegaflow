@@ -34,7 +34,7 @@ class BrowserMediaRuntime:
     ffmpeg: str
     ffprobe: str
     webp_encoder: str
-    vp8_encoder: str | None
+    h264_encoder: str | None
 
 
 def actionable_playwright_error(message: str) -> str:
@@ -68,7 +68,7 @@ def actionable_playwright_error(message: str) -> str:
 
 def require_browser_media_runtime(
     *,
-    require_vp8: bool = False,
+    require_h264: bool = False,
     which: Callable[[str], str | None] = shutil.which,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> BrowserMediaRuntime:
@@ -82,7 +82,7 @@ def require_browser_media_runtime(
             "browser presentation media requires "
             + " and ".join(missing)
             + "; install an ffmpeg build with libwebp"
-            + (" and libvpx" if require_vp8 else "")
+            + (" and libx264" if require_h264 else "")
         )
     result = run(
         [ffmpeg, "-hide_banner", "-encoders"],
@@ -99,10 +99,10 @@ def require_browser_media_runtime(
         raise BrowserRuntimeError(
             "browser state publication requires an ffmpeg build with the libwebp encoder"
         )
-    vp8 = "libvpx" if re_search_encoder(encoders, "libvpx") else None
-    if require_vp8 and vp8 is None:
+    h264 = "libx264" if re_search_encoder(encoders, "libx264") else None
+    if require_h264 and h264 is None:
         raise BrowserRuntimeError(
-            "captured browser motion requires an ffmpeg build with the libvpx VP8 encoder"
+            "captured browser motion requires an ffmpeg build with the libx264 H.264 encoder"
         )
     probe = run(
         [ffprobe, "-version"], capture_output=True, text=True, check=False
@@ -115,7 +115,7 @@ def require_browser_media_runtime(
         ffmpeg=ffmpeg,
         ffprobe=ffprobe,
         webp_encoder="libwebp",
-        vp8_encoder=vp8,
+        h264_encoder=h264,
     )
 
 

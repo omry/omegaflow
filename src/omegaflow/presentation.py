@@ -62,7 +62,6 @@ ASSET_MEDIA_TYPES = {
     ".jpg": "image/jpeg",
     ".mp4": "video/mp4",
     ".png": "image/png",
-    ".webm": "video/webm",
     ".webp": "image/webp",
 }
 
