@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -1136,6 +1137,7 @@ def openai_speech_bytes(
     *,
     environ: dict[str, str] | None = None,
     urlopen: Callable[..., Any] = urllib.request.urlopen,
+    on_activity: Callable[[int, float], None] | None = None,
 ) -> bytes:
     env = audio_environment(settings, environ)
     api_key = env.get(settings.env)
@@ -1147,6 +1149,7 @@ def openai_speech_bytes(
         "input": segment.text,
         "voice": settings.voice,
         "response_format": settings.format,
+        "stream_format": "audio",
     }
     if settings.instructions:
         payload["instructions"] = settings.instructions
@@ -1161,7 +1164,18 @@ def openai_speech_bytes(
     )
     try:
         with urlopen(request, timeout=120) as response:
-            return response.read()
+            started = time.monotonic()
+            chunks: list[bytes] = []
+            received = 0
+            while True:
+                chunk = response.read(8 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                received += len(chunk)
+                if on_activity is not None:
+                    on_activity(received, time.monotonic() - started)
+            return b"".join(chunks)
     except urllib.error.HTTPError as exc:
         if exc.fp is None:
             detail = exc.msg
@@ -1179,9 +1193,8 @@ def generate_audio(
     settings: AudioSettings,
     *,
     force: bool = False,
-    synthesize: Callable[
-        [NarrationSegment, AudioSettings], bytes
-    ] = openai_speech_bytes,
+    synthesize: Callable[..., bytes] = openai_speech_bytes,
+    on_activity: Callable[[int, float], None] | None = None,
 ) -> list[Path]:
     written: list[Path] = []
     for item in plan:
@@ -1196,7 +1209,14 @@ def generate_audio(
                 written.append(item.output_path)
                 continue
         item.output_path.parent.mkdir(parents=True, exist_ok=True)
-        audio_bytes = synthesize(item.segment, settings)
+        if on_activity is None:
+            audio_bytes = synthesize(item.segment, settings)
+        else:
+            audio_bytes = synthesize(
+                item.segment,
+                settings,
+                on_activity=on_activity,
+            )
         if not audio_bytes:
             raise AudioError(
                 f"audio provider returned no data for {item.segment.segment_id}"

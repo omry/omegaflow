@@ -15,6 +15,7 @@ from omegaflow.capture import (
     CaptureFailed,
     CaptureFailureCollector,
     CaptureSetupError,
+    capture_action_items,
     prepare_capture_paths,
 )
 from omegaflow.browser_handoff import (
@@ -216,6 +217,176 @@ def test_coordinator_dispatches_beats_in_source_order_with_shared_context(
         "terminal-two",
     ]
     assert not result.context.paths.temporary.exists()
+
+
+def test_capture_action_items_flatten_terminal_commands_and_browser_actions() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "actions",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "terminal",
+                    "heading": "Run commands",
+                    "actions": [
+                        {
+                            "commands": [
+                                {"id": "prepare", "run": "prepare", "display": "Prepare"},
+                                {"id": "build", "run": "build", "display": "Build"},
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "heading": "Use browser",
+                    "actions": [
+                        {"id": "open_player", "open_page": {"url": "https://example.com"}},
+                        {"id": "wait_done", "wait_for": {"url": {"contains": "example"}}},
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert [
+        (item.beat_id, item.action_id, item.label)
+        for item in capture_action_items(plan)
+    ] == [
+        ("terminal", "prepare", "Prepare"),
+        ("terminal", "build", "Build"),
+        ("browser", "open_player", "Open player"),
+        ("browser", "wait_done", "Wait done"),
+    ]
+
+
+def test_coordinator_reports_started_and_completed_actions(tmp_path: Path) -> None:
+    calls: list[str] = []
+    progress: list[tuple[str, str, int, int]] = []
+
+    class ProgressRunner(FakeRunner):
+        def capture_beat(self, beat, *, on_progress=None) -> BeatCapture:
+            action_ids: list[str] = []
+            for action_index, action in enumerate(beat.actions):
+                browser_id = getattr(action, "id", None)
+                if browser_id is not None:
+                    action_ids.append(browser_id)
+                    continue
+                commands = action.config.get("commands")
+                if commands:
+                    action_ids.extend(
+                        command.get("id")
+                        or f"__step_{action_index}_command_{command_index}"
+                        for command_index, command in enumerate(commands)
+                    )
+                else:
+                    action_ids.append(f"__step_{action_index}")
+            for action_id in action_ids:
+                if on_progress is not None:
+                    on_progress("started", action_id)
+                    on_progress("completed", action_id)
+            return super().capture_beat(beat)
+
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: ProgressRunner("terminal", calls),
+        browser_runner_factory=lambda: ProgressRunner("browser", calls),
+    )
+
+    coordinator.capture(
+        mixed_plan(),
+        tmp_path / "run",
+        workspace=tmp_path,
+        on_progress=lambda state, action, current, total: progress.append(
+            (state, action.action_id, current, total)
+        ),
+    )
+
+    assert progress == [
+        ("started", "__step_0", 0, 2),
+        ("completed", "__step_0", 1, 2),
+        ("started", "__step_0", 1, 2),
+        ("completed", "__step_0", 2, 2),
+    ]
+
+
+def test_coordinator_does_not_complete_failed_beat(tmp_path: Path) -> None:
+    progress: list[tuple[str, str, int, int]] = []
+
+    class FailingRunner(FakeRunner):
+        def capture_beat(self, beat: object) -> BeatCapture:
+            raise RuntimeError("capture failed")
+
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: FailingRunner("terminal", []),
+    )
+
+    with pytest.raises(CaptureFailed, match="capture failed"):
+        coordinator.capture(
+            normalize_recording_plan(
+                {"id": "broken", "beats": [{"id": "broken", "actions": []}]}
+            ),
+            tmp_path / "run",
+            workspace=tmp_path,
+            on_progress=lambda state, action, current, total: progress.append(
+                (state, action.action_id, current, total)
+            ),
+        )
+
+    assert progress == []
+
+
+@pytest.mark.parametrize(
+    ("events", "message"),
+    [
+        ([('queued', '__step_0')], "invalid action state 'queued'"),
+        ([('started', 'missing')], "unknown action 'broken'/'missing'"),
+        ([('completed', '__step_0')], "before starting it"),
+        (
+            [('started', '__step_0'), ('started', '__step_0')],
+            "started action 'broken'/'__step_0' twice",
+        ),
+        (
+            [
+                ('started', '__step_0'),
+                ('completed', '__step_0'),
+                ('completed', '__step_0'),
+            ],
+            "completed action 'broken'/'__step_0' twice",
+        ),
+    ],
+)
+def test_coordinator_rejects_malformed_runner_progress(
+    tmp_path: Path,
+    events: list[tuple[str, str]],
+    message: str,
+) -> None:
+    class MalformedProgressRunner(FakeRunner):
+        def capture_beat(self, beat, *, on_progress=None) -> BeatCapture:
+            assert on_progress is not None
+            for event in events:
+                on_progress(*event)
+            return super().capture_beat(beat)
+
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: MalformedProgressRunner("terminal", []),
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        coordinator.capture(
+            normalize_recording_plan(
+                {
+                    "id": "broken",
+                    "beats": [{"id": "broken", "actions": [{"run": "true"}]}],
+                }
+            ),
+            tmp_path / "run",
+            workspace=tmp_path,
+            on_progress=lambda *_args: None,
+        )
+
+    assert isinstance(caught.value.__cause__, CaptureSetupError)
+    assert message in str(caught.value.__cause__)
 
 
 def test_coordinator_hands_blocking_terminal_watch_to_browser_runner(

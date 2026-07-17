@@ -25,6 +25,7 @@ from omegaflow.recording_plan import (
     NarrationTakeWaitPlan,
     RecordingPlanError,
     normalize_recording_plan,
+    terminal_action_id,
     validate_recording_modalities,
 )
 from omegaflow.studio_config import RecordingSpec, USER_RECORDING_YAML_SCHEMAS
@@ -65,6 +66,23 @@ def browser_spec() -> dict:
             }
         ],
     }
+
+
+@pytest.mark.parametrize(
+    ("action_index", "command_index", "command", "expected"),
+    [
+        (2, None, None, "__step_2"),
+        (2, 3, {}, "__step_2_command_3"),
+        (2, 3, {"id": "publish"}, "publish"),
+    ],
+)
+def test_terminal_action_id_is_the_shared_capture_contract(
+    action_index: int,
+    command_index: int | None,
+    command: dict[str, object] | None,
+    expected: str,
+) -> None:
+    assert terminal_action_id(action_index, command_index, command) == expected
 
 
 def terminal_spec() -> dict:

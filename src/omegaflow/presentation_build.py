@@ -17,7 +17,7 @@ import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import audio, record
 from .browser_capture import PersistentBrowserRunner
@@ -29,7 +29,12 @@ from .browser_runtime import (
     BrowserRuntimeError,
     require_browser_media_runtime,
 )
-from .capture import CaptureCoordinator, CaptureFailed, CaptureResult
+from .capture import (
+    CaptureCoordinator,
+    CaptureFailed,
+    CaptureProgressCallback,
+    CaptureResult,
+)
 from .presentation import serialize_presentation_manifest, validate_presentation_manifest
 from .presentation_compiler import (
     ArtifactFingerprints,
@@ -60,6 +65,7 @@ from .recording_plan import (
     FrozenMapping,
     RecordingPlan,
     TerminalActionPlan,
+    terminal_action_id,
 )
 from .studio_config import RecordingMedium, project_root
 from .terminal_capture import PersistentTerminalRunner
@@ -254,6 +260,7 @@ def capture_recording(
     run_dir: Path,
     *,
     headed: bool = False,
+    on_progress: CaptureProgressCallback | None = None,
 ) -> CaptureResult:
     """Capture every beat in one shared environment with failure diagnostics."""
 
@@ -317,6 +324,7 @@ def capture_recording(
             workspace=project_root_from_spec(spec),
             working_directory=working_directory,
             environment=environment,
+            on_progress=on_progress,
         )
     except Exception as exc:
         _preserve_capture_diagnostics(spec, run_dir, exc)
@@ -586,6 +594,7 @@ def prepare_narration_audio(
     run_dir: Path,
     *,
     force: bool = False,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> PresentationAudioArtifacts | None:
     """Generate cached take audio and run-local v3 per-take metadata."""
 
@@ -615,14 +624,58 @@ def prepare_narration_audio(
                 output_path=item.output_path,
             )
         )
-    audio.generate_audio(audio_items, settings, force=force)
-    audio.generate_timestamps(
-        plan.id,
-        audio_items,
-        settings,
-        transcription,
-        force=force,
-    )
+    total_steps = 3 * len(audio_items)
+    current_step = 0
+
+    def report(message: str) -> None:
+        if on_progress is not None:
+            on_progress(message, current_step, total_steps)
+
+    def complete(message: str) -> None:
+        nonlocal current_step
+        current_step += 1
+        report(message)
+
+    def streamed_size(size: int) -> str:
+        value = float(size)
+        for unit in ("B", "KiB", "MiB", "GiB"):
+            if value < 1024 or unit == "GiB":
+                return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+            value /= 1024
+        raise AssertionError("unreachable")
+
+    for take_item, audio_item in zip(take_items, audio_items, strict=True):
+        label = headings.get(take_item.take.members[0].beat_id) or take_item.take.id
+        message = f"Generate narration: {label}"
+        report(message)
+
+        def report_audio_activity(received: int, elapsed: float) -> None:
+            if on_progress is not None:
+                on_progress(
+                    f"{message} · {elapsed:.1f}s · {streamed_size(received)} received",
+                    current_step,
+                    total_steps,
+                )
+
+        audio.generate_audio(
+            [audio_item],
+            settings,
+            force=force,
+            on_activity=report_audio_activity if on_progress is not None else None,
+        )
+        complete(message)
+    for take_item, audio_item in zip(take_items, audio_items, strict=True):
+        label = headings.get(take_item.take.members[0].beat_id) or take_item.take.id
+        message = f"Time narration: {label}"
+        report(message)
+        audio.generate_timestamps(
+            plan.id,
+            [audio_item],
+            settings,
+            transcription,
+            force=force,
+        )
+        complete(message)
     output_dir = run_paths(run_dir)["audio"]
     output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     timestamps_dir = output_dir / "timestamps"
@@ -633,6 +686,9 @@ def prepare_narration_audio(
     timestamp_paths: dict[str, str] = {}
     timestamp_files: dict[str, Path] = {}
     for take_item, audio_item in zip(take_items, audio_items, strict=True):
+        label = headings.get(take_item.take.members[0].beat_id) or take_item.take.id
+        message = f"Prepare narration: {label}"
+        report(message)
         content_sha256 = hashlib.sha256(audio_item.output_path.read_bytes()).hexdigest()
         safe_id = audio.narration_take_filename_id(take_item.take.id)
         take_audio_paths[take_item.take.id] = (
@@ -662,6 +718,7 @@ def prepare_narration_audio(
         timestamp_paths[take_item.take.id] = f"timestamps/{filename}"
         timestamp_files[take_item.take.id] = timestamp_path
         audio.write_narration_take_index(take_item)
+        complete(message)
     metadata_path = output_dir / "audio.json"
     metadata = audio.narration_audio_metadata_v3_payload(
         plan,
@@ -1209,13 +1266,10 @@ def _terminal_action_ids(beat: BeatPlan) -> tuple[str, ...]:
         if commands:
             for command_index, command in enumerate(commands):
                 result.append(
-                    str(
-                        command.get("id")
-                        or f"__step_{action_index}_command_{command_index}"
-                    )
+                    terminal_action_id(action_index, command_index, command)
                 )
         else:
-            result.append(f"__step_{action_index}")
+            result.append(terminal_action_id(action_index, None))
     return tuple(result)
 
 

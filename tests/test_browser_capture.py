@@ -578,9 +578,15 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
         )
         context = capture_context(tmp_path, {"DEMO_PASSWORD": "private-password"})
         runner = PersistentBrowserRunner(plan.browser)
+        progress: list[tuple[str, str]] = []
         runner.start(context)
         try:
-            capture = runner.capture_beat(plan.beats[0])
+            capture = runner.capture_beat(
+                plan.beats[0],
+                on_progress=lambda state, action_id: progress.append(
+                    (state, action_id)
+                ),
+            )
             metadata = capture.metadata
             actions = metadata["actions"]
             actions_by_id = {action["action_id"]: action for action in actions}
@@ -603,6 +609,11 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                 ),
             }
             assert runner.page.locator("body").get_attribute("data-shortcut") == "yes"
+            assert progress == [
+                event
+                for action in plan.beats[0].actions
+                for event in (("started", action.id), ("completed", action.id))
+            ]
             assert runner.page.get_by_test_id("scrollbox").evaluate(
                 "element => element.scrollTop"
             ) > 0

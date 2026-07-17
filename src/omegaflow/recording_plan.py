@@ -64,6 +64,19 @@ TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"after"}
 TERMINAL_CHECK_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"name"}
 
 
+def terminal_action_id(
+    action_index: int,
+    command_index: int | None,
+    command: Mapping[str, Any] | None = None,
+) -> str:
+    """Return the stable ID shared by terminal capture and compilation."""
+
+    if command_index is None:
+        return f"__step_{action_index}"
+    explicit = command.get("id") if command is not None else None
+    return str(explicit or f"__step_{action_index}_command_{command_index}")
+
+
 def _mapping(value: object, *, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RecordingPlanError(f"{field} must be a mapping")

@@ -234,6 +234,48 @@ def test_terminal_run_file_executes_in_the_persistent_shell(tmp_path: Path) -> N
     coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
 
 
+def test_terminal_commands_report_live_action_boundaries(tmp_path: Path) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "progress",
+            "beats": [
+                {
+                    "id": "commands",
+                    "actions": [
+                        {
+                            "commands": [
+                                {"id": "one", "run": "printf one"},
+                                {"id": "two", "run": "printf two"},
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    progress: list[tuple[str, str, int, int]] = []
+
+    CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=False, timeout_seconds=5.0
+        )
+    ).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+        on_progress=lambda state, action, current, total: progress.append(
+            (state, action.action_id, current, total)
+        ),
+    )
+
+    assert progress == [
+        ("started", "one", 0, 2),
+        ("completed", "one", 1, 2),
+        ("started", "two", 1, 2),
+        ("completed", "two", 2, 2),
+    ]
+
+
 def test_terminal_run_file_snapshot_survives_cleanup_mutation(
     tmp_path: Path,
 ) -> None:

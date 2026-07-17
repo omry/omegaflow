@@ -7,6 +7,7 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from omegaconf import OmegaConf
@@ -65,6 +66,301 @@ def load_hatch_build_module():
 
 def test_version_is_available() -> None:
     assert __version__ == "0.9.0"
+
+
+class TtyBuffer(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def test_build_progress_renders_determinate_interactive_work() -> None:
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=4,
+        stream=stream,
+        interactive=True,
+        color=False,
+    )
+
+    progress.begin("Recording workflow (2 beats)")
+    progress.update("Record: Install OmegaFlow")
+    progress.advance("Recorded: Install OmegaFlow")
+    progress.advance("Recorded: Build the video")
+    progress.begin("Preparing narration (1 take)")
+    progress.advance("Generated narration")
+    progress.advance("Video ready")
+    progress.finish()
+
+    output = stream.getvalue()
+    assert "0/4" in output
+    assert "1/4" in output
+    assert "4/4" in output
+    assert "Record: Install OmegaFlow" in output
+    assert "Preparing narration (1 take)" in output
+
+
+def test_build_progress_keeps_noninteractive_logs_concise() -> None:
+    stream = io.StringIO()
+    progress = studio.BuildProgress(
+        total=4,
+        stream=stream,
+        interactive=False,
+        color=False,
+    )
+
+    progress.begin("Recording workflow (2 beats)")
+    progress.update("Record: Install OmegaFlow")
+    progress.advance("Recorded: Install OmegaFlow")
+    progress.begin("Preparing narration (1 take)")
+    progress.advance("Generated narration")
+    progress.begin("Assembling video")
+    progress.advance("Compiled internal manifest")
+    progress.finish()
+
+    assert stream.getvalue().splitlines() == [
+        "step  Recording workflow (2 beats)",
+        "step  Preparing narration (1 take)",
+        "step  Assembling video",
+    ]
+
+
+def test_cached_recording_advances_build_progress_without_internal_lines(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "demo",
+            "beats": [{"id": "hello", "actions": [{"run": "printf hello"}]}],
+        }
+    )
+    run_dir = tmp_path / "cached-run"
+    monkeypatch.setattr(
+        studio, "latest_successful_recording_run_dir", lambda _spec: run_dir
+    )
+    monkeypatch.setattr(
+        studio.presentation_build, "capture_is_fresh", lambda *_args: True
+    )
+    stream = io.StringIO()
+    progress = studio.BuildProgress(
+        total=2,
+        stream=stream,
+        interactive=False,
+        color=False,
+    )
+
+    result = studio.run_build_record_action(
+        OmegaConf.create(
+            {"force": False, "verbose": False, "output_format": "text"}
+        ),
+        {"_recording_id": "demo"},
+        plan,
+        progress=progress,
+    )
+
+    assert result == run_dir
+    assert progress.current == 1
+    assert stream.getvalue().splitlines() == ["step  Recording workflow (1 action)"]
+    assert capsys.readouterr().out == ""
+
+
+def test_forced_recording_reports_each_captured_action(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "demo",
+            "beats": [
+                {
+                    "id": "one",
+                    "heading": "First",
+                    "actions": [
+                        {
+                            "commands": [
+                                {"id": "prepare", "run": "prepare", "display": "Prepare"}
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "two",
+                    "heading": "Second",
+                    "actions": [
+                        {
+                            "commands": [
+                                {"id": "verify", "run": "verify", "display": "Verify"}
+                            ]
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    run_dir = tmp_path / "forced-run"
+    monkeypatch.setattr(studio, "current_recording_run_dir", lambda _spec: run_dir)
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: pytest.fail("forced capture must not inspect cached runs"),
+    )
+
+    def fake_capture(_spec, capture_plan, target, *, headed, on_progress):
+        assert target == run_dir
+        assert headed is False
+        actions = studio.capture_action_items(capture_plan)
+        for current, action in enumerate(actions):
+            on_progress("started", action, current, len(actions))
+            on_progress("completed", action, current + 1, len(actions))
+
+    monkeypatch.setattr(studio.presentation_build, "capture_recording", fake_capture)
+    monkeypatch.setattr(
+        studio.presentation_build, "write_capture_fingerprint", lambda *_args: None
+    )
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=3,
+        stream=stream,
+        interactive=True,
+        color=False,
+    )
+
+    result = studio.run_build_record_action(
+        OmegaConf.create(
+            {"force": True, "verbose": False, "output_format": "text"}
+        ),
+        {"_recording_id": "demo"},
+        plan,
+        progress=progress,
+    )
+
+    assert result == run_dir
+    assert progress.current == 2
+    assert "Record: First · Prepare" in stream.getvalue()
+    assert "Record: Second · Verify" in stream.getvalue()
+    assert capsys.readouterr().out == ""
+
+
+def test_failed_build_clears_progress_and_reports_failure(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "audio": {"enabled": False},
+        "beats": [{"id": "hello", "actions": []}],
+    }
+    plan = studio.normalized_recording_plan(spec)
+    cfg = OmegaConf.create(
+        {
+            "recording": "demo",
+            "force": False,
+            "verbose": False,
+            "output_format": "text",
+        }
+    )
+    monkeypatch.setattr(studio, "build_publish_surface_names", lambda *_args: [])
+
+    def fail_capture(_cfg, _spec, _plan, *, progress):
+        progress.begin("Recording workflow (1 beat)")
+        progress.update("Record: Broken beat")
+        raise studio.StudioError("broken capture")
+
+    monkeypatch.setattr(studio, "run_build_record_action", fail_capture)
+
+    with pytest.raises(studio.StudioError, match="broken capture"):
+        studio.run_manifest_build(cfg, dict(cfg), spec, plan)
+
+    output = capsys.readouterr().out
+    assert "step  Recording workflow (1 beat)" in output
+    assert "fail  build failed after" in output
+    assert "build completed" not in output
+
+
+def test_manifest_build_folds_internal_steps_into_concise_progress(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "audio": {"enabled": True},
+        "beats": [
+            {
+                "id": "hello",
+                "heading": "Say hello",
+                "narration": "Say hello.",
+                "actions": [],
+            }
+        ],
+    }
+    plan = studio.normalized_recording_plan(spec)
+    cfg = OmegaConf.create(
+        {
+            "recording": "demo",
+            "force": False,
+            "verbose": False,
+            "output_format": "text",
+        }
+    )
+    run_dir = tmp_path / "run"
+    monkeypatch.setattr(
+        studio, "latest_successful_recording_run_dir", lambda _spec: run_dir
+    )
+    monkeypatch.setattr(
+        studio.presentation_build, "capture_is_fresh", lambda *_args: True
+    )
+
+    def fake_audio(_spec, _plan, _run_dir, *, force, on_progress):
+        assert force is False
+        for current, message in enumerate(
+            ("Generate narration", "Time narration", "Prepare narration")
+        ):
+            on_progress(message, current, 3)
+            on_progress(message, current + 1, 3)
+        return SimpleNamespace(timestamps={"take": tmp_path / "take.json"})
+
+    monkeypatch.setattr(
+        studio.presentation_build, "prepare_narration_audio", fake_audio
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "compile_presentation_bundle",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            manifest=run_dir / "presentation" / "recording.presentation.json",
+            warnings=(),
+        ),
+    )
+    monkeypatch.setattr(
+        studio, "build_publish_surface_names", lambda *_args: ["website"]
+    )
+    published: list[tuple[str | None, bool]] = []
+
+    def fake_publish(
+        _cfg,
+        *,
+        surface_name=None,
+        presentation_run_dir=None,
+        report=True,
+    ):
+        assert presentation_run_dir == run_dir
+        published.append((surface_name, report))
+
+    monkeypatch.setattr(studio, "run_publish_surface", fake_publish)
+    monkeypatch.setattr(studio, "remove_unused_empty_run_dir", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        studio, "garbage_collect_recording_runs", lambda *_a, **_k: []
+    )
+
+    assert studio.run_manifest_build(cfg, dict(cfg), spec, plan) == 0
+
+    output = capsys.readouterr().out
+    assert "step  Recording workflow (0 actions)" in output
+    assert "step  Preparing narration (1 take)" in output
+    assert "step  Assembling video" in output
+    assert "pass  build completed after" in output
+    assert "capture recording" not in output
+    assert "compile presentation" not in output
+    assert "publish surface" not in output
+    assert "wrote presentation" not in output
+    assert published == [("website", False)]
 
 
 def test_command_output_replace_selects_replacement_mode() -> None:

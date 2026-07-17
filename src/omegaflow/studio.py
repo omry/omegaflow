@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,7 @@ from . import audio
 from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
+from .capture import CaptureActionItem, capture_action_items
 from .recording_plan import RecordingPlanError, normalize_recording_plan
 from .studio_config import (
     CONFIG_DIR,
@@ -59,6 +60,7 @@ from .terminal_style import (
     color_enabled,
     color_text,
 )
+from .tool_progress import LogProgressRenderer, ProgressBarRenderer
 
 
 class StudioError(RuntimeError):
@@ -105,6 +107,77 @@ def fail_line(message: str) -> None:
 
 def info_line(message: str) -> None:
     status_line("info", message, color=ANSI_CYAN_BOLD)
+
+
+class BuildProgress:
+    """One concise progress surface for the complete video build."""
+
+    def __init__(
+        self,
+        *,
+        total: int,
+        stream: Any | None = None,
+        interactive: bool | None = None,
+        color: bool | None = None,
+        active: bool = True,
+    ) -> None:
+        if total <= 0:
+            raise ValueError("build progress total must be positive")
+        self.total = total
+        self.current = 0
+        self.stream = stream or sys.stdout
+        self.active = active
+        if interactive is None:
+            isatty = getattr(self.stream, "isatty", None)
+            interactive = bool(isatty and isatty())
+        self.interactive = interactive
+        self._bar = ProgressBarRenderer(
+            stream=self.stream,
+            interactive=interactive,
+            enabled=color,
+        )
+        self._log = LogProgressRenderer(stream=self.stream, enabled=color)
+        self._finished = False
+        self._lock = threading.RLock()
+
+    def _event(self, message: str) -> dict[str, Any]:
+        return {
+            "phase": "status",
+            "status": "step",
+            "message": message,
+            "current": self.current,
+            "total": self.total,
+        }
+
+    def begin(self, message: str) -> None:
+        with self._lock:
+            if not self.active:
+                return
+            event = self._event(message)
+            if self.interactive:
+                self._bar.emit(event)
+            else:
+                self._log.emit(event)
+
+    def update(self, message: str) -> None:
+        with self._lock:
+            if self.active and self.interactive:
+                self._bar.emit(self._event(message))
+
+    def advance(self, message: str, *, units: int = 1) -> None:
+        if units < 0:
+            raise ValueError("build progress units must be non-negative")
+        with self._lock:
+            self.current = min(self.total, self.current + units)
+            self.update(message)
+
+    def finish(self) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self._finished = True
+            if self.active and self.interactive:
+                self._bar.finish(replay=False)
 
 
 PRESENTATION_BUILD_STEPS = [
@@ -253,15 +326,26 @@ def run_build_record_action(
     cfg: DictConfig,
     spec: dict[str, Any],
     plan: Any,
+    *,
+    progress: BuildProgress | None = None,
 ) -> Path:
     config = container_from_hydra_cfg(cfg)
     verbose = bool_config(config, "verbose")
+    action_count = len(capture_action_items(plan))
+    if progress is not None:
+        noun = "action" if action_count == 1 else "actions"
+        progress.begin(f"Recording workflow ({action_count} {noun})")
     if not bool_config(config, "force"):
         latest = latest_successful_recording_run_dir(spec)
         if latest is not None and presentation_build.capture_is_fresh(
             spec, plan, latest
         ):
-            if text_output_enabled(cfg):
+            if progress is not None:
+                progress.advance(
+                    "Reused recorded workflow",
+                    units=action_count,
+                )
+            elif text_output_enabled(cfg):
                 skip_line(
                     "capture recording",
                     detail=f"{display_path(latest)} is fresh",
@@ -270,16 +354,33 @@ def run_build_record_action(
         if latest is not None and text_output_enabled(cfg) and verbose:
             info_line("capture recording: capture fingerprint changed")
     run_dir = current_recording_run_dir(spec)
-    if text_output_enabled(cfg):
+    if progress is None and text_output_enabled(cfg):
         step_line("capture recording")
+
+    def on_capture_progress(
+        state: str,
+        action: CaptureActionItem,
+        _current: int,
+        _total: int,
+    ) -> None:
+        if progress is None:
+            return
+        beat_label = action.beat_heading or action.beat_id
+        message = f"Record: {beat_label} · {action.label}"
+        if state == "completed":
+            progress.advance(message)
+        else:
+            progress.update(message)
+
     presentation_build.capture_recording(
         spec,
         plan,
         run_dir,
         headed=bool_config(config, "headed"),
+        on_progress=on_capture_progress if progress is not None else None,
     )
     presentation_build.write_capture_fingerprint(spec, plan, run_dir)
-    if text_output_enabled(cfg):
+    if progress is None and text_output_enabled(cfg):
         pass_line(f"captured recording: {display_path(run_dir)}")
     return run_dir
 
@@ -1376,6 +1477,7 @@ def run_publish_surface(
     *,
     surface_name: str | None = None,
     presentation_run_dir: Path | None = None,
+    report: bool = True,
 ) -> None:
     config = container_from_hydra_cfg(cfg)
     path = publish_surface(
@@ -1383,7 +1485,7 @@ def run_publish_surface(
         surface_name=surface_name,
         presentation_run_dir=presentation_run_dir,
     )
-    if path is not None and text_output_enabled(cfg):
+    if path is not None and report and text_output_enabled(cfg):
         step_line("publish surface")
         pass_line(f"wrote publish surface: {display_path(path)}")
 
@@ -1879,48 +1981,81 @@ def run_manifest_build(
 ) -> int:
     started = time.monotonic()
     success = False
+    surface_names = build_publish_surface_names(config, spec)
+    raw_audio = spec.get("audio")
+    audio_enabled = (
+        isinstance(raw_audio, Mapping) and raw_audio.get("enabled") is True
+    )
+    narration_steps = 3 * len(plan.narration_takes) if audio_enabled else 0
+    total_steps = (
+        len(capture_action_items(plan))
+        + narration_steps
+        + 2
+        + len(surface_names)
+    )
+    progress = BuildProgress(
+        total=max(1, total_steps),
+        interactive=False if bool_config(config, "verbose") else None,
+        active=text_output_enabled(cfg),
+    )
+    warnings: tuple[str, ...] = ()
     try:
-        run_dir = run_build_record_action(cfg, spec, plan)
-        if text_output_enabled(cfg):
-            step_line("prepare narration takes")
+        run_dir = run_build_record_action(cfg, spec, plan, progress=progress)
+        narration_current = 0
+
+        def on_narration_progress(message: str, current: int, _total: int) -> None:
+            nonlocal narration_current
+            if current > narration_current:
+                progress.advance(message, units=current - narration_current)
+                narration_current = current
+            else:
+                progress.update(message)
+
+        if narration_steps:
+            take_count = len(plan.narration_takes)
+            noun = "take" if take_count == 1 else "takes"
+            progress.begin(f"Preparing narration ({take_count} {noun})")
         audio_artifacts = presentation_build.prepare_narration_audio(
             spec,
             plan,
             run_dir,
             force=bool_config(config, "force"),
+            on_progress=on_narration_progress if narration_steps else None,
         )
-        if text_output_enabled(cfg):
-            if audio_artifacts is None:
-                skip_line("prepare narration takes", detail="audio is disabled or empty")
-            else:
-                pass_line(f"prepared {len(audio_artifacts.timestamps)} narration take(s)")
-            step_line("compile presentation")
+        progress.begin("Assembling video")
         result = presentation_build.compile_presentation_bundle(
             spec,
             plan,
             run_dir,
             audio_artifacts=audio_artifacts,
         )
-        if text_output_enabled(cfg):
-            pass_line(f"wrote presentation: {display_path(result.manifest)}")
-            for warning in result.warnings:
-                info_line(f"{warning}: review recommended")
-        for surface_name in build_publish_surface_names(config, spec):
+        progress.advance("Assembled video")
+        warnings = result.warnings
+        for surface_name in surface_names:
+            progress.update("Publish video")
             run_publish_surface(
                 cfg,
                 surface_name=surface_name,
                 presentation_run_dir=run_dir,
+                report=False,
             )
+            progress.advance("Published video")
+        progress.update("Finalize video")
         remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
         garbage_collect_recording_runs(
             spec,
             current_run_dir=run_dir,
-            report=text_output_enabled(cfg),
+            report=text_output_enabled(cfg) and bool_config(config, "verbose"),
         )
+        progress.advance("Video ready")
         success = True
     except presentation_build.PresentationBuildError as exc:
         raise StudioError(str(exc)) from exc
     finally:
+        progress.finish()
+        if success:
+            for warning in warnings:
+                info_line(f"{warning}: review recommended")
         print_build_elapsed(cfg, time.monotonic() - started, success=success)
     print_success_followups(cfg)
     return 0

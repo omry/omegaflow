@@ -12,7 +12,7 @@ import sys
 import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .capture import BeatCapture, CaptureContext
 from .record import RecordingError, asciinema_command, command_output_config
@@ -21,6 +21,7 @@ from .recording_plan import (
     FrozenMapping,
     TerminalActionPlan,
     TerminalCheckPlan,
+    terminal_action_id,
 )
 from .studio_config import RecordingMedium
 
@@ -434,10 +435,12 @@ omegaflow_run_marked() {
   local action_id="$2"
   local script="$3"
   local status
+  printf '{"seq":%s,"status":"action_started","action_id":"%s"}\n' "$seq" "$action_id" >&9
   printf '\033]1337;OmegaFlowAction;%s;%s;start\007' "$beat_id" "$action_id"
   eval "$script"
   status=$?
   printf '\033]1337;OmegaFlowAction;%s;%s;end\007' "$beat_id" "$action_id"
+  printf '{"seq":%s,"status":"action_completed","action_id":"%s"}\n' "$seq" "$action_id" >&9
   return "$status"
 }
 
@@ -671,6 +674,7 @@ class TerminalControlSession:
         script: str = "",
         beat_id: str = "",
         wait_indefinitely: bool = False,
+        on_progress: Callable[[str, str], None] | None = None,
     ) -> tuple[int, int]:
         if op not in CONTROL_OPERATIONS or op == "shutdown":
             raise ValueError(f"invalid terminal execution operation: {op}")
@@ -689,7 +693,11 @@ class TerminalControlSession:
         started = self._read_response(seq)
         if started.get("status") != "started":
             raise TerminalCaptureError(f"terminal request {seq} did not start")
-        completed = self._read_response(seq, wait_indefinitely=wait_indefinitely)
+        completed = self._read_response(
+            seq,
+            wait_indefinitely=wait_indefinitely,
+            on_progress=on_progress,
+        )
         end_ms = self._elapsed_ms()
         status = completed.get("status")
         self._append_event(
@@ -768,7 +776,11 @@ class TerminalControlSession:
             raise TerminalCaptureError("could not write terminal request") from exc
 
     def _read_response(
-        self, seq: int, *, wait_indefinitely: bool = False
+        self,
+        seq: int,
+        *,
+        wait_indefinitely: bool = False,
+        on_progress: Callable[[str, str], None] | None = None,
     ) -> dict[str, Any]:
         deadline = time.monotonic() + self.timeout_seconds
         while True:
@@ -783,6 +795,16 @@ class TerminalControlSession:
                     raise TerminalCaptureError(
                         f"terminal response sequence mismatch for request {seq}"
                     )
+                status = response.get("status")
+                if status in {"action_started", "action_completed"}:
+                    action_id = response.get("action_id")
+                    if not isinstance(action_id, str) or not action_id:
+                        raise TerminalCaptureError(
+                            "terminal action response is missing its action id"
+                        )
+                    if on_progress is not None:
+                        on_progress(status.removeprefix("action_"), action_id)
+                    continue
                 return response
             process = self._process
             if process is None or process.poll() is not None:
@@ -912,7 +934,12 @@ class PersistentTerminalRunner:
     def run_cleanup(self, steps: Iterable[TerminalCheckPlan]) -> None:
         self._execute_steps("cleanup", steps)
 
-    def capture_beat(self, beat: BeatPlan) -> BeatCapture:
+    def capture_beat(
+        self,
+        beat: BeatPlan,
+        *,
+        on_progress: Callable[[str, str], None] | None = None,
+    ) -> BeatCapture:
         if beat.medium is not RecordingMedium.terminal:
             raise TerminalCaptureError(
                 f"terminal runner cannot capture {beat.medium.value} beat {beat.id!r}"
@@ -937,6 +964,7 @@ class PersistentTerminalRunner:
                 command_snapshots=command_snapshots,
             ),
             wait_indefinitely=_beat_has_browser_handoff(actions),
+            on_progress=on_progress,
         )
         if checks:
             session.execute(
@@ -1031,7 +1059,7 @@ def _beat_script(
         if command_entries:
             commands: list[str] = []
             for command_index, command in enumerate(command_entries):
-                action_id = _capture_action_id(
+                action_id = terminal_action_id(
                     action_index, command_index, command
                 )
                 commands.append(
@@ -1049,14 +1077,15 @@ def _beat_script(
                 _validated_group_script(" && ".join(commands), value.get("expect", {}))
             )
         else:
+            action_id = terminal_action_id(action_index, None)
             steps.append(
                 _marked_step_script(
                     beat_id,
-                    f"__step_{action_index}",
+                    action_id,
                     _validated_step_script(
                         value,
                         context,
-                        snapshot=command_snapshots[f"__step_{action_index}"],
+                        snapshot=command_snapshots[action_id],
                     ),
                 )
             )
@@ -1088,24 +1117,13 @@ def _beat_command_snapshots(
         else:
             commands = ((None, value),)
         for command_index, command in commands:
-            action_id = _capture_action_id(action_index, command_index, command)
+            action_id = terminal_action_id(action_index, command_index, command)
             command_text = _step_command(command, context)
             snapshots[action_id] = {
                 "command": command_text,
                 "display": _step_display(command, command_text),
             }
     return snapshots
-
-
-def _capture_action_id(
-    action_index: int,
-    command_index: int | None,
-    command: Mapping[str, Any] | None = None,
-) -> str:
-    if command_index is None:
-        return f"__step_{action_index}"
-    explicit = command.get("id") if command is not None else None
-    return explicit or f"__step_{action_index}_command_{command_index}"
 
 
 def _marked_step_script(beat_id: str, action_id: str, script: str) -> str:

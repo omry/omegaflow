@@ -30,15 +30,7 @@ No active release blockers.
 
 ## Release backlog
 
-- [ ] `P1` Show useful progress throughout video builds.
-      Long-running builds should not appear stalled while OmegaFlow records the
-      workflow, generates narration audio and timestamps, or performs other
-      expensive processing. Acceptance checks: show clear progress for the
-      recording and audio phases; fold any other meaningfully slow build phases
-      into the same progress experience; report the current operation and
-      determinate totals when they are known; preserve readable non-interactive
-      logs; avoid long silent periods; and add coverage for successful, cached,
-      forced, and failed builds.
+No active release backlog items.
 
 ## Post-release
 
@@ -177,6 +169,14 @@ No active release blockers.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Show useful progress throughout video builds.
+      Completed: `2026-07-18`. Added one determinate build progress surface for
+      executable recording actions, narration generation and timing, final
+      assembly, and publishing. Long speech generation reports elapsed time and
+      streamed bytes without inventing a completion percentage. Cached work
+      advances the same bar, non-interactive logs show only major phases, and
+      successful, cached, forced, and failed paths are covered by tests.
 
 - [x] `P1` Add Towncrier release notes and GitHub Releases to publishing.
       Completed: `2026-07-15`. Added generated and validated release notes,

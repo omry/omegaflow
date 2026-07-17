@@ -15,11 +15,18 @@ from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from types import MappingProxyType
 from typing import Any, Callable, Protocol, runtime_checkable
 
 from .browser_handoff import BROWSER_HANDOFF_ROOT_ENV, BrowserHandoffBroker
-from .recording_plan import BeatPlan, RecordingPlan, TerminalActionPlan
+from .recording_plan import (
+    BeatPlan,
+    BrowserActionPlan,
+    RecordingPlan,
+    TerminalActionPlan,
+    terminal_action_id,
+)
 from .studio_config import RecordingMedium
 
 
@@ -168,7 +175,12 @@ class CaptureRunner(Protocol):
 
     def start(self, context: CaptureContext) -> None: ...
 
-    def capture_beat(self, beat: BeatPlan) -> BeatCapture: ...
+    def capture_beat(
+        self,
+        beat: BeatPlan,
+        *,
+        on_progress: RunnerProgressCallback | None = None,
+    ) -> BeatCapture: ...
 
     def close(self) -> None: ...
 
@@ -253,7 +265,65 @@ def _failure_detail(operation: str, error: BaseException) -> CaptureFailureDetai
     return CaptureFailureDetail(operation=operation, error=error)
 
 
+RunnerProgressCallback = Callable[[str, str], None]
 CaptureRunnerFactory = Callable[[], CaptureRunner]
+
+
+@dataclass(frozen=True)
+class CaptureActionItem:
+    """One executable recording action shown by build progress."""
+
+    beat_id: str
+    beat_heading: str
+    action_id: str
+    label: str
+
+
+CaptureProgressCallback = Callable[[str, CaptureActionItem, int, int], None]
+
+
+def _action_label(value: Mapping[str, Any], fallback: str) -> str:
+    display = value.get("display")
+    if isinstance(display, str) and display:
+        return display
+    return fallback.replace("_", " ").replace("-", " ").capitalize()
+
+
+def capture_action_items(plan: RecordingPlan) -> tuple[CaptureActionItem, ...]:
+    """Flatten user-facing terminal commands and browser actions in source order."""
+
+    items: list[CaptureActionItem] = []
+    for beat in plan.beats:
+        for action_index, action in enumerate(beat.actions):
+            if isinstance(action, BrowserActionPlan):
+                items.append(
+                    CaptureActionItem(
+                        beat_id=beat.id,
+                        beat_heading=beat.heading,
+                        action_id=action.id,
+                        label=_action_label(action.config, action.id),
+                    )
+                )
+                continue
+            if not isinstance(action, TerminalActionPlan):
+                continue
+            commands = action.config.get("commands")
+            entries = enumerate(commands) if commands else ((None, action.config),)
+            for command_index, command in entries:
+                action_id = terminal_action_id(
+                    action_index,
+                    command_index,
+                    command,
+                )
+                items.append(
+                    CaptureActionItem(
+                        beat_id=beat.id,
+                        beat_heading=beat.heading,
+                        action_id=action_id,
+                        label=_action_label(command, action_id),
+                    )
+                )
+    return tuple(items)
 
 
 @dataclass(frozen=True)
@@ -286,6 +356,7 @@ class CaptureCoordinator:
         workspace: Path,
         working_directory: Path | None = None,
         environment: Mapping[str, str | None] | None = None,
+        on_progress: CaptureProgressCallback | None = None,
     ) -> CaptureResult:
         context = CaptureContext.create(
             run_dir,
@@ -299,6 +370,54 @@ class CaptureCoordinator:
         captures: list[BeatCapture] = []
         failures = CaptureFailureCollector()
         operation = "initialize capture"
+        action_items = capture_action_items(plan)
+        action_by_key = {
+            (item.beat_id, item.action_id): item for item in action_items
+        }
+        completed_actions = 0
+        total_actions = len(action_items)
+        progress_lock = Lock()
+        started_action_keys: set[tuple[str, str]] = set()
+        completed_action_keys: set[tuple[str, str]] = set()
+
+        def runner_progress(beat: BeatPlan) -> RunnerProgressCallback | None:
+            if on_progress is None:
+                return None
+
+            def report(state: str, action_id: str) -> None:
+                nonlocal completed_actions
+                key = (beat.id, action_id)
+                item = action_by_key.get(key)
+                if item is None:
+                    raise CaptureSetupError(
+                        f"runner reported unknown action {beat.id!r}/{action_id!r}"
+                    )
+                with progress_lock:
+                    if state not in {"started", "completed"}:
+                        raise CaptureSetupError(
+                            f"runner reported invalid action state {state!r}"
+                        )
+                    if state == "started":
+                        if key in started_action_keys:
+                            raise CaptureSetupError(
+                                f"runner started action {beat.id!r}/{action_id!r} twice"
+                            )
+                        started_action_keys.add(key)
+                    if state == "completed":
+                        if key not in started_action_keys:
+                            raise CaptureSetupError(
+                                "runner completed action "
+                                f"{beat.id!r}/{action_id!r} before starting it"
+                            )
+                        if key in completed_action_keys:
+                            raise CaptureSetupError(
+                                f"runner completed action {beat.id!r}/{action_id!r} twice"
+                            )
+                        completed_action_keys.add(key)
+                        completed_actions += 1
+                    on_progress(state, item, completed_actions, total_actions)
+
+            return report
 
         def ensure_runner(medium: RecordingMedium) -> CaptureRunner:
             nonlocal operation
@@ -317,6 +436,12 @@ class CaptureCoordinator:
             runner.start(context)
             started.add(medium)
             return runner
+
+        def capture_beat(runner: CaptureRunner, beat: BeatPlan) -> BeatCapture:
+            progress_callback = runner_progress(beat)
+            if progress_callback is None:
+                return runner.capture_beat(beat)
+            return runner.capture_beat(beat, on_progress=progress_callback)
 
         try:
             if plan.setup or plan.cleanup:
@@ -350,7 +475,7 @@ class CaptureCoordinator:
                     broker.prepare(handoff_id)
                     executor = ThreadPoolExecutor(max_workers=1)
                     try:
-                        terminal_future = executor.submit(runner.capture_beat, beat)
+                        terminal_future = executor.submit(capture_beat, runner, beat)
                         try:
                             try:
                                 url = _wait_for_browser_handoff(
@@ -368,7 +493,9 @@ class CaptureCoordinator:
                                     )
                                 set_handoff_url(handoff_id, url)
                                 operation = f"capture beat {browser_beat.id}"
-                                browser_capture = browser_runner.capture_beat(browser_beat)
+                                browser_capture = capture_beat(
+                                    browser_runner, browser_beat
+                                )
                             finally:
                                 broker.close(handoff_id)
                             terminal_capture = terminal_future.result()
@@ -383,7 +510,7 @@ class CaptureCoordinator:
                     captures.extend((terminal_capture, browser_capture))
                     beat_index += 2
                     continue
-                capture = runner.capture_beat(beat)
+                capture = capture_beat(runner, beat)
                 if capture.beat_id != beat.id:
                     raise RuntimeError(
                         f"{beat.medium.value} runner returned beat {capture.beat_id!r} "

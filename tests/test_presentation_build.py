@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 import omegaflow.presentation_build as presentation_build
 import omegaflow.studio as studio
+from omegaflow import audio as audio_module
 from omegaflow.capture import CaptureContext
 from omegaflow.presentation_build import (
     _capture_environment,
@@ -326,8 +327,8 @@ def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
     }
     plan = normalize_recording_plan(spec)
 
-    def fake_generate_audio(items, _settings, *, force=False):
-        del force
+    def fake_generate_audio(items, _settings, *, force=False, on_activity=None):
+        del force, on_activity
         for item in items:
             item.output_path.parent.mkdir(parents=True, exist_ok=True)
             item.output_path.write_bytes(b"take-audio")
@@ -357,6 +358,125 @@ def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
         "browser",
     ]
     assert set(artifacts.timestamps) == {"joined"}
+
+
+def test_prepare_narration_audio_reports_each_slow_operation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    spec = {
+        "id": "narrated",
+        "audio": {
+            "enabled": True,
+            "provider": "openai",
+            "env": "OPENAI_API_KEY",
+            "model": "gpt-4o-mini-tts",
+            "voice": "marin",
+            "cache_dir": str(tmp_path / "cache"),
+            "format": "mp3",
+        },
+        "beats": [
+            {
+                "id": "hello",
+                "heading": "Say hello",
+                "narration": "Say hello.",
+                "actions": [],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    def fake_generate_audio(items, _settings, *, force=False, on_activity=None):
+        del force
+        assert len(items) == 1
+        item = items[0]
+        item.output_path.parent.mkdir(parents=True, exist_ok=True)
+        item.output_path.write_bytes(b"take-audio")
+        if on_activity is not None:
+            on_activity(1536, 2.5)
+        return [item.output_path]
+
+    def fake_generate_timestamps(
+        _recording_id, items, _settings, _transcription, *, force=False
+    ):
+        del force
+        assert len(items) == 1
+        item = items[0]
+        path = studio.audio.timeline_path_for(item)
+        path.write_text('{"words": []}\n', encoding="utf-8")
+        return [path]
+
+    monkeypatch.setattr(studio.audio, "generate_audio", fake_generate_audio)
+    monkeypatch.setattr(studio.audio, "generate_timestamps", fake_generate_timestamps)
+    monkeypatch.setattr(studio.audio, "audio_duration_seconds", lambda _path: 1.0)
+    progress: list[tuple[str, int, int]] = []
+
+    prepare_narration_audio(
+        spec,
+        plan,
+        tmp_path / "run",
+        on_progress=lambda message, current, total: progress.append(
+            (message, current, total)
+        ),
+    )
+
+    assert progress == [
+        ("Generate narration: Say hello", 0, 3),
+        ("Generate narration: Say hello · 2.5s · 1.5 KiB received", 0, 3),
+        ("Generate narration: Say hello", 1, 3),
+        ("Time narration: Say hello", 1, 3),
+        ("Time narration: Say hello", 2, 3),
+        ("Prepare narration: Say hello", 2, 3),
+        ("Prepare narration: Say hello", 3, 3),
+    ]
+
+
+def test_openai_speech_stream_reports_received_audio_chunks(tmp_path: Path) -> None:
+    settings = audio_module.AudioSettings(
+        enabled=True,
+        provider="openai",
+        env="OPENAI_API_KEY",
+        model="gpt-4o-mini-tts",
+        voice="marin",
+        format="mp3",
+        cache_dir=tmp_path,
+    )
+    segment = audio_module.NarrationSegment(
+        segment_id="take",
+        heading="Take",
+        text="Hello world",
+    )
+    reads = iter((b"abc", b"defg", b""))
+    request_payload: dict[str, object] = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self, size: int = -1) -> bytes:
+            assert size == 8 * 1024
+            return next(reads)
+
+    def urlopen(request, *, timeout):
+        assert timeout == 120
+        request_payload.update(json.loads(request.data))
+        return Response()
+
+    activity: list[tuple[int, float]] = []
+    content = audio_module.openai_speech_bytes(
+        segment,
+        settings,
+        environ={"OPENAI_API_KEY": "secret"},
+        urlopen=urlopen,
+        on_activity=lambda received, elapsed: activity.append((received, elapsed)),
+    )
+
+    assert content == b"abcdefg"
+    assert request_payload["stream_format"] == "audio"
+    assert [received for received, _elapsed in activity] == [3, 7]
+    assert all(elapsed >= 0 for _received, elapsed in activity)
 
 
 def test_source_words_repair_zero_duration_transcription_timestamps() -> None:

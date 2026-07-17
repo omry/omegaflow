@@ -10,7 +10,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit
 
 from .browser_runtime import (
@@ -455,14 +455,24 @@ class PersistentBrowserRunner:
                 "BROWSER_SCHEMA", f"browser startup failed: {message}"
             ) from exc
 
-    def capture_beat(self, beat: BeatPlan) -> BeatCapture:
+    def capture_beat(
+        self,
+        beat: BeatPlan,
+        *,
+        on_progress: Callable[[str, str], None] | None = None,
+    ) -> BeatCapture:
         try:
-            return self._capture_browser_beat(beat)
+            return self._capture_browser_beat(beat, on_progress=on_progress)
         except BaseException:
             self._capture_failed = True
             raise
 
-    def _capture_browser_beat(self, beat: BeatPlan) -> BeatCapture:
+    def _capture_browser_beat(
+        self,
+        beat: BeatPlan,
+        *,
+        on_progress: Callable[[str, str], None] | None = None,
+    ) -> BeatCapture:
         if beat.medium is not RecordingMedium.browser:
             raise BrowserCaptureError(
                 "BROWSER_SCHEMA",
@@ -482,6 +492,8 @@ class PersistentBrowserRunner:
                     "BROWSER_SCHEMA", f"browser beat {beat.id!r} has a terminal action"
                 )
             action_response_start = len(self.responses)
+            if on_progress is not None:
+                on_progress("started", raw_action.id)
             actions.append(
                 self._execute_action(
                     beat.id,
@@ -490,6 +502,8 @@ class PersistentBrowserRunner:
                 )
             )
             self._append_capture("action", beat_id=beat.id, **actions[-1])
+            if on_progress is not None:
+                on_progress("completed", raw_action.id)
             previous_action_response_start = action_response_start
         checks: list[dict[str, Any]] = []
         for raw_check in beat.checks:
