@@ -783,10 +783,13 @@ def _browser_pass(
     presentation = thaw(plan.presentation)
     browser_header = presentation.get("browser", {})
     default_transition = browser_header.get("transitions", {}).get("default", "cut")
+    default_pointer_visible = bool(
+        browser_header.get("pointer", {}).get("visible", True)
+    )
     pointer = {
         "x": float(log.viewport["width"]) / 2,
         "y": float(log.viewport["height"]) / 2,
-        "visible": bool(browser_header.get("pointer", {}).get("visible", True)),
+        "visible": default_pointer_visible,
     }
     display_url: str | None = None
     state: Mapping[str, Any] = log.initial_state
@@ -795,6 +798,11 @@ def _browser_pass(
     for beat in plan.beats:
         if beat.medium is not RecordingMedium.browser:
             continue
+        pointer["visible"] = (
+            default_pointer_visible
+            if beat.browser_pointer_visible is None
+            else beat.browser_pointer_visible
+        )
         captures = log.actions_by_beat.get(beat.id, ())
         initial_states[beat.id] = state
         starts = None

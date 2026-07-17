@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
+from typing import Any, get_args, get_type_hints
 
 import pytest
 from omegaconf import OmegaConf
@@ -26,7 +27,7 @@ from omegaflow.recording_plan import (
     normalize_recording_plan,
     validate_recording_modalities,
 )
-from omegaflow.studio_config import RecordingSpec
+from omegaflow.studio_config import RecordingSpec, USER_RECORDING_YAML_SCHEMAS
 
 
 def browser_spec() -> dict:
@@ -129,6 +130,87 @@ def test_omegaconf_schema_authority_supports_versioned_artifacts() -> None:
         assert OmegaConf.structured(schema) is not None
 
 
+def annotation_contains_any(annotation: object) -> bool:
+    return annotation is Any or any(
+        annotation_contains_any(argument) for argument in get_args(annotation)
+    )
+
+
+def test_annotation_contains_any_recurses_through_nested_containers() -> None:
+    assert annotation_contains_any(list[dict[str, Any]])
+    assert not annotation_contains_any(list[dict[str, str | int]])
+
+
+def test_user_recording_yaml_schema_has_no_any_typed_fields() -> None:
+    permissive: list[str] = []
+    for schema in USER_RECORDING_YAML_SCHEMAS:
+        hints = get_type_hints(schema)
+        for item in fields(schema):
+            if annotation_contains_any(hints[item.name]):
+                permissive.append(f"{schema.__name__}.{item.name}")
+
+    assert permissive == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        (
+            "expect",
+            {"output_contians": ["hello"]},
+            r"beats\.0\.actions\.0\.commands\.0\.expect has unknown fields: output_contians",
+        ),
+        (
+            "output",
+            {"replce": "hello"},
+            r"beats\.0\.actions\.0\.commands\.0\.output mapping must contain only: replace",
+        ),
+    ],
+)
+def test_terminal_action_metadata_is_validated_during_plan_normalization(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    spec = terminal_spec()
+    command = spec["beats"][0]["actions"][0]["commands"][0]
+    command[field] = value
+
+    with pytest.raises(RecordingPlanError, match=message):
+        normalize_recording_plan(spec)
+
+
+def test_requirements_are_validated_during_plan_normalization() -> None:
+    spec = terminal_spec()
+    spec["requirements"] = {"commandz": ["bash"]}
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"requirements has unknown fields: commandz",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_browser_beat_can_override_pointer_visibility() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["pointer"] = {"visible": False}
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].browser_pointer_visible is False
+
+
+def test_terminal_beat_rejects_browser_pointer_visibility() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["pointer"] = {"visible": False}
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"beats\.0\.pointer is invalid for terminal beats",
+    ):
+        normalize_recording_plan(spec)
+
+
 def test_run_files_resolve_from_the_recording_source_directory(tmp_path: Path) -> None:
     source_dir = tmp_path / "recordings" / "demo"
     scripts = source_dir / "scripts"
@@ -217,6 +299,14 @@ def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
                 "capture_delay_ms": 0,
             },
         },
+        {
+            "id": "move_viewport",
+            "move_pointer": {"viewport": {"x": 0.4, "y": 0.12}},
+        },
+        {
+            "id": "move_target",
+            "move_pointer": {"target": {"role": "button", "name": "Create"}},
+        },
         {"id": "press", "press": {"key": "Control+K", "target": {"text": "Search"}}},
         {"id": "scroll_target", "scroll": {"target": {"text": "Results"}}},
         {"id": "scroll_by", "scroll": {"by": {"x": 0, "y": 400}}},
@@ -241,6 +331,53 @@ def test_accepts_each_browser_action_variant(action: dict) -> None:
     plan = normalize_recording_plan(spec)
 
     assert plan.beats[0].actions[-1].id == action["id"]
+
+
+def test_browser_action_accepts_hold_before() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1]["hold_before_ms"] = 250
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].actions[1].config["hold_before_ms"] == 250
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5])
+def test_browser_action_rejects_invalid_hold_before(value: object) -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1]["hold_before_ms"] = value
+
+    with pytest.raises(RecordingPlanError, match="hold_before_ms"):
+        normalize_recording_plan(spec)
+
+
+@pytest.mark.parametrize(
+    ("move_pointer", "match"),
+    [
+        ({}, "exactly one"),
+        (
+            {
+                "viewport": {"x": 0.4, "y": 0.12},
+                "target": {"role": "button", "name": "Create"},
+            },
+            "exactly one",
+        ),
+        ({"viewport": {"x": -0.1, "y": 0.5}}, "between 0 and 1"),
+        ({"viewport": {"x": 0.5, "y": 1.1}}, "between 0 and 1"),
+        ({"viewport": {"x": True, "y": 0.5}}, "numbers between 0 and 1"),
+    ],
+)
+def test_rejects_invalid_pointer_move_destination(
+    move_pointer: dict,
+    match: str,
+) -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append(
+        {"id": "move", "move_pointer": move_pointer}
+    )
+
+    with pytest.raises(RecordingPlanError, match=match):
+        normalize_recording_plan(spec)
 
 
 @pytest.mark.parametrize(

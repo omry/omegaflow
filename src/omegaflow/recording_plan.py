@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, fields, is_dataclass, replace
+from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeVar
@@ -17,11 +17,16 @@ from .studio_config import (
     BrowserActionConfig,
     BrowserCheckConfig,
     BrowserConditionConfig,
+    BrowserPointerPresentationConfig,
     BrowserRecordingConfig,
     BrowserTargetConfig,
     BrowserUrlMatcherConfig,
+    RecordingActionConfig,
+    RecordingCheckConfig,
+    RecordingExpectationConfig,
     RecordingMedium,
     RecordingPresentationConfig,
+    RecordingRequirementsConfig,
     RecordingStepConfig,
     StudioConfigError,
     narration_text_and_anchors,
@@ -37,6 +42,7 @@ T = TypeVar("T")
 ACTION_KINDS = (
     "open_page",
     "click",
+    "move_pointer",
     "fill",
     "type_keys",
     "press",
@@ -49,6 +55,13 @@ CHECK_KINDS = ("url", "visible", "hidden", "text", "value", "count", "response")
 URL_MATCH_KINDS = ("equals", "contains", "matches")
 ACTION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 ANCHOR_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_-]*@\Z")
+TERMINAL_STEP_FIELDS = {item.name for item in fields(RecordingStepConfig)}
+BROWSER_ACTION_FIELDS = {item.name for item in fields(BrowserActionConfig)}
+BROWSER_CHECK_FIELDS = {item.name for item in fields(BrowserCheckConfig)}
+BROWSER_ACTION_ONLY_FIELDS = BROWSER_ACTION_FIELDS - {"after"}
+BROWSER_CHECK_ONLY_FIELDS = BROWSER_CHECK_FIELDS - {"name"}
+TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"after"}
+TERMINAL_CHECK_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"name"}
 
 
 def _mapping(value: object, *, field: str) -> dict[str, Any]:
@@ -84,6 +97,210 @@ def _positive_int(value: object, *, field: str, allow_zero: bool = False) -> int
         qualifier = "non-negative" if allow_zero else "positive"
         raise RecordingPlanError(f"{field} must be {qualifier}")
     return value
+
+
+def _expectation_mapping(value: object, *, field: str) -> dict[str, Any]:
+    if isinstance(value, RecordingExpectationConfig):
+        return asdict(value)
+    return _mapping(value, field=field)
+
+
+def validate_terminal_expectation(
+    value: object,
+    *,
+    field: str,
+) -> RecordingExpectationConfig:
+    mapping = _expectation_mapping(value, field=field)
+    allowed = {"exit_code", "output_contains", "output_regex", "file_exists"}
+    unexpected = sorted(set(mapping) - allowed)
+    if unexpected:
+        raise RecordingPlanError(
+            f"{field} has unknown fields: {', '.join(unexpected)}"
+        )
+    exit_code = mapping.get("exit_code", 0)
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        raise RecordingPlanError(f"{field}.exit_code must be an integer")
+    for name in ("output_contains", "output_regex", "file_exists"):
+        values = mapping.get(name, [])
+        if not isinstance(values, list) or any(
+            not isinstance(item, str) or not item for item in values
+        ):
+            raise RecordingPlanError(
+                f"{field}.{name} must be a list of non-empty strings"
+            )
+        if name == "output_regex":
+            for pattern in values:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise RecordingPlanError(
+                        f"{field}.output_regex is invalid: {exc}"
+                    ) from exc
+    return _typed(mapping, RecordingExpectationConfig, field=field)
+
+
+def validate_terminal_output(value: object, *, field: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, str):
+        if value not in {"real", "suppress"}:
+            raise RecordingPlanError(f"{field} must be one of: real, suppress")
+        return
+    mapping = _mapping(value, field=field)
+    if set(mapping) != {"replace"}:
+        raise RecordingPlanError(f"{field} mapping must contain only: replace")
+    if not isinstance(mapping["replace"], str):
+        raise RecordingPlanError(f"{field}.replace must be a string")
+
+
+def _optional_non_negative_number(value: object, *, field: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise RecordingPlanError(f"{field} must be a non-negative number")
+
+
+def validate_terminal_command(value: object, *, field: str) -> None:
+    mapping = _mapping(value, field=field)
+    has_run = isinstance(mapping.get("run"), str) and bool(mapping["run"])
+    has_run_file = isinstance(mapping.get("run_file"), str) and bool(
+        mapping["run_file"]
+    )
+    if has_run == has_run_file:
+        raise RecordingPlanError(
+            f"{field} must define exactly one of run or run_file"
+        )
+    command_id = mapping.get("id")
+    if command_id not in {None, ""} and (
+        not isinstance(command_id, str) or not ACTION_ID_RE.fullmatch(command_id)
+    ):
+        raise RecordingPlanError(f"{field}.id must be identifier-like")
+    display = mapping.get("display")
+    if display is not None and (not isinstance(display, str) or not display):
+        raise RecordingPlanError(f"{field}.display must be a non-empty string")
+    after = mapping.get("after")
+    if after is not None and (not isinstance(after, str) or not ANCHOR_RE.fullmatch(after)):
+        raise RecordingPlanError(f"{field}.after must contain exactly one @anchor@")
+    for name in ("follow_along", "browser_handoff", "show_prompt_after"):
+        if name in mapping and not isinstance(mapping[name], bool):
+            raise RecordingPlanError(f"{field}.{name} must be a boolean")
+    if mapping.get("timing", "presentation") not in {"presentation", "realtime"}:
+        raise RecordingPlanError(
+            f"{field}.timing must be presentation or realtime"
+        )
+    for name in (
+        "pre_command_pause",
+        "pre_enter_pause",
+        "post_enter_pause",
+        "post_command_pause",
+    ):
+        _optional_non_negative_number(mapping.get(name), field=f"{field}.{name}")
+    validate_terminal_output(mapping.get("output"), field=f"{field}.output")
+    validate_terminal_expectation(mapping.get("expect", {}), field=f"{field}.expect")
+
+
+def validate_terminal_step(value: object, *, field: str) -> RecordingStepConfig:
+    mapping = _mapping(value, field=field)
+    commands = mapping.get("commands")
+    if commands is None:
+        validate_terminal_command(mapping, field=field)
+    else:
+        if not isinstance(commands, list) or not commands:
+            raise RecordingPlanError(f"{field}.commands must be a non-empty list")
+        if any(mapping.get(name) is not None for name in ("run", "run_file", "display")):
+            raise RecordingPlanError(
+                f"{field} must use commands or run/run_file/display, not both"
+            )
+        for index, command in enumerate(commands):
+            validate_terminal_command(command, field=f"{field}.commands.{index}")
+        validate_terminal_expectation(
+            mapping.get("expect", {}), field=f"{field}.expect"
+        )
+        validate_terminal_output(mapping.get("output"), field=f"{field}.output")
+    name = mapping.get("name")
+    if name is not None and (not isinstance(name, str) or not name):
+        raise RecordingPlanError(f"{field}.name must be a non-empty string")
+    progress = mapping.get("progress", [])
+    if not isinstance(progress, list) or any(
+        not isinstance(item, str) or not item for item in progress
+    ):
+        raise RecordingPlanError(f"{field}.progress must be a list of non-empty strings")
+    return _typed(mapping, RecordingStepConfig, field=field)
+
+
+def validate_requirements(value: object, *, field: str = "requirements") -> None:
+    mapping = _mapping(value, field=field)
+    unexpected = sorted(set(mapping) - {"commands"})
+    if unexpected:
+        raise RecordingPlanError(
+            f"{field} has unknown fields: {', '.join(unexpected)}"
+        )
+    commands = mapping.get("commands", [])
+    if not isinstance(commands, list) or any(
+        not isinstance(command, str) or not command for command in commands
+    ):
+        raise RecordingPlanError(
+            f"{field}.commands must be a list of non-empty strings"
+        )
+    _typed(mapping, RecordingRequirementsConfig, field=field)
+
+
+def validate_parameters(value: object, *, field: str = "parameters") -> None:
+    mapping = _mapping(value, field=field)
+    for name, parameter in mapping.items():
+        if not isinstance(name, str) or not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*", name
+        ):
+            raise RecordingPlanError(f"{field} keys must be shell-safe names")
+        if isinstance(parameter, dict):
+            if set(parameter) != {"default"}:
+                raise RecordingPlanError(
+                    f"{field}.{name} mapping must contain only: default"
+                )
+            parameter = parameter["default"]
+        if not isinstance(parameter, (str, int, float, bool)):
+            raise RecordingPlanError(f"{field}.{name} must define a scalar default")
+
+
+def _is_injected_default(value: object) -> bool:
+    if value is None or value == "" or value is False:
+        return True
+    if value == [] or value == {}:
+        return True
+    if isinstance(value, RecordingExpectationConfig):
+        value = asdict(value)
+    if isinstance(value, dict) and set(value) == {
+        "exit_code",
+        "output_contains",
+        "output_regex",
+        "file_exists",
+    }:
+        return value == {
+            "exit_code": 0,
+            "output_contains": [],
+            "output_regex": [],
+            "file_exists": [],
+        }
+    return False
+
+
+def _project_envelope(
+    mapping: dict[str, Any],
+    *,
+    fields_to_keep: set[str],
+    fields_to_reject: set[str],
+    field: str,
+) -> dict[str, Any]:
+    unexpected = sorted(
+        name
+        for name in fields_to_reject
+        if name in mapping and not _is_injected_default(mapping[name])
+    )
+    if unexpected:
+        raise RecordingPlanError(
+            f"{field} has fields invalid for this beat medium: {', '.join(unexpected)}"
+        )
+    return {name: value for name, value in mapping.items() if name in fields_to_keep}
 
 
 def validate_target(value: object, *, field: str) -> BrowserTargetConfig:
@@ -218,6 +435,7 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
         "id",
         kind,
         "after",
+        "hold_before_ms",
         "hold_after_ms",
         "transition",
         "display_url_after",
@@ -267,6 +485,38 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
             validate_condition(payload["ready"], field=f"{field}.open_page.ready")
         if payload.get("timeout_ms") is not None:
             _positive_int(payload["timeout_ms"], field=f"{field}.open_page.timeout_ms")
+    elif kind == "move_pointer":
+        destination = _one_present(
+            payload,
+            ("viewport", "target"),
+            field=f"{field}.move_pointer",
+        )
+        if destination == "target":
+            validate_target(
+                payload["target"],
+                field=f"{field}.move_pointer.target",
+            )
+        else:
+            viewport = _mapping(
+                payload["viewport"],
+                field=f"{field}.move_pointer.viewport",
+            )
+            if set(viewport) != {"x", "y"}:
+                raise RecordingPlanError(
+                    f"{field}.move_pointer.viewport must contain x and y"
+                )
+            if any(
+                isinstance(viewport[axis], bool)
+                or not isinstance(viewport[axis], (int, float))
+                for axis in ("x", "y")
+            ):
+                raise RecordingPlanError(
+                    f"{field}.move_pointer.viewport values must be numbers between 0 and 1"
+                )
+            if any(not 0 <= float(viewport[axis]) <= 1 for axis in ("x", "y")):
+                raise RecordingPlanError(
+                    f"{field}.move_pointer.viewport values must be between 0 and 1"
+                )
     elif kind == "click":
         validate_target(payload.get("target"), field=f"{field}.click.target")
         if payload.get("button", "left") not in {"left", "middle", "right"}:
@@ -329,12 +579,13 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
     after = mapping.get("after")
     if after is not None and (not isinstance(after, str) or not ANCHOR_RE.fullmatch(after)):
         raise RecordingPlanError(f"{field}.after must contain exactly one @anchor@")
-    if mapping.get("hold_after_ms") is not None:
-        _positive_int(
-            mapping["hold_after_ms"],
-            field=f"{field}.hold_after_ms",
-            allow_zero=True,
-        )
+    for hold_field in ("hold_before_ms", "hold_after_ms"):
+        if mapping.get(hold_field) is not None:
+            _positive_int(
+                mapping[hold_field],
+                field=f"{field}.{hold_field}",
+                allow_zero=True,
+            )
     if mapping.get("transition") not in {None, "cut", "fade", "captured"}:
         raise RecordingPlanError(f"{field}.transition must be cut, fade, or captured")
     if mapping.get("display_url_after") is not None:
@@ -505,7 +756,9 @@ def normalize_beat_actions(
             action_mapping = _mapping(
                 action, field=f"{field}.actions.{action_index}"
             )
-            browser_kinds = [kind for kind in ACTION_KINDS if kind in action_mapping]
+            browser_kinds = [
+                kind for kind in ACTION_KINDS if action_mapping.get(kind) is not None
+            ]
             if browser_kinds:
                 raise RecordingPlanError(
                     f"{field}.actions.{action_index} browser action "
@@ -513,17 +766,25 @@ def normalize_beat_actions(
                 )
         return NormalizedBeatActions(
             terminal_actions=tuple(
-                _typed(
-                    _mapping(action, field=f"{field}.actions.{action_index}"),
-                    RecordingStepConfig,
+                validate_terminal_step(
+                    _project_envelope(
+                        _mapping(action, field=f"{field}.actions.{action_index}"),
+                        fields_to_keep=TERMINAL_STEP_FIELDS,
+                        fields_to_reject=BROWSER_ACTION_ONLY_FIELDS,
+                        field=f"{field}.actions.{action_index}",
+                    ),
                     field=f"{field}.actions.{action_index}",
                 )
                 for action_index, action in enumerate(actions)
             ),
             terminal_checks=tuple(
-                _typed(
-                    _mapping(check, field=f"{field}.checks.{check_index}"),
-                    RecordingStepConfig,
+                validate_terminal_step(
+                    _project_envelope(
+                        _mapping(check, field=f"{field}.checks.{check_index}"),
+                        fields_to_keep=TERMINAL_STEP_FIELDS,
+                        fields_to_reject=BROWSER_CHECK_ONLY_FIELDS,
+                        field=f"{field}.checks.{check_index}",
+                    ),
                     field=f"{field}.checks.{check_index}",
                 )
                 for check_index, check in enumerate(checks)
@@ -531,17 +792,59 @@ def normalize_beat_actions(
         )
     return NormalizedBeatActions(
         browser_actions=tuple(
-            validate_browser_action(action, field=f"{field}.actions.{action_index}")
+            validate_browser_action(
+                _project_envelope(
+                    _mapping(action, field=f"{field}.actions.{action_index}"),
+                    fields_to_keep=BROWSER_ACTION_FIELDS,
+                    fields_to_reject=TERMINAL_ACTION_ONLY_FIELDS,
+                    field=f"{field}.actions.{action_index}",
+                ),
+                field=f"{field}.actions.{action_index}",
+            )
             for action_index, action in enumerate(actions)
         ),
         browser_checks=tuple(
-            validate_browser_check(check, field=f"{field}.checks.{check_index}")
+            validate_browser_check(
+                _project_envelope(
+                    _mapping(check, field=f"{field}.checks.{check_index}"),
+                    fields_to_keep=BROWSER_CHECK_FIELDS,
+                    fields_to_reject=TERMINAL_CHECK_ONLY_FIELDS,
+                    field=f"{field}.checks.{check_index}",
+                ),
+                field=f"{field}.checks.{check_index}",
+            )
             for check_index, check in enumerate(checks)
         ),
     )
 
 
+def validate_beat_pointer(
+    beat: dict[str, Any],
+    *,
+    index: int,
+    medium: RecordingMedium,
+) -> BrowserPointerPresentationConfig | None:
+    value = beat.get("pointer")
+    if value is None:
+        return None
+    if medium is not RecordingMedium.browser:
+        raise RecordingPlanError(f"beats.{index}.pointer is invalid for terminal beats")
+    return _typed(
+        _mapping(value, field=f"beats.{index}.pointer"),
+        BrowserPointerPresentationConfig,
+        field=f"beats.{index}.pointer",
+    )
+
+
 def validate_recording_modalities(spec: dict[str, Any]) -> None:
+    validate_requirements(spec.get("requirements", {}))
+    validate_parameters(spec.get("parameters", {}))
+    for lifecycle in ("setup", "cleanup"):
+        steps = spec.get(lifecycle, [])
+        if not isinstance(steps, list):
+            raise RecordingPlanError(f"{lifecycle} must be a list")
+        for index, step in enumerate(steps):
+            validate_terminal_step(step, field=f"{lifecycle}.{index}")
     beats = spec.get("beats", [])
     if not isinstance(beats, list):
         raise RecordingPlanError("beats must be a list")
@@ -557,6 +860,7 @@ def validate_recording_modalities(spec: dict[str, Any]) -> None:
             ) from exc
         if medium is RecordingMedium.browser:
             has_browser = True
+        validate_beat_pointer(beat, index=index, medium=medium)
         normalize_beat_actions(beat, index=index)
         guide = beat.get("guide")
         if guide is not None:
@@ -692,6 +996,7 @@ class BeatPlan:
     narration_text: str
     explicit_narration_take: str | None
     viewer_hold_ms: int
+    browser_pointer_visible: bool | None
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
     waits: tuple[NarrationWaitPlan, ...]
@@ -994,6 +1299,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             medium = RecordingMedium(beat.get("medium", RecordingMedium.terminal.value))
         except (TypeError, ValueError) as exc:
             raise RecordingPlanError(f"beats.{index}.medium is invalid") from exc
+        pointer_config = validate_beat_pointer(beat, index=index, medium=medium)
         normalized = normalize_beat_actions(beat, index=index)
         if medium is RecordingMedium.terminal:
             normalized = replace(
@@ -1137,6 +1443,9 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 narration_text=narration_text,
                 explicit_narration_take=explicit_take,
                 viewer_hold_ms=viewer_hold_ms,
+                browser_pointer_visible=(
+                    None if pointer_config is None else pointer_config.visible
+                ),
                 guide=guide,
                 anchors=anchors,
                 waits=waits,

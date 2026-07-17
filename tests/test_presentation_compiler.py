@@ -526,6 +526,35 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
     assert original.presentation_fingerprint != asset_change.presentation_fingerprint
 
 
+def test_browser_hold_before_is_presentation_only_for_freshness() -> None:
+    def plan(hold_before_ms: int | None = None) -> object:
+        action: dict[str, object] = {
+            "id": "open",
+            "open_page": {"url": "about:blank"},
+        }
+        if hold_before_ms is not None:
+            action["hold_before_ms"] = hold_before_ms
+        return normalize_recording_plan(
+            {
+                "id": "browser-fingerprint",
+                "browser": {},
+                "beats": [
+                    {
+                        "id": "browser",
+                        "medium": "browser",
+                        "actions": [action],
+                    }
+                ],
+            }
+        )
+
+    original = artifact_fingerprints(plan())
+    delayed = artifact_fingerprints(plan(250))
+
+    assert original.capture_fingerprint == delayed.capture_fingerprint
+    assert original.presentation_fingerprint != delayed.presentation_fingerprint
+
+
 def test_fingerprints_normalize_sha256_case_without_hashing_secret_content() -> None:
     plan = fingerprint_plan()
     arguments = {
@@ -893,6 +922,140 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         "asset": "state-" + "5" * 64,
         "transition": "cut",
     }
+
+
+def test_browser_beat_pointer_override_is_published_in_its_payload() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "hidden-pointer",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "pointer": {"visible": False},
+                    "actions": [
+                        {
+                            "id": "open",
+                            "open_page": {"url": "about:blank"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    capture = {
+        "action_id": "open",
+        "kind": "open_page",
+        "completion": {"kind": "navigation"},
+        "visual": {"kind": "state", "state": state_asset("1")},
+    }
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=[capture],
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("0"),
+        initial_pointer={"x": 10, "y": 20, "visible": True},
+    )
+
+    assert compiled.payload["initial_pointer"] == {
+        "x": 10.0,
+        "y": 20.0,
+        "visible": False,
+    }
+
+
+def test_standalone_pointer_moves_compile_without_click_feedback() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "pointer-moves",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                        {
+                            "id": "move-viewport",
+                            "move_pointer": {
+                                "viewport": {"x": 0.4, "y": 0.12}
+                            },
+                            "hold_before_ms": 250,
+                            "hold_after_ms": 100,
+                        },
+                        {
+                            "id": "move-target",
+                            "move_pointer": {
+                                "target": {
+                                    "role": "button",
+                                    "name": "Submit",
+                                }
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    captures = [
+        {
+            "action_id": "open",
+            "kind": "open_page",
+            "completion": {"kind": "navigation"},
+            "visual": {"kind": "state", "state": state_asset("1")},
+        },
+        {
+            "action_id": "move-viewport",
+            "kind": "move_pointer",
+            "target": {"point": {"x": 576, "y": 108}},
+            "completion": {"kind": "action"},
+            "visual": {"kind": "state", "state": state_asset("2")},
+        },
+        {
+            "action_id": "move-target",
+            "kind": "move_pointer",
+            "target": {
+                "bounds": {"x": 100, "y": 200, "width": 80, "height": 40},
+                "point": {"x": 140, "y": 220},
+            },
+            "completion": {"kind": "action"},
+            "visual": {"kind": "state", "state": state_asset("3")},
+        },
+    ]
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=captures,
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("0"),
+    )
+
+    pointer_events = [
+        event
+        for event in compiled.payload["events"]
+        if event["kind"] == "pointer_move"
+    ]
+    assert [event["action_id"] for event in pointer_events] == [
+        "move-viewport",
+        "move-target",
+    ]
+    assert [event["end"] for event in pointer_events] == [
+        {"x": 576.0, "y": 108.0},
+        {"x": 140.0, "y": 220.0},
+    ]
+    assert compiled.action_starts_ms["move-viewport"] == 0
+    assert pointer_events[0]["at_ms"] == 250
+    assert compiled.action_completions_ms["move-viewport"] == (
+        pointer_events[0]["end_ms"] + 100
+    )
+    assert compiled.action_starts_ms["move-target"] == (
+        compiled.action_completions_ms["move-viewport"]
+    )
+    assert not any(event["kind"] == "click" for event in compiled.payload["events"])
 
 
 def test_handoff_display_url_uses_the_captured_watch_url() -> None:

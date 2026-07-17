@@ -387,10 +387,19 @@ class RecordingFailureSummaryConfig:
 
 
 @dataclass
+class RecordingRequirementsConfig:
+    commands: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RecordingDefaults:
-    studio: dict[str, Any] = field(default_factory=dict)
-    parameters: dict[str, Any] = field(default_factory=dict)
-    requirements: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[
+        str,
+        str | int | float | bool | dict[str, str | int | float | bool],
+    ] = field(default_factory=dict)
+    requirements: RecordingRequirementsConfig = field(
+        default_factory=RecordingRequirementsConfig
+    )
     capture: RecordingCaptureConfig = field(default_factory=RecordingCaptureConfig)
     style: RecordingStyleConfig = field(default_factory=RecordingStyleConfig)
     outputs: RecordingOutputsConfig = field(default_factory=RecordingOutputsConfig)
@@ -403,7 +412,6 @@ class RecordingDefaults:
     presentation: RecordingPresentationConfig = field(
         default_factory=RecordingPresentationConfig
     )
-    narration: dict[str, Any] = field(default_factory=dict)
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
         default_factory=RecordingFailureSummaryConfig
@@ -414,10 +422,9 @@ class RecordingDefaults:
 
 
 @dataclass
-class RecordingSpec(RecordingDefaults):
+class RecordingSourceSpec(RecordingDefaults):
     id: str = ""
     title: str | None = None
-    script: str | None = None
 ```
 
 <!-- recording-config-schema:end -->

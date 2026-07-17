@@ -252,6 +252,51 @@ const renderer = core.createBrowserRendererAdapter({
     assert result.returncode == 0, result.stderr
 
 
+def test_hidden_browser_pointer_stays_hidden_during_move_and_click_events() -> None:
+    result = run_core_script(
+        r"""
+const payload = {
+  payload_version: 1,
+  beat_id: 'browser',
+  duration_ms: 500,
+  viewport: {width: 1000, height: 500, device_scale_factor: 1},
+  initial_state: 'initial',
+  initial_pointer: {x: 0, y: 0, visible: false},
+  initial_display_url: 'https://example.test/',
+  events: [
+    {
+      kind: 'pointer_move', action_id: 'click', at_ms: 0, end_ms: 300,
+      start: {x: 0, y: 0}, end: {x: 100, y: 50},
+      curve: {x1: 25, y1: 5, x2: 75, y2: 45},
+    },
+    {
+      kind: 'click', action_id: 'click', at_ms: 300, end_ms: 400,
+      point: {x: 100, y: 50}, button: 'left',
+    },
+  ],
+};
+const scenes = [];
+const renderer = core.createBrowserRendererAdapter({
+  render({scene}) { scenes.push(JSON.parse(JSON.stringify(scene))); },
+});
+(async () => {
+  await renderer.load({payload, beat: {id: 'browser'}, assets: {}, container: null});
+  renderer.renderAt(150);
+  renderer.renderAt(350);
+  if (scenes.some((scene) => scene.pointer.visible)) {
+    console.error(JSON.stringify(scenes));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_viewport_layout_scales_uniformly_and_letterboxes() -> None:
     result = run_core_script(
         r"""

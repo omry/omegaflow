@@ -992,7 +992,13 @@ def _capture_action_value(action: TerminalActionPlan | BrowserActionPlan) -> Any
         return value
     if isinstance(action, BrowserActionPlan):
         config = dict(value["config"])
-        for field in ("after", "hold_after_ms", "transition", "display_url_after"):
+        for field in (
+            "after",
+            "hold_before_ms",
+            "hold_after_ms",
+            "transition",
+            "display_url_after",
+        ):
             config.pop(field, None)
         open_page = config.get("open_page")
         if isinstance(open_page, dict):
@@ -1549,6 +1555,8 @@ def compile_browser_beat(
             "visible": bool(initial_pointer.get("visible", True)),
         }
     )
+    if beat.browser_pointer_visible is not None:
+        pointer["visible"] = beat.browser_pointer_visible
     assets: dict[str, CompiledAssetSource] = {}
     initial_asset = _register_state_asset(initial_state, assets)
     events: list[dict[str, Any]] = []
@@ -1574,6 +1582,10 @@ def compile_browser_beat(
                     f"action {action.id!r} starts before its predecessor completes",
                 )
         starts[action.id] = start_ms
+        visual_start_ms = start_ms
+        hold_before_ms = config.get("hold_before_ms")
+        if hold_before_ms is not None:
+            visual_start_ms += milliseconds_half_up(hold_before_ms)
         action_events, end_ms, pointer = _compile_browser_action(
             recording_id,
             beat.id,
@@ -1581,7 +1593,7 @@ def compile_browser_beat(
             config,
             payload,
             capture,
-            start_ms=start_ms,
+            start_ms=visual_start_ms,
             pointer=pointer,
             assets=assets,
             clip_asset=clip_assets.get((beat.id, action.id)),
@@ -1643,15 +1655,7 @@ def compile_browser_beat(
             "device_scale_factor": scale,
         },
         "initial_state": initial_asset,
-        "initial_pointer": (
-            {"x": width / 2, "y": height / 2, "visible": True}
-            if initial_pointer is None
-            else {
-                "x": _number(initial_pointer.get("x"), field="initial pointer x"),
-                "y": _number(initial_pointer.get("y"), field="initial pointer y"),
-                "visible": bool(initial_pointer.get("visible", True)),
-            }
-        ),
+        "initial_pointer": pointer,
         "initial_display_url": initial_display_url,
         "animation_policies": {"pointer": "pointer-v1", "typing": "natural-v1"},
         "events": events,
@@ -1687,7 +1691,7 @@ def _compile_browser_action(
     resolved_pointer = dict(pointer)
     target = capture.get("target")
     target = target if isinstance(target, Mapping) else None
-    if action.kind == "click":
+    if action.kind in {"click", "move_pointer"}:
         point = _target_point(target, action.id)
         move_duration, curve = pointer_motion(
             recording_id, beat_id, action.id, resolved_pointer, point
@@ -1707,17 +1711,18 @@ def _compile_browser_action(
             }
         )
         cursor += move_duration
-        events.append(
-            {
-                "kind": "click",
-                "action_id": action.id,
-                "at_ms": cursor,
-                "end_ms": cursor + CLICK_DURATION_MS,
-                "point": point,
-                "button": payload.get("button", "left"),
-            }
-        )
-        cursor += CLICK_DURATION_MS
+        if action.kind == "click":
+            events.append(
+                {
+                    "kind": "click",
+                    "action_id": action.id,
+                    "at_ms": cursor,
+                    "end_ms": cursor + CLICK_DURATION_MS,
+                    "point": point,
+                    "button": payload.get("button", "left"),
+                }
+            )
+            cursor += CLICK_DURATION_MS
         resolved_pointer.update(point)
     elif action.kind in {"fill", "type_keys"}:
         bounds = _target_bounds(target, action.id)

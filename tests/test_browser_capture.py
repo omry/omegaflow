@@ -221,6 +221,38 @@ def test_open_page_consumes_recorder_owned_handoff_url_once() -> None:
         )
 
 
+def test_visible_wait_allows_target_to_match_later(tmp_path: Path) -> None:
+    runner = PersistentBrowserRunner(
+        {"timeouts": {"action_ms": 100, "readiness_ms": 1500}}
+    )
+    runner.start(capture_context(tmp_path))
+    try:
+        runner.page.set_content(
+            "<button aria-label='Pause'>Pause</button>"
+            "<script>setTimeout(() => {"
+            "document.querySelector('button').setAttribute('aria-label', 'Play again');"
+            "}, 750)</script>"
+        )
+
+        completion = runner._wait_condition(  # noqa: SLF001
+            {
+                "visible": {
+                    "role": "button",
+                    "name": "Play again",
+                    "exact": True,
+                },
+                "timeout_ms": 1500,
+            },
+            response_start=0,
+            beat_id="browser",
+            action_id="wait-for-play-again",
+        )
+
+        assert completion == {"kind": "visible"}
+    finally:
+        runner.close()
+
+
 def browser_plan(config: dict | None = None):
     return normalize_recording_plan(
         {
@@ -413,6 +445,21 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                                 },
                             },
                             {
+                                "id": "move-viewport",
+                                "move_pointer": {
+                                    "viewport": {"x": 0.4, "y": 0.12}
+                                },
+                            },
+                            {
+                                "id": "move-target",
+                                "move_pointer": {
+                                    "target": {
+                                        "role": "button",
+                                        "name": "Open dialog",
+                                    }
+                                },
+                            },
+                            {
                                 "id": "open-dialog",
                                 "click": {
                                     "target": {
@@ -537,9 +584,24 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
             metadata = capture.metadata
             actions = metadata["actions"]
             actions_by_id = {action["action_id"]: action for action in actions}
-            old_seq = actions[0]["completion"]["response_seq"]
-            created_seq = actions[2]["completion"]["response_seq"]
+            old_seq = actions_by_id["open"]["completion"]["response_seq"]
+            created_seq = actions_by_id["created-response"]["completion"]["response_seq"]
             assert created_seq > old_seq
+            assert actions_by_id["move-viewport"]["target"]["point"] == {
+                "x": pytest.approx(runner.profile.viewport_width * 0.4),
+                "y": pytest.approx(runner.profile.viewport_height * 0.12),
+            }
+            move_target = actions_by_id["move-target"]["target"]
+            assert move_target["point"] == {
+                "x": pytest.approx(
+                    move_target["bounds"]["x"]
+                    + move_target["bounds"]["width"] / 2
+                ),
+                "y": pytest.approx(
+                    move_target["bounds"]["y"]
+                    + move_target["bounds"]["height"] / 2
+                ),
+            }
             assert runner.page.locator("body").get_attribute("data-shortcut") == "yes"
             assert runner.page.get_by_test_id("scrollbox").evaluate(
                 "element => element.scrollTop"

@@ -481,6 +481,19 @@ class RecordingFailureSummaryConfig:
 
 
 @dataclass
+class RecordingExpectationConfig:
+    exit_code: int = 0
+    output_contains: list[str] = field(default_factory=list)
+    output_regex: list[str] = field(default_factory=list)
+    file_exists: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RecordingRequirementsConfig:
+    commands: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RecordingCommandConfig:
     id: str | None = None
     run: str | None = None
@@ -490,8 +503,10 @@ class RecordingCommandConfig:
     follow_along: bool = False
     browser_handoff: bool = False
     show_prompt_after: bool = True
-    output: Any = None
-    expect: dict[str, Any] = field(default_factory=dict)
+    output: str | dict[str, str] | None = None
+    expect: RecordingExpectationConfig = field(
+        default_factory=RecordingExpectationConfig
+    )
     timing: str = "presentation"
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
@@ -507,8 +522,10 @@ class RecordingStepConfig:
     name: str | None = None
     after: str | None = None
     progress: list[str] = field(default_factory=list)
-    output: Any = None
-    expect: dict[str, Any] = field(default_factory=dict)
+    output: str | dict[str, str] | None = None
+    expect: RecordingExpectationConfig = field(
+        default_factory=RecordingExpectationConfig
+    )
     commands: list[RecordingCommandConfig] | None = None
 
 
@@ -550,6 +567,18 @@ class BrowserClickConfig:
     target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
     button: str = "left"
     position: str | dict[str, float] = "center"
+
+
+@dataclass
+class BrowserViewportPointConfig:
+    x: float = 0.5
+    y: float = 0.5
+
+
+@dataclass
+class BrowserMovePointerConfig:
+    viewport: BrowserViewportPointConfig | None = None
+    target: BrowserTargetConfig | None = None
 
 
 @dataclass
@@ -601,12 +630,14 @@ class BrowserActionConfig:
     id: str = ""
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
+    move_pointer: BrowserMovePointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
     after: str | None = None
+    hold_before_ms: int | None = None
     hold_after_ms: int | None = None
     transition: str | None = None
     display_url_after: str | None = None
@@ -636,6 +667,38 @@ class BrowserCheckConfig:
 
 
 @dataclass
+class RecordingActionConfig(RecordingStepConfig):
+    """Structured YAML envelope for terminal and browser actions."""
+
+    id: str = ""
+    open_page: BrowserOpenPageConfig | None = None
+    click: BrowserClickConfig | None = None
+    move_pointer: BrowserMovePointerConfig | None = None
+    fill: BrowserFillConfig | None = None
+    type_keys: BrowserTypeKeysConfig | None = None
+    press: BrowserPressConfig | None = None
+    scroll: BrowserScrollConfig | None = None
+    wait_for: BrowserWaitForConfig | None = None
+    hold_before_ms: int | None = None
+    hold_after_ms: int | None = None
+    transition: str | None = None
+    display_url_after: str | None = None
+
+
+@dataclass
+class RecordingCheckConfig(RecordingStepConfig):
+    """Structured YAML envelope for terminal and browser checks."""
+
+    url: BrowserUrlMatcherConfig | None = None
+    visible: BrowserTargetConfig | None = None
+    hidden: BrowserTargetConfig | None = None
+    text: BrowserTextCheckConfig | None = None
+    value: BrowserTextCheckConfig | None = None
+    count: BrowserCountCheckConfig | None = None
+    response: BrowserResponseMatcherConfig | None = None
+
+
+@dataclass
 class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
     success_hint: str | None = None
@@ -651,16 +714,21 @@ class RecordingBeatConfig:
     marker: str | None = None
     caption: str | None = None
     viewer_hold: float | None = None
-    actions: list[Any] = field(default_factory=list)
-    checks: list[Any] = field(default_factory=list)
+    pointer: BrowserPointerPresentationConfig | None = None
+    actions: list[RecordingActionConfig] = field(default_factory=list)
+    checks: list[RecordingCheckConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
 
 
 @dataclass
 class RecordingDefaults:
-    studio: dict[str, Any] = field(default_factory=dict)
-    parameters: dict[str, Any] = field(default_factory=dict)
-    requirements: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[
+        str,
+        str | int | float | bool | dict[str, str | int | float | bool],
+    ] = field(default_factory=dict)
+    requirements: RecordingRequirementsConfig = field(
+        default_factory=RecordingRequirementsConfig
+    )
     capture: RecordingCaptureConfig = field(default_factory=RecordingCaptureConfig)
     style: RecordingStyleConfig = field(default_factory=RecordingStyleConfig)
     outputs: RecordingOutputsConfig = field(default_factory=RecordingOutputsConfig)
@@ -673,7 +741,6 @@ class RecordingDefaults:
     presentation: RecordingPresentationConfig = field(
         default_factory=RecordingPresentationConfig
     )
-    narration: dict[str, Any] = field(default_factory=dict)
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
         default_factory=RecordingFailureSummaryConfig
@@ -684,10 +751,17 @@ class RecordingDefaults:
 
 
 @dataclass
-class RecordingSpec(RecordingDefaults):
+class RecordingSourceSpec(RecordingDefaults):
     id: str = ""
     title: str | None = None
+
+
+@dataclass
+class RecordingSpec(RecordingSourceSpec):
+    """Resolved internal spec, including fields generated from the script body."""
+
     script: str | None = None
+    narration: dict[str, Any] = field(default_factory=dict)
 
 
 RECORDING_IDENTITY_FIELDS = {"id", "title"}
@@ -716,22 +790,85 @@ class StudioDirectiveGuide(RecordingGuideConfig):
 
 @dataclass
 class StudioDirectiveBeat(RecordingBeatConfig):
-    actions: list[Any] = field(default_factory=list)
-    checks: list[Any] = field(default_factory=list)
     guide: StudioDirectiveGuide | None = None
 
 
 @dataclass
 class StudioDirectiveBlock:
-    scene: Any = None
+    scene: str | dict[str, str] | None = None
     beat: StudioDirectiveBeat | None = None
     beats: list[StudioDirectiveBeat] = field(default_factory=list)
+
+
+USER_RECORDING_YAML_SCHEMAS = (
+    RecordingCaptureConfig,
+    RecordingStyleConfig,
+    RecordingOutputsConfig,
+    RecordingTimingConfig,
+    RecordingEnvironmentConfig,
+    RecordingAudioBillingConfig,
+    RecordingAudioTranscriptionConfig,
+    RecordingAudioConfig,
+    BrowserViewportConfig,
+    BrowserContextConfig,
+    BrowserAuthConfig,
+    BrowserTimeoutsConfig,
+    BrowserTargetConfig,
+    BrowserRedactionConfig,
+    BrowserRecordingConfig,
+    BrowserWindowPresentationConfig,
+    BrowserChromePresentationConfig,
+    BrowserTransitionsPresentationConfig,
+    BrowserPointerPresentationConfig,
+    BrowserTypingPresentationConfig,
+    BrowserPresentationConfig,
+    RecordingPresentationConfig,
+    RecordingPublishSurfaceConfig,
+    RecordingPublishConfig,
+    RecordingFailureAnimationConfig,
+    RecordingFailureSummaryConfig,
+    RecordingExpectationConfig,
+    RecordingRequirementsConfig,
+    RecordingCommandConfig,
+    RecordingStepConfig,
+    BrowserUrlMatcherConfig,
+    BrowserResponseMatcherConfig,
+    BrowserConditionConfig,
+    BrowserOpenPageConfig,
+    BrowserClickConfig,
+    BrowserViewportPointConfig,
+    BrowserMovePointerConfig,
+    BrowserSecretConfig,
+    BrowserFillConfig,
+    BrowserTypeKeysConfig,
+    BrowserPressConfig,
+    BrowserScrollOffsetConfig,
+    BrowserScrollConfig,
+    BrowserWaitForConfig,
+    BrowserActionConfig,
+    BrowserTextCheckConfig,
+    BrowserCountCheckConfig,
+    BrowserCheckConfig,
+    RecordingActionConfig,
+    RecordingCheckConfig,
+    RecordingGuideConfig,
+    RecordingBeatConfig,
+    RecordingDefaults,
+    RecordingSourceSpec,
+    StudioDirectiveScene,
+    StudioDirectiveCommand,
+    StudioDirectiveStep,
+    StudioDirectiveGuide,
+    StudioDirectiveBeat,
+    StudioDirectiveBlock,
+)
 
 
 def register_studio_schema() -> None:
     store = ConfigStore.instance()
     store.store(name="studio_schema", node=StudioConfig)
     store.store(name="recording_defaults_schema", node=RecordingDefaults)
+    store.store(name="recording_source_schema", node=RecordingSourceSpec)
     store.store(name="recording_spec_schema", node=RecordingSpec)
     store.store(name="studio_directive_schema", node=StudioDirectiveBlock)
 
@@ -1021,7 +1158,7 @@ def split_frontmatter(script_text: str, *, source: Path) -> tuple[dict[str, Any]
     config = parse_yaml_mapping(frontmatter_text, source=f"{source} frontmatter")
     validate_config_keys(
         config,
-        schema=RecordingSpec,
+        schema=RecordingSourceSpec,
         source=f"{source} frontmatter",
     )
     return config, body
@@ -1077,6 +1214,18 @@ def validate_studio_directive_block(
             validated["scene"],
             source=source,
         )
+    from .recording_plan import normalize_beat_actions, validate_beat_pointer
+
+    for index, beat in enumerate(beat_values_from_directive(validated)):
+        raw_medium = beat.get("medium", RecordingMedium.terminal.value)
+        try:
+            medium = RecordingMedium(raw_medium)
+        except (TypeError, ValueError) as exc:
+            raise StudioConfigError(
+                f"{source}.beats.{index}.medium must be terminal or browser"
+            ) from exc
+        normalize_beat_actions(beat, index=index)
+        validate_beat_pointer(beat, index=index, medium=medium)
     return validated
 
 
@@ -1513,12 +1662,12 @@ def recording_from_script(
     defaults = load_recording_defaults(workspace_dir)
     spec = merge_mapping(defaults, frontmatter)
     spec.setdefault("id", recording_id)
-    spec["script"] = display_path(script_path)
     spec = structured_config_mapping(
         spec,
-        schema=RecordingSpec,
+        schema=RecordingSourceSpec,
         source=str(script_path),
     )
+    spec["script"] = display_path(script_path)
     spec["_script_dir"] = str(script_path.parent.resolve())
     merge_script_recording_beats(spec, blocks)
     from .recording_plan import validate_recording_modalities

@@ -335,7 +335,10 @@ class PersistentBrowserRunner:
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(
                 headless=self.headless,
-                args=["--mute-audio"],
+                args=[
+                    "--autoplay-policy=no-user-gesture-required",
+                    "--mute-audio",
+                ],
                 env=dict(context.environment),
             )
             self.browser_context = self.browser.new_context(
@@ -572,6 +575,38 @@ class PersistentBrowserRunner:
                         "y": target_fact["bounds"]["y"] + relative_y,
                     }
                 locator.click(**options)
+            elif action.kind == "move_pointer":
+                target = payload.get("target")
+                if target is not None:
+                    _, target_fact = self._strict_target(
+                        target,
+                        beat_id=beat_id,
+                        action_id=action.id,
+                    )
+                else:
+                    viewport_position = _mapping(
+                        payload.get("viewport"),
+                        field=f"action {action.id}.move_pointer.viewport",
+                    )
+                    viewport = self.page.viewport_size
+                    if not isinstance(viewport, dict):
+                        raise BrowserCaptureError(
+                            "BROWSER_SCHEMA", "browser viewport is unavailable"
+                        )
+                    x = min(
+                        float(viewport["width"] - 1),
+                        float(viewport["width"]) * float(viewport_position["x"]),
+                    )
+                    y = min(
+                        float(viewport["height"] - 1),
+                        float(viewport["height"]) * float(viewport_position["y"]),
+                    )
+                    target_fact = {"point": {"x": x, "y": y}}
+                point = _mapping(
+                    target_fact.get("point"),
+                    field=f"action {action.id}.move_pointer point",
+                )
+                self.page.mouse.move(float(point["x"]), float(point["y"]))
             elif action.kind in {"fill", "type_keys"}:
                 locator, target_fact = self._strict_target(
                     payload.get("target"), beat_id=beat_id, action_id=action.id
@@ -733,6 +768,8 @@ class PersistentBrowserRunner:
         *,
         beat_id: str,
         action_id: str | None,
+        wait_state: str = "attached",
+        timeout_ms: int | None = None,
     ) -> tuple[Any, dict[str, Any]]:
         if self.page is None:
             raise BrowserCaptureError("BROWSER_SCHEMA", "browser runner is not started")
@@ -770,10 +807,22 @@ class PersistentBrowserRunner:
             locator = self.page.locator("xpath=" + target["xpath"])
             self._emit_warning("FRAGILE_BROWSER_SELECTOR", beat_id, action_id)
         try:
-            locator.first.wait_for(state="attached", timeout=self._timeout({}, readiness=False))
+            locator.first.wait_for(
+                state=wait_state,
+                timeout=(
+                    self._timeout({}, readiness=False)
+                    if timeout_ms is None
+                    else timeout_ms
+                ),
+            )
             count = locator.count()
         except BaseException as exc:
             if _is_playwright_timeout(exc):
+                if timeout_ms is not None:
+                    raise BrowserCaptureError(
+                        "BROWSER_READINESS_TIMEOUT",
+                        "browser readiness condition timed out",
+                    ) from exc
                 raise BrowserCaptureError(
                     "BROWSER_TARGET_COUNT",
                     f"{context}: expected exactly one element matching "
@@ -1047,10 +1096,13 @@ class PersistentBrowserRunner:
         timeout = self._timeout(condition, readiness=True)
         try:
             if condition.get("visible") is not None:
-                locator, _ = self._strict_target(
-                    condition["visible"], beat_id=beat_id, action_id=action_id
+                self._strict_target(
+                    condition["visible"],
+                    beat_id=beat_id,
+                    action_id=action_id,
+                    wait_state="visible",
+                    timeout_ms=timeout,
                 )
-                locator.wait_for(state="visible", timeout=timeout)
                 return {"kind": "visible"}
             if condition.get("hidden") is not None:
                 locator = self._locator_without_count(condition["hidden"])

@@ -28,6 +28,7 @@ beat:
 | `marker` | string | Optional UI marker id. |
 | `caption` | string | Text printed visibly in the terminal recording. |
 | `viewer_hold` | number | Extra viewer pause after the beat. |
+| `pointer` | mapping | Browser-beat override for pointer visibility. Use `visible: false` to hide the cursor for the whole beat. |
 | `actions` | list | Commands to record. |
 | `checks` | list | Commands that validate the result. |
 | `guide` | mapping | Guided-mode commands and success hint. |
@@ -233,6 +234,17 @@ beat in the recording. Terminal and browser beats also share the same process
 environment, so a terminal beat can start a local server that a later browser
 beat visits.
 
+Hide the mouse cursor in a browser beat that does not demonstrate a pointer
+action. The override applies for the whole beat; later beats return to their own
+override or the recording-wide `presentation.browser.pointer.visible` default.
+
+```yaml
+- id: inspect-result
+  medium: browser
+  pointer:
+    visible: false
+```
+
 ```yaml
 - id: create-project
   medium: browser
@@ -274,6 +286,7 @@ Each action has an `id` and exactly one operation:
 | --- | --- |
 | `open_page` | Navigate, optionally show loading, and wait for a readiness boundary. |
 | `click` | Click a semantic target. |
+| `move_pointer` | Move the pointer to viewport-relative coordinates or the center of a semantic target. |
 | `fill` | Set a field efficiently; this is the default for text entry. |
 | `type_keys` | Fall back to physical key events when a site rejects fill or paste. |
 | `press` | Send a key or shortcut, optionally to a target. |
@@ -282,6 +295,33 @@ Each action has an `id` and exactly one operation:
 
 `fill` and `type_keys` produce the same terminal typing visualization. Their
 difference affects capture semantics, not playback pacing.
+
+Use `move_pointer.viewport` for a stable location relative to the browser
+viewport. Both coordinates are normalized from `0` to `1`:
+
+```yaml
+- id: point-near-top
+  move_pointer:
+    viewport: {x: 0.4, y: 0.12}
+```
+
+Use `move_pointer.target` to resolve one visible DOM element and move to its
+center:
+
+```yaml
+- id: point-at-submit
+  move_pointer:
+    target: {role: button, name: Submit}
+```
+
+Pointer moves use the same deterministic motion as the movement before a
+click. The common action fields `after`, `hold_before_ms`, and `hold_after_ms`
+can synchronize the move with narration, pause before it starts, and keep the
+pointer at its destination.
+
+`hold_before_ms` and `hold_after_ms` are presentation timing: they do not slow
+down browser capture or require recapturing the page. A changed hold recompiles
+the presentation from the existing capture.
 
 Prefer targets based on `role` and `name`, `label`, `placeholder`, `text`, or
 `test_id`. CSS and XPath are available as best-effort escape hatches and emit a
@@ -379,6 +419,14 @@ during the website build.
 
 ```python
 @dataclass
+class RecordingExpectationConfig:
+    exit_code: int = 0
+    output_contains: list[str] = field(default_factory=list)
+    output_regex: list[str] = field(default_factory=list)
+    file_exists: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RecordingCommandConfig:
     id: str | None = None
     run: str | None = None
@@ -388,8 +436,10 @@ class RecordingCommandConfig:
     follow_along: bool = False
     browser_handoff: bool = False
     show_prompt_after: bool = True
-    output: Any = None
-    expect: dict[str, Any] = field(default_factory=dict)
+    output: str | dict[str, str] | None = None
+    expect: RecordingExpectationConfig = field(
+        default_factory=RecordingExpectationConfig
+    )
     timing: str = "presentation"
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
@@ -405,8 +455,10 @@ class RecordingStepConfig:
     name: str | None = None
     after: str | None = None
     progress: list[str] = field(default_factory=list)
-    output: Any = None
-    expect: dict[str, Any] = field(default_factory=dict)
+    output: str | dict[str, str] | None = None
+    expect: RecordingExpectationConfig = field(
+        default_factory=RecordingExpectationConfig
+    )
     commands: list[RecordingCommandConfig] | None = None
 
 
@@ -464,6 +516,18 @@ class BrowserClickConfig:
 
 
 @dataclass
+class BrowserViewportPointConfig:
+    x: float = 0.5
+    y: float = 0.5
+
+
+@dataclass
+class BrowserMovePointerConfig:
+    viewport: BrowserViewportPointConfig | None = None
+    target: BrowserTargetConfig | None = None
+
+
+@dataclass
 class BrowserSecretConfig:
     env: str = ""
     presentation: str = "masked"
@@ -512,12 +576,14 @@ class BrowserActionConfig:
     id: str = ""
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
+    move_pointer: BrowserMovePointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
     after: str | None = None
+    hold_before_ms: int | None = None
     hold_after_ms: int | None = None
     transition: str | None = None
     display_url_after: str | None = None
@@ -547,6 +613,38 @@ class BrowserCheckConfig:
 
 
 @dataclass
+class RecordingActionConfig(RecordingStepConfig):
+    """Structured YAML envelope for terminal and browser actions."""
+
+    id: str = ""
+    open_page: BrowserOpenPageConfig | None = None
+    click: BrowserClickConfig | None = None
+    move_pointer: BrowserMovePointerConfig | None = None
+    fill: BrowserFillConfig | None = None
+    type_keys: BrowserTypeKeysConfig | None = None
+    press: BrowserPressConfig | None = None
+    scroll: BrowserScrollConfig | None = None
+    wait_for: BrowserWaitForConfig | None = None
+    hold_before_ms: int | None = None
+    hold_after_ms: int | None = None
+    transition: str | None = None
+    display_url_after: str | None = None
+
+
+@dataclass
+class RecordingCheckConfig(RecordingStepConfig):
+    """Structured YAML envelope for terminal and browser checks."""
+
+    url: BrowserUrlMatcherConfig | None = None
+    visible: BrowserTargetConfig | None = None
+    hidden: BrowserTargetConfig | None = None
+    text: BrowserTextCheckConfig | None = None
+    value: BrowserTextCheckConfig | None = None
+    count: BrowserCountCheckConfig | None = None
+    response: BrowserResponseMatcherConfig | None = None
+
+
+@dataclass
 class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
     success_hint: str | None = None
@@ -562,8 +660,9 @@ class RecordingBeatConfig:
     marker: str | None = None
     caption: str | None = None
     viewer_hold: float | None = None
-    actions: list[Any] = field(default_factory=list)
-    checks: list[Any] = field(default_factory=list)
+    pointer: BrowserPointerPresentationConfig | None = None
+    actions: list[RecordingActionConfig] = field(default_factory=list)
+    checks: list[RecordingCheckConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
 ```
 

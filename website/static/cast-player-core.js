@@ -790,6 +790,7 @@
       throw new Error('browser payload is invalid');
     }
     const clampedMs = Math.max(0, Math.min(Number(localMs) || 0, payload.duration_ms));
+    const pointerVisible = Boolean(payload.initial_pointer.visible);
     const scene = {
       localMs: clampedMs,
       viewport: payload.viewport,
@@ -848,10 +849,10 @@
             event.curve,
             minimumJerkProgress(progress),
           ),
-          visible: true,
+          visible: pointerVisible,
         };
       } else if (event.kind === 'click') {
-        scene.pointer = {...event.point, visible: true};
+        scene.pointer = {...event.point, visible: pointerVisible};
         scene.click = progress < 1 ? {...event.point, progress, button: event.button} : null;
       } else if (event.kind === 'focus') {
         scene.focus = progress < 1 ? {target: event.target, progress} : null;
