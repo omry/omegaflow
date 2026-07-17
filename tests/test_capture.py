@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import stat
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
+import omegaflow.capture as capture_module
 from omegaflow.capture import (
     BeatCapture,
     CaptureCoordinator,
@@ -13,6 +16,10 @@ from omegaflow.capture import (
     CaptureFailureCollector,
     CaptureSetupError,
     prepare_capture_paths,
+)
+from omegaflow.browser_handoff import (
+    BROWSER_HANDOFF_ID_ENV,
+    BrokeredBrowserSession,
 )
 from omegaflow.recording_plan import normalize_recording_plan
 from omegaflow.recording_plan import RecordingPlan
@@ -209,6 +216,166 @@ def test_coordinator_dispatches_beats_in_source_order_with_shared_context(
         "terminal-two",
     ]
     assert not result.context.paths.temporary.exists()
+
+
+def test_coordinator_hands_blocking_terminal_watch_to_browser_runner(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    class HandoffTerminal(FakeRunner):
+        def capture_beat(self, beat: object) -> BeatCapture:
+            assert self.context is not None
+            environment = dict(self.context.environment)
+            environment[BROWSER_HANDOFF_ID_ENV] = "watch_command"
+            session = BrokeredBrowserSession.from_environment(
+                "http://127.0.0.1:43123/cast-player.html?manifest=demo",
+                environment=environment,
+            )
+            assert session is not None
+            self.calls.append("terminal:watch-blocked")
+            while session.is_open():
+                time.sleep(0.005)
+            self.calls.append("terminal:watch-released")
+            return BeatCapture(beat_id=getattr(beat, "id"))
+
+        def cancel_capture(self) -> None:
+            self.calls.append("terminal:cancel-capture")
+
+    class HandoffBrowser(FakeRunner):
+        def set_handoff_url(self, handoff_id: str, url: str) -> None:
+            self.calls.append(f"browser:handoff:{handoff_id}:{url}")
+
+        def capture_beat(self, beat: object) -> BeatCapture:
+            self.calls.append(f"browser:beat:{getattr(beat, 'id')}")
+            return BeatCapture(beat_id=getattr(beat, "id"))
+
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "watch",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "watch_command",
+                                    "run": "watch",
+                                    "browser_handoff": True,
+                                    "follow_along": True,
+                                    "show_prompt_after": False,
+                                }
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {
+                            "id": "open",
+                            "open_page": {"handoff": "watch_command"},
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    terminal = HandoffTerminal("terminal", calls)
+    browser = HandoffBrowser("browser", calls)
+
+    result = CaptureCoordinator(
+        terminal_runner_factory=lambda: terminal,
+        browser_runner_factory=lambda: browser,
+    ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert [beat.beat_id for beat in result.beats] == ["watch", "browser"]
+    assert calls.index("terminal:watch-blocked") < calls.index("browser:beat:browser")
+    assert calls.index("browser:beat:browser") < calls.index("terminal:watch-released")
+    assert any(
+        call.startswith(
+            "browser:handoff:watch_command:http://127.0.0.1:43123/"
+        )
+        for call in calls
+    )
+
+
+def test_coordinator_cancels_blocking_terminal_handoff_when_capture_is_interrupted(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls: list[str] = []
+    released = threading.Event()
+
+    class BlockingTerminal(FakeRunner):
+        def capture_beat(self, beat: object) -> BeatCapture:
+            self.calls.append("terminal:watch-blocked")
+            if not released.wait(timeout=1):
+                raise AssertionError("blocking terminal capture was not cancelled")
+            self.calls.append("terminal:watch-cancelled")
+            raise RuntimeError("terminal capture cancelled")
+
+        def cancel_capture(self) -> None:
+            self.calls.append("terminal:cancel-capture")
+            released.set()
+
+    class HandoffBrowser(FakeRunner):
+        def set_handoff_url(self, handoff_id: str, url: str) -> None:
+            raise AssertionError("handoff URL should not be delivered after interruption")
+
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff-interrupted",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "watch",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "watch_command",
+                                    "run": "watch",
+                                    "browser_handoff": True,
+                                    "follow_along": True,
+                                    "show_prompt_after": False,
+                                }
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {
+                            "id": "open",
+                            "open_page": {"handoff": "watch_command"},
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    terminal = BlockingTerminal("terminal", calls)
+    browser = HandoffBrowser("browser", calls)
+    monkeypatch.setattr(
+        capture_module,
+        "_wait_for_browser_handoff",
+        lambda *_args: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        CaptureCoordinator(
+            terminal_runner_factory=lambda: terminal,
+            browser_runner_factory=lambda: browser,
+        ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert isinstance(caught.value.primary.error, KeyboardInterrupt)
+    assert "terminal:cancel-capture" in calls
+    assert "terminal:watch-cancelled" in calls
 
 
 def test_coordinator_closes_started_runners_after_primary_failure(

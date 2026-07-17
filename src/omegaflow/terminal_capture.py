@@ -38,10 +38,15 @@ TERMINAL_ACTION_MARKER_RE = re.compile(
     r"\x1b\]1337;OmegaFlowAction;(?P<beat>[A-Za-z0-9_-]+);"
     r"(?P<action>[A-Za-z0-9_-]+);(?P<phase>start|end)\x07"
 )
+TERMINAL_BROWSER_HANDOFF_MARKER_RE = re.compile(
+    r"\x1b\]1337;OmegaFlowBrowserHandoff;"
+    r"(?P<action>[A-Za-z0-9_-]+);ready\x07"
+)
 TERMINAL_ANY_MARKER_RE = re.compile(
     r"\x1b\]1337;(?:"
     r"OmegaFlow;[0-9]+;(?:setup|beat|checks|cleanup);(?:start|end);[A-Za-z0-9_-]*"
     r"|OmegaFlowAction;[A-Za-z0-9_-]+;[A-Za-z0-9_-]+;(?:start|end)"
+    r"|OmegaFlowBrowserHandoff;[A-Za-z0-9_-]+;ready"
     r")\x07"
 )
 
@@ -665,6 +670,7 @@ class TerminalControlSession:
         *,
         script: str = "",
         beat_id: str = "",
+        wait_indefinitely: bool = False,
     ) -> tuple[int, int]:
         if op not in CONTROL_OPERATIONS or op == "shutdown":
             raise ValueError(f"invalid terminal execution operation: {op}")
@@ -683,7 +689,7 @@ class TerminalControlSession:
         started = self._read_response(seq)
         if started.get("status") != "started":
             raise TerminalCaptureError(f"terminal request {seq} did not start")
-        completed = self._read_response(seq)
+        completed = self._read_response(seq, wait_indefinitely=wait_indefinitely)
         end_ms = self._elapsed_ms()
         status = completed.get("status")
         self._append_event(
@@ -748,6 +754,11 @@ class TerminalControlSession:
                 f"persistent terminal session exited with status {process.returncode}"
             )
 
+    def cancel(self) -> None:
+        """Terminate the persistent shell without competing for its response stream."""
+
+        self._terminate_process()
+
     def _write_request(self, request: bytes) -> None:
         if self._request_fd is None:
             raise TerminalCaptureError("terminal request stream is unavailable")
@@ -756,7 +767,9 @@ class TerminalControlSession:
         except OSError as exc:
             raise TerminalCaptureError("could not write terminal request") from exc
 
-    def _read_response(self, seq: int) -> dict[str, Any]:
+    def _read_response(
+        self, seq: int, *, wait_indefinitely: bool = False
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + self.timeout_seconds
         while True:
             line, separator, remainder = self._response_buffer.partition(b"\n")
@@ -775,12 +788,17 @@ class TerminalControlSession:
             if process is None or process.poll() is not None:
                 raise TerminalCaptureError("terminal session exited before responding")
             remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            if not wait_indefinitely and remaining <= 0:
                 raise TerminalCaptureError(f"terminal request {seq} timed out")
             if self._response_fd is None:
                 raise TerminalCaptureError("terminal response stream is unavailable")
-            readable, _, _ = select.select([self._response_fd], [], [], remaining)
+            wait_seconds = 0.25 if wait_indefinitely else remaining
+            readable, _, _ = select.select(
+                [self._response_fd], [], [], wait_seconds
+            )
             if not readable:
+                if wait_indefinitely:
+                    continue
                 raise TerminalCaptureError(f"terminal request {seq} timed out")
             chunk = os.read(self._response_fd, 65536)
             if chunk:
@@ -918,6 +936,7 @@ class PersistentTerminalRunner:
                 self.context,
                 command_snapshots=command_snapshots,
             ),
+            wait_indefinitely=_beat_has_browser_handoff(actions),
         )
         if checks:
             session.execute(
@@ -950,6 +969,11 @@ class PersistentTerminalRunner:
                 )
         finally:
             self.session = None
+
+    def cancel_capture(self) -> None:
+        session = self.session
+        if session is not None:
+            session.cancel()
 
     def _execute_steps(self, op: str, steps: Iterable[TerminalCheckPlan]) -> None:
         configs = tuple(step.config for step in steps)
@@ -1041,6 +1065,14 @@ def _beat_script(
     return "omegaflow_begin_beat && " + " && ".join(steps)
 
 
+def _beat_has_browser_handoff(actions: Iterable[TerminalActionPlan]) -> bool:
+    return any(
+        command.get("browser_handoff")
+        for action in actions
+        for command in (action.config.get("commands") or ())
+    )
+
+
 def _beat_command_snapshots(
     actions: Iterable[TerminalActionPlan],
     context: CaptureContext | None,
@@ -1089,6 +1121,17 @@ def _validated_step_script(
     snapshot: Mapping[str, str] | None = None,
 ) -> str:
     command = snapshot["command"] if snapshot is not None else _step_command(step, context)
+    if step.get("browser_handoff"):
+        handoff_id = step.get("id")
+        if not isinstance(handoff_id, str) or not handoff_id:
+            raise TerminalCaptureError("browser handoff command requires an id")
+        command = (
+            "(export OMEGAFLOW_BROWSER_HANDOFF_ID="
+            + shlex.quote(handoff_id)
+            + "; "
+            + command
+            + ")"
+        )
     display = (
         snapshot["display"]
         if snapshot is not None
@@ -1247,6 +1290,7 @@ def extract_terminal_beat_casts(
     beat_origins: dict[str, float] = {}
     active: str | None = None
     active_action: tuple[str, str, float] | None = None
+    ended_handoffs: set[tuple[str, str]] = set()
     absolute_time = 0.0
 
     def append_event(beat_id: str, timestamp: float, kind: Any, data: Any) -> None:
@@ -1281,6 +1325,8 @@ def extract_terminal_beat_casts(
             previous_times[beat_id] = absolute_time
             beat_origins[beat_id] = absolute_time
             return
+        if active is None and any(item[0] == beat_id for item in ended_handoffs):
+            return
         if active != beat_id:
             raise TerminalCaptureError(
                 f"terminal beat {beat_id!r} end marker does not match active beat"
@@ -1296,6 +1342,8 @@ def extract_terminal_beat_casts(
         beat_id = match.group("beat")
         action_id = match.group("action")
         phase = match.group("phase")
+        if (beat_id, action_id) in ended_handoffs and phase == "end":
+            return
         if active != beat_id:
             raise TerminalCaptureError(
                 f"terminal action marker {beat_id!r}/{action_id!r} is outside its beat"
@@ -1315,7 +1363,13 @@ def extract_terminal_beat_casts(
             raise TerminalCaptureError(
                 f"terminal action {beat_id!r}/{action_id!r} end marker does not match"
             )
-        start = active_action[2]
+        finish_active_action()
+
+    def finish_active_action() -> None:
+        nonlocal active_action
+        if active_action is None:
+            raise TerminalCaptureError("terminal action has no active interval")
+        beat_id, action_id, start = active_action
         origin = beat_origins[beat_id]
         start_ms = round((start - origin) * 1000)
         end_ms = round((absolute_time - origin) * 1000)
@@ -1328,6 +1382,22 @@ def extract_terminal_beat_casts(
             }
         )
         active_action = None
+
+    def handle_handoff_marker(match: re.Match[str]) -> None:
+        nonlocal active
+        action_id = match.group("action")
+        if active is None or active_action is None:
+            raise TerminalCaptureError(
+                f"browser handoff {action_id!r} is outside a terminal action"
+            )
+        beat_id = active
+        if active_action[:2] != (beat_id, action_id):
+            raise TerminalCaptureError(
+                f"browser handoff {action_id!r} does not match active terminal action"
+            )
+        finish_active_action()
+        ended_handoffs.add((beat_id, action_id))
+        active = None
 
     for line_number, line in enumerate(lines[1:], 2):
         try:
@@ -1362,9 +1432,15 @@ def extract_terminal_beat_casts(
                 handle_beat_marker(beat_marker)
             else:
                 action_marker = TERMINAL_ACTION_MARKER_RE.fullmatch(marker.group(0))
-                if action_marker is None:
-                    raise TerminalCaptureError("terminal cast marker is malformed")
-                handle_action_marker(action_marker)
+                if action_marker is not None:
+                    handle_action_marker(action_marker)
+                else:
+                    handoff_marker = TERMINAL_BROWSER_HANDOFF_MARKER_RE.fullmatch(
+                        marker.group(0)
+                    )
+                    if handoff_marker is None:
+                        raise TerminalCaptureError("terminal cast marker is malformed")
+                    handle_handoff_marker(handoff_marker)
             cursor = marker.end()
         suffix = data[cursor:]
         if suffix and active is not None:

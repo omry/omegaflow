@@ -1482,13 +1482,13 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         "omegaflow recording=quickstart action=watch"
     )
     assert build_commands[1]["after"] == "@watch@"
+    assert build_commands[1]["browser_handoff"] is True
+    assert build_commands[1]["follow_along"] is True
     assert build_commands[1]["show_prompt_after"] is False
-    watch_url = (
-        "http://localhost:18474/cast-player.html?"
-        "manifest=/quickstart/presentation/recording.presentation.json"
-        "&autoplay=countdown"
+    assert build_commands[1]["run"] == (
+        "omegaflow recording=quickstart action=watch"
     )
-    assert watch_url in build_commands[1]["output"]["replace"]
+    assert build_commands[1].get("output") is None
     assert browser_beat["narration_take"] == "build-and-browser"
     assert browser_beat["narration"].startswith(
         "@open_player@ OmegaFlow can script and record browser workflows just "
@@ -1505,8 +1505,8 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert spec["browser"]["viewport"]["width"] == 1152
     assert spec["browser"]["viewport"]["height"] == 360
     assert list(actions) == ["open_player", "play", "wait_for_playback"]
-    assert actions["open_player"]["open_page"]["url"] == watch_url
-    assert actions["open_player"]["open_page"]["display_url"] == watch_url
+    assert actions["open_player"]["open_page"]["handoff"] == "watch_command"
+    assert actions["open_player"]["open_page"]["display_url"] == "$handoff"
     assert "transition" not in actions["play"]
     assert actions["wait_for_playback"]["transition"] == "captured"
 
@@ -2435,6 +2435,40 @@ def test_managed_watch_server_stops_when_browser_closes(monkeypatch, capsys) -> 
     }
     assert "opened isolated system browser" in output
     assert "stopped local watch server" in output
+
+
+def test_managed_watch_browser_uses_capture_handoff_instead_of_system_browser(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from omegaflow.browser_handoff import (
+        BROWSER_HANDOFF_ID_ENV,
+        BROWSER_HANDOFF_ROOT_ENV,
+        BrowserHandoffBroker,
+    )
+
+    broker = BrowserHandoffBroker(tmp_path / "handoffs")
+    broker.prepare("watch_command")
+    monkeypatch.setenv(BROWSER_HANDOFF_ROOT_ENV, str(broker.root))
+    monkeypatch.setenv(BROWSER_HANDOFF_ID_ENV, "watch_command")
+    monkeypatch.setattr(
+        studio,
+        "launch_managed_wsl_host_browser",
+        lambda _url: (_ for _ in ()).throw(AssertionError("system browser opened")),
+    )
+    monkeypatch.setattr(
+        studio,
+        "launch_managed_native_browser",
+        lambda _url: (_ for _ in ()).throw(AssertionError("system browser opened")),
+    )
+
+    session = studio.launch_managed_watch_browser(
+        "http://127.0.0.1:43123/cast-player.html?manifest=demo"
+    )
+
+    assert session.is_open() is True
+    assert broker.ready_url("watch_command") is not None
+    broker.close("watch_command")
+    assert session.is_open() is False
 
 
 def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:

@@ -895,6 +895,69 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
     }
 
 
+def test_handoff_display_url_uses_the_captured_watch_url() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff",
+            "browser": {},
+            "presentation": {"browser": {"chrome": {"mode": "full"}}},
+            "beats": [
+                {
+                    "id": "watch",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "watch_command",
+                                    "run": "watch",
+                                    "browser_handoff": True,
+                                    "follow_along": True,
+                                    "show_prompt_after": False,
+                                }
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {
+                            "id": "open",
+                            "open_page": {
+                                "handoff": "watch_command",
+                                "display_url": "$handoff",
+                            },
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    watch_url = "http://127.0.0.1:43123/cast-player.html?manifest=demo"
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[1],
+        action_captures=[
+            {
+                "action_id": "open",
+                "kind": "open_page",
+                "completion": {"kind": "navigation", "url": watch_url},
+                "visual": {"kind": "state", "state": state_asset("1")},
+            }
+        ],
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("0"),
+    )
+
+    assert [
+        event["value"]
+        for event in compiled.payload["events"]
+        if event["kind"] == "display_url"
+    ] == [watch_url]
+
+
 def test_pointer_and_text_animation_are_deterministic() -> None:
     arguments = (
         "recording",

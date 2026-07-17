@@ -185,6 +185,42 @@ def fixture_site():
         thread.join()
 
 
+def test_open_page_consumes_recorder_owned_handoff_url_once() -> None:
+    calls: list[tuple[str, str, int]] = []
+
+    class FakePage:
+        def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
+            calls.append((url, wait_until, timeout))
+
+    runner = PersistentBrowserRunner({})
+    runner.page = FakePage()
+    runner.set_handoff_url(
+        "watch_command",
+        "http://127.0.0.1:43123/cast-player.html?manifest=demo",
+    )
+
+    completion = runner._open_page(  # noqa: SLF001
+        {"handoff": "watch_command"},
+        beat_id="browser",
+        action_id="open",
+    )
+
+    assert calls == [
+        (
+            "http://127.0.0.1:43123/cast-player.html?manifest=demo",
+            "domcontentloaded",
+            15_000,
+        )
+    ]
+    assert completion["url"] == calls[0][0]
+    with pytest.raises(BrowserCaptureError, match="no captured URL"):
+        runner._open_page(  # noqa: SLF001
+            {"handoff": "watch_command"},
+            beat_id="browser",
+            action_id="open-again",
+        )
+
+
 def browser_plan(config: dict | None = None):
     return normalize_recording_plan(
         {

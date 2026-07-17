@@ -303,6 +303,11 @@ def action_command_entries(
             raise RecordingError(
                 f"{field}.{index}.commands.{command_index}.follow_along must be a boolean"
             )
+        browser_handoff = raw_command.get("browser_handoff", False)
+        if not isinstance(browser_handoff, bool):
+            raise RecordingError(
+                f"{field}.{index}.commands.{command_index}.browser_handoff must be a boolean"
+            )
         show_prompt_after = raw_command.get("show_prompt_after", True)
         if not isinstance(show_prompt_after, bool):
             raise RecordingError(
@@ -339,6 +344,7 @@ def action_command_entries(
                 "display": display,
                 "after": after,
                 "follow_along": follow_along,
+                "browser_handoff": browser_handoff,
                 "show_prompt_after": show_prompt_after,
                 "output": output,
                 "timing": timing,

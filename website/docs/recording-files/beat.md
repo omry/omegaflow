@@ -189,6 +189,43 @@ Command output is buffered until the command finishes by default. Set
 the command runs, preserving visible delays between output updates. Output
 replacement and suppression remain non-streaming.
 
+#### Hand a browser URL to the next beat
+
+Use `browser_handoff: true` when a real, blocking OmegaFlow command opens its
+managed browser and the immediately following browser beat should take control.
+OmegaFlow keeps the command running, captures its real output, opens the
+reported URL in the recorder-owned browser, and releases the command after that
+browser beat ends. The current handoff integration is supported by OmegaFlow's
+managed `action=watch` browser launch; it does not intercept arbitrary system
+browser commands.
+
+```yaml
+- id: watch
+  actions:
+  - commands:
+    - id: watch_command
+      run: omegaflow recording=demo action=watch
+      browser_handoff: true
+      follow_along: true
+      show_prompt_after: false
+- id: inspect-player
+  medium: browser
+  actions:
+  - id: open-player
+    open_page:
+      handoff: watch_command
+      display_url: https://app.example.com/player
+```
+
+The handoff command must have an explicit `id`, use real output, and be the
+last command in its terminal beat. Its browser consumer must be the next beat,
+with a matching `open_page.handoff` as the first action.
+
+Set `display_url: $handoff` only when the exact captured URL is safe to publish.
+For authentication and other token-bearing URLs, use a static, sanitized
+`display_url` as shown above. The display URL changes only the browser chrome;
+the recorder still navigates to the handed-off URL.
+
 ### Browser beats
 
 Browser actions operate one persistent Playwright page shared by every browser
@@ -349,6 +386,7 @@ class RecordingCommandConfig:
     display: str | None = None
     after: str | None = None
     follow_along: bool = False
+    browser_handoff: bool = False
     show_prompt_after: bool = True
     output: Any = None
     expect: dict[str, Any] = field(default_factory=dict)
@@ -409,7 +447,8 @@ class BrowserConditionConfig:
 
 @dataclass
 class BrowserOpenPageConfig:
-    url: str = ""
+    url: str | None = None
+    handoff: str | None = None
     display_url: str | None = None
     lifecycle: str = "domcontentloaded"
     ready: BrowserConditionConfig | None = None

@@ -168,11 +168,20 @@ def _validate_capture_url(value: object, *, field: str) -> None:
         raise RecordingPlanError(f"{field} must be relative, HTTP(S), or about:blank")
 
 
-def validate_display_url(value: object, *, field: str) -> None:
+def validate_display_url(
+    value: object,
+    *,
+    field: str,
+    allow_handoff: bool = False,
+) -> None:
     if not isinstance(value, str) or not value:
         raise RecordingPlanError(f"{field} must be a non-empty string")
     if value == "about:blank":
         return
+    if value == "$handoff":
+        if allow_handoff:
+            return
+        raise RecordingPlanError(f"{field} does not support $handoff")
     parsed = urlsplit(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise RecordingPlanError(f"{field} must be absolute HTTP(S) or about:blank")
@@ -225,10 +234,26 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
     payload = _mapping(mapping[kind], field=f"{field}.{kind}")
 
     if kind == "open_page":
-        _validate_capture_url(payload.get("url"), field=f"{field}.open_page.url")
+        source = _one_present(payload, ("url", "handoff"), field=f"{field}.open_page")
+        if source == "url":
+            _validate_capture_url(payload.get("url"), field=f"{field}.open_page.url")
+        else:
+            handoff = payload.get("handoff")
+            if not isinstance(handoff, str) or not ACTION_ID_RE.fullmatch(handoff):
+                raise RecordingPlanError(
+                    f"{field}.open_page.handoff must be identifier-like"
+                )
         display_url = payload.get("display_url")
         if display_url is not None:
-            validate_display_url(display_url, field=f"{field}.open_page.display_url")
+            validate_display_url(
+                display_url,
+                field=f"{field}.open_page.display_url",
+                allow_handoff=source == "handoff",
+            )
+            if display_url == "$handoff" and source != "handoff":
+                raise RecordingPlanError(
+                    f"{field}.open_page.display_url $handoff requires a handoff source"
+                )
         if payload.get("lifecycle", "domcontentloaded") not in {
             "domcontentloaded",
             "load",
@@ -1033,8 +1058,8 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             for action in browser_actions:
                 if action.kind == "open_page":
                     payload = action.config["open_page"]
-                    capture_url = payload["url"]
-                    if not urlsplit(capture_url).scheme and (
+                    capture_url = payload.get("url")
+                    if capture_url is not None and not urlsplit(capture_url).scheme and (
                         browser_config is None or not browser_config.base_url
                     ):
                         raise RecordingPlanError(
@@ -1128,6 +1153,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         )
 
     frozen_beats = tuple(beat_plans)
+    _validate_browser_handoffs(frozen_beats)
     return RecordingPlan(
         id=recording_id,
         title=title,
@@ -1138,3 +1164,94 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         cleanup=lifecycle_steps["cleanup"],
         narration_takes=plan_narration_takes(frozen_beats),
     )
+
+
+def _validate_browser_handoffs(beats: tuple[BeatPlan, ...]) -> None:
+    for beat_index, beat in enumerate(beats):
+        if beat.medium is not RecordingMedium.terminal:
+            continue
+        handoffs: list[tuple[int, int, Mapping[str, Any]]] = []
+        for action_index, action in enumerate(beat.actions):
+            if not isinstance(action, TerminalActionPlan):
+                continue
+            commands = action.config.get("commands") or ()
+            for command_index, command in enumerate(commands):
+                if command.get("browser_handoff"):
+                    handoffs.append((action_index, command_index, command))
+        if not handoffs:
+            continue
+        if len(handoffs) != 1:
+            raise RecordingPlanError(
+                f"terminal beat {beat.id!r} must contain at most one browser_handoff"
+            )
+        action_index, command_index, command = handoffs[0]
+        command_id = command.get("id")
+        if not isinstance(command_id, str) or not command_id:
+            raise RecordingPlanError("browser_handoff command requires an explicit id")
+        if command.get("follow_along") is not True:
+            raise RecordingPlanError("browser_handoff command requires follow_along: true")
+        if command.get("show_prompt_after") is not False:
+            raise RecordingPlanError(
+                "browser_handoff command requires show_prompt_after: false"
+            )
+        output = command.get("output")
+        if output is not None and output != "real":
+            raise RecordingPlanError("browser_handoff command requires real output")
+        final_action = beat.actions[-1]
+        final_commands = (
+            final_action.config.get("commands")
+            if isinstance(final_action, TerminalActionPlan)
+            else None
+        )
+        if (
+            action_index != len(beat.actions) - 1
+            or not final_commands
+            or command_index != len(final_commands) - 1
+        ):
+            raise RecordingPlanError(
+                "browser_handoff command must be the last command in its terminal beat"
+            )
+        if beat_index + 1 >= len(beats):
+            raise RecordingPlanError(
+                f"browser_handoff {command_id!r} has no following browser beat"
+            )
+        consumer = beats[beat_index + 1]
+        if consumer.medium is not RecordingMedium.browser or not consumer.actions:
+            raise RecordingPlanError(
+                f"following beat does not consume browser_handoff {command_id!r}"
+            )
+        first = consumer.actions[0]
+        open_page = (
+            first.config.get("open_page")
+            if isinstance(first, BrowserActionPlan) and first.kind == "open_page"
+            else None
+        )
+        if not open_page or open_page.get("handoff") != command_id:
+            raise RecordingPlanError(
+                f"following browser beat does not consume browser_handoff {command_id!r}"
+            )
+
+    for beat_index, beat in enumerate(beats):
+        if beat.medium is not RecordingMedium.browser or not beat.actions:
+            continue
+        first = beat.actions[0]
+        if not isinstance(first, BrowserActionPlan) or first.kind != "open_page":
+            continue
+        handoff_id = first.config["open_page"].get("handoff")
+        if handoff_id is None:
+            continue
+        if beat_index == 0 or beats[beat_index - 1].medium is not RecordingMedium.terminal:
+            raise RecordingPlanError(
+                f"open_page handoff {handoff_id!r} has no preceding terminal command"
+            )
+        producer_ids = {
+            command.get("id")
+            for action in beats[beat_index - 1].actions
+            if isinstance(action, TerminalActionPlan)
+            for command in (action.config.get("commands") or ())
+            if command.get("browser_handoff")
+        }
+        if handoff_id not in producer_ids:
+            raise RecordingPlanError(
+                f"open_page handoff {handoff_id!r} has no preceding terminal command"
+            )

@@ -264,6 +264,21 @@ class PersistentBrowserRunner:
         self._close_succeeded = False
         self._completed = False
         self._capture_failed = False
+        self._handoff_urls: dict[str, str] = {}
+
+    def set_handoff_url(self, handoff_id: str, url: str) -> None:
+        if not handoff_id or handoff_id in self._handoff_urls:
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA",
+                f"browser handoff {handoff_id!r} is invalid or duplicated",
+            )
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise BrowserCaptureError(
+                "BROWSER_SCHEMA",
+                f"browser handoff {handoff_id!r} has an invalid URL",
+            )
+        self._handoff_urls[handoff_id] = url
 
     def start(self, context: CaptureContext) -> None:
         if self.page is not None:
@@ -675,7 +690,15 @@ class PersistentBrowserRunner:
     ) -> dict[str, Any]:
         if self.page is None:
             raise BrowserCaptureError("BROWSER_SCHEMA", "browser runner is not started")
+        handoff_id = payload.get("handoff")
         capture_url = payload.get("url")
+        if handoff_id is not None:
+            capture_url = self._handoff_urls.pop(str(handoff_id), None)
+            if capture_url is None:
+                raise BrowserCaptureError(
+                    "BROWSER_SCHEMA",
+                    f"browser handoff {handoff_id!r} has no captured URL",
+                )
         if not isinstance(capture_url, str) or not capture_url:
             raise BrowserCaptureError("BROWSER_SCHEMA", "open_page.url must be non-empty")
         base_url = self.browser_config.get("base_url")
@@ -700,6 +723,8 @@ class PersistentBrowserRunner:
                 beat_id=beat_id,
                 action_id=action_id,
             )
+        completion["url"] = capture_url
+        completion["lifecycle"] = lifecycle
         return completion
 
     def _strict_target(

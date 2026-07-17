@@ -1602,6 +1602,18 @@ def compile_browser_beat(
         display_url = config.get("display_url_after")
         if action.kind == "open_page" and payload.get("display_url") is not None:
             display_url = payload["display_url"]
+            if display_url == "$handoff":
+                completion = capture.get("completion")
+                display_url = (
+                    completion.get("url")
+                    if isinstance(completion, Mapping)
+                    else None
+                )
+                if not isinstance(display_url, str) or not display_url:
+                    raise PresentationCompileError(
+                        "PRESENTATION_SCHEMA",
+                        f"open_page action {action.id!r} has no captured handoff URL",
+                    )
         if display_url is not None:
             events.append(
                 {

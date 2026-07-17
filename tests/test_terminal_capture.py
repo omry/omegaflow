@@ -17,7 +17,72 @@ from omegaflow.recording_plan import normalize_recording_plan
 from omegaflow.terminal_capture import (
     PersistentTerminalRunner,
     TerminalControlSession,
+    extract_terminal_beat_casts,
 )
+
+
+def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
+    tmp_path: Path,
+) -> None:
+    cast_path = tmp_path / "terminal.cast"
+    cast_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"version": 3, "width": 80, "height": 24}),
+                json.dumps(
+                    [
+                        0.1,
+                        "o",
+                        "\x1b]1337;OmegaFlow;1;beat;start;watch\x07"
+                        "\x1b]1337;OmegaFlowAction;watch;watch_command;start\x07"
+                        "$ omegaflow recording=demo action=watch\r\n",
+                    ]
+                ),
+                json.dumps(
+                    [
+                        0.2,
+                        "o",
+                        "pass  serving local watch server: http://127.0.0.1:43123/\r\n"
+                        "info  opened isolated system browser; close it or press Ctrl-C to stop\r\n"
+                        "\x1b]1337;OmegaFlowBrowserHandoff;watch_command;ready\x07",
+                    ]
+                ),
+                json.dumps(
+                    [
+                        2.0,
+                        "o",
+                        "info  stopped local watch server\r\n"
+                        "\x1b]1337;OmegaFlowAction;watch;watch_command;end\x07"
+                        "\x1b]1337;OmegaFlow;1;beat;end;watch\x07",
+                    ]
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    extract_terminal_beat_casts(
+        cast_path,
+        tmp_path / "beats",
+        expected_beat_ids=("watch",),
+    )
+
+    output = (tmp_path / "beats" / "watch.cast").read_text(encoding="utf-8")
+    actions = json.loads(
+        (tmp_path / "beats" / "watch.actions.json").read_text(encoding="utf-8")
+    )
+    assert "serving local watch server" in output
+    assert "opened isolated system browser" in output
+    assert "stopped local watch server" not in output
+    assert actions["actions"] == [
+        {
+            "id": "watch_command",
+            "start_ms": 0,
+            "end_ms": 200,
+            "duration_ms": 200,
+        }
+    ]
 
 
 def test_persistent_terminal_protocol_preserves_state_and_marks_hidden_intervals(

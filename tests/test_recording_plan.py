@@ -85,6 +85,45 @@ def terminal_spec() -> dict:
     }
 
 
+def browser_handoff_spec() -> dict:
+    return {
+        "id": "browser-handoff",
+        "browser": {},
+        "presentation": {"browser": {"chrome": {"mode": "full"}}},
+        "beats": [
+            {
+                "id": "watch",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "id": "watch_command",
+                                "run": "omegaflow recording=demo action=watch",
+                                "browser_handoff": True,
+                                "follow_along": True,
+                                "show_prompt_after": False,
+                            }
+                        ]
+                    }
+                ],
+            },
+            {
+                "id": "browser",
+                "medium": "browser",
+                "actions": [
+                    {
+                        "id": "open",
+                        "open_page": {
+                            "handoff": "watch_command",
+                            "display_url": "$handoff",
+                        },
+                    }
+                ],
+            },
+        ],
+    }
+
+
 def test_omegaconf_schema_authority_supports_versioned_artifacts() -> None:
     for schema in (RecordingSpec, BrowserPayloadV1, PresentationManifestV1):
         assert OmegaConf.structured(schema) is not None
@@ -311,6 +350,87 @@ def test_requires_display_url_for_full_chrome() -> None:
     spec = browser_spec()
     del spec["beats"][0]["actions"][0]["open_page"]["display_url"]
     with pytest.raises(RecordingPlanError, match="requires display_url"):
+        normalize_recording_plan(spec)
+
+
+def test_normalizes_recorder_owned_browser_handoff() -> None:
+    plan = normalize_recording_plan(browser_handoff_spec())
+
+    command = plan.beats[0].actions[0].config["commands"][0]
+    open_page = plan.beats[1].actions[0].config["open_page"]
+    assert command["browser_handoff"] is True
+    assert open_page["handoff"] == "watch_command"
+    assert open_page["url"] is None
+
+
+@pytest.mark.parametrize(
+    ("mutator", "match"),
+    [
+        (
+            lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(
+                {"id": None}
+            ),
+            "browser_handoff.*id",
+        ),
+        (
+            lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(
+                {"follow_along": False}
+            ),
+            "browser_handoff.*follow_along",
+        ),
+        (
+            lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(
+                {"show_prompt_after": True}
+            ),
+            "browser_handoff.*show_prompt_after",
+        ),
+        (
+            lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(
+                {"output": {"replace": "pretend"}}
+            ),
+            "browser_handoff.*real output",
+        ),
+        (
+            lambda spec: spec["beats"][0]["actions"][0]["commands"].append(
+                {"id": "later", "run": "true"}
+            ),
+            "browser_handoff.*last command",
+        ),
+        (
+            lambda spec: spec["beats"][1]["actions"][0]["open_page"].update(
+                {"handoff": "other"}
+            ),
+            "does not consume",
+        ),
+        (
+            lambda spec: spec["beats"][1]["actions"][0]["open_page"].update(
+                {"url": "about:blank"}
+            ),
+            "exactly one of.*url.*handoff",
+        ),
+    ],
+)
+def test_rejects_invalid_recorder_owned_browser_handoff(mutator, match: str) -> None:
+    spec = browser_handoff_spec()
+    mutator(spec)
+
+    with pytest.raises(RecordingPlanError, match=match):
+        normalize_recording_plan(spec)
+
+
+def test_handoff_display_url_requires_explicit_dynamic_value_or_safe_static_url() -> None:
+    spec = browser_handoff_spec()
+    spec["beats"][1]["actions"][0]["open_page"]["display_url"] = "$other"
+
+    with pytest.raises(RecordingPlanError, match="display_url"):
+        normalize_recording_plan(spec)
+
+
+def test_rejects_handoff_consumer_without_a_matching_terminal_producer() -> None:
+    spec = browser_handoff_spec()
+    spec["beats"][0]["actions"][0]["commands"][0]["browser_handoff"] = False
+
+    with pytest.raises(RecordingPlanError, match="no preceding terminal command"):
         normalize_recording_plan(spec)
 
 

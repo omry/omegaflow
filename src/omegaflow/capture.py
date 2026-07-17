@@ -10,14 +10,16 @@ from __future__ import annotations
 import os
 import shutil
 import stat
+import time
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from .recording_plan import BeatPlan
-from .recording_plan import RecordingPlan
+from .browser_handoff import BROWSER_HANDOFF_ROOT_ENV, BrowserHandoffBroker
+from .recording_plan import BeatPlan, RecordingPlan, TerminalActionPlan
 from .studio_config import RecordingMedium
 
 
@@ -135,6 +137,7 @@ class CaptureContext:
             {
                 "OMEGAFLOW_RUN_DIR": str(paths.run),
                 "TMPDIR": str(paths.temporary),
+                BROWSER_HANDOFF_ROOT_ENV: str(paths.temporary / "browser-handoffs"),
             }
         )
         return cls(
@@ -326,9 +329,60 @@ class CaptureCoordinator:
                             "terminal capture runner does not support project setup"
                         )
                     run_setup(plan.setup)
-            for beat in plan.beats:
+            beat_index = 0
+            while beat_index < len(plan.beats):
+                beat = plan.beats[beat_index]
                 runner = ensure_runner(beat.medium)
                 operation = f"capture beat {beat.id}"
+                handoff_id = _terminal_browser_handoff_id(beat)
+                if handoff_id is not None:
+                    browser_beat = plan.beats[beat_index + 1]
+                    browser_runner = ensure_runner(RecordingMedium.browser)
+                    cancel_terminal_capture = getattr(runner, "cancel_capture", None)
+                    if not callable(cancel_terminal_capture):
+                        raise CaptureSetupError(
+                            "terminal capture runner does not support cancelling "
+                            "a browser handoff"
+                        )
+                    broker = BrowserHandoffBroker(
+                        Path(context.environment[BROWSER_HANDOFF_ROOT_ENV])
+                    )
+                    broker.prepare(handoff_id)
+                    executor = ThreadPoolExecutor(max_workers=1)
+                    try:
+                        terminal_future = executor.submit(runner.capture_beat, beat)
+                        try:
+                            try:
+                                url = _wait_for_browser_handoff(
+                                    broker,
+                                    handoff_id,
+                                    terminal_future,
+                                )
+                                set_handoff_url = getattr(
+                                    browser_runner, "set_handoff_url", None
+                                )
+                                if not callable(set_handoff_url):
+                                    raise CaptureSetupError(
+                                        "browser capture runner does not support browser "
+                                        "handoff"
+                                    )
+                                set_handoff_url(handoff_id, url)
+                                operation = f"capture beat {browser_beat.id}"
+                                browser_capture = browser_runner.capture_beat(browser_beat)
+                            finally:
+                                broker.close(handoff_id)
+                            terminal_capture = terminal_future.result()
+                        except BaseException:
+                            if not terminal_future.done():
+                                cancel_terminal_capture()
+                            raise
+                    finally:
+                        executor.shutdown(wait=True, cancel_futures=True)
+                    _validate_beat_capture(terminal_capture, beat)
+                    _validate_beat_capture(browser_capture, browser_beat)
+                    captures.extend((terminal_capture, browser_capture))
+                    beat_index += 2
+                    continue
                 capture = runner.capture_beat(beat)
                 if capture.beat_id != beat.id:
                     raise RuntimeError(
@@ -336,6 +390,7 @@ class CaptureCoordinator:
                         f"while capturing {beat.id!r}"
                     )
                 captures.append(capture)
+                beat_index += 1
         except BaseException as exc:
             failures.record_primary(operation, exc)
         finally:
@@ -376,3 +431,41 @@ class CaptureCoordinator:
 
         failures.raise_if_failed()
         return CaptureResult(context=context, beats=tuple(captures))
+
+
+def _validate_beat_capture(capture: BeatCapture, beat: BeatPlan) -> None:
+    if capture.beat_id != beat.id:
+        raise RuntimeError(
+            f"{beat.medium.value} runner returned beat {capture.beat_id!r} "
+            f"while capturing {beat.id!r}"
+        )
+
+
+def _terminal_browser_handoff_id(beat: BeatPlan) -> str | None:
+    if beat.medium is not RecordingMedium.terminal:
+        return None
+    for action in beat.actions:
+        if not isinstance(action, TerminalActionPlan):
+            continue
+        for command in action.config.get("commands") or ():
+            if command.get("browser_handoff"):
+                command_id = command.get("id")
+                return command_id if isinstance(command_id, str) else None
+    return None
+
+
+def _wait_for_browser_handoff(
+    broker: BrowserHandoffBroker,
+    handoff_id: str,
+    terminal_future: Future[BeatCapture],
+) -> str:
+    while True:
+        url = broker.ready_url(handoff_id)
+        if url is not None:
+            return url
+        if terminal_future.done():
+            terminal_future.result()
+            raise RuntimeError(
+                f"terminal command {handoff_id!r} exited without opening a browser"
+            )
+        time.sleep(0.01)

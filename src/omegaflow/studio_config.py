@@ -488,6 +488,7 @@ class RecordingCommandConfig:
     display: str | None = None
     after: str | None = None
     follow_along: bool = False
+    browser_handoff: bool = False
     show_prompt_after: bool = True
     output: Any = None
     expect: dict[str, Any] = field(default_factory=dict)
@@ -535,7 +536,8 @@ class BrowserConditionConfig:
 
 @dataclass
 class BrowserOpenPageConfig:
-    url: str = ""
+    url: str | None = None
+    handoff: str | None = None
     display_url: str | None = None
     lifecycle: str = "domcontentloaded"
     ready: BrowserConditionConfig | None = None

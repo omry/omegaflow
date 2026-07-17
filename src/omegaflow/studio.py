@@ -1714,7 +1714,12 @@ def launch_managed_native_browser(url: str) -> ManagedSystemBrowser:
 
 def launch_managed_watch_browser(
     url: str,
-) -> ManagedSystemBrowser:
+) -> Any:
+    from .browser_handoff import BrokeredBrowserSession
+
+    brokered = BrokeredBrowserSession.from_environment(url)
+    if brokered is not None:
+        return brokered
     if running_under_wsl():
         return launch_managed_wsl_host_browser(url)
     return launch_managed_native_browser(url)
@@ -1728,7 +1733,7 @@ def run_watch_server(
     managed_browser: bool = False,
     open_browser: bool = True,
 ) -> int:
-    static_root = studio_config_module.project_root() / "website" / "static"
+    static_root = Path(__file__).with_name("player") / "static"
 
     def handler_factory(*args: Any, **kwargs: Any) -> StudioWatchRequestHandler:
         return StudioWatchRequestHandler(
