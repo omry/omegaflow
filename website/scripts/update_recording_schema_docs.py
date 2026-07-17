@@ -41,11 +41,13 @@ SCHEMA_GROUPS = {
     ],
     "beat": [
         "RecordingExpectationConfig",
+        "RecordingInvocationConfig",
         "RecordingCommandConfig",
         "RecordingStepConfig",
         "BrowserTargetConfig",
         "BrowserUrlMatcherConfig",
         "BrowserResponseMatcherConfig",
+        "BrowserStateMatcherConfig",
         "BrowserConditionConfig",
         "BrowserOpenPageConfig",
         "BrowserClickConfig",

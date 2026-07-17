@@ -494,19 +494,23 @@ class RecordingRequirementsConfig:
 
 
 @dataclass
-class RecordingCommandConfig:
-    id: str | None = None
+class RecordingInvocationConfig:
     run: str | None = None
     run_file: str | None = None
     display: str | None = None
     after: str | None = None
-    follow_along: bool = False
-    browser_handoff: bool = False
-    show_prompt_after: bool = True
     output: str | dict[str, str] | None = None
     expect: RecordingExpectationConfig = field(
         default_factory=RecordingExpectationConfig
     )
+
+
+@dataclass
+class RecordingCommandConfig(RecordingInvocationConfig):
+    id: str | None = None
+    follow_along: bool = False
+    browser_handoff: bool = False
+    show_prompt_after: bool = True
     timing: str = "presentation"
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
@@ -515,17 +519,9 @@ class RecordingCommandConfig:
 
 
 @dataclass
-class RecordingStepConfig:
-    run: str | None = None
-    run_file: str | None = None
-    display: str | None = None
+class RecordingStepConfig(RecordingInvocationConfig):
     name: str | None = None
-    after: str | None = None
     progress: list[str] = field(default_factory=list)
-    output: str | dict[str, str] | None = None
-    expect: RecordingExpectationConfig = field(
-        default_factory=RecordingExpectationConfig
-    )
     commands: list[RecordingCommandConfig] | None = None
 
 
@@ -543,11 +539,15 @@ class BrowserResponseMatcherConfig(BrowserUrlMatcherConfig):
 
 
 @dataclass
-class BrowserConditionConfig:
+class BrowserStateMatcherConfig:
     visible: BrowserTargetConfig | None = None
     hidden: BrowserTargetConfig | None = None
     url: BrowserUrlMatcherConfig | None = None
     response: BrowserResponseMatcherConfig | None = None
+
+
+@dataclass
+class BrowserConditionConfig(BrowserStateMatcherConfig):
     timeout_ms: int | None = None
 
 
@@ -655,15 +655,11 @@ class BrowserCountCheckConfig:
 
 
 @dataclass
-class BrowserCheckConfig:
+class BrowserCheckConfig(BrowserStateMatcherConfig):
     name: str = ""
-    url: BrowserUrlMatcherConfig | None = None
-    visible: BrowserTargetConfig | None = None
-    hidden: BrowserTargetConfig | None = None
     text: BrowserTextCheckConfig | None = None
     value: BrowserTextCheckConfig | None = None
     count: BrowserCountCheckConfig | None = None
-    response: BrowserResponseMatcherConfig | None = None
 
 
 @dataclass
@@ -774,23 +770,8 @@ class StudioDirectiveScene:
 
 
 @dataclass
-class StudioDirectiveCommand(RecordingCommandConfig):
-    pass
-
-
-@dataclass
-class StudioDirectiveStep(RecordingStepConfig):
-    commands: list[StudioDirectiveCommand] | None = None
-
-
-@dataclass
-class StudioDirectiveGuide(RecordingGuideConfig):
-    pass
-
-
-@dataclass
 class StudioDirectiveBeat(RecordingBeatConfig):
-    guide: StudioDirectiveGuide | None = None
+    pass
 
 
 @dataclass
@@ -829,10 +810,12 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingFailureSummaryConfig,
     RecordingExpectationConfig,
     RecordingRequirementsConfig,
+    RecordingInvocationConfig,
     RecordingCommandConfig,
     RecordingStepConfig,
     BrowserUrlMatcherConfig,
     BrowserResponseMatcherConfig,
+    BrowserStateMatcherConfig,
     BrowserConditionConfig,
     BrowserOpenPageConfig,
     BrowserClickConfig,
@@ -856,9 +839,6 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingDefaults,
     RecordingSourceSpec,
     StudioDirectiveScene,
-    StudioDirectiveCommand,
-    StudioDirectiveStep,
-    StudioDirectiveGuide,
     StudioDirectiveBeat,
     StudioDirectiveBlock,
 )
