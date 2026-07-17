@@ -35,7 +35,6 @@ environment:
   path_prepend:
   - recordings/quickstart-demo/bin
 browser:
-  base_url: http://127.0.0.1:18474
   viewport:
     width: 1152
     height: 360
@@ -59,12 +58,7 @@ audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
   env_file: .env
-setup:
-- name: start the generated-player preview server
-  run_file: scripts/start-demo-server.sh
 cleanup:
-- name: stop the generated-player preview server
-  run_file: scripts/stop-demo-server.sh
 - name: remove demo project
   run_file: scripts/cleanup-demo-project.sh
 ---
@@ -153,20 +147,14 @@ beat:
       display: omegaflow recording=quickstart
       after: "@build@"
       timing: realtime
-    # The demo preview server is already running so the following browser beat
-    # can capture it. Type the real user command, then let that beat represent
-    # the browser window opened by the blocking watch process.
     - id: watch_command
-      run: ":"
+      run: omegaflow recording=quickstart action=watch
       display: omegaflow recording=quickstart action=watch
       after: "@watch@"
       pre_command_pause: 0.45
+      browser_handoff: true
+      follow_along: true
       show_prompt_after: false
-      output:
-        replace: |
-          step  watch recording
-          pass  serving local watch server: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
-          info  opened isolated system browser; close it or press Ctrl-C to stop
   guide:
     commands:
     - omegaflow recording=quickstart
@@ -194,8 +182,8 @@ beat:
   - id: open_player
     after: "@open_player@"
     open_page:
-      url: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
-      display_url: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
+      handoff: watch_command
+      display_url: $handoff
       ready:
         visible:
           role: button
