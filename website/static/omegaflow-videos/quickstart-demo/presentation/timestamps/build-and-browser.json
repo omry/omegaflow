@@ -9,29 +9,29 @@
     {
       "beat_id": "build",
       "id": "watch",
-      "source_ms": 7499,
+      "source_ms": 8028,
       "text_offset": 124
     },
     {
       "beat_id": "play-in-browser",
       "id": "open_player",
-      "source_ms": 11430,
+      "source_ms": 12236,
       "text_offset": 189
     }
   ],
-  "duration_ms": 30600,
+  "duration_ms": 32760,
   "members": [
     {
       "beat_id": "build",
-      "source_end_ms": 11369,
+      "source_end_ms": 12172,
       "source_start_ms": 0,
       "text_end": 188,
       "text_start": 0
     },
     {
       "beat_id": "play-in-browser",
-      "source_end_ms": 30600,
-      "source_start_ms": 11430,
+      "source_end_ms": 32760,
+      "source_start_ms": 12236,
       "text_end": 506,
       "text_start": 189
     }
@@ -42,603 +42,603 @@
     {
       "beat_id": "build",
       "gap_ms": 200,
-      "source_ms": 6017,
+      "source_ms": 6442,
       "target": "build_command",
       "text_offset": 99
     },
     {
       "beat_id": "play-in-browser",
       "gap_ms": 300,
-      "source_ms": 27485,
+      "source_ms": 29425,
       "target": "wait_for_playback",
       "text_offset": 454
     }
   ],
   "words": [
     {
-      "end_ms": 302,
+      "end_ms": 324,
       "start_ms": 0,
       "text": "Build",
       "text_end": 5,
       "text_start": 0
     },
     {
-      "end_ms": 544,
-      "start_ms": 363,
+      "end_ms": 583,
+      "start_ms": 388,
       "text": "the",
       "text_end": 9,
       "text_start": 6
     },
     {
-      "end_ms": 1209,
-      "start_ms": 605,
+      "end_ms": 1295,
+      "start_ms": 647,
       "text": "quickstart",
       "text_end": 20,
       "text_start": 10
     },
     {
-      "end_ms": 1814,
-      "start_ms": 1270,
+      "end_ms": 1942,
+      "start_ms": 1360,
       "text": "recording",
       "text_end": 30,
       "text_start": 21
     },
     {
-      "end_ms": 1996,
-      "start_ms": 1875,
+      "end_ms": 2137,
+      "start_ms": 2007,
       "text": "to",
       "text_end": 33,
       "text_start": 31
     },
     {
-      "end_ms": 2298,
-      "start_ms": 2056,
+      "end_ms": 2460,
+      "start_ms": 2201,
       "text": "turn",
       "text_end": 38,
       "text_start": 34
     },
     {
-      "end_ms": 2540,
-      "start_ms": 2358,
+      "end_ms": 2719,
+      "start_ms": 2525,
       "text": "the",
       "text_end": 42,
       "text_start": 39
     },
     {
-      "end_ms": 2963,
-      "start_ms": 2600,
+      "end_ms": 3172,
+      "start_ms": 2784,
       "text": "sample",
       "text_end": 49,
       "text_start": 43
     },
     {
-      "end_ms": 3508,
-      "start_ms": 3024,
+      "end_ms": 3755,
+      "start_ms": 3237,
       "text": "workflow",
       "text_end": 58,
       "text_start": 50
     },
     {
-      "end_ms": 3810,
-      "start_ms": 3568,
+      "end_ms": 4079,
+      "start_ms": 3820,
       "text": "into",
       "text_end": 63,
       "text_start": 59
     },
     {
-      "end_ms": 3931,
-      "start_ms": 3870,
+      "end_ms": 4208,
+      "start_ms": 4144,
       "text": "a",
       "text_end": 65,
       "text_start": 64
     },
     {
-      "end_ms": 4838,
-      "start_ms": 3991,
+      "end_ms": 5179,
+      "start_ms": 4273,
       "text": "ready-to-watch",
       "text_end": 80,
       "text_start": 66
     },
     {
-      "end_ms": 5201,
-      "start_ms": 4898,
+      "end_ms": 5568,
+      "start_ms": 5244,
       "text": "Hello",
       "text_end": 86,
       "text_start": 81
     },
     {
-      "end_ms": 5564,
-      "start_ms": 5261,
+      "end_ms": 5956,
+      "start_ms": 5633,
       "text": "World",
       "text_end": 92,
       "text_start": 87
     },
     {
-      "end_ms": 5987,
-      "start_ms": 5624,
+      "end_ms": 6410,
+      "start_ms": 6021,
       "text": "video.",
       "text_end": 99,
       "text_start": 93
     },
     {
-      "end_ms": 6289,
-      "start_ms": 6047,
+      "end_ms": 6733,
+      "start_ms": 6474,
       "text": "When",
       "text_end": 104,
       "text_start": 100
     },
     {
-      "end_ms": 6531,
-      "start_ms": 6350,
+      "end_ms": 6992,
+      "start_ms": 6798,
       "text": "the",
       "text_end": 108,
       "text_start": 105
     },
     {
-      "end_ms": 6894,
-      "start_ms": 6592,
+      "end_ms": 7381,
+      "start_ms": 7057,
       "text": "build",
       "text_end": 114,
       "text_start": 109
     },
     {
-      "end_ms": 7499,
-      "start_ms": 6955,
+      "end_ms": 8028,
+      "start_ms": 7445,
       "text": "finishes,",
       "text_end": 124,
       "text_start": 115
     },
     {
-      "end_ms": 7741,
-      "start_ms": 7559,
+      "end_ms": 8287,
+      "start_ms": 8093,
       "text": "run",
       "text_end": 128,
       "text_start": 125
     },
     {
-      "end_ms": 7983,
-      "start_ms": 7801,
+      "end_ms": 8546,
+      "start_ms": 8352,
       "text": "the",
       "text_end": 132,
       "text_start": 129
     },
     {
-      "end_ms": 8587,
-      "start_ms": 8043,
+      "end_ms": 9194,
+      "start_ms": 8611,
       "text": "follow-up",
       "text_end": 142,
       "text_start": 133
     },
     {
-      "end_ms": 8950,
-      "start_ms": 8648,
+      "end_ms": 9582,
+      "start_ms": 9258,
       "text": "watch",
       "text_end": 148,
       "text_start": 143
     },
     {
-      "end_ms": 9434,
-      "start_ms": 9011,
+      "end_ms": 10100,
+      "start_ms": 9647,
       "text": "command",
       "text_end": 156,
       "text_start": 149
     },
     {
-      "end_ms": 9615,
-      "start_ms": 9494,
+      "end_ms": 10294,
+      "start_ms": 10165,
       "text": "to",
       "text_end": 159,
       "text_start": 157
     },
     {
-      "end_ms": 9918,
-      "start_ms": 9676,
+      "end_ms": 10618,
+      "start_ms": 10359,
       "text": "open",
       "text_end": 164,
       "text_start": 160
     },
     {
-      "end_ms": 10160,
-      "start_ms": 9978,
+      "end_ms": 10877,
+      "start_ms": 10683,
       "text": "the",
       "text_end": 168,
       "text_start": 165
     },
     {
-      "end_ms": 10523,
-      "start_ms": 10220,
+      "end_ms": 11265,
+      "start_ms": 10942,
       "text": "video",
       "text_end": 174,
       "text_start": 169
     },
     {
-      "end_ms": 10704,
-      "start_ms": 10583,
+      "end_ms": 11460,
+      "start_ms": 11330,
       "text": "in",
       "text_end": 177,
       "text_start": 175
     },
     {
-      "end_ms": 10825,
-      "start_ms": 10764,
+      "end_ms": 11589,
+      "start_ms": 11524,
       "text": "a",
       "text_end": 179,
       "text_start": 178
     },
     {
-      "end_ms": 11369,
-      "start_ms": 10885,
+      "end_ms": 12172,
+      "start_ms": 11654,
       "text": "browser.",
       "text_end": 188,
       "text_start": 180
     },
     {
-      "end_ms": 11974,
-      "start_ms": 11430,
+      "end_ms": 12819,
+      "start_ms": 12236,
       "text": "OmegaFlow",
       "text_end": 198,
       "text_start": 189
     },
     {
-      "end_ms": 12216,
-      "start_ms": 12034,
+      "end_ms": 13078,
+      "start_ms": 12884,
       "text": "can",
       "text_end": 202,
       "text_start": 199
     },
     {
-      "end_ms": 12639,
-      "start_ms": 12276,
+      "end_ms": 13531,
+      "start_ms": 13143,
       "text": "script",
       "text_end": 209,
       "text_start": 203
     },
     {
-      "end_ms": 12881,
-      "start_ms": 12700,
+      "end_ms": 13790,
+      "start_ms": 13596,
       "text": "and",
       "text_end": 213,
       "text_start": 210
     },
     {
-      "end_ms": 13304,
-      "start_ms": 12942,
+      "end_ms": 14243,
+      "start_ms": 13855,
       "text": "record",
       "text_end": 220,
       "text_start": 214
     },
     {
-      "end_ms": 13788,
-      "start_ms": 13365,
+      "end_ms": 14761,
+      "start_ms": 14308,
       "text": "browser",
       "text_end": 228,
       "text_start": 221
     },
     {
-      "end_ms": 14393,
-      "start_ms": 13849,
+      "end_ms": 15409,
+      "start_ms": 14826,
       "text": "workflows",
       "text_end": 238,
       "text_start": 229
     },
     {
-      "end_ms": 14695,
-      "start_ms": 14453,
+      "end_ms": 15733,
+      "start_ms": 15474,
       "text": "just",
       "text_end": 243,
       "text_start": 239
     },
     {
-      "end_ms": 14877,
-      "start_ms": 14756,
+      "end_ms": 15927,
+      "start_ms": 15797,
       "text": "as",
       "text_end": 246,
       "text_start": 244
     },
     {
-      "end_ms": 15058,
-      "start_ms": 14937,
+      "end_ms": 16121,
+      "start_ms": 15992,
       "text": "it",
       "text_end": 249,
       "text_start": 247
     },
     {
-      "end_ms": 15360,
-      "start_ms": 15119,
+      "end_ms": 16445,
+      "start_ms": 16186,
       "text": "does",
       "text_end": 254,
       "text_start": 250
     },
     {
-      "end_ms": 15905,
-      "start_ms": 15421,
+      "end_ms": 17027,
+      "start_ms": 16509,
       "text": "terminal",
       "text_end": 263,
       "text_start": 255
     },
     {
-      "end_ms": 16570,
-      "start_ms": 15965,
+      "end_ms": 17740,
+      "start_ms": 17092,
       "text": "workflows.",
       "text_end": 274,
       "text_start": 264
     },
     {
-      "end_ms": 16812,
-      "start_ms": 16630,
+      "end_ms": 17999,
+      "start_ms": 17804,
       "text": "The",
       "text_end": 278,
       "text_start": 275
     },
     {
-      "end_ms": 17175,
-      "start_ms": 16872,
+      "end_ms": 18387,
+      "start_ms": 18063,
       "text": "watch",
       "text_end": 284,
       "text_start": 279
     },
     {
-      "end_ms": 17658,
-      "start_ms": 17235,
+      "end_ms": 18905,
+      "start_ms": 18452,
       "text": "command",
       "text_end": 292,
       "text_start": 285
     },
     {
-      "end_ms": 18021,
-      "start_ms": 17719,
+      "end_ms": 19293,
+      "start_ms": 18970,
       "text": "opens",
       "text_end": 298,
       "text_start": 293
     },
     {
-      "end_ms": 18263,
-      "start_ms": 18082,
+      "end_ms": 19552,
+      "start_ms": 19358,
       "text": "the",
       "text_end": 302,
       "text_start": 299
     },
     {
-      "end_ms": 18868,
-      "start_ms": 18324,
+      "end_ms": 20200,
+      "start_ms": 19617,
       "text": "generated",
       "text_end": 312,
       "text_start": 303
     },
     {
-      "end_ms": 19291,
-      "start_ms": 18928,
+      "end_ms": 20653,
+      "start_ms": 20265,
       "text": "player",
       "text_end": 319,
       "text_start": 313
     },
     {
-      "end_ms": 19473,
-      "start_ms": 19352,
+      "end_ms": 20847,
+      "start_ms": 20718,
       "text": "in",
       "text_end": 322,
       "text_start": 320
     },
     {
-      "end_ms": 19594,
-      "start_ms": 19533,
+      "end_ms": 20977,
+      "start_ms": 20912,
       "text": "a",
       "text_end": 324,
       "text_start": 323
     },
     {
-      "end_ms": 20138,
-      "start_ms": 19654,
+      "end_ms": 21559,
+      "start_ms": 21042,
       "text": "browser,",
       "text_end": 333,
       "text_start": 325
     },
     {
-      "end_ms": 20501,
-      "start_ms": 20198,
+      "end_ms": 21948,
+      "start_ms": 21624,
       "text": "where",
       "text_end": 339,
       "text_start": 334
     },
     {
-      "end_ms": 20803,
-      "start_ms": 20561,
+      "end_ms": 22272,
+      "start_ms": 22013,
       "text": "this",
       "text_end": 344,
       "text_start": 340
     },
     {
-      "end_ms": 21226,
-      "start_ms": 20864,
+      "end_ms": 22725,
+      "start_ms": 22336,
       "text": "script",
       "text_end": 351,
       "text_start": 345
     },
     {
-      "end_ms": 21589,
-      "start_ms": 21287,
+      "end_ms": 23113,
+      "start_ms": 22790,
       "text": "plays",
       "text_end": 357,
       "text_start": 352
     },
     {
-      "end_ms": 21831,
-      "start_ms": 21650,
+      "end_ms": 23372,
+      "start_ms": 23178,
       "text": "the",
       "text_end": 361,
       "text_start": 358
     },
     {
-      "end_ms": 22194,
-      "start_ms": 21892,
+      "end_ms": 23761,
+      "start_ms": 23437,
       "text": "video",
       "text_end": 367,
       "text_start": 362
     },
     {
-      "end_ms": 22375,
-      "start_ms": 22255,
+      "end_ms": 23955,
+      "start_ms": 23825,
       "text": "we",
       "text_end": 370,
       "text_start": 368
     },
     {
-      "end_ms": 22678,
-      "start_ms": 22436,
+      "end_ms": 24279,
+      "start_ms": 24020,
       "text": "just",
       "text_end": 375,
       "text_start": 371
     },
     {
-      "end_ms": 23222,
-      "start_ms": 22738,
+      "end_ms": 24861,
+      "start_ms": 24343,
       "text": "created.",
       "text_end": 384,
       "text_start": 376
     },
     {
-      "end_ms": 23343,
-      "start_ms": 23283,
+      "end_ms": 24991,
+      "start_ms": 24926,
       "text": "A",
       "text_end": 386,
       "text_start": 385
     },
     {
-      "end_ms": 23766,
-      "start_ms": 23404,
+      "end_ms": 25444,
+      "start_ms": 25056,
       "text": "single",
       "text_end": 393,
       "text_start": 387
     },
     {
-      "end_ms": 24371,
-      "start_ms": 23827,
+      "end_ms": 26091,
+      "start_ms": 25509,
       "text": "OmegaFlow",
       "text_end": 403,
       "text_start": 394
     },
     {
-      "end_ms": 24734,
-      "start_ms": 24432,
+      "end_ms": 26480,
+      "start_ms": 26156,
       "text": "video",
       "text_end": 409,
       "text_start": 404
     },
     {
-      "end_ms": 24976,
-      "start_ms": 24794,
+      "end_ms": 26739,
+      "start_ms": 26545,
       "text": "can",
       "text_end": 413,
       "text_start": 410
     },
     {
-      "end_ms": 25278,
-      "start_ms": 25036,
+      "end_ms": 27063,
+      "start_ms": 26804,
       "text": "move",
       "text_end": 418,
       "text_start": 414
     },
     {
-      "end_ms": 25762,
-      "start_ms": 25339,
+      "end_ms": 27581,
+      "start_ms": 27127,
       "text": "between",
       "text_end": 426,
       "text_start": 419
     },
     {
-      "end_ms": 26306,
-      "start_ms": 25823,
+      "end_ms": 28163,
+      "start_ms": 27645,
       "text": "terminal",
       "text_end": 435,
       "text_start": 427
     },
     {
-      "end_ms": 26548,
-      "start_ms": 26367,
+      "end_ms": 28422,
+      "start_ms": 28228,
       "text": "and",
       "text_end": 439,
       "text_start": 436
     },
     {
-      "end_ms": 27032,
-      "start_ms": 26609,
+      "end_ms": 28940,
+      "start_ms": 28487,
       "text": "browser",
       "text_end": 447,
       "text_start": 440
     },
     {
-      "end_ms": 27455,
-      "start_ms": 27092,
+      "end_ms": 29393,
+      "start_ms": 29005,
       "text": "beats.",
       "text_end": 454,
       "text_start": 448
     },
     {
-      "end_ms": 27637,
-      "start_ms": 27516,
+      "end_ms": 29588,
+      "start_ms": 29458,
       "text": "To",
       "text_end": 457,
       "text_start": 455
     },
     {
-      "end_ms": 28000,
-      "start_ms": 27697,
+      "end_ms": 29976,
+      "start_ms": 29652,
       "text": "learn",
       "text_end": 463,
       "text_start": 458
     },
     {
-      "end_ms": 28362,
-      "start_ms": 28060,
+      "end_ms": 30365,
+      "start_ms": 30041,
       "text": "more,",
       "text_end": 469,
       "text_start": 464
     },
     {
-      "end_ms": 28725,
-      "start_ms": 28423,
+      "end_ms": 30753,
+      "start_ms": 30429,
       "text": "start",
       "text_end": 475,
       "text_start": 470
     },
     {
-      "end_ms": 28967,
-      "start_ms": 28786,
+      "end_ms": 31012,
+      "start_ms": 30818,
       "text": "the",
       "text_end": 479,
       "text_start": 476
     },
     {
-      "end_ms": 29511,
-      "start_ms": 29028,
+      "end_ms": 31595,
+      "start_ms": 31077,
       "text": "tutorial",
       "text_end": 488,
       "text_start": 480
     },
     {
-      "end_ms": 29693,
-      "start_ms": 29572,
+      "end_ms": 31789,
+      "start_ms": 31659,
       "text": "or",
       "text_end": 491,
       "text_start": 489
     },
     {
-      "end_ms": 29995,
-      "start_ms": 29753,
+      "end_ms": 32113,
+      "start_ms": 31854,
       "text": "read",
       "text_end": 496,
       "text_start": 492
     },
     {
-      "end_ms": 30237,
-      "start_ms": 30056,
+      "end_ms": 32372,
+      "start_ms": 32177,
       "text": "the",
       "text_end": 500,
       "text_start": 497
     },
     {
-      "end_ms": 30600,
-      "start_ms": 30298,
+      "end_ms": 32760,
+      "start_ms": 32436,
       "text": "docs.",
       "text_end": 506,
       "text_start": 501
