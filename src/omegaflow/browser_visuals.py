@@ -227,6 +227,8 @@ class BrowserVisualCapture:
         ffmpeg = media.ffmpeg
         ffprobe = media.ffprobe
         assets: list[DynamicFragmentAsset] = []
+        previous_request: DynamicFragmentRequest | None = None
+        previous_source_end_ms: int | None = None
         for index, request in enumerate(self.dynamic_requests, 1):
             # Playwright's video can lag the authored action clock, and that
             # lag can grow during a recording. Align the end state first, then
@@ -253,6 +255,16 @@ class BrowserVisualCapture:
                         reference_ms=request.source_start_ms,
                         maximum_ms=source_end_ms,
                     )
+                if (
+                    previous_request is not None
+                    and previous_source_end_ms is not None
+                    and request.beat_id == previous_request.beat_id
+                    and abs(
+                        request.source_start_ms - previous_request.source_end_ms
+                    )
+                    <= FRAME_MATCH_DURATION_MS
+                ):
+                    source_start_ms = previous_source_end_ms
             except BrowserVisualError as exc:
                 detail = str(exc).split(": ", 1)[-1]
                 raise BrowserVisualError(
@@ -260,6 +272,11 @@ class BrowserVisualCapture:
                     f"beat {request.beat_id!r}, action {request.action_id!r}: {detail}",
                 ) from exc
             duration_ms = source_end_ms - source_start_ms
+            if duration_ms <= 0:
+                raise BrowserVisualError(
+                    "BROWSER_UNSUPPORTED_MOTION",
+                    f"action {request.action_id!r} has no aligned dynamic frames",
+                )
             if (
                 not request.explicit_dynamic
                 and duration_ms > IMPLICIT_DYNAMIC_MAX_DURATION_MS
@@ -368,6 +385,8 @@ class BrowserVisualCapture:
                     source_end_ms=source_end_ms,
                 )
             )
+            previous_request = request
+            previous_source_end_ms = source_end_ms
         return tuple(assets)
 
     def _screenshot(

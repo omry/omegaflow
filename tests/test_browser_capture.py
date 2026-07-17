@@ -1423,6 +1423,62 @@ def test_dynamic_fragment_aligns_states_when_video_lags_authored_interval(
     assert 1000 <= asset.source_end_ms <= 1080
 
 
+def test_adjacent_dynamic_fragments_preserve_continuous_source_video(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ffmpeg, source, end_state = write_color_transition_video(tmp_path)
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.extend(
+        [
+            DynamicFragmentRequest(
+                beat_id="dynamic",
+                action_id="click",
+                source_start_ms=0,
+                source_end_ms=1000,
+                end_state_path=end_state,
+                explicit_dynamic=True,
+            ),
+            DynamicFragmentRequest(
+                beat_id="dynamic",
+                action_id="wait",
+                source_start_ms=1002,
+                source_end_ms=1800,
+                end_state_path=end_state,
+                explicit_dynamic=True,
+            ),
+            DynamicFragmentRequest(
+                beat_id="dynamic",
+                action_id="later",
+                source_start_ms=2000,
+                source_end_ms=2400,
+                end_state_path=end_state,
+                explicit_dynamic=True,
+            ),
+        ]
+    )
+    aligned_ends = iter((800, 1800, 2400))
+    monkeypatch.setattr(
+        browser_visuals,
+        "_matching_end_frame_ms",
+        lambda *_args, **_kwargs: next(aligned_ends),
+    )
+
+    first, second, later = visuals.finalize_dynamic_fragments(source)
+
+    assert first.source_end_ms == 800
+    assert second.source_start_ms == first.source_end_ms
+    assert second.duration_ms == 1000
+    assert later.source_start_ms == 2000
+
+
 def test_dynamic_fragment_alignment_error_identifies_beat_and_action(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
