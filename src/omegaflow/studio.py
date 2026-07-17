@@ -1732,6 +1732,7 @@ def run_watch_server(
     *,
     managed_browser: bool = False,
     open_browser: bool = True,
+    port: int = 0,
 ) -> int:
     static_root = Path(__file__).with_name("player") / "static"
 
@@ -1743,7 +1744,17 @@ def run_watch_server(
             **kwargs,
         )
 
-    with http.server.ThreadingHTTPServer((WATCH_HOST, 0), handler_factory) as server:
+    try:
+        watch_server = http.server.ThreadingHTTPServer(
+            (WATCH_HOST, port), handler_factory
+        )
+    except OSError as exc:
+        requested = f"{WATCH_HOST}:{port}" if port else WATCH_HOST
+        raise StudioError(
+            f"could not start local watch server on {requested}: {exc}"
+        ) from exc
+
+    with watch_server as server:
         url = f"http://{WATCH_HOST}:{server.server_port}{url_path}"
         if text_output_enabled(cfg):
             step_line("watch recording")
@@ -1784,6 +1795,21 @@ def run_watch_server(
     return 0
 
 
+def configured_watch_port(config: dict[str, Any]) -> int:
+    value = config.get("watch_port")
+    if value is None:
+        return 0
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 1 <= value <= 65535
+    ):
+        raise StudioError(
+            "watch_port must be an integer between 1 and 65535 or null"
+        )
+    return value
+
+
 def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
@@ -1799,6 +1825,7 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         artifacts,
         managed_browser=open_browser,
         open_browser=open_browser,
+        port=configured_watch_port(config),
     )
 
 

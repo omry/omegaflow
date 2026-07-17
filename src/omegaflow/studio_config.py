@@ -257,6 +257,7 @@ class StudioConfig:
     headed: bool = False
     force: bool = False
     open: bool = True
+    watch_port: int | None = None
     run_id: str | None = None
     runs_since: str | None = None
     runs_limit: int | None = 10

@@ -75,6 +75,7 @@ output, and env-file paths are resolved from that root.
 | `env_file` | Path to the process-level `.env` file, resolved from the project root. |
 | `env_override` | Allows values from `env_file` to replace existing environment variables. |
 | `workspace` | Bootstrap-only destination for `action=bootstrap`; defaults to `studio.recording_dir`. |
+| `watch_port` | Optional fixed port for the local `action=watch` server. Leave unset to select a free port automatically. |
 | `dry_run` | Preview without writing. For bootstrap, use `dry_run=true` to list generated files or `dry_run=diff` to show unified diffs. |
 | `rec` | Recording config overrides merged on top of the selected recording. CLI shorthand such as `rec.capture.headless=false` is supported. |
 | `script_params` | Values for parameters explicitly declared by the selected recording. |

@@ -20,6 +20,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `force` | `false` | `build`, `bootstrap` | Rebuild reusable stages or replace bootstrap-created targets. |
 | `headed` | `false` | `build` | Override headless capture and show the recorder terminal. |
 | `open` | `true` | `watch` | Open an isolated browser. Set `false` to serve the player without opening one. |
+| `watch_port` | `null` | `watch` | Bind the local player server to this fixed port. The default lets the operating system select a free port. |
 | `surface` | `null` | `build` | Publish only the named configured surface. |
 
 ## Run selection fields

@@ -2160,9 +2160,11 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         *,
         managed_browser=False,
         open_browser=True,
+        port=0,
     ):
         requested["managed_browser"] = managed_browser
         requested["open_browser"] = open_browser
+        requested["port"] = port
         return 0
 
     monkeypatch.setattr(studio, "watch_player_url_path", fake_watch_player_url_path)
@@ -2170,7 +2172,7 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
 
     status = studio.run_watch(
         OmegaConf.create({"output_format": "text"}),
-        {"recording": "hello"},
+        {"recording": "hello", "watch_port": 43123},
     )
 
     assert status == 0
@@ -2178,7 +2180,41 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         "autoplay_countdown": True,
         "managed_browser": True,
         "open_browser": True,
+        "port": 43123,
     }
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, 65536, "43123"])
+def test_run_watch_rejects_invalid_configured_port(monkeypatch, value) -> None:
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_player_url_path",
+        lambda _spec, *, run_dir=None, autoplay_countdown=False: (
+            "/cast-player.html?manifest=demo",
+            {},
+        ),
+    )
+    monkeypatch.setattr(
+        studio,
+        "run_watch_server",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("watch server started")
+        ),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match="watch_port must be an integer between 1 and 65535 or null",
+    ):
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "watch_port": value},
+        )
 
 
 def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
@@ -2205,9 +2241,11 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
         *,
         managed_browser=False,
         open_browser=True,
+        port=0,
     ):
         requested["managed_browser"] = managed_browser
         requested["open_browser"] = open_browser
+        requested["port"] = port
         return 0
 
     monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
@@ -2221,6 +2259,7 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
     assert requested == {
         "managed_browser": False,
         "open_browser": False,
+        "port": 0,
     }
 
 
@@ -2472,11 +2511,13 @@ def test_managed_watch_browser_uses_capture_handoff_instead_of_system_browser(
 
 
 def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
+    observed: dict[str, object] = {}
+
     class FakeServer:
         server_port = 51234
 
-        def __init__(self, _address, _handler_factory) -> None:
-            pass
+        def __init__(self, address, _handler_factory) -> None:
+            observed["address"] = address
 
         def __enter__(self):
             return self
@@ -2494,13 +2535,36 @@ def test_watch_server_reports_local_watch_server(monkeypatch, capsys) -> None:
         OmegaConf.create({"output_format": "text"}),
         "/cast-player.html?manifest=/__studio_artifacts__/recording.presentation.json",
         {"cast": Path("recording.cast")},
+        port=51234,
     )
     output = capsys.readouterr().out
 
     assert status == 0
+    assert observed == {"address": ("127.0.0.1", 51234)}
     assert "serving local watch server: http://127.0.0.1:51234/" in output
     assert "opened browser; press Ctrl-C to stop" in output
     assert "stopped local watch server" in output
+
+
+def test_watch_server_reports_configured_port_collision(monkeypatch) -> None:
+    def fail_to_bind(_address, _handler_factory):
+        raise OSError(98, "Address already in use")
+
+    monkeypatch.setattr(studio.http.server, "ThreadingHTTPServer", fail_to_bind)
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"could not start local watch server on 127\.0\.0\.1:43123: "
+            r"\[Errno 98\] Address already in use"
+        ),
+    ):
+        studio.run_watch_server(
+            OmegaConf.create({"output_format": "text"}),
+            "/cast-player.html?manifest=demo",
+            {},
+            port=43123,
+        )
 
 
 def test_watch_server_can_serve_without_calling_browser_opener(
