@@ -1427,6 +1427,61 @@ beat:
         raise AssertionError("expected unknown beat key to fail")
 
 
+def test_studio_directive_schema_rejects_unknown_action_payload_key() -> None:
+    script = """
+```yaml studio-directive
+beat:
+  id: browser
+  medium: browser
+  heading: Open page
+  narration: Open the player.
+  actions:
+  - id: open
+    open_page:
+      url: /
+      typo_loading: show
+```
+""".lstrip()
+
+    with pytest.raises(StudioConfigError, match="typo_loading"):
+        studio_directive_blocks(script)
+
+
+@pytest.mark.parametrize("generated_field", ["script", "narration", "studio"])
+def test_recording_frontmatter_rejects_non_user_fields(
+    tmp_path: Path,
+    monkeypatch,
+    generated_field: str,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        f"""
+---
+id: hello
+{generated_field}: {{}}
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    with pytest.raises(StudioConfigError, match=generated_field):
+        recording_from_script("hello")
+
+
 def test_studio_directive_schema_does_not_inject_defaults() -> None:
     script = """
 ```yaml studio-directive
