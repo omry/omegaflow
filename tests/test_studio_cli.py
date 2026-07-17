@@ -1463,6 +1463,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         if "beat" in block
     ]
     beats_by_id = {beat["id"]: beat for beat in beats}
+    build_commands = beats_by_id["build"]["actions"][0]["commands"]
     browser_beat = beats_by_id["play-in-browser"]
     actions = {action["id"]: action for action in browser_beat["actions"]}
 
@@ -1473,24 +1474,39 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     )
     assert "build next" not in beats_by_id["bootstrap"]["narration"]
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
+    assert [command["id"] for command in build_commands] == [
+        "build_command",
+        "watch_command",
+    ]
+    assert build_commands[1]["display"] == (
+        "omegaflow recording=quickstart action=watch"
+    )
+    assert build_commands[1]["after"] == "@watch@"
+    assert build_commands[1]["show_prompt_after"] is False
+    watch_url = (
+        "http://localhost:18474/cast-player.html?"
+        "manifest=/quickstart/presentation/recording.presentation.json"
+        "&autoplay=countdown"
+    )
+    assert watch_url in build_commands[1]["output"]["replace"]
     assert browser_beat["narration_take"] == "build-and-browser"
     assert browser_beat["narration"].startswith(
-        "OmegaFlow can script and record browser workflows just as it does "
-        "terminal workflows"
+        "@open_player@ OmegaFlow can script and record browser workflows just "
+        "as it does terminal workflows"
     )
-    assert (
-        "this script @open_player@ opens a browser window"
-        in browser_beat["narration"]
-    )
+    assert "The watch command opens" in browser_beat["narration"]
     assert browser_beat["narration"].index("A single OmegaFlow video") < (
         browser_beat["narration"].index("@wait:wait_for_playback")
     )
+    assert "one narration take" not in browser_beat["narration"]
     assert browser_beat["narration"].index("@wait:wait_for_playback") < (
         browser_beat["narration"].index("To learn more")
     )
     assert spec["browser"]["viewport"]["width"] == 1152
     assert spec["browser"]["viewport"]["height"] == 360
     assert list(actions) == ["open_player", "play", "wait_for_playback"]
+    assert actions["open_player"]["open_page"]["url"] == watch_url
+    assert actions["open_player"]["open_page"]["display_url"] == watch_url
     assert "transition" not in actions["play"]
     assert actions["wait_for_playback"]["transition"] == "captured"
 
@@ -1589,14 +1605,14 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert "fenced `studio-directive` blocks tell" in recording
     assert "id: show_message" in recording
     assert (
-        "run: for n in 1 2 3 4 5; do printf '%s\\n' \"$n\"; sleep 1; "
-        "done; printf 'hello world\\n'"
+        "run: for n in 3 2 1; do printf '%s\\n' \"$n\"; sleep 1; "
+        "done; printf 'Hello World!\\n'"
     ) in recording
     assert "follow_along: true" in recording
     assert "@run_demo@" in recording
     assert "@wait:show_message@" in recording
     assert "output_contains:" in recording
-    assert "- hello world" in recording
+    assert "- Hello World!" in recording
     assert not support_dir.exists()
 
 
@@ -1621,7 +1637,7 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
 
     assert "id: quickstart" in recording
     assert "title: Quickstart" in recording
-    assert "- hello world" in recording
+    assert "- Hello World!" in recording
     assert not support_dir.exists()
 
 
@@ -1674,8 +1690,8 @@ def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
     assert "+  data_dir: recordings/.omegaflow" in output
     assert "+id: quickstart" in output
     assert (
-        "+      run: for n in 1 2 3 4 5; do printf '%s\\n' \"$n\"; sleep 1; "
-        "done; printf 'hello world\\n'"
+        "+      run: for n in 3 2 1; do printf '%s\\n' \"$n\"; sleep 1; "
+        "done; printf 'Hello World!\\n'"
     ) in output
     assert "No files were written." in output
     assert not (tmp_path / ".omegaflow").exists()
@@ -1740,7 +1756,7 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
 
     assert "id: tutorial/recording-file" in recording
     assert "title: Recording File" in recording
-    assert "- hello world" in recording
+    assert "- Hello World!" in recording
     assert not support_dir.exists()
 
 

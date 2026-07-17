@@ -489,10 +489,10 @@ beat:
   - commands:
     - id: show_message
       follow_along: true
-      run: for n in 1 2 3 4 5; do printf '%s\\n' "$n"; sleep 1; done; printf 'hello world\\n'
+      run: for n in 3 2 1; do printf '%s\\n' "$n"; sleep 1; done; printf 'Hello World!\\n'
       expect:
         output_contains:
-        - hello world
+        - Hello World!
 ```
 
 Publish surfaces in the header let the same recording write a standalone HTML

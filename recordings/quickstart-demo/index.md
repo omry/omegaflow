@@ -142,8 +142,8 @@ beat:
   narration: >-
     @build@ Build the quickstart recording to turn the sample workflow into a
     ready-to-watch Hello World video.
-    @wait:build_command+200ms@ When the build finishes, the follow-up command
-    shows how to watch the video.
+    @wait:build_command+200ms@ When the build finishes, @watch@ run the
+    follow-up watch command to open the video in a browser.
   marker: build
   caption: Build the generated quickstart recording.
   actions:
@@ -153,6 +153,20 @@ beat:
       display: omegaflow recording=quickstart
       after: "@build@"
       timing: realtime
+    # The demo preview server is already running so the following browser beat
+    # can capture it. Type the real user command, then let that beat represent
+    # the browser window opened by the blocking watch process.
+    - id: watch_command
+      run: ":"
+      display: omegaflow recording=quickstart action=watch
+      after: "@watch@"
+      pre_command_pause: 0.45
+      show_prompt_after: false
+      output:
+        replace: |
+          step  watch recording
+          pass  serving local watch server: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
+          info  opened isolated system browser; close it or press Ctrl-C to stop
   guide:
     commands:
     - omegaflow recording=quickstart
@@ -166,12 +180,12 @@ beat:
   heading: Play It In The Browser
   narration_take: build-and-browser
   narration: >-
-    OmegaFlow can script and record browser workflows just as it does terminal
-    workflows. To demonstrate, this script @open_player@ opens a browser window
-    and @wait:open_player+300ms@ @play@ plays the video we just created.
+    @open_player@ OmegaFlow can script and record browser workflows just as it
+    does terminal workflows. The watch command opens the generated player in a
+    browser, where this script @wait:open_player+300ms@ @play@ plays the video
+    we just created.
     @playback_complete@
-    A single OmegaFlow video can move between terminal and browser beats, while
-    one narration take keeps every action synchronized with the voiceover.
+    A single OmegaFlow video can move between terminal and browser beats.
     @wait:wait_for_playback+300ms@ To learn more, start the tutorial or read the
     docs.
   marker: play-in-browser
@@ -180,8 +194,8 @@ beat:
   - id: open_player
     after: "@open_player@"
     open_page:
-      url: /cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&title=Quickstart
-      display_url: https://omegaflow.dev/videos/quickstart
+      url: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
+      display_url: http://localhost:18474/cast-player.html?manifest=/quickstart/presentation/recording.presentation.json&autoplay=countdown
       ready:
         visible:
           role: button
@@ -196,6 +210,8 @@ beat:
         exact: true
   - id: wait_for_playback
     after: "@playback_complete@"
+    # This captured wait begins immediately after the click so the two dynamic
+    # action fragments exercise continuous browser-motion boundaries.
     transition: captured
     wait_for:
       visible:

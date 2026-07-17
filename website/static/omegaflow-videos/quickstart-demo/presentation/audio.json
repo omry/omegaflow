@@ -1,5 +1,5 @@
 {
-  "duration_ms": 61752,
+  "duration_ms": 59328,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,10 +12,10 @@
           "text_start": 0
         }
       ],
-      "sha256": "62203c0b587e02d0d60b371203f2fc1891e86d54f54acb5070f1679c4ffe1a8f",
-      "source_end_ms": 13416,
+      "sha256": "2f59b086062c26126ec89004178b76604e2a4afe85a8daaf8aea107dfee368a7",
+      "source_end_ms": 13656,
       "source_start_ms": 0,
-      "src": "audio/__beat__-install-62203c0b587e02d0d60b371203f2fc1891e86d54f54acb5070f1679c4ffe1a8f.mp3",
+      "src": "audio/__beat__-install-2f59b086062c26126ec89004178b76604e2a4afe85a8daaf8aea107dfee368a7.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -28,10 +28,10 @@
           "text_start": 0
         }
       ],
-      "sha256": "a94ae8f50b52d8793dbdf6d8e9196b7d0cb04bee0fc31378cf47aa4e9841c7fd",
-      "source_end_ms": 28632,
-      "source_start_ms": 13416,
-      "src": "audio/__beat__-bootstrap-a94ae8f50b52d8793dbdf6d8e9196b7d0cb04bee0fc31378cf47aa4e9841c7fd.mp3",
+      "sha256": "eb78e38d3de92c9bf0bec49241d591bfa6aa2ce86dc5963a3a6b3ef8d064efa2",
+      "source_end_ms": 28824,
+      "source_start_ms": 13656,
+      "src": "audio/__beat__-bootstrap-eb78e38d3de92c9bf0bec49241d591bfa6aa2ce86dc5963a3a6b3ef8d064efa2.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -39,21 +39,21 @@
       "members": [
         {
           "beat_id": "build",
-          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch Hello World video. When the build finishes, the follow-up command shows how to watch the video.",
-          "text_end": 176,
+          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch Hello World video. When the build finishes, run the follow-up watch command to open the video in a browser.",
+          "text_end": 188,
           "text_start": 0
         },
         {
           "beat_id": "play-in-browser",
-          "text": "OmegaFlow can script and record browser workflows just as it does terminal workflows. To demonstrate, this script opens a browser window and plays the video we just created. A single OmegaFlow video can move between terminal and browser beats, while one narration take keeps every action synchronized with the voiceover. To learn more, start the tutorial or read the docs.",
-          "text_end": 549,
-          "text_start": 177
+          "text": "OmegaFlow can script and record browser workflows just as it does terminal workflows. The watch command opens the generated player in a browser, where this script plays the video we just created. A single OmegaFlow video can move between terminal and browser beats. To learn more, start the tutorial or read the docs.",
+          "text_end": 506,
+          "text_start": 189
         }
       ],
-      "sha256": "274287ee8eb3da4c9b867bc6fb77fe57936ff314d9ef53ad81706a78e913498a",
-      "source_end_ms": 61752,
-      "source_start_ms": 28632,
-      "src": "audio/build-and-browser-274287ee8eb3da4c9b867bc6fb77fe57936ff314d9ef53ad81706a78e913498a.mp3",
+      "sha256": "25d8b69041fbd3f1cd9db3dfd5e2ded46ccb8e54cd41a16a20eada545bf6f565",
+      "source_end_ms": 59328,
+      "source_start_ms": 28824,
+      "src": "audio/build-and-browser-25d8b69041fbd3f1cd9db3dfd5e2ded46ccb8e54cd41a16a20eada545bf6f565.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],
