@@ -1523,6 +1523,8 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     actions = {action["id"]: action for action in browser_beat["actions"]}
 
     assert beats_by_id["install"]["narration"].startswith("OmegaFlow")
+    assert "narration_take" not in beats_by_id["install"]
+    assert "narration_take" not in beats_by_id["bootstrap"]
     assert all(
         not beats_by_id[beat_id]["narration"].startswith("OmegaFlow")
         for beat_id in ("bootstrap", "build")
@@ -1541,13 +1543,14 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert build_commands[1]["follow_along"] is True
     assert build_commands[1]["show_prompt_after"] is False
     assert build_commands[1]["run"] == (
-        "omegaflow recording=quickstart action=watch"
+        "omegaflow recording=quickstart action=watch watch_port=43123"
     )
     assert build_commands[1].get("output") is None
     assert browser_beat["narration_take"] == "build-and-browser"
+    assert browser_beat["pointer"] == {"visible": False}
     assert browser_beat["narration"].startswith(
-        "@open_player@ OmegaFlow can script and record browser workflows just "
-        "as it does terminal workflows"
+        "@open_player@ OmegaFlow can script and record browser workflows "
+        "just as it does terminal workflows"
     )
     assert "The watch command opens" in browser_beat["narration"]
     assert browser_beat["narration"].index("A single OmegaFlow video") < (
@@ -1559,11 +1562,15 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     )
     assert spec["browser"]["viewport"]["width"] == 1152
     assert spec["browser"]["viewport"]["height"] == 360
-    assert list(actions) == ["open_player", "play", "wait_for_playback"]
+    assert list(actions) == [
+        "open_player",
+        "wait_for_playback",
+    ]
     assert actions["open_player"]["open_page"]["handoff"] == "watch_command"
     assert actions["open_player"]["open_page"]["display_url"] == "$handoff"
-    assert "transition" not in actions["play"]
+    assert actions["wait_for_playback"]["after"] == "@open_player@"
     assert actions["wait_for_playback"]["transition"] == "captured"
+    assert actions["wait_for_playback"]["wait_for"]["timeout_ms"] == 60000
 
     generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
     generated_beat = next(

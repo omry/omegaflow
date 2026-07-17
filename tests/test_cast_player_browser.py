@@ -298,14 +298,19 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             (static_root / "omegaflow-videos/quickstart-demo/presentation"
              / browser_beat["payload"]).read_text(encoding="utf-8")
         )
-        first_clip = next(
+        clip_events = [
             event for event in browser_payload["events"] if event["kind"] == "clip"
-        )
-        clip_start_ms = browser_beat["offset_ms"] + first_clip["at_ms"] + 100
+        ]
+        assert len(clip_events) == 1
+        captured_clip = clip_events[0]
+        clip_sample_ms = captured_clip["at_ms"] + 100
+        clip_seek_ms = browser_beat["offset_ms"] + clip_sample_ms
         progress_value = round(
-            clip_start_ms / manifest_data["recording"]["duration_ms"] * 1000
+            clip_seek_ms / manifest_data["recording"]["duration_ms"] * 1000
         )
-        page.locator("#progress").evaluate(
+        progress = page.locator("#progress")
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
             "(element, value) => { element.value = String(value); "
             "element.dispatchEvent(new Event('input', {bubbles: true})); "
             "element.dispatchEvent(new Event('change', {bubbles: true})); }",
@@ -316,16 +321,6 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
         active_clip.evaluate(
             "clip => { "
             "clip.__testMediaEvents = {play: 0, pause: 0, seeking: 0}; "
-            "for (const name of ['play', 'pause', 'seeking']) { "
-            "clip.addEventListener(name, () => clip.__testMediaEvents[name] += 1); "
-            "} }"
-        )
-        captured_clips = page.locator(".browser-clip")
-        assert captured_clips.count() == 2
-        continuation_clip = captured_clips.nth(1)
-        continuation_clip.evaluate(
-            "clip => { "
-            "clip.__testMediaEvents = {play: 0, pause: 0, seeking: 0}; "
             "clip.__testHiddenMutations = 0; "
             "new MutationObserver(records => { "
             "clip.__testHiddenMutations += records.length; "
@@ -334,13 +329,18 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             "clip.addEventListener(name, () => clip.__testMediaEvents[name] += 1); "
             "} }"
         )
+        captured_clips = page.locator(".browser-clip")
+        assert captured_clips.count() == 1
+        early_frame = active_clip.screenshot()
         initial_clip_time = active_clip.evaluate("clip => clip.currentTime")
         page.locator("#play").click()
         page.wait_for_function(
             "initial => document.querySelector('.browser-clip:not([hidden])')"
-            ".currentTime > initial + 0.2",
+            ".currentTime > initial + 1.1",
             arg=initial_clip_time,
         )
+        countdown_frame = active_clip.screenshot()
+        assert countdown_frame != early_frame
         clip_playback = active_clip.evaluate(
             "clip => ({paused: clip.paused, currentTime: clip.currentTime, "
             "events: clip.__testMediaEvents})"
@@ -349,40 +349,11 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
         assert clip_playback["events"]["play"] == 1
         assert clip_playback["events"]["pause"] == 0
         assert clip_playback["events"]["seeking"] <= 1
-        page.wait_for_function(
-            "() => { const clips = document.querySelectorAll('.browser-clip'); "
-            "return clips.length === 2 && !clips[1].hidden && "
-            "clips[1].currentTime > 0.5; }",
-            timeout=4000,
-        )
-        continuation_playback = continuation_clip.evaluate(
-            "clip => ({hidden: clip.hidden, paused: clip.paused, "
-            "currentTime: clip.currentTime, events: {...clip.__testMediaEvents}, "
-            "hiddenMutations: clip.__testHiddenMutations})"
-        )
-        assert continuation_playback["hidden"] is False
-        assert continuation_playback["paused"] is False
-        assert continuation_playback["events"]["play"] == 1
-        assert continuation_playback["events"]["pause"] == 0
-        assert continuation_playback["events"]["seeking"] <= 1
-        assert continuation_playback["hiddenMutations"] <= 1
-        early_frame = continuation_clip.screenshot()
-        page.wait_for_function(
-            "() => document.querySelectorAll('.browser-clip')[1].currentTime > 2.5",
-            timeout=4000,
-        )
-        later_frame = continuation_clip.screenshot()
-        assert later_frame != early_frame
-
-        final_clip = next(
-            event for event in reversed(browser_payload["events"])
-            if event["kind"] == "clip"
-        )
-        final_clip_element = continuation_clip.element_handle()
+        final_clip_element = active_clip.element_handle()
         assert final_clip_element is not None
         page.wait_for_function(
-            "() => document.querySelectorAll('.browser-clip')[1].hidden",
-            timeout=9000,
+            "() => document.querySelector('.browser-clip').hidden",
+            timeout=12000,
         )
         completed_clip = final_clip_element.evaluate(
             "clip => ({hidden: clip.hidden, paused: clip.paused, "
@@ -395,7 +366,7 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             "events: {...clip.__testMediaEvents}, "
             "hiddenMutations: clip.__testHiddenMutations})"
         )
-        final_clip_index = browser_payload["events"].index(final_clip)
+        final_clip_index = browser_payload["events"].index(captured_clip)
         final_state = browser_payload["events"][final_clip_index + 1]
         assert final_state["kind"] == "state"
         final_state_path = manifest_data["assets"][final_state["asset"]]["path"]
@@ -417,7 +388,7 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             if clip["beatId"] == browser_beat["id"]
         ]
         assert diagnostics["version"] == 1
-        assert len(beat_diagnostics) == 2
+        assert len(beat_diagnostics) == 1
         assert all(clip["sampleCount"] > 0 for clip in beat_diagnostics)
         attempted = [clip for clip in beat_diagnostics if clip["playAttempts"]]
         assert attempted, [

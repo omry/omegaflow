@@ -148,7 +148,8 @@ beat:
       after: "@build@"
       timing: realtime
     - id: watch_command
-      run: omegaflow recording=quickstart action=watch
+      # Keep the captured URL stable across homepage-video rebuilds.
+      run: omegaflow recording=quickstart action=watch watch_port=43123
       display: omegaflow recording=quickstart action=watch
       after: "@watch@"
       pre_command_pause: 0.45
@@ -170,14 +171,14 @@ beat:
   narration: >-
     @open_player@ OmegaFlow can script and record browser workflows just as it
     does terminal workflows. The watch command opens the generated player in a
-    browser, where this script @wait:open_player+300ms@ @play@ plays the video
-    we just created.
-    @playback_complete@
+    browser, where this script plays the video we just created.
     A single OmegaFlow video can move between terminal and browser beats.
     @wait:wait_for_playback+300ms@ To learn more, start the tutorial or read the
     docs.
   marker: play-in-browser
   caption: Script browser interaction with the generated player.
+  pointer:
+    visible: false
   actions:
   - id: open_player
     after: "@open_player@"
@@ -189,19 +190,11 @@ beat:
           role: button
           name: Play
           exact: true
-  - id: play
-    after: "@play@"
-    click:
-      target:
-        role: button
-        name: Play
-        exact: true
   - id: wait_for_playback
-    after: "@playback_complete@"
-    # This captured wait begins immediately after the click so the two dynamic
-    # action fragments exercise continuous browser-motion boundaries.
+    after: "@open_player@"
     transition: captured
     wait_for:
+      timeout_ms: 60000
       visible:
         role: button
         name: Play again
