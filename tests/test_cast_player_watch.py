@@ -90,6 +90,67 @@ def test_player_preloads_per_take_audio_for_seamless_handoff() -> None:
     assert "element.preload = 'metadata';" not in html
 
 
+def test_playback_does_not_start_before_player_initialization_finishes() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+let audioPlayCalls = 0;
+presentationManifest = {
+  recording: {duration_ms: 10000},
+  audio: {
+    metadata: 'audio.json',
+    intervals: [
+      {presentation_start_ms: 0, presentation_end_ms: 10000, source_start_ms: 0, source_end_ms: 10000},
+    ],
+  },
+  beats: [{id: 'terminal', renderer: 'terminal', offset_ms: 0, duration_ms: 10000}],
+};
+events = [{time: 10, data: 'done'}];
+totalSeconds = 10;
+audioReady = true;
+audio = {
+  currentTime: 0,
+  duration: 10,
+  muted: false,
+  paused: true,
+  playbackRate: 1,
+  pause() { this.paused = true; },
+  play() {
+    audioPlayCalls += 1;
+    this.paused = false;
+    return Promise.resolve();
+  },
+};
+
+updateTransportButtons();
+togglePlayPause();
+
+if (playing || audioPlayCalls !== 0 || !playButton.disabled) {
+  console.error(JSON.stringify({playing, audioPlayCalls, playDisabled: playButton.disabled}));
+  process.exit(1);
+}
+
+presentationAudioController = CastPlayerCore.createPresentationAudioController({
+  audio,
+  intervals: presentationManifest.audio.intervals,
+});
+playbackReady = true;
+updateTransportButtons();
+togglePlayPause();
+
+if (!playing || audioPlayCalls !== 1 || playButton.disabled) {
+  console.error(JSON.stringify({
+    phase: 'ready', playing, audioPlayCalls, playDisabled: playButton.disabled,
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def run_player_script(script_body: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:
@@ -242,6 +303,7 @@ context.clearTimeout = () => {};
 vm.runInContext(`
 events = [{time: 1, data: 'done'}];
 totalSeconds = 1;
+playbackReady = true;
 startAutoplayCountdown();
 `, context);
 
@@ -498,6 +560,7 @@ vm.runInContext(`
     onPlayRejected: handleAudioPlaybackRejected,
     onPlayStarted: handleAudioPlaybackStarted,
   });
+  playbackReady = true;
 
   play({autoplay: true, feedback: true});
   await Promise.resolve();
@@ -773,6 +836,7 @@ presentationManifest = {
 events = [];
 totalSeconds = 10;
 currentSeconds = 0;
+playbackReady = true;
 play();
 if (!playing || progressTimer == null) {
   console.error(JSON.stringify({playing, progressTimer}));
@@ -794,6 +858,7 @@ events = [];
 totalSeconds = 10;
 currentSeconds = 10;
 pausedAtGuidedPoint = true;
+playbackReady = true;
 play();
 if (playing || currentSeconds !== 10 || pausedAtGuidedPoint || !guideModal.hidden) {
   console.error(JSON.stringify({playing, currentSeconds, pausedAtGuidedPoint, hidden: guideModal.hidden}));
@@ -1012,6 +1077,7 @@ def test_space_toggles_playback_and_shows_visual_feedback() -> None:
 vm.runInContext(`
 events = [{time: 1, data: 'done'}];
 totalSeconds = 1;
+playbackReady = true;
 updateTransportButtons();
 let prevented = 0;
 const event = {

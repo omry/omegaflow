@@ -30,14 +30,6 @@ No active release blockers.
 
 ## Release backlog
 
-- [ ] `P0` Prevent duplicate voiceover when the primary website video starts
-      before it has fully loaded. Starting playback immediately can cause two
-      overlapping narration streams during the second segment. Acceptance
-      checks: reproduce the issue on the primary website with delayed media
-      loading; ensure only one narration stream is active throughout playback;
-      keep pause, seek, replay, and segment transitions single-voiced; and add
-      a regression test that starts playback before all media is ready.
-
 - [ ] `P1` Make build progress reflect long-running active work. The current
       action-based bar can remain at `0/4` for most of a build and then rush
       through every remaining unit. Acceptance checks: keep the progress
@@ -184,6 +176,13 @@ No active release blockers.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P0` Prevent duplicate voiceover when playback starts before the website
+      player has fully loaded. Completed: `2026-07-18`. Playback now remains
+      disabled until visual media and narration ownership finish initializing,
+      preventing an early click from starting a second audio path. Added a
+      delayed-readiness regression and retained coverage for pause, seek,
+      replay, and narration transitions.
 
 - [x] `P1` Show useful progress throughout video builds.
       Completed: `2026-07-18`. Added one determinate build progress surface for

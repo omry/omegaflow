@@ -887,6 +887,7 @@
       let presentationManifest = null;
       let presentationShell = null;
       let presentationAudioController = null;
+      let playbackReady = false;
       let lastPresentationBeatIndex = null;
       let manifestBaseUrl = null;
       let castSeconds = 0;
@@ -2064,7 +2065,9 @@
       function updateTransportButtons() {
         const clamped = Math.min(currentSeconds, totalSeconds);
         const ready = Boolean(
-          (events.length || presentationManifest?.beats?.length) && totalSeconds,
+          playbackReady &&
+          (events.length || presentationManifest?.beats?.length) &&
+          totalSeconds,
         );
         const playLabel = playing
           ? 'Pause'
@@ -3054,7 +3057,10 @@
       }
 
       function play(options = {}) {
-        if (!events.length && !presentationManifest?.beats?.length) {
+        if (
+          !playbackReady ||
+          (!events.length && !presentationManifest?.beats?.length)
+        ) {
           return;
         }
         if (pausedAtGuidedPoint && currentSeconds >= totalSeconds) {
@@ -3359,6 +3365,7 @@
               onPlayStarted: handleAudioPlaybackStarted,
             });
           }
+          playbackReady = true;
           updateTotalSeconds();
           resetPlayback();
           if (autoplayCountdown) {
