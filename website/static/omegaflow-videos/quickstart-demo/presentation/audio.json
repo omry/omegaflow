@@ -1,5 +1,5 @@
 {
-  "duration_ms": 61728,
+  "duration_ms": 59352,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,10 +12,10 @@
           "text_start": 0
         }
       ],
-      "sha256": "c1c2fc78014664aa1d2e0a09f36525c9cedf6876ac990df2388739b8a02de1b1",
-      "source_end_ms": 13248,
+      "sha256": "7b2d3daf4254ddd61edab7f5679876cca90dae6cc9ccdbff6309701bcf930b2e",
+      "source_end_ms": 14664,
       "source_start_ms": 0,
-      "src": "audio/__beat__-install-c1c2fc78014664aa1d2e0a09f36525c9cedf6876ac990df2388739b8a02de1b1.mp3",
+      "src": "audio/__beat__-install-7b2d3daf4254ddd61edab7f5679876cca90dae6cc9ccdbff6309701bcf930b2e.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -23,15 +23,15 @@
       "members": [
         {
           "beat_id": "bootstrap",
-          "text": "Next, from your repository root, run bootstrap to set up the recording workspace. The command creates the project settings, recording defaults, and workspace layout. The generated quickstart is ready to run, so you can try OmegaFlow immediately.",
-          "text_end": 245,
+          "text": "From your repository root, run bootstrap to set up the recording workspace. The command creates the project settings and recording defaults, along with an OmegaFlow quickstart video script you can run immediately.",
+          "text_end": 213,
           "text_start": 0
         }
       ],
-      "sha256": "703821dbc9b76846cf1f716a2b3f445f8dfb4a89ba261c40c187a2728943f30d",
-      "source_end_ms": 28968,
-      "source_start_ms": 13248,
-      "src": "audio/__beat__-bootstrap-703821dbc9b76846cf1f716a2b3f445f8dfb4a89ba261c40c187a2728943f30d.mp3",
+      "sha256": "6dd3fe0741ab1b8a9923f1b57a886932dc5dce2dea71cdad002a109246270fa9",
+      "source_end_ms": 27432,
+      "source_start_ms": 14664,
+      "src": "audio/__beat__-bootstrap-6dd3fe0741ab1b8a9923f1b57a886932dc5dce2dea71cdad002a109246270fa9.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -50,10 +50,10 @@
           "text_start": 189
         }
       ],
-      "sha256": "0885c3dd70d448ef42ffbea1c8224319d5a6bf73cb598c6711e8ef5b4d5e04f7",
-      "source_end_ms": 61728,
-      "source_start_ms": 28968,
-      "src": "audio/build-and-browser-0885c3dd70d448ef42ffbea1c8224319d5a6bf73cb598c6711e8ef5b4d5e04f7.mp3",
+      "sha256": "d2e63cda312a36a21d504192d63a9abc1aa87769a8082c8f0237f179a4ccecc5",
+      "source_end_ms": 59352,
+      "source_start_ms": 27432,
+      "src": "audio/build-and-browser-d2e63cda312a36a21d504192d63a9abc1aa87769a8082c8f0237f179a4ccecc5.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],
