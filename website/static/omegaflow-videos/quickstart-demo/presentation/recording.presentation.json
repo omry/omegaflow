@@ -1,10 +1,10 @@
 {
   "assets": {
-    "clip-792e63a681f0644bd9c43e439f1eb71a1fe5b7ad9667a58e239369cb08ef5a84": {
-      "bytes": 123662,
+    "clip-0822e2e221db5c72b8c5353820c53a1a7663d4a9f829f98afcd125eb0bfb6a80": {
+      "bytes": 105901,
       "media_type": "video/mp4",
-      "path": "media/792e63a681f0644bd9c43e439f1eb71a1fe5b7ad9667a58e239369cb08ef5a84.mp4",
-      "sha256": "792e63a681f0644bd9c43e439f1eb71a1fe5b7ad9667a58e239369cb08ef5a84"
+      "path": "media/0822e2e221db5c72b8c5353820c53a1a7663d4a9f829f98afcd125eb0bfb6a80.mp4",
+      "sha256": "0822e2e221db5c72b8c5353820c53a1a7663d4a9f829f98afcd125eb0bfb6a80"
     },
     "state-00f01e21acf6158b0f01569141e555690fb9ee56c78f6a68609dcd85a54aede0": {
       "bytes": 60,
@@ -12,69 +12,69 @@
       "path": "media/45386cc70e17d73a9cabfe193842500a7f2ef153841e91f94b3d878546b3901a.webp",
       "sha256": "45386cc70e17d73a9cabfe193842500a7f2ef153841e91f94b3d878546b3901a"
     },
-    "state-664a949c9cc6bc21c61d1d54052eae42bd6894fc30b15e2048ac143ba3205ce1": {
-      "bytes": 14364,
+    "state-1bb91925af0c02353c698a935817cebb5e50c39f635a2de0e39e7539e0c9a5c5": {
+      "bytes": 14924,
       "media_type": "image/webp",
-      "path": "media/20f4a9b2d03d9d735b40e124b261f4034545aaaae006f67544a24635b95450fe.webp",
-      "sha256": "20f4a9b2d03d9d735b40e124b261f4034545aaaae006f67544a24635b95450fe"
+      "path": "media/d7959b536f3206ecc8d33aa9fd302b7c261c2666ff6ae835c6ff3ed7de80d295.webp",
+      "sha256": "d7959b536f3206ecc8d33aa9fd302b7c261c2666ff6ae835c6ff3ed7de80d295"
     },
-    "state-caa5faca709baf14ff5b71311cd6a89630bbc369c07efc9f93f52b73b2194b38": {
-      "bytes": 6318,
+    "state-1fd4259e23dfa9c68062dc9a8034e8600fccd416b79be38ba8c19f2e35a70ad6": {
+      "bytes": 6738,
       "media_type": "image/webp",
-      "path": "media/5d3a8a6908b4eb839abd2c4d9f25687cf8b8ec88d1836fd99c7a0b232d18b5e4.webp",
-      "sha256": "5d3a8a6908b4eb839abd2c4d9f25687cf8b8ec88d1836fd99c7a0b232d18b5e4"
+      "path": "media/fb2708b8e20ad90c56118fa515128a69a4db6ec3167c337bcff7224f9aa092ee.webp",
+      "sha256": "fb2708b8e20ad90c56118fa515128a69a4db6ec3167c337bcff7224f9aa092ee"
     }
   },
   "audio": {
     "intervals": [
       {
-        "presentation_end_ms": 10310,
+        "presentation_end_ms": 9570,
         "presentation_start_ms": 0,
-        "source_end_ms": 10310,
+        "source_end_ms": 9570,
         "source_start_ms": 0
       },
       {
-        "presentation_end_ms": 14664,
-        "presentation_start_ms": 10310,
-        "source_end_ms": 14664,
-        "source_start_ms": 10310
+        "presentation_end_ms": 13920,
+        "presentation_start_ms": 9570,
+        "source_end_ms": 13920,
+        "source_start_ms": 9570
       },
       {
-        "presentation_end_ms": 19694,
-        "presentation_start_ms": 14664,
-        "source_end_ms": 19694,
-        "source_start_ms": 14664
+        "presentation_end_ms": 18510,
+        "presentation_start_ms": 13920,
+        "source_end_ms": 18510,
+        "source_start_ms": 13920
       },
       {
-        "presentation_end_ms": 27432,
-        "presentation_start_ms": 19694,
-        "source_end_ms": 27432,
-        "source_start_ms": 19694
+        "presentation_end_ms": 26976,
+        "presentation_start_ms": 18510,
+        "source_end_ms": 26976,
+        "source_start_ms": 18510
       },
       {
-        "presentation_end_ms": 33182,
-        "presentation_start_ms": 27432,
-        "source_end_ms": 33182,
-        "source_start_ms": 27432
+        "presentation_end_ms": 32626,
+        "presentation_start_ms": 26976,
+        "source_end_ms": 32626,
+        "source_start_ms": 26976
       },
       {
-        "presentation_end_ms": 59968,
-        "presentation_start_ms": 38018,
-        "source_end_ms": 55132,
-        "source_start_ms": 33182
+        "presentation_end_ms": 58559,
+        "presentation_start_ms": 37409,
+        "source_end_ms": 53776,
+        "source_start_ms": 32626
       },
       {
-        "presentation_end_ms": 64188,
-        "presentation_start_ms": 59968,
-        "source_end_ms": 59352,
-        "source_start_ms": 55132
+        "presentation_end_ms": 62023,
+        "presentation_start_ms": 58559,
+        "source_end_ms": 57240,
+        "source_start_ms": 53776
       }
     ],
     "metadata": "audio.json"
   },
   "beats": [
     {
-      "duration_ms": 14664,
+      "duration_ms": 13920,
       "guide": {
         "success_hint": "Install OmegaFlow in your project's Python environment."
       },
@@ -86,37 +86,37 @@
       "transition_in": null
     },
     {
-      "duration_ms": 12768,
+      "duration_ms": 13056,
       "guide": {
         "success_hint": "Inspect and commit the generated recording workspace."
       },
       "heading": "Bootstrap Quickstart",
       "id": "bootstrap",
-      "offset_ms": 14664,
+      "offset_ms": 13920,
       "payload": "beats/bootstrap.cast",
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 16616,
+      "duration_ms": 16383,
       "guide": {
         "success_hint": "The generated video is ready to play."
       },
       "heading": "Build The Video",
       "id": "build",
-      "offset_ms": 27432,
+      "offset_ms": 26976,
       "payload": "beats/build.cast",
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 20140,
+      "duration_ms": 18664,
       "guide": {
         "success_hint": "The generated player is ready to publish with your docs."
       },
       "heading": "Play It In The Browser",
       "id": "play-in-browser",
-      "offset_ms": 44048,
+      "offset_ms": 43359,
       "payload": "beats/play-in-browser.browser.json",
       "renderer": "browser",
       "transition_in": "window-open"
@@ -136,7 +136,7 @@
     }
   },
   "recording": {
-    "duration_ms": 64188,
+    "duration_ms": 62023,
     "id": "quickstart-demo",
     "title": "Quickstart Demo"
   },
