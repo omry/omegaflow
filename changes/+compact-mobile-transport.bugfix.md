@@ -1,0 +1,1 @@
+Compact the narration bar and playback transport in the Docusaurus-embedded player on short and mobile viewports so more vertical space remains for the video, while every playback control and the completed 100% timeline stay visible.

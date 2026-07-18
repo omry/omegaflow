@@ -208,6 +208,121 @@ def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path
         browser.close()
 
 
+@pytest.mark.parametrize("width", [390, 320])
+def test_embedded_transport_stays_compact_on_short_mobile_viewports(
+    tmp_path: Path, width: int
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": width, "height": 240},
+            is_mobile=True,
+            has_touch=True,
+        )
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        header = page.locator(".bar").bounding_box()
+        status = page.locator(".status").bounding_box()
+        stage = page.locator(".stage").bounding_box()
+        assert header is not None and status is not None and stage is not None
+        assert header["height"] <= 40
+        assert status["height"] <= 58
+        assert stage["height"] >= 140
+        for control in ("#play", "#restart", "#rate", "#mute", "#progress"):
+            assert page.locator(control).is_visible()
+
+        page.evaluate(
+            """() => {
+              const narration = document.querySelector('#narration');
+              narration.innerHTML = Array.from({length: 32}, (_, index) => (
+                `<span class="narration-word ${index === 27 ? 'current' : 'future'}">word${index}</span>`
+              )).join(' ');
+              window.updateNarrationScroll();
+            }"""
+        )
+        narration_box = page.locator("#narration").bounding_box()
+        current_word_box = page.locator(".narration-word.current").bounding_box()
+        assert narration_box is not None and current_word_box is not None
+        assert current_word_box["x"] >= narration_box["x"] - 1
+        assert current_word_box["x"] + current_word_box["width"] <= (
+            narration_box["x"] + narration_box["width"] + 1
+        )
+        assert current_word_box["y"] >= narration_box["y"] - 1
+        assert current_word_box["y"] + current_word_box["height"] <= (
+            narration_box["y"] + narration_box["height"] + 1
+        )
+        browser.close()
+
+
+def test_narration_bar_compacts_when_the_player_not_the_viewport_is_short(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 800})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#player").evaluate(
+            "element => { element.style.height = '240px'; }"
+        )
+
+        header = page.locator(".bar").bounding_box()
+        assert header is not None
+        assert header["height"] <= 40
+        browser.close()
+
+
+def test_completed_progress_track_remains_visible(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 240})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#play").click()
+        page.wait_for_function(
+            "document.querySelector('#progress').value === '1000'"
+        )
+
+        state = page.locator("#progress").evaluate(
+            """element => ({
+              complete: element.parentElement.dataset.complete,
+              position: element.style.getPropertyValue('--position'),
+              width: element.getBoundingClientRect().width,
+              height: element.getBoundingClientRect().height,
+              display: getComputedStyle(element).display,
+              visibility: getComputedStyle(element).visibility,
+              opacity: getComputedStyle(element).opacity,
+            })"""
+        )
+        assert state["complete"] == "true"
+        assert state["position"] == "100%"
+        assert state["display"] == "block"
+        assert state["visibility"] == "visible"
+        assert state["opacity"] == "1"
+        assert state["width"] > 100
+        assert state["height"] > 0
+        browser.close()
+
+
 def test_playback_completion_renders_the_exact_final_browser_state(
     tmp_path: Path,
 ) -> None:

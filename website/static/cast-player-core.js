@@ -1231,9 +1231,7 @@
           !clip.seeking &&
           (enteringClip ||
             (!clipPlaying &&
-              Math.abs((clip.currentTime || 0) - seekTargetSeconds) > driftToleranceSeconds) ||
-            (clipPlaying &&
-              (clip.currentTime || 0) < seekTargetSeconds - driftToleranceSeconds))
+              Math.abs((clip.currentTime || 0) - seekTargetSeconds) > driftToleranceSeconds))
         ) {
           clip.currentTime = seekTargetSeconds;
         }

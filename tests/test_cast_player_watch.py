@@ -63,7 +63,7 @@ def test_embedded_player_preserves_browser_stage_ratio() -> None:
     )
     assert "playerRoot.dataset.layout = params.get('layout') || ''" in html
     assert '.player[data-layout="wide-browser"]' in html
-    assert 'grid-template-rows: max(60px, 16%) 1fr max(80px, 20.4%);' in html
+    assert 'grid-template-rows: auto minmax(0, 1fr) auto;' in html
     assert '.player[data-embedded="true"] .status' in html
     assert '.player[data-embedded="true"] .progress-wrap' in html
 

@@ -43,6 +43,8 @@
       }
 
       .player {
+        container-name: player;
+        container-type: size;
         display: grid;
         grid-template-rows: auto 1fr auto;
         height: 100vh;
@@ -509,6 +511,17 @@
         appearance: none;
       }
 
+      .progress-wrap[data-complete="true"] .progress {
+        display: block;
+        background:
+          linear-gradient(90deg, var(--brand), var(--cue)) 0 / 100% 100%
+            no-repeat,
+          #0c0f15;
+        box-shadow: 0 0 0 1px rgba(255, 194, 71, 0.32);
+        opacity: 1;
+        visibility: visible;
+      }
+
       .progress-wrap {
         position: relative;
         flex: 1 1 auto;
@@ -734,11 +747,10 @@
 
       .player[data-layout="wide-browser"] {
         /*
-         * Preserve the browser stage ratio inside a 16:10 iframe. The 63.6%
-         * middle row, together with the renderer's 2vw padding, matches the
-         * 1152x360 viewport plus its uniformly scaled window decoration.
+         * Let the compact transport size itself from its controls so short
+         * embeds devote the remaining space to the browser stage.
          */
-        grid-template-rows: max(60px, 16%) 1fr max(80px, 20.4%);
+        grid-template-rows: auto minmax(0, 1fr) auto;
       }
 
       .player[data-embedded="true"] .bar {
@@ -748,21 +760,115 @@
       .player[data-embedded="true"] .status {
         min-height: 0;
         flex-wrap: wrap;
+        column-gap: 0.4rem;
+        row-gap: 0.15rem;
+        padding: 0.25rem 0.55rem 0.18rem;
       }
 
       .player[data-embedded="true"] .progress-wrap {
         order: 3;
         flex-basis: 100%;
+        min-height: 0.75rem;
+      }
+
+      .player[data-embedded="true"] .progress {
+        --thumb-size: 0.7rem;
+        height: 0.25rem;
+      }
+
+      .player[data-embedded="true"] .section-marker {
+        height: 0.7rem;
+      }
+
+      .player[data-embedded="true"] .section-marker.active {
+        height: 0.85rem;
       }
 
       @media (max-width: 620px) {
         .status {
           flex-wrap: wrap;
+          column-gap: 0.4rem;
+          row-gap: 0.15rem;
+          padding: 0.25rem 0.55rem 0.18rem;
         }
 
         .progress-wrap {
           order: 3;
           flex-basis: 100%;
+          min-height: 0.75rem;
+        }
+
+        .progress {
+          --thumb-size: 0.7rem;
+          height: 0.25rem;
+        }
+
+        .section-marker {
+          height: 0.7rem;
+        }
+
+        .section-marker.active {
+          height: 0.85rem;
+        }
+
+        #voice {
+          display: none;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .status {
+          column-gap: 0.2rem;
+          padding-inline: 0.3rem;
+        }
+
+        .transport {
+          gap: 0.15rem;
+        }
+
+        .icon-button {
+          width: 1.6rem;
+          min-width: 1.6rem;
+          height: 1.6rem;
+          min-height: 1.6rem;
+        }
+
+        .rate-button {
+          min-width: 2.15rem;
+        }
+
+        .status button {
+          min-height: 1.6rem;
+        }
+
+        #clock {
+          min-width: 3.8rem;
+          font-size: 0.72rem;
+        }
+      }
+
+      @container player (max-height: 420px) {
+        .bar {
+          gap: 0.45rem;
+          grid-template-columns: 1.5rem minmax(0, 1fr);
+          height: auto;
+          min-height: 0;
+          padding: 0.3rem 0.55rem;
+        }
+
+        .player-logo-link {
+          width: 1.5rem;
+          height: 1.5rem;
+        }
+
+        .player-logo-link svg {
+          width: 1.25rem;
+          height: 1.25rem;
+        }
+
+        .narration {
+          height: 1.35em;
+          white-space: normal;
         }
       }
     </style>
@@ -1826,13 +1932,35 @@
       }
 
       function updateNarrationScroll({animate = false} = {}) {
-        const overflow = narration.scrollHeight - narration.clientHeight;
+        const verticalOverflow = narration.scrollHeight - narration.clientHeight;
+        const horizontalOverflow = narration.scrollWidth - narration.clientWidth;
+        const current = narration.querySelector('.narration-word.current');
+        if (verticalOverflow <= 1 && horizontalOverflow > 1) {
+          cancelNarrationScrollAnimation();
+          narrationScrollTarget = 0;
+          narration.scrollTop = 0;
+          if (!current) {
+            narration.scrollLeft = 0;
+            return;
+          }
+          const narrationRect = narration.getBoundingClientRect();
+          const currentRect = current.getBoundingClientRect();
+          const relativeLeft = currentRect.left - narrationRect.left + narration.scrollLeft;
+          const centered = relativeLeft - Math.max(
+            0,
+            (narration.clientWidth - currentRect.width) / 2,
+          );
+          narration.scrollLeft = Math.min(
+            horizontalOverflow,
+            Math.max(0, centered),
+          );
+          return;
+        }
         narration.scrollLeft = 0;
-        if (overflow <= 1) {
+        if (verticalOverflow <= 1) {
           setNarrationScrollTop(0);
           return;
         }
-        const current = narration.querySelector('.narration-word.current');
         if (!current) {
           if (animate) {
             narration.scrollLeft = 0;
@@ -1841,7 +1969,12 @@
           setNarrationScrollTop(0);
           return;
         }
-        const lineHeight = Math.max(1, narration.clientHeight / 2);
+        const computedLineHeight = typeof window.getComputedStyle === 'function'
+          ? Number.parseFloat(window.getComputedStyle(narration).lineHeight)
+          : Number.NaN;
+        const lineHeight = Number.isFinite(computedLineHeight)
+          ? Math.max(1, computedLineHeight)
+          : Math.max(1, narration.clientHeight / 2);
         const narrationTop = narration.getBoundingClientRect().top;
         const currentTop = current.getBoundingClientRect().top;
         const relativeTop = Math.max(
@@ -1849,7 +1982,7 @@
           currentTop - narrationTop + narration.scrollTop,
         );
         const targetLine = Math.floor(relativeTop / lineHeight);
-        setNarrationScrollTop(Math.min(overflow, targetLine * lineHeight), {
+        setNarrationScrollTop(Math.min(verticalOverflow, targetLine * lineHeight), {
           animate,
         });
       }
@@ -1903,6 +2036,9 @@
           ? String(Math.round((clamped / totalSeconds) * 1000))
           : '0';
         progress.style.setProperty('--position', `${percent}%`);
+        progressWrap.dataset.complete = totalSeconds > 0 && percent >= 100
+          ? 'true'
+          : 'false';
         updateNarration(clamped, {animateScroll: playing && !scrubbing});
         updateSectionMarkerState(clamped);
         updateTransportButtons();
@@ -2394,6 +2530,9 @@
           : 0;
         clock.textContent = `${formatTime(clamped)} / ${formatTime(totalSeconds)}`;
         progress.style.setProperty('--position', `${percent}%`);
+        progressWrap.dataset.complete = totalSeconds > 0 && percent >= 100
+          ? 'true'
+          : 'false';
         updateNarration(clamped, {animateScroll: false});
         updateSectionMarkerState(clamped);
         updateTransportButtons();
