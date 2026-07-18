@@ -30,15 +30,6 @@ No active release blockers.
 
 ## Release backlog
 
-- [ ] `P1` Make build progress reflect long-running active work. The current
-      action-based bar can remain at `0/4` for most of a build and then rush
-      through every remaining unit. Acceptance checks: keep the progress
-      surface visibly active during a long first action; avoid fake precision;
-      represent the relative work of capture, narration, assembly, and publish
-      phases meaningfully; preserve concise non-interactive output and stable
-      recorded TUI playback; and add a regression test with a deliberately slow
-      first action followed by fast final phases.
-
 ## Post-release
 
 - [ ] `P2` Support narration-synchronized text highlighting in terminal beats.
@@ -176,6 +167,13 @@ No active release blockers.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Make build progress reflect long-running active work.
+      Completed: `2026-07-18`. Interactive builds now show a moving activity
+      tracer and elapsed time for the current phase while keeping completed
+      units unchanged, so long capture and narration work stays visibly active
+      without reporting invented partial completion. Non-interactive output
+      remains concise, and realtime terminal capture retains the animated TUI.
 
 - [x] `P0` Prevent duplicate voiceover when playback starts before the website
       player has fully loaded. Completed: `2026-07-18`. Playback now remains

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import tomllib
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,7 @@ from omegaflow.studio_config import (
     studio_directive_blocks,
     studio_run_dir,
 )
+from omegaflow.tool_progress import ProgressBarRenderer
 
 
 def write_successful_presentation_run(
@@ -97,6 +99,86 @@ def test_build_progress_renders_determinate_interactive_work() -> None:
     assert "4/4" in output
     assert "Record: Install OmegaFlow" in output
     assert "Preparing narration (1 take)" in output
+
+
+def test_build_progress_keeps_a_long_first_action_visibly_active() -> None:
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=4,
+        stream=stream,
+        interactive=True,
+        color=False,
+        heartbeat_interval=0.01,
+    )
+
+    progress.begin("Recording workflow (1 action)")
+    initial_output = stream.getvalue()
+    deadline = time.monotonic() + 0.5
+    while len(stream.getvalue()) == len(initial_output) and time.monotonic() < deadline:
+        time.sleep(0.005)
+    active_output = stream.getvalue()
+    progress.finish()
+
+    assert len(active_output) > len(initial_output)
+    assert "0/4" in active_output
+    assert "1/4" not in active_output
+    assert " · 0." in active_output
+    assert "▓" in active_output
+    assert active_output.count("Recording workflow (1 action)") >= 2
+
+
+def test_build_progress_keeps_the_progress_line_within_narrow_terminals() -> None:
+    stream = TtyBuffer()
+    renderer = ProgressBarRenderer(
+        stream=stream,
+        columns=20,
+        interactive=True,
+        enabled=False,
+    )
+
+    renderer.emit(
+        {
+            "message": "Recording",
+            "status": "step",
+            "current": 0,
+            "total": 4,
+            "active": True,
+            "activity_elapsed": 123.4,
+            "activity_step": 1,
+        }
+    )
+
+    progress_line = next(
+        line.removeprefix("\x1b[2K")
+        for line in stream.getvalue().splitlines()
+        if "progress" in line
+    )
+    assert len(progress_line) <= 20
+    assert "0/4" in progress_line
+    assert "123.4s" not in progress_line
+
+
+def test_build_progress_does_not_retain_transient_heartbeat_history() -> None:
+    renderer = ProgressBarRenderer(interactive=False, enabled=False)
+    renderer.emit(
+        {"message": "Recording", "status": "step", "current": 0, "total": 4}
+    )
+
+    for step in range(100):
+        renderer.emit(
+            {
+                "message": "Recording",
+                "status": "step",
+                "current": 0,
+                "total": 4,
+                "active": True,
+                "activity_elapsed": step / 4,
+                "activity_step": step,
+                "transient": True,
+            }
+        )
+
+    assert len(renderer._events) == 1
 
 
 def test_build_progress_keeps_noninteractive_logs_concise() -> None:

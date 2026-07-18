@@ -120,13 +120,17 @@ class BuildProgress:
         interactive: bool | None = None,
         color: bool | None = None,
         active: bool = True,
+        heartbeat_interval: float = 0.25,
     ) -> None:
         if total <= 0:
             raise ValueError("build progress total must be positive")
+        if heartbeat_interval <= 0:
+            raise ValueError("build progress heartbeat interval must be positive")
         self.total = total
         self.current = 0
         self.stream = stream or sys.stdout
         self.active = active
+        self.heartbeat_interval = heartbeat_interval
         if interactive is None:
             isatty = getattr(self.stream, "isatty", None)
             interactive = bool(isatty and isatty())
@@ -139,21 +143,57 @@ class BuildProgress:
         self._log = LogProgressRenderer(stream=self.stream, enabled=color)
         self._finished = False
         self._lock = threading.RLock()
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+        self._active_message: str | None = None
+        self._active_since = 0.0
+        self._activity_step = 0
 
-    def _event(self, message: str) -> dict[str, Any]:
-        return {
+    def _event(self, message: str, *, active: bool = False) -> dict[str, Any]:
+        event: dict[str, Any] = {
             "phase": "status",
             "status": "step",
             "message": message,
             "current": self.current,
             "total": self.total,
         }
+        if active:
+            event["active"] = True
+            event["activity_elapsed"] = max(
+                0.0, time.monotonic() - self._active_since
+            )
+            event["activity_step"] = self._activity_step
+        return event
+
+    def _activate(self, message: str) -> None:
+        if message != self._active_message:
+            self._active_message = message
+            self._active_since = time.monotonic()
+            self._activity_step = 0
+        if self.interactive and self._heartbeat_thread is None:
+            self._heartbeat_thread = threading.Thread(
+                target=self._heartbeat,
+                name="omegaflow-build-progress",
+                daemon=True,
+            )
+            self._heartbeat_thread.start()
+
+    def _heartbeat(self) -> None:
+        while not self._heartbeat_stop.wait(self.heartbeat_interval):
+            with self._lock:
+                if self._finished or not self.active or self._active_message is None:
+                    continue
+                self._activity_step += 1
+                event = self._event(self._active_message, active=True)
+                event["transient"] = True
+                self._bar.emit(event)
 
     def begin(self, message: str) -> None:
         with self._lock:
             if not self.active:
                 return
-            event = self._event(message)
+            self._activate(message)
+            event = self._event(message, active=True)
             if self.interactive:
                 self._bar.emit(event)
             else:
@@ -162,7 +202,8 @@ class BuildProgress:
     def update(self, message: str) -> None:
         with self._lock:
             if self.active and self.interactive:
-                self._bar.emit(self._event(message))
+                self._activate(message)
+                self._bar.emit(self._event(message, active=True))
 
     def advance(self, message: str, *, units: int = 1) -> None:
         if units < 0:
@@ -172,10 +213,16 @@ class BuildProgress:
             self.update(message)
 
     def finish(self) -> None:
+        heartbeat_thread: threading.Thread | None
         with self._lock:
             if self._finished:
                 return
             self._finished = True
+            self._heartbeat_stop.set()
+            heartbeat_thread = self._heartbeat_thread
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(timeout=max(1.0, self.heartbeat_interval * 2))
+        with self._lock:
             if self.active and self.interactive:
                 self._bar.finish(replay=False)
 

@@ -214,8 +214,18 @@ class ProgressBarRenderer:
         total = event.get("total")
         current_int = current if isinstance(current, int) and current >= 0 else None
         total_int = total if isinstance(total, int) and total > 0 else None
+        active = event.get("active") is True
+        activity_elapsed = event.get("activity_elapsed")
+        elapsed = (
+            float(activity_elapsed)
+            if isinstance(activity_elapsed, (int, float)) and activity_elapsed >= 0
+            else None
+        )
+        activity_step = event.get("activity_step")
+        pulse = activity_step if isinstance(activity_step, int) else 0
         self._event_count += 1
-        self._events.append(dict(event))
+        if event.get("transient") is not True:
+            self._events.append(dict(event))
         if not self._interactive():
             return
         self._render(
@@ -223,6 +233,9 @@ class ProgressBarRenderer:
             status=status,
             current=current_int,
             total=total_int,
+            active=active,
+            activity_elapsed=elapsed,
+            activity_step=pulse,
         )
 
     def finish(self, *, replay: bool = False) -> None:
@@ -250,19 +263,34 @@ class ProgressBarRenderer:
         status: str,
         current: int | None,
         total: int | None,
+        active: bool,
+        activity_elapsed: float | None,
+        activity_step: int,
     ) -> None:
         stream = self.stream or sys.stdout
         enabled = color_enabled(stream) if self.enabled is None else self.enabled
         if self._rendered:
             stream.write("\x1b[2F")
         columns = self._terminal_columns()
-        detail = self._detail(current=current, total=total)
+        detail = self._detail(
+            current=current,
+            total=total,
+            active=active,
+            activity_elapsed=activity_elapsed,
+        )
+        minimum_width = len("progress ") + len("[]") + 4
+        if detail and minimum_width + 1 + len(detail) > columns:
+            detail = self._detail(current=current, total=total)
+        if detail and minimum_width + 1 + len(detail) > columns:
+            detail = ""
         bar_width = self._bar_width(columns=columns, detail=detail)
         bar = self._bar(
             current=current,
             total=total,
             width=bar_width,
             enabled=enabled,
+            active=active,
+            activity_step=activity_step,
         )
         label = color_text("progress", ANSI_CYAN_BOLD, enabled=enabled)
         detail_text = f" {detail}" if detail else ""
@@ -292,6 +320,8 @@ class ProgressBarRenderer:
         total: int | None,
         width: int,
         enabled: bool,
+        active: bool = False,
+        activity_step: int = 0,
     ) -> str:
         if current is not None and total is not None:
             clamped = min(max(current, 0), total)
@@ -300,16 +330,30 @@ class ProgressBarRenderer:
             filled = self._event_count % (width + 1)
             if filled == 0:
                 filled = 1
-        filled_text = "█" * filled
-        empty_text = "░" * (width - filled)
-        text = f"[{filled_text}{empty_text}]"
+        cells = ["█"] * filled + ["░"] * (width - filled)
+        if active and filled < width:
+            remaining = width - filled
+            pulse_offset = activity_step % max(1, remaining * 2 - 2)
+            if pulse_offset >= remaining:
+                pulse_offset = (remaining * 2 - 2) - pulse_offset
+            cells[filled + pulse_offset] = "▓"
+        text = f"[{''.join(cells)}]"
         return color_text(text, ANSI_GREEN_BOLD, enabled=enabled)
 
     @staticmethod
-    def _detail(*, current: int | None, total: int | None) -> str:
+    def _detail(
+        *,
+        current: int | None,
+        total: int | None,
+        active: bool = False,
+        activity_elapsed: float | None = None,
+    ) -> str:
+        parts: list[str] = []
         if current is not None and total is not None:
-            return f"{min(current, total)}/{total}"
-        return ""
+            parts.append(f"{min(current, total)}/{total}")
+        if active and activity_elapsed is not None:
+            parts.append(f"{activity_elapsed:.1f}s")
+        return " · ".join(parts)
 
     @staticmethod
     def _truncate(text: str, width: int) -> str:
