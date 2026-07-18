@@ -202,6 +202,10 @@ class ProgressBarRenderer:
         self._rendered = False
         self._event_count = 0
         self._events: list[dict[str, Any]] = []
+        self._activity_position: int | None = None
+        self._activity_direction = 1
+        self._last_activity_step: int | None = None
+        self._activity_width: int | None = None
 
     def emit(self, event: dict[str, Any]) -> None:
         message = event.get("message")
@@ -223,6 +227,9 @@ class ProgressBarRenderer:
         )
         activity_step = event.get("activity_step")
         pulse = activity_step if isinstance(activity_step, int) else 0
+        completion = event.get("completion")
+        if not isinstance(completion, str) or not completion:
+            completion = None
         self._event_count += 1
         if event.get("transient") is not True:
             self._events.append(dict(event))
@@ -236,12 +243,16 @@ class ProgressBarRenderer:
             active=active,
             activity_elapsed=elapsed,
             activity_step=pulse,
+            completion=completion,
         )
 
-    def finish(self, *, replay: bool = False) -> None:
+    def finish(self, *, replay: bool = False, retain: bool = False) -> None:
         stream = self.stream or sys.stdout
         if self._rendered:
-            stream.write("\x1b[2F\x1b[2M")
+            if retain:
+                stream.write("\x1b[1F\x1b[2K\r")
+            else:
+                stream.write("\x1b[2F\x1b[2M")
             self._rendered = False
         if replay:
             renderer = LogProgressRenderer(stream=stream, enabled=self.enabled)
@@ -266,9 +277,16 @@ class ProgressBarRenderer:
         active: bool,
         activity_elapsed: float | None,
         activity_step: int,
+        completion: str | None,
     ) -> None:
         stream = self.stream or sys.stdout
         enabled = color_enabled(stream) if self.enabled is None else self.enabled
+        complete = (
+            current is not None
+            and total is not None
+            and current >= total
+        )
+        active = active and not complete
         if self._rendered:
             stream.write("\x1b[2F")
         columns = self._terminal_columns()
@@ -277,6 +295,7 @@ class ProgressBarRenderer:
             total=total,
             active=active,
             activity_elapsed=activity_elapsed,
+            completion=completion,
         )
         minimum_width = len("progress ") + len("[]") + 4
         if detail and minimum_width + 1 + len(detail) > columns:
@@ -332,13 +351,55 @@ class ProgressBarRenderer:
                 filled = 1
         cells = ["█"] * filled + ["░"] * (width - filled)
         if active and filled < width:
-            remaining = width - filled
-            pulse_offset = activity_step % max(1, remaining * 2 - 2)
-            if pulse_offset >= remaining:
-                pulse_offset = (remaining * 2 - 2) - pulse_offset
-            cells[filled + pulse_offset] = "▓"
+            pulse_position = self._advance_activity_position(
+                filled=filled,
+                width=width,
+                activity_step=activity_step,
+            )
+            for offset, intensity in ((-1, "▒"), (0, "▓"), (1, "▒")):
+                position = pulse_position + offset
+                if filled <= position < width:
+                    cells[position] = intensity
         text = f"[{''.join(cells)}]"
         return color_text(text, ANSI_GREEN_BOLD, enabled=enabled)
+
+    def _advance_activity_position(
+        self,
+        *,
+        filled: int,
+        width: int,
+        activity_step: int,
+    ) -> int:
+        lower = min(filled, width - 1)
+        upper = width - 1
+        if self._activity_position is None or self._last_activity_step is None:
+            self._activity_position = lower
+            self._activity_direction = 1
+            self._last_activity_step = 0
+        if self._activity_width != width:
+            self._activity_position = min(
+                max(self._activity_position, lower),
+                upper,
+            )
+            self._activity_width = width
+        if self._activity_position < lower:
+            self._activity_position = lower
+            self._activity_direction = 1
+        if activity_step < self._last_activity_step:
+            self._activity_position = lower
+            self._activity_direction = 1
+            self._last_activity_step = 0
+        for _ in range(activity_step - self._last_activity_step):
+            next_position = self._activity_position + self._activity_direction
+            if next_position > upper:
+                self._activity_direction = -1
+                next_position = max(lower, self._activity_position - 1)
+            elif next_position < lower:
+                self._activity_direction = 1
+                next_position = min(upper, self._activity_position + 1)
+            self._activity_position = next_position
+        self._last_activity_step = activity_step
+        return self._activity_position
 
     @staticmethod
     def _detail(
@@ -347,12 +408,15 @@ class ProgressBarRenderer:
         total: int | None,
         active: bool = False,
         activity_elapsed: float | None = None,
+        completion: str | None = None,
     ) -> str:
         parts: list[str] = []
         if current is not None and total is not None:
             parts.append(f"{min(current, total)}/{total}")
         if active and activity_elapsed is not None:
             parts.append(f"{activity_elapsed:.1f}s")
+        if completion:
+            parts.append(completion)
         return " · ".join(parts)
 
     @staticmethod

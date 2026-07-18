@@ -987,7 +987,7 @@ def test_terminal_realtime_captures_interactive_build_progress(
         "progress.begin('Recording workflow'); "
         "progress.advance('Assembling video'); "
         "progress.advance('Video ready'); "
-        "progress.finish()"
+        "progress.finish(completion='completed in 2.3s')"
     )
     plan = normalize_recording_plan(
         {
@@ -1030,8 +1030,10 @@ def test_terminal_realtime_captures_interactive_build_progress(
     output = _cast_output(cast)
     assert "progress" in output
     assert "2/2" in output
+    assert "2/2 · completed in 2.3s" in output
     assert "\x1b[2F" in output
-    assert "\x1b[2M" in output
+    assert "\x1b[2M" not in output
+    assert "\x1b[1F\x1b[2K\r" in output
 
 
 def _cast_output(cast: str) -> str:

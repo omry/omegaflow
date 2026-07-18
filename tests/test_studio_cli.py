@@ -127,6 +127,131 @@ def test_build_progress_keeps_a_long_first_action_visibly_active() -> None:
     assert active_output.count("Recording workflow (1 action)") >= 2
 
 
+def test_build_progress_activity_indicator_uses_an_intensity_gradient() -> None:
+    renderer = ProgressBarRenderer(interactive=True, enabled=False)
+
+    bar = renderer._bar(
+        current=0,
+        total=4,
+        width=12,
+        enabled=False,
+        active=True,
+        activity_step=5,
+    )
+
+    assert "▒▓▒" in bar
+
+
+def test_build_progress_activity_position_does_not_jump_on_real_advance() -> None:
+    renderer = ProgressBarRenderer(interactive=True, enabled=False)
+
+    before = renderer._bar(
+        current=0,
+        total=4,
+        width=20,
+        enabled=False,
+        active=True,
+        activity_step=8,
+    )
+    after = renderer._bar(
+        current=1,
+        total=4,
+        width=20,
+        enabled=False,
+        active=True,
+        activity_step=8,
+    )
+
+    assert before.index("▓") == after.index("▓")
+
+
+def test_build_progress_activity_keeps_moving_after_progress_advances() -> None:
+    renderer = ProgressBarRenderer(interactive=True, enabled=False)
+
+    renderer._bar(
+        current=0,
+        total=4,
+        width=20,
+        enabled=False,
+        active=True,
+        activity_step=2,
+    )
+    at_boundary = renderer._bar(
+        current=1,
+        total=4,
+        width=20,
+        enabled=False,
+        active=True,
+        activity_step=2,
+    )
+    next_heartbeat = renderer._bar(
+        current=1,
+        total=4,
+        width=20,
+        enabled=False,
+        active=True,
+        activity_step=3,
+    )
+
+    assert at_boundary.index("▓") == 1 + 5
+    assert next_heartbeat.index("▓") == at_boundary.index("▓") + 1
+
+
+def test_build_progress_activity_phase_survives_message_changes() -> None:
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=4,
+        stream=stream,
+        interactive=True,
+        color=False,
+    )
+    progress.begin("Recording workflow")
+    progress._activity_step = 8
+
+    progress.advance("Recorded first action")
+    progress.finish()
+
+    assert progress._activity_step == 8
+
+
+def test_build_progress_retains_the_completed_interactive_bar() -> None:
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=1,
+        stream=stream,
+        interactive=True,
+        color=False,
+    )
+    progress.begin("Recording workflow")
+    progress.advance("Video ready")
+
+    progress.finish(completion="completed in 2.3s")
+
+    output = stream.getvalue()
+    final_render = output.rsplit("\x1b[2F", 1)[-1]
+    final_progress_line = next(
+        line for line in final_render.splitlines() if "progress" in line
+    )
+    assert "[████████████████████████████] 1/1" in final_progress_line
+    assert final_progress_line.endswith("1/1 · completed in 2.3s")
+    assert output.endswith("\x1b[1F\x1b[2K\r")
+
+
+def test_build_progress_clears_an_incomplete_interactive_bar() -> None:
+    stream = TtyBuffer()
+    progress = studio.BuildProgress(
+        total=2,
+        stream=stream,
+        interactive=True,
+        color=False,
+    )
+    progress.begin("Recording workflow")
+
+    progress.finish()
+
+    assert stream.getvalue().endswith("\x1b[2F\x1b[2M")
+
+
 def test_build_progress_keeps_the_progress_line_within_narrow_terminals() -> None:
     stream = TtyBuffer()
     renderer = ProgressBarRenderer(
@@ -360,10 +485,28 @@ def test_failed_build_clears_progress_and_reports_failure(
 def test_manifest_build_folds_internal_steps_into_concise_progress(
     tmp_path, monkeypatch, capsys
 ) -> None:
+    website_surface = tmp_path / "website.md"
+    website_surface.write_text(
+        "<!-- studio:demo:start -->\nold\n<!-- studio:demo:end -->\n",
+        encoding="utf-8",
+    )
     spec = {
         "id": "demo",
         "_recording_id": "demo",
         "audio": {"enabled": True},
+        "publish": {
+            "surfaces": {
+                "website": {
+                    "type": "docusaurus_mdx",
+                    "file": str(website_surface),
+                    "placeholder": "demo",
+                },
+                "standalone": {
+                    "type": "standalone_html",
+                    "file": "standalone.html",
+                },
+            }
+        },
         "beats": [
             {
                 "id": "hello",
@@ -411,19 +554,34 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
         ),
     )
     monkeypatch.setattr(
-        studio, "build_publish_surface_names", lambda *_args: ["website"]
+        studio,
+        "build_publish_surface_names",
+        lambda *_args: ["website", "standalone"],
     )
-    published: list[tuple[str | None, bool]] = []
+    published_bundles: list[tuple[dict[str, object], Path]] = []
+    monkeypatch.setattr(
+        studio,
+        "publish_presentation_bundle",
+        lambda bundle_spec, bundle_run_dir: published_bundles.append(
+            (bundle_spec, bundle_run_dir)
+        ),
+    )
+    published: list[tuple[str | None, bool, bool]] = []
 
     def fake_publish(
         _cfg,
         *,
         surface_name=None,
         presentation_run_dir=None,
+        publish_bundle_assets=True,
         report=True,
     ):
         assert presentation_run_dir == run_dir
-        published.append((surface_name, report))
+        published.append((surface_name, publish_bundle_assets, report))
+        return studio.PublishSurfaceOutcome(
+            path=tmp_path / f"{surface_name}.html",
+            updated=surface_name == "website",
+        )
 
     monkeypatch.setattr(studio, "run_publish_surface", fake_publish)
     monkeypatch.setattr(studio, "remove_unused_empty_run_dir", lambda *_a, **_k: None)
@@ -442,7 +600,90 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
     assert "compile presentation" not in output
     assert "publish surface" not in output
     assert "wrote presentation" not in output
-    assert published == [("website", False)]
+    assert "publish  website (Docusaurus): updated — rebuild required" in output
+    assert str(tmp_path / "website.html") not in output
+    assert (
+        "publish  standalone (Standalone HTML): unchanged — "
+        f"{tmp_path / 'standalone.html'}"
+        in output
+    )
+    assert published_bundles == [(spec, run_dir)]
+    assert published == [
+        ("website", False, False),
+        ("standalone", False, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("invalid_surface", "message"),
+    [
+        (
+            {"type": "unsupported", "file": "invalid.html"},
+            "unsupported publish surface type",
+        ),
+        (
+            {"type": "docusaurus_mdx", "file": "invalid.md"},
+            "docusaurus_mdx surfaces require a placeholder",
+        ),
+        (
+            {"type": "plain_html", "file": "invalid.html"},
+            "plain_html surfaces require a placeholder",
+        ),
+    ],
+)
+def test_manifest_build_validates_all_surfaces_before_publishing(
+    monkeypatch, invalid_surface, message
+) -> None:
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "audio": {"enabled": False},
+        "publish": {
+            "surfaces": {
+                "valid": {
+                    "type": "standalone_html",
+                    "file": "valid.html",
+                },
+                "invalid": {
+                    **invalid_surface,
+                },
+            }
+        },
+        "beats": [{"id": "hello", "actions": []}],
+    }
+    plan = studio.normalized_recording_plan(spec)
+    cfg = OmegaConf.create(
+        {
+            "recording": "demo",
+            "force": False,
+            "verbose": False,
+            "output_format": "text",
+        }
+    )
+    monkeypatch.setattr(
+        studio,
+        "build_publish_surface_names",
+        lambda *_args: ["valid", "invalid"],
+    )
+    capture_called = False
+    publish_called = False
+
+    def capture(*_args, **_kwargs):
+        nonlocal capture_called
+        capture_called = True
+
+    def publish(*_args, **_kwargs):
+        nonlocal publish_called
+        publish_called = True
+
+    monkeypatch.setattr(studio, "run_build_record_action", capture)
+    monkeypatch.setattr(studio, "publish_presentation_bundle", publish)
+
+    with pytest.raises(studio.StudioError, match=message):
+        studio.run_manifest_build(cfg, dict(cfg), spec, plan)
+
+    assert capture_called is False
+    assert publish_called is False
 
 
 def test_command_output_replace_selects_replacement_mode() -> None:
@@ -2290,9 +2531,10 @@ def test_success_followups_show_user_facing_actions(capsys) -> None:
     studio.print_success_followups(cfg)
 
     output = capsys.readouterr().out
-    assert "next follow-up command" in output
+    assert output.splitlines() == [
+        "watch  omegaflow recording=quickstart-demo action=watch"
+    ]
     assert "action=play" not in output
-    assert "omegaflow recording=quickstart-demo action=watch" in output
     assert "action=inspect" not in output
 
 
@@ -2583,6 +2825,127 @@ def test_build_publish_surface_names_can_disable_build_publish() -> None:
     }
 
     assert studio.build_publish_surface_names({}, spec) == []
+
+
+def test_run_publish_surface_reports_the_target_as_unchanged_when_up_to_date(
+    tmp_path, monkeypatch
+) -> None:
+    target = tmp_path / "quick-start.md"
+    target.write_text(
+        "<!-- studio:demo:start -->\nold\n<!-- studio:demo:end -->\n",
+        encoding="utf-8",
+    )
+    spec = {
+        "publish": {
+            "default": "docs",
+            "surfaces": {
+                "docs": {
+                    "type": "docusaurus_mdx",
+                    "file": str(target),
+                    "placeholder": "demo",
+                }
+            },
+        }
+    }
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda *_args, **_kwargs: spec,
+    )
+    monkeypatch.setattr(studio, "publish_surface", lambda *_args, **_kwargs: None)
+
+    result = studio.run_publish_surface(
+        OmegaConf.create({"recording": "demo", "output_format": "text"}),
+        surface_name="docs",
+        report=False,
+    )
+
+    assert result == studio.PublishSurfaceOutcome(path=target, updated=False)
+
+
+def test_run_publish_surface_reports_docusaurus_rebuild_requirement(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    target = tmp_path / "quick-start.md"
+    target.write_text(
+        "<!-- studio:demo:start -->\nold\n<!-- studio:demo:end -->\n",
+        encoding="utf-8",
+    )
+    spec = {
+        "publish": {
+            "default": "docs",
+            "surfaces": {
+                "docs": {
+                    "type": "docusaurus_mdx",
+                    "file": str(target),
+                    "placeholder": "demo",
+                }
+            },
+        }
+    }
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda *_args, **_kwargs: spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "publish_surface",
+        lambda *_args, **_kwargs: target,
+    )
+
+    result = studio.run_publish_surface(
+        OmegaConf.create({"recording": "demo", "output_format": "text"}),
+        surface_name="docs",
+    )
+
+    assert result == studio.PublishSurfaceOutcome(path=target, updated=True)
+    assert (
+        capsys.readouterr().out
+        == "publish  docs (Docusaurus): updated — rebuild required\n"
+    )
+
+
+def test_publish_surface_display_name_avoids_repeating_the_surface_type() -> None:
+    assert (
+        studio.publish_surface_display_name("docusaurus", "docusaurus_mdx")
+        == "Docusaurus"
+    )
+    assert (
+        studio.publish_surface_display_name("docs", "docusaurus_mdx")
+        == "docs (Docusaurus)"
+    )
+
+
+def test_publish_surface_summary_colors_surface_outcome_and_path(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    path = tmp_path / "quick-start.md"
+
+    studio.print_publish_surfaces(
+        OmegaConf.create({"output_format": "text"}),
+        [
+            (
+                "Docusaurus",
+                studio.PublishSurfaceOutcome(path=path, updated=True),
+                True,
+            ),
+            (
+                "Standalone HTML",
+                studio.PublishSurfaceOutcome(path=path, updated=False),
+                False,
+            ),
+        ],
+    )
+
+    output = capsys.readouterr().out
+    assert "\033[36;1mDocusaurus\033[0m" in output
+    assert "\033[32;1mupdated\033[0m" in output
+    assert "\033[33;1mrebuild required\033[0m" in output
+    assert "\033[33;1munchanged\033[0m" in output
+    assert f"\033[2m{path}\033[0m" in output
 
 
 def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> None:

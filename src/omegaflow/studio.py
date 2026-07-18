@@ -21,6 +21,7 @@ import uuid
 import webbrowser
 from collections.abc import Callable, Mapping
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, unquote, urlparse
@@ -169,7 +170,6 @@ class BuildProgress:
         if message != self._active_message:
             self._active_message = message
             self._active_since = time.monotonic()
-            self._activity_step = 0
         if self.interactive and self._heartbeat_thread is None:
             self._heartbeat_thread = threading.Thread(
                 target=self._heartbeat,
@@ -212,7 +212,7 @@ class BuildProgress:
             self.current = min(self.total, self.current + units)
             self.update(message)
 
-    def finish(self) -> None:
+    def finish(self, *, completion: str | None = None) -> None:
         heartbeat_thread: threading.Thread | None
         with self._lock:
             if self._finished:
@@ -224,7 +224,18 @@ class BuildProgress:
             heartbeat_thread.join(timeout=max(1.0, self.heartbeat_interval * 2))
         with self._lock:
             if self.active and self.interactive:
-                self._bar.finish(replay=False)
+                retain = self.current >= self.total
+                if retain and completion:
+                    event = self._event(
+                        self._active_message or "Video ready",
+                        active=False,
+                    )
+                    event["completion"] = completion
+                    self._bar.emit(event)
+                self._bar.finish(
+                    replay=False,
+                    retain=retain,
+                )
 
 
 PRESENTATION_BUILD_STEPS = [
@@ -1448,11 +1459,40 @@ def replace_placeholder(text: str, placeholder: str, replacement: str) -> str:
     )
 
 
+def resolve_publish_surface_definition(
+    surface: dict[str, Any],
+    *,
+    preflight_target: bool,
+) -> tuple[str, Path]:
+    surface_type = optional_string(surface.get("type"))
+    file_name = optional_string(surface.get("file"))
+    if not surface_type:
+        raise StudioError("publish surface type must be a non-empty string")
+    publish_surface_type_label(surface_type)
+    if not file_name:
+        raise StudioError("publish surface file must be a non-empty string")
+    path = record.relative_path(file_name)
+    if surface_type in {"docusaurus_mdx", "plain_html"}:
+        placeholder = optional_string(surface.get("placeholder"))
+        if not placeholder:
+            raise StudioError(f"{surface_type} surfaces require a placeholder")
+        if preflight_target:
+            try:
+                original = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise StudioError(
+                    f"could not read publish surface: {display_path(path)}"
+                ) from exc
+            replace_placeholder(original, placeholder, "")
+    return surface_type, path
+
+
 def publish_surface(
     config: dict[str, Any],
     *,
     surface_name: str | None = None,
     presentation_run_dir: Path | None = None,
+    publish_bundle_assets: bool = True,
 ) -> Path | None:
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
     selected = selected_surface(config, spec, surface_name=surface_name)
@@ -1463,20 +1503,14 @@ def publish_surface(
         raise StudioError(
             "no successful recording run found; run omegaflow action=build first"
         )
-    try:
-        presentation_build.validate_run_bundle(spec, run_dir)
-        presentation_build.publish_bundle(spec, run_dir)
-    except presentation_build.PresentationBuildError as exc:
-        raise StudioError(str(exc)) from exc
-    publish_paths = {"manifest": presentation_build.public_manifest_path(spec)}
     _surface_name, surface = selected
-    surface_type = optional_string(surface.get("type"))
-    file_name = optional_string(surface.get("file"))
-    if not surface_type:
-        raise StudioError("publish surface type must be a non-empty string")
-    if not file_name:
-        raise StudioError("publish surface file must be a non-empty string")
-    path = record.relative_path(file_name)
+    surface_type, path = resolve_publish_surface_definition(
+        surface,
+        preflight_target=True,
+    )
+    if publish_bundle_assets:
+        publish_presentation_bundle(spec, run_dir)
+    publish_paths = {"manifest": presentation_build.public_manifest_path(spec)}
 
     if surface_type == "docusaurus_mdx":
         placeholder = optional_string(surface.get("placeholder"))
@@ -1519,22 +1553,68 @@ def publish_surface(
     raise StudioError(f"unsupported publish surface type: {surface_type}")
 
 
+def publish_presentation_bundle(spec: Mapping[str, Any], run_dir: Path) -> Path:
+    try:
+        return presentation_build.publish_bundle(spec, run_dir)
+    except presentation_build.PresentationBuildError as exc:
+        raise StudioError(str(exc)) from exc
+
+
+@dataclass(frozen=True)
+class PublishSurfaceOutcome:
+    path: Path
+    updated: bool
+
+
 def run_publish_surface(
     cfg: DictConfig,
     *,
     surface_name: str | None = None,
     presentation_run_dir: Path | None = None,
+    publish_bundle_assets: bool = True,
     report: bool = True,
-) -> None:
+) -> PublishSurfaceOutcome | None:
     config = container_from_hydra_cfg(cfg)
-    path = publish_surface(
+    spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    selected = selected_surface(config, spec, surface_name=surface_name)
+    target_path: Path | None = None
+    selected_name: str | None = None
+    surface_type: str | None = None
+    if selected is not None:
+        selected_name, surface = selected
+        surface_type, target_path = resolve_publish_surface_definition(
+            surface,
+            preflight_target=True,
+        )
+    updated_path = publish_surface(
         config,
         surface_name=surface_name,
         presentation_run_dir=presentation_run_dir,
+        publish_bundle_assets=publish_bundle_assets,
     )
-    if path is not None and report and text_output_enabled(cfg):
-        step_line("publish surface")
-        pass_line(f"wrote publish surface: {display_path(path)}")
+    if target_path is None:
+        return None
+    outcome = PublishSurfaceOutcome(
+        path=updated_path or target_path,
+        updated=updated_path is not None,
+    )
+    if report and text_output_enabled(cfg):
+        assert surface_type is not None
+        assert selected_name is not None
+        print_publish_surfaces(
+            cfg,
+            [
+                (
+                    publish_surface_display_name(
+                        selected_name,
+                        surface_type,
+                    ),
+                    outcome,
+                    surface_type == "docusaurus_mdx",
+                )
+            ],
+        )
+    return outcome
 
 
 def watch_player_url_path(
@@ -1990,14 +2070,107 @@ def print_success_followups(cfg: DictConfig) -> None:
     recording_id = recording_id_from_value(recording_value)
     if not isinstance(recording_id, str) or not recording_id:
         return
-    print()
-    print(color_text("next", ANSI_CYAN_BOLD) + " follow-up command")
     print(
-        "  "
-        + color_text("watch  ", ANSI_GREEN_BOLD)
-        + " "
+        color_text("watch", ANSI_GREEN_BOLD)
+        + "  "
         + studio_tool_command(recording_id, "action=watch")
     )
+
+
+def print_publish_surfaces(
+    cfg: DictConfig,
+    surfaces: list[tuple[str, PublishSurfaceOutcome, bool]],
+) -> None:
+    if not text_output_enabled(cfg):
+        return
+    for name, outcome, rebuild_required in surfaces:
+        enabled = color_enabled()
+        result = "updated" if outcome.updated else "unchanged"
+        result_color = ANSI_GREEN_BOLD if outcome.updated else ANSI_YELLOW_BOLD
+        prefix = (
+            color_text("publish", ANSI_GREEN_BOLD, enabled=enabled)
+            + "  "
+            + color_text(name, ANSI_CYAN_BOLD, enabled=enabled)
+            + ": "
+        )
+        if rebuild_required:
+            print(
+                prefix
+                + color_text(result, result_color, enabled=enabled)
+                + " — "
+                + color_text(
+                    "rebuild required",
+                    ANSI_YELLOW_BOLD,
+                    enabled=enabled,
+                )
+            )
+            continue
+        print(
+            prefix
+            + color_text(result, result_color, enabled=enabled)
+            + " — "
+            + color_text(
+                display_path(outcome.path),
+                ANSI_DIM,
+                enabled=enabled,
+            )
+        )
+
+
+def publish_surface_type_label(surface_type: str) -> str:
+    labels = {
+        "docusaurus_mdx": "Docusaurus",
+        "plain_html": "HTML",
+        "standalone_html": "Standalone HTML",
+    }
+    try:
+        return labels[surface_type]
+    except KeyError as exc:
+        raise StudioError(f"unsupported publish surface type: {surface_type}") from exc
+
+
+def publish_surface_display_name(surface_name: str, surface_type: str) -> str:
+    type_label = publish_surface_type_label(surface_type)
+    normalized_name = surface_name.replace("_", " ").replace("-", " ").lower()
+    if normalized_name == type_label.lower():
+        return type_label
+    return f"{surface_name} ({type_label})"
+
+
+@dataclass(frozen=True)
+class BuildPublishSurface:
+    name: str
+    label: str
+    type: str
+
+
+def resolve_build_publish_surfaces(
+    config: dict[str, Any],
+    spec: dict[str, Any],
+    surface_names: list[str],
+) -> list[BuildPublishSurface]:
+    resolved: list[BuildPublishSurface] = []
+    for surface_name in surface_names:
+        selected = selected_surface(
+            config,
+            spec,
+            surface_name=surface_name,
+        )
+        if selected is None:
+            raise StudioError(f"publish surface not found: {surface_name}")
+        _selected_name, surface = selected
+        surface_type, _path = resolve_publish_surface_definition(
+            surface,
+            preflight_target=True,
+        )
+        resolved.append(
+            BuildPublishSurface(
+                name=surface_name,
+                label=publish_surface_display_name(surface_name, surface_type),
+                type=surface_type,
+            )
+        )
+    return resolved
 
 
 def format_elapsed(seconds: float) -> str:
@@ -2046,7 +2219,13 @@ def run_manifest_build(
         active=text_output_enabled(cfg),
     )
     warnings: tuple[str, ...] = ()
+    published_surfaces: list[tuple[str, PublishSurfaceOutcome, bool]] = []
     try:
+        publish_targets = resolve_build_publish_surfaces(
+            config,
+            spec,
+            surface_names,
+        )
         run_dir = run_build_record_action(cfg, spec, plan, progress=progress)
         narration_current = 0
 
@@ -2078,15 +2257,29 @@ def run_manifest_build(
         )
         progress.advance("Assembled video")
         warnings = result.warnings
-        for surface_name in surface_names:
+        if publish_targets:
             progress.update("Publish video")
-            run_publish_surface(
+            publish_presentation_bundle(spec, run_dir)
+        for target in publish_targets:
+            progress.update(f"Publish {target.label}")
+            outcome = run_publish_surface(
                 cfg,
-                surface_name=surface_name,
+                surface_name=target.name,
                 presentation_run_dir=run_dir,
+                publish_bundle_assets=False,
                 report=False,
             )
-            progress.advance("Published video")
+            if outcome is None:
+                raise StudioError(f"publish surface not found: {target.name}")
+            published_surfaces.append(
+                (
+                    target.label,
+                    outcome,
+                    target.type == "docusaurus_mdx",
+                )
+            )
+            result_label = "updated" if outcome.updated else "unchanged"
+            progress.advance(f"{target.label}: {result_label}")
         progress.update("Finalize video")
         remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
         garbage_collect_recording_runs(
@@ -2099,11 +2292,22 @@ def run_manifest_build(
     except presentation_build.PresentationBuildError as exc:
         raise StudioError(str(exc)) from exc
     finally:
-        progress.finish()
+        elapsed = time.monotonic() - started
+        compact_success = success and progress.active and progress.interactive
+        progress.finish(
+            completion=(
+                f"completed in {format_elapsed(elapsed)}"
+                if compact_success
+                else None
+            )
+        )
         if success:
             for warning in warnings:
                 info_line(f"{warning}: review recommended")
-        print_build_elapsed(cfg, time.monotonic() - started, success=success)
+        if not compact_success:
+            print_build_elapsed(cfg, elapsed, success=success)
+        if success:
+            print_publish_surfaces(cfg, published_surfaces)
     print_success_followups(cfg)
     return 0
 
