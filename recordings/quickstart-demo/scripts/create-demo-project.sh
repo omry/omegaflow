@@ -17,5 +17,5 @@ test -f recordings/config.yaml
 test -f recordings/quickstart/index.md
 test ! -e recordings/quickstart/scripts/hello.sh
 grep -Fq "run: for n in 3 2 1; do printf '%s\\n' \"\$n\"; sleep 1; done; printf 'Hello World!\\n'" recordings/quickstart/index.md
-grep -Fq 'follow_along: true' recordings/quickstart/index.md
+grep -Fq 'timing: realtime' recordings/quickstart/index.md
 grep -Fq -- '- Hello World!' recordings/quickstart/index.md

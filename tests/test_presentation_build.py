@@ -7,6 +7,8 @@ import zlib
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 import omegaflow.presentation_build as presentation_build
 import omegaflow.studio as studio
 from omegaflow import audio as audio_module
@@ -491,6 +493,41 @@ def test_source_words_repair_zero_duration_transcription_timestamps() -> None:
 
     assert words[1]["start_ms"] == 400
     assert words[1]["end_ms"] == 401
+
+
+@pytest.mark.parametrize(
+    ("text", "raw_words", "expected"),
+    [
+        (
+            "A ready-to-watch video. When",
+            [
+                {"word": "A", "start": 0.0, "end": 0.1},
+                {"word": "ready", "start": 0.2, "end": 0.4},
+                {"word": "to", "start": 0.4, "end": 0.5},
+                {"word": "watch", "start": 0.5, "end": 0.8},
+                {"word": "video", "start": 0.9, "end": 1.2},
+                {"word": "When", "start": 1.8, "end": 2.0},
+            ],
+            [(0, 100), (200, 800), (900, 1200), (1800, 2000)],
+        ),
+        (
+            "Quick start works",
+            [
+                {"word": "Quickstart", "start": 0.1, "end": 0.7},
+                {"word": "works", "start": 0.8, "end": 1.1},
+            ],
+            [(100, 400), (400, 700), (800, 1100)],
+        ),
+    ],
+)
+def test_source_words_preserve_timings_across_tokenization_differences(
+    text: str,
+    raw_words: list[dict[str, object]],
+    expected: list[tuple[int, int]],
+) -> None:
+    words = _source_words_with_timing(text, raw_words, duration_ms=2500)
+
+    assert [(word["start_ms"], word["end_ms"]) for word in words] == expected
 
 
 def test_watch_serves_run_local_manifest_reference_graph(

@@ -109,10 +109,12 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    Next, from your repository root, @bootstrap@ run bootstrap to set up the
-    recording workspace. @wait:bootstrap_run+200ms@ The command creates the
-    project settings, recording defaults, and workspace layout. The generated
-    quickstart is ready to run, so you can try OmegaFlow immediately.
+    From your repository root, @bootstrap@ run bootstrap to set up the recording
+    workspace. @wait:bootstrap_run+200ms@ The command creates the
+    @project_settings_start@ project settings @project_settings_end@ and
+    @recording_defaults_start@ recording defaults, @recording_defaults_end@
+    along with @quickstart_script_start@ an OmegaFlow quickstart video script
+    you can run immediately. @quickstart_script_end@
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -122,6 +124,19 @@ beat:
       display: omegaflow action=bootstrap
       after: "@bootstrap@"
       pre_command_pause: 0.45
+  effects:
+  - highlight:
+      text: .omegaflow/config.yaml
+      start: "@project_settings_start@"
+      end: "@project_settings_end@"
+  - highlight:
+      text: recordings/config.yaml
+      start: "@recording_defaults_start@"
+      end: "@recording_defaults_end@"
+  - highlight:
+      text: recordings/quickstart/index.md
+      start: "@quickstart_script_start@"
+      end: "@quickstart_script_end@"
   guide:
     commands:
     - omegaflow action=bootstrap
@@ -154,7 +169,7 @@ beat:
       after: "@watch@"
       pre_command_pause: 0.45
       browser_handoff: true
-      follow_along: true
+      timing: realtime
       show_prompt_after: false
   guide:
     commands:

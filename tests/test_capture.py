@@ -435,7 +435,7 @@ def test_coordinator_hands_blocking_terminal_watch_to_browser_runner(
                                     "id": "watch_command",
                                     "run": "watch",
                                     "browser_handoff": True,
-                                    "follow_along": True,
+                                    "timing": "realtime",
                                     "show_prompt_after": False,
                                 }
                             ]
@@ -510,7 +510,7 @@ def test_coordinator_cancels_blocking_terminal_handoff_when_capture_is_interrupt
                                     "id": "watch_command",
                                     "run": "watch",
                                     "browser_handoff": True,
-                                    "follow_along": True,
+                                    "timing": "realtime",
                                     "show_prompt_after": False,
                                 }
                             ]

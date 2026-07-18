@@ -930,7 +930,9 @@ def test_audio_timing_markers_require_audio_enabled(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     recording_dir = recordings_dir / "demo"
     recording_dir.mkdir(parents=True)
-    (recordings_dir / "config.yaml").write_text("audio:\n  enabled: false\n", encoding="utf-8")
+    (recordings_dir / "config.yaml").write_text(
+        "audio:\n  enabled: false\n", encoding="utf-8"
+    )
     (recording_dir / "index.md").write_text(
         """\
 ---
@@ -970,6 +972,48 @@ beat:
         assert "command 'run_demo' after anchor '@run_demo@' in beat 'hello'" in message
     else:
         raise AssertionError("expected audio timing markers without audio to fail")
+
+
+def test_terminal_highlight_anchor_timing_requires_audio_enabled(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "demo"
+    recording_dir.mkdir(parents=True)
+    (recordings_dir / "config.yaml").write_text("audio:\n  enabled: false\n", encoding="utf-8")
+    (recording_dir / "index.md").write_text(
+        """\
+---
+id: demo
+title: Demo
+---
+
+```yaml studio-directive
+scene: Demo
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Hello
+  narration: "@highlight_start@ Project settings. @highlight_end@"
+  effects:
+  - highlight:
+      text: .omegaflow/config.yaml
+      start: "@highlight_start@"
+      end: "@highlight_end@"
+```
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        StudioConfigError,
+        match=r"terminal text highlight in beat 'hello'",
+    ):
+        recording_spec_from_config(
+            {"recording": "demo", "studio": {"recording_dir": str(recordings_dir)}},
+            recording_id=None,
+            overrides=(),
+        )
 
 
 def test_studio_run_dir_uses_safe_placeholder_for_invalid_recording_id() -> None:
@@ -1816,6 +1860,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     beats_by_id = {beat["id"]: beat for beat in beats}
     build_commands = beats_by_id["build"]["actions"][0]["commands"]
     browser_beat = beats_by_id["play-in-browser"]
+    bootstrap_beat = beats_by_id["bootstrap"]
     actions = {action["id"]: action for action in browser_beat["actions"]}
 
     assert beats_by_id["install"]["narration"].startswith("OmegaFlow")
@@ -1826,17 +1871,50 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         for beat_id in ("bootstrap", "build")
     )
     assert "build next" not in beats_by_id["bootstrap"]["narration"]
+    assert (
+        "The command creates the @project_settings_start@ project settings "
+        "@project_settings_end@ and @recording_defaults_start@ recording defaults, "
+        "@recording_defaults_end@ along with @quickstart_script_start@ an OmegaFlow "
+        "quickstart video script you can run immediately. @quickstart_script_end@"
+        in bootstrap_beat["narration"]
+    )
+    assert bootstrap_beat["effects"] == [
+        {
+            "highlight": {
+                "text": ".omegaflow/config.yaml",
+                "start": "@project_settings_start@",
+                "end": "@project_settings_end@",
+            }
+        },
+        {
+            "highlight": {
+                "text": "recordings/config.yaml",
+                "start": "@recording_defaults_start@",
+                "end": "@recording_defaults_end@",
+            }
+        },
+        {
+            "highlight": {
+                "text": "recordings/quickstart/index.md",
+                "start": "@quickstart_script_start@",
+                "end": "@quickstart_script_end@",
+            }
+        },
+    ]
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
     assert [command["id"] for command in build_commands] == [
         "build_command",
         "watch_command",
     ]
+    assert build_commands[0]["timing"] == "realtime"
+    assert "follow_along" not in build_commands[0]
     assert build_commands[1]["display"] == (
         "omegaflow recording=quickstart action=watch"
     )
     assert build_commands[1]["after"] == "@watch@"
     assert build_commands[1]["browser_handoff"] is True
-    assert build_commands[1]["follow_along"] is True
+    assert build_commands[1]["timing"] == "realtime"
+    assert "follow_along" not in build_commands[1]
     assert build_commands[1]["show_prompt_after"] is False
     assert build_commands[1]["run"] == (
         "omegaflow recording=quickstart action=watch watch_port=43123"
@@ -1966,7 +2044,8 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
         "run: for n in 3 2 1; do printf '%s\\n' \"$n\"; sleep 1; "
         "done; printf 'Hello World!\\n'"
     ) in recording
-    assert "follow_along: true" in recording
+    assert "timing: realtime" in recording
+    assert "follow_along" not in recording
     assert "@run_demo@" in recording
     assert "@wait:show_message@" in recording
     assert "output_contains:" in recording

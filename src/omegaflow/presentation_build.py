@@ -40,6 +40,7 @@ from .presentation_compiler import (
     ArtifactFingerprints,
     BrowserCaptureLog,
     CompiledBrowserBeat,
+    TerminalTextHighlightEvent,
     compile_artifact_fingerprints,
     compile_browser_beat,
     compile_recording_timing,
@@ -751,22 +752,60 @@ def _source_words_with_timing(
     if not source:
         raise PresentationBuildError("narration take has no words")
     raw = raw_words if isinstance(raw_words, list) else []
-    use_raw = len(raw) == len(source) and all(
+    raw_is_timed = bool(raw) and all(
         isinstance(item, Mapping)
+        and isinstance(item.get("word"), str)
         and all(
             not isinstance(value, bool) and isinstance(value, (int, float))
             for value in (item.get("start"), item.get("end"))
         )
         for item in raw
     )
+    source_normalized = [_normalized_spoken_word(match.group(0)) for match in source]
+    raw_normalized = (
+        [_normalized_spoken_word(str(item["word"])) for item in raw]
+        if raw_is_timed
+        else []
+    )
+    use_raw = (
+        raw_is_timed
+        and all(source_normalized)
+        and all(raw_normalized)
+        and "".join(source_normalized) == "".join(raw_normalized)
+    )
+    source_character_offset = 0
+    raw_character_ranges: list[tuple[int, int, int, int]] = []
+    if use_raw:
+        raw_character_offset = 0
+        for item, normalized in zip(raw, raw_normalized, strict=True):
+            next_offset = raw_character_offset + len(normalized)
+            raw_character_ranges.append(
+                (
+                    raw_character_offset,
+                    next_offset,
+                    round(float(item["start"]) * 1000),
+                    round(float(item["end"]) * 1000),
+                )
+            )
+            raw_character_offset = next_offset
     if duration_ms < len(source):
         raise PresentationBuildError("narration audio is too short for word timing")
     words: list[dict[str, Any]] = []
     previous_end = 0
     for index, match in enumerate(source):
         if use_raw:
-            candidate_start = round(float(raw[index]["start"]) * 1000)
-            candidate_end = round(float(raw[index]["end"]) * 1000)
+            normalized_width = len(source_normalized[index])
+            candidate_start = _spoken_character_time_ms(
+                source_character_offset,
+                raw_character_ranges,
+                boundary="start",
+            )
+            source_character_offset += normalized_width
+            candidate_end = _spoken_character_time_ms(
+                source_character_offset,
+                raw_character_ranges,
+                boundary="end",
+            )
         else:
             candidate_start = round(duration_ms * match.start() / max(1, len(text)))
             candidate_end = round(duration_ms * match.end() / max(1, len(text)))
@@ -785,6 +824,29 @@ def _source_words_with_timing(
         )
         previous_end = end_ms
     return words
+
+
+def _normalized_spoken_word(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _spoken_character_time_ms(
+    offset: int,
+    ranges: list[tuple[int, int, int, int]],
+    *,
+    boundary: str,
+) -> int:
+    if boundary == "start":
+        candidates = (item for item in ranges if offset < item[1])
+    else:
+        candidates = (item for item in ranges if offset <= item[1])
+    start, end, start_ms, end_ms = next(candidates, ranges[-1])
+    if offset <= start:
+        return start_ms
+    if offset >= end:
+        return end_ms
+    fraction = (offset - start) / (end - start)
+    return round(start_ms + fraction * (end_ms - start_ms))
 
 
 def _terminal_duration_ms(path: Path) -> int:
@@ -996,6 +1058,24 @@ def compile_presentation_bundle(
                         for item in timing.actions
                         if item.beat_id == beat.id
                     },
+                    text_highlights=tuple(
+                        TerminalTextHighlightEvent(
+                            id=f"{beat.id}-highlight-{index}",
+                            text=highlight.text,
+                            occurrence=highlight.occurrence,
+                            start_ms=(
+                                timing.anchor_times_ms[
+                                    (beat.id, highlight.start_anchor)
+                                ]
+                                - beat_timing.offset_ms
+                            ),
+                            end_ms=(
+                                timing.anchor_times_ms[(beat.id, highlight.end_anchor)]
+                                - beat_timing.offset_ms
+                            ),
+                        )
+                        for index, highlight in enumerate(beat.terminal_highlights)
+                    ),
                 )
                 transition = None
             else:

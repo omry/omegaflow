@@ -24,6 +24,7 @@ from omegaflow.recording_plan import (
     NarrationTakePlan,
     NarrationTakeWaitPlan,
     RecordingPlanError,
+    TerminalTextHighlightPlan,
     normalize_recording_plan,
     terminal_action_id,
     validate_recording_modalities,
@@ -119,7 +120,7 @@ def browser_handoff_spec() -> dict:
                                 "id": "watch_command",
                                 "run": "omegaflow recording=demo action=watch",
                                 "browser_handoff": True,
-                                "follow_along": True,
+                                "timing": "realtime",
                                 "show_prompt_after": False,
                             }
                         ]
@@ -183,6 +184,11 @@ def test_user_recording_yaml_schema_has_no_any_typed_fields() -> None:
             {"replce": "hello"},
             r"beats\.0\.actions\.0\.commands\.0\.output mapping must contain only: replace",
         ),
+        (
+            "follow_along",
+            True,
+            r"follow_along",
+        ),
     ],
 )
 def test_terminal_action_metadata_is_validated_during_plan_normalization(
@@ -225,6 +231,108 @@ def test_terminal_beat_rejects_browser_pointer_visibility() -> None:
     with pytest.raises(
         RecordingPlanError,
         match=r"beats\.0\.pointer is invalid for terminal beats",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["narration"] = (
+        "@highlight_start@ Project settings. @highlight_end@ @run@ Run it. "
+        "@wait:done@"
+    )
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "text": ".omegaflow/config.yaml",
+                "start": "@highlight_start@",
+                "end": "@highlight_end@",
+                "occurrence": 2,
+            }
+        }
+    ]
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].terminal_highlights == (
+        TerminalTextHighlightPlan(
+            text=".omegaflow/config.yaml",
+            start_anchor="highlight_start",
+            end_anchor="highlight_end",
+            occurrence=2,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("effect", "message"),
+    [
+        (
+            {"highlight": {"text": "", "start": "@start@", "end": "@end@"}},
+            r"beats\.0\.effects\.0\.highlight\.text must be non-empty",
+        ),
+        (
+            {
+                "highlight": {
+                    "text": "config.yaml",
+                    "start": "@missing@",
+                    "end": "@end@",
+                }
+            },
+            r"references unknown start anchor @missing@",
+        ),
+        (
+            {
+                "highlight": {
+                    "text": "config.yaml",
+                    "start": "@end@",
+                    "end": "@start@",
+                }
+            },
+            r"start anchor @end@ must precede end anchor @start@",
+        ),
+        (
+            {
+                "highlight": {
+                    "text": "config.yaml",
+                    "start": "@start@",
+                    "end": "@end@",
+                    "occurrence": 0,
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.occurrence must be positive",
+        ),
+        ({}, r"beats\.0\.effects\.0 must contain exactly one of: highlight"),
+    ],
+)
+def test_terminal_text_highlight_rejects_invalid_configuration(
+    effect: dict[str, object], message: str
+) -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["narration"] = (
+        "@start@ Project settings. @end@ @run@ Run it. @wait:done@"
+    )
+    spec["beats"][0]["effects"] = [effect]
+
+    with pytest.raises(RecordingPlanError, match=message):
+        normalize_recording_plan(spec)
+
+
+def test_browser_beat_rejects_terminal_text_highlight() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "text": "Create",
+                "start": "@menu@",
+                "end": "@menu@",
+            }
+        }
+    ]
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"beats\.0\.effects are invalid for browser beats",
     ):
         normalize_recording_plan(spec)
 
@@ -529,9 +637,9 @@ def test_normalizes_recorder_owned_browser_handoff() -> None:
         ),
         (
             lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(
-                {"follow_along": False}
+                {"timing": "presentation"}
             ),
-            "browser_handoff.*follow_along",
+            "browser_handoff.*timing.*realtime",
         ),
         (
             lambda spec: spec["beats"][0]["actions"][0]["commands"][0].update(

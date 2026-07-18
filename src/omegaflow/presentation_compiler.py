@@ -27,6 +27,7 @@ from .recording_plan import (
     NarrationTakePlan,
     RecordingPlan,
     TerminalActionPlan,
+    terminal_action_id,
 )
 
 
@@ -733,14 +734,14 @@ def _add_beat_action_constraints(
         commands = action.config.get("commands")
         if commands:
             for command_index, command in enumerate(commands):
-                action_id = command.get("id") or f"__step_{action_index}_command_{command_index}"
+                action_id = terminal_action_id(action_index, command_index, command)
                 after = command.get("after")
                 if command_index == 0 and action.config.get("after") is not None:
                     after = action.config.get("after")
                 definitions.append((action_id, after, command.get("id") is not None))
         else:
             definitions.append(
-                (f"__step_{action_index}", action.config.get("after"), False)
+                (terminal_action_id(action_index, None), action.config.get("after"), False)
             )
 
     scheduled: list[_ScheduledAction] = []
@@ -1022,11 +1023,7 @@ def _capture_action_value(action: TerminalActionPlan | BrowserActionPlan) -> Any
 
 
 def _strip_terminal_presentation_fields(value: dict[str, Any]) -> None:
-    for field in (
-        "after",
-        "timing",
-    ):
-        value.pop(field, None)
+    value.pop("after", None)
 
 
 def _presentation_plan_value(plan: RecordingPlan) -> dict[str, Any]:
@@ -1124,6 +1121,15 @@ class TerminalBeatMaterialization:
     bytes: int
 
 
+@dataclass(frozen=True)
+class TerminalTextHighlightEvent:
+    id: str
+    text: str
+    occurrence: int
+    start_ms: int
+    end_ms: int
+
+
 def materialize_terminal_beat(
     source: Path,
     destination: Path,
@@ -1131,6 +1137,7 @@ def materialize_terminal_beat(
     duration_ms: int,
     captured_action_intervals_ms: Mapping[str, tuple[int, int]] | None = None,
     action_starts_ms: Mapping[str, int] | None = None,
+    text_highlights: tuple[TerminalTextHighlightEvent, ...] = (),
 ) -> TerminalBeatMaterialization:
     """Relocate a beat-local cast and extend its final hold to solved duration."""
 
@@ -1222,6 +1229,12 @@ def materialize_terminal_beat(
         else:
             hold_time = solved_duration / 1000
         events.append([hold_time, "o", ""])
+    events = _insert_terminal_text_highlights(
+        events,
+        version=version,
+        duration_ms=solved_duration,
+        highlights=text_highlights,
+    )
 
     payload = "\n".join(
         [
@@ -1244,6 +1257,93 @@ def materialize_terminal_beat(
         sha256=digest,
         bytes=len(content),
     )
+
+
+def _insert_terminal_text_highlights(
+    events: list[list[object]],
+    *,
+    version: int,
+    duration_ms: int,
+    highlights: tuple[TerminalTextHighlightEvent, ...],
+) -> list[list[object]]:
+    if not highlights:
+        return events
+
+    timeline: list[tuple[int, int, int, list[object]]] = []
+    absolute_seconds = Decimal(0)
+    for sequence, event in enumerate(events):
+        event_seconds = Decimal(str(event[0]))
+        absolute_seconds = (
+            absolute_seconds + event_seconds if version == 3 else event_seconds
+        )
+        absolute_ms = milliseconds_half_up(absolute_seconds * 1000)
+        timeline.append((absolute_ms, 0, sequence, [*event[1:]]))
+
+    seen_ids: set[str] = set()
+    marker_sequence = len(events)
+    for highlight in highlights:
+        if (
+            not highlight.id
+            or highlight.id in seen_ids
+            or not highlight.text
+            or isinstance(highlight.occurrence, bool)
+            or not isinstance(highlight.occurrence, int)
+            or highlight.occurrence <= 0
+            or isinstance(highlight.start_ms, bool)
+            or not isinstance(highlight.start_ms, int)
+            or isinstance(highlight.end_ms, bool)
+            or not isinstance(highlight.end_ms, int)
+            or not 0 <= highlight.start_ms < highlight.end_ms <= duration_ms
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA", "terminal text highlight is invalid"
+            )
+        seen_ids.add(highlight.id)
+        start_payload = {
+            "active": True,
+            "id": highlight.id,
+            "occurrence": highlight.occurrence,
+            "text": highlight.text,
+        }
+        end_payload = {"active": False, "id": highlight.id}
+        prefix = "omegaflow:highlight:"
+        timeline.append(
+            (
+                highlight.start_ms,
+                2,
+                marker_sequence,
+                [
+                    "m",
+                    prefix
+                    + json.dumps(
+                        start_payload, separators=(",", ":"), sort_keys=True
+                    ),
+                ],
+            )
+        )
+        marker_sequence += 1
+        timeline.append(
+            (
+                highlight.end_ms,
+                1,
+                marker_sequence,
+                [
+                    "m",
+                    prefix
+                    + json.dumps(end_payload, separators=(",", ":"), sort_keys=True),
+                ],
+            )
+        )
+        marker_sequence += 1
+
+    timeline.sort(key=lambda item: item[:3])
+    result: list[list[object]] = []
+    previous_ms = 0
+    for event_ms, _priority, _sequence, payload in timeline:
+        timestamp_ms = event_ms - previous_ms if version == 3 else event_ms
+        result.append([timestamp_ms / 1000, *payload])
+        previous_ms = event_ms
+    return result
 
 
 def _relocate_terminal_events(

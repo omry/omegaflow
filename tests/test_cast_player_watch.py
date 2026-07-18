@@ -281,6 +281,99 @@ if (!vm.runInContext('playing', context) || !flash.innerHTML.includes('<svg')) {
     assert result.returncode == 0, result.stderr
 
 
+def test_terminal_text_highlight_marker_adds_and_removes_exact_occurrence() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('created config.yaml\\ncreated config.yaml');
+applyTerminalHighlightMarker('omegaflow:highlight:{"active":true,"id":"one","text":"config.yaml","occurrence":2}');
+`, context);
+const highlighted = element('terminal').innerHTML;
+if ((highlighted.match(/terminal-text-highlight/g) || []).length !== 1) {
+  console.error(JSON.stringify({phase: 'active', highlighted}));
+  process.exit(1);
+}
+if (!highlighted.includes('<span class="terminal-text-highlight">config.yaml</span>')) {
+  console.error(JSON.stringify({phase: 'exact-text', highlighted}));
+  process.exit(1);
+}
+vm.runInContext(`
+applyTerminalHighlightMarker('omegaflow:highlight:{"active":false,"id":"one"}');
+`, context);
+const cleared = element('terminal').innerHTML;
+if (cleared.includes('terminal-text-highlight')) {
+  console.error(JSON.stringify({phase: 'cleared', cleared}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_redraw_updates_lines_in_place_and_removes_finished_surface() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('progress [░░░░] 0/4\\ncurrent Recording\\n');
+appendChunk('\\u001b[');
+appendChunk('2F\\r\\u001b[2Kprogress [██░░] 2/4\\n\\r\\u001b[2Kcurrent Assembling\\n');
+`, context);
+const redrawn = element('terminal').innerHTML;
+if (
+  redrawn.includes('0/4') || redrawn.includes('Recording') ||
+  !redrawn.includes('2/4') || !redrawn.includes('Assembling')
+) {
+  console.error(JSON.stringify({phase: 'redrawn', redrawn}));
+  process.exit(1);
+}
+vm.runInContext(`appendChunk('\\u001b[2F\\u001b[2M');`, context);
+const finished = element('terminal').innerHTML;
+if (finished.includes('progress') || finished.includes('current')) {
+  console.error(JSON.stringify({phase: 'finished', finished}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_supports_cursor_motion_erasure_and_alternate_screen() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('primary\\nsecond');
+appendChunk('\\u001b[1F\\u001b[3CX\\r\\u001b[2Kreplacement');
+`, context);
+const edited = element('terminal').innerHTML;
+if (!edited.startsWith('replacement\nsecond')) {
+  console.error(JSON.stringify({phase: 'edited', edited}));
+  process.exit(1);
+}
+vm.runInContext(`
+appendChunk('\\u001b[?1049hfull-screen\\u001b[2;4H!');
+`, context);
+const alternate = element('terminal').innerHTML;
+if (!alternate.startsWith('full-screen') || !alternate.includes('   !')) {
+  console.error(JSON.stringify({phase: 'alternate', alternate}));
+  process.exit(1);
+}
+vm.runInContext(`appendChunk('\\u001b[?1049l');`, context);
+const restored = element('terminal').innerHTML;
+if (restored !== edited) {
+  console.error(JSON.stringify({phase: 'restored', edited, restored}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_scrubbing_cancels_watch_autoplay_countdown() -> None:
     result = run_player_script(
         r"""

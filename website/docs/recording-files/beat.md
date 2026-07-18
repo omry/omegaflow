@@ -31,6 +31,7 @@ beat:
 | `pointer` | mapping | Browser-beat override for pointer visibility. Use `visible: false` to hide the cursor for the whole beat. |
 | `actions` | list | Commands to record. |
 | `checks` | list | Commands that validate the result. |
+| `effects` | list | Narration-synchronized terminal presentation effects. |
 | `guide` | mapping | Guided-mode commands and success hint. |
 
 ## Synchronizing Narration And Commands
@@ -182,13 +183,14 @@ Step fields:
 | `expect` | mapping | Exit code, output, regex, or file-existence expectations. |
 | `commands` | list | Command entries for one action. |
 
-Command entries also accept `id`, `follow_along`, `show_prompt_after`,
-`timing`, and pre/post command pause fields.
+Command entries also accept `id`, `show_prompt_after`, `timing`, and pre/post
+command pause fields.
 
 Command output is buffered until the command finishes by default. Set
-`follow_along: true` to stream real stdout and stderr into the recording while
-the command runs, preserving visible delays between output updates. Output
-replacement and suppression remain non-streaming.
+`timing: realtime` to run the command in a pseudo-terminal and preserve its live
+output timing and terminal-state updates. Use realtime timing for progress bars
+and terminal interfaces that redraw in place. Output replacement and suppression
+remain non-streaming.
 
 #### Hand a browser URL to the next beat
 
@@ -207,7 +209,7 @@ browser commands.
     - id: watch_command
       run: omegaflow recording=demo action=watch
       browser_handoff: true
-      follow_along: true
+      timing: realtime
       show_prompt_after: false
 - id: inspect-player
   medium: browser
@@ -226,6 +228,29 @@ Set `display_url: $handoff` only when the exact captured URL is safe to publish.
 For authentication and other token-bearing URLs, use a static, sanitized
 `display_url` as shown above. The display URL changes only the browser chrome;
 the recorder still navigates to the handed-off URL.
+
+### Highlight terminal text during narration
+
+Use a terminal highlight effect to draw attention to an exact piece of text
+already visible in the terminal. Its `start` and `end` values reference local
+narration anchors, so the highlight follows the spoken words when narration is
+regenerated or retimed.
+
+```yaml
+narration: >-
+  The command creates the @settings_start@ project settings,
+  @settings_end@ then continues.
+effects:
+- highlight:
+    text: .omegaflow/config.yaml
+    start: "@settings_start@"
+    end: "@settings_end@"
+```
+
+`text` is matched literally against complete terminal lines. Set the optional,
+one-based `occurrence` when the same text appears more than once. Highlights
+are valid only on terminal beats and require `audio.enabled: true` because
+their timing comes from narration timestamps.
 
 ### Browser beats
 
@@ -441,7 +466,6 @@ class RecordingInvocationConfig:
 @dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
-    follow_along: bool = False
     browser_handoff: bool = False
     show_prompt_after: bool = True
     timing: str = "presentation"
@@ -647,6 +671,21 @@ class RecordingGuideConfig:
 
 
 @dataclass
+class TerminalTextHighlightConfig:
+    text: str = ""
+    start: str = ""
+    end: str = ""
+    occurrence: int = 1
+
+
+@dataclass
+class TerminalEffectConfig:
+    """Typed envelope for presentation effects on terminal beats."""
+
+    highlight: TerminalTextHighlightConfig | None = None
+
+
+@dataclass
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
@@ -659,6 +698,7 @@ class RecordingBeatConfig:
     pointer: BrowserPointerPresentationConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
+    effects: list[TerminalEffectConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
 ```
 

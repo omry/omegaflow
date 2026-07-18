@@ -4,6 +4,7 @@ import json
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -867,7 +868,7 @@ def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
     assert all(text != "abcde" for _, text in typed_events)
 
 
-def test_terminal_beat_follow_along_streams_output_during_command(
+def test_terminal_beat_realtime_streams_output_during_command(
     tmp_path: Path,
 ) -> None:
     if shutil.which(asciinema_command()) is None:
@@ -889,7 +890,7 @@ def test_terminal_beat_follow_along_streams_output_during_command(
                                         "printf '3\\n'"
                                     ),
                                     "display": "count slowly",
-                                    "follow_along": True,
+                                    "timing": "realtime",
                                 }
                             ]
                         }
@@ -918,13 +919,119 @@ def test_terminal_beat_follow_along_streams_output_during_command(
         absolute_ms += round(float(event[0]) * 1000)
         if event[1] != "o":
             continue
-        text = str(event[2]).strip()
-        if text in {"1", "2", "3"}:
-            output_times[text] = absolute_ms
+        for text in str(event[2]).replace("\r", "").splitlines():
+            if text in {"1", "2", "3"}:
+                output_times[text] = absolute_ms
 
     assert list(output_times) == ["1", "2", "3"]
     assert output_times["2"] - output_times["1"] >= 150
     assert output_times["3"] - output_times["2"] >= 150
+
+
+def test_terminal_realtime_command_receives_a_pty(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-pty",
+            "beats": [
+                {
+                    "id": "realtime",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f"{shlex.quote(sys.executable)} -c 'import os; "
+                                        "print(os.isatty(0), os.isatty(1), os.isatty(2))'"
+                                    ),
+                                    "timing": "realtime",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    source = tmp_path / "run/capture/terminal-beats/realtime.cast"
+    events = [
+        json.loads(line)
+        for line in source.read_text(encoding="utf-8").splitlines()[1:]
+    ]
+    assert any("True True True" in str(event[2]) for event in events)
+
+
+def test_terminal_realtime_captures_interactive_build_progress(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    program = (
+        "from omegaflow.studio import BuildProgress; "
+        "progress = BuildProgress(total=2, color=False); "
+        "progress.begin('Recording workflow'); "
+        "progress.advance('Assembling video'); "
+        "progress.advance('Video ready'); "
+        "progress.finish()"
+    )
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-progress",
+            "beats": [
+                {
+                    "id": "progress",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f"{shlex.quote(sys.executable)} -c "
+                                        f"{shlex.quote(program)}"
+                                    ),
+                                    "timing": "realtime",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    cast = (tmp_path / "run/capture/terminal-beats/progress.cast").read_text(
+        encoding="utf-8"
+    )
+    output = _cast_output(cast)
+    assert "progress" in output
+    assert "2/2" in output
+    assert "\x1b[2F" in output
+    assert "\x1b[2M" in output
 
 
 def _cast_output(cast: str) -> str:

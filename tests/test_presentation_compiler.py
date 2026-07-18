@@ -21,6 +21,7 @@ from omegaflow.presentation_compiler import (
     natural_text_duration_ms,
     pointer_motion,
     solved_intervals,
+    TerminalTextHighlightEvent,
 )
 from omegaflow.recording_plan import normalize_recording_plan
 
@@ -472,14 +473,14 @@ def fingerprint_plan(
     command: str = "printf one",
     display: str | None = None,
     pre_command_pause: float | None = None,
-    follow_along: bool = False,
+    timing: str = "presentation",
     viewer_hold: float = 0,
 ) -> object:
     command_config: dict[str, object] = {"run": command}
     if pre_command_pause is not None:
         command_config["pre_command_pause"] = pre_command_pause
-    if follow_along:
-        command_config["follow_along"] = True
+    if timing != "presentation":
+        command_config["timing"] = timing
     if display is not None:
         command_config["display"] = display
     action: dict[str, object] = {"commands": [command_config]}
@@ -511,7 +512,7 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
     pause_change = artifact_fingerprints(
         fingerprint_plan(pre_command_pause=0.5)
     )
-    follow_change = artifact_fingerprints(fingerprint_plan(follow_along=True))
+    timing_change = artifact_fingerprints(fingerprint_plan(timing="realtime"))
     asset_change = artifact_fingerprints(fingerprint_plan(), asset="b")
 
     assert original.capture_fingerprint == presentation_change.capture_fingerprint
@@ -522,7 +523,7 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
     assert original.capture_fingerprint != capture_change.capture_fingerprint
     assert original.capture_fingerprint != display_change.capture_fingerprint
     assert original.capture_fingerprint != pause_change.capture_fingerprint
-    assert original.capture_fingerprint != follow_change.capture_fingerprint
+    assert original.capture_fingerprint != timing_change.capture_fingerprint
     assert original.presentation_fingerprint != asset_change.presentation_fingerprint
 
 
@@ -683,6 +684,54 @@ def test_terminal_materialization_relocates_events_to_solved_action_start(
         [0.8, "o", "$ command\n"],
         [0.2, "o", "done\n"],
         [0.2, "o", ""],
+    ]
+
+
+@pytest.mark.parametrize("version", [2, 3])
+def test_terminal_materialization_inserts_timed_text_highlight_markers(
+    tmp_path: Path, version: int
+) -> None:
+    source = tmp_path / "source.cast"
+    destination = tmp_path / "published.cast"
+    write_cast(source, version, [[0.1, "o", ".omegaflow/config.yaml\n"]])
+
+    materialize_terminal_beat(
+        source,
+        destination,
+        duration_ms=1000,
+        text_highlights=(
+            TerminalTextHighlightEvent(
+                id="highlight-0",
+                text=".omegaflow/config.yaml",
+                occurrence=1,
+                start_ms=250,
+                end_ms=750,
+            ),
+        ),
+    )
+
+    output = [json.loads(line) for line in destination.read_text().splitlines()][1:]
+    absolute_ms = 0
+    markers: list[tuple[int, dict[str, object]]] = []
+    for event in output:
+        event_ms = round(float(event[0]) * 1000)
+        absolute_ms = absolute_ms + event_ms if version == 3 else event_ms
+        if event[1] == "m":
+            prefix = "omegaflow:highlight:"
+            assert str(event[2]).startswith(prefix)
+            markers.append((absolute_ms, json.loads(str(event[2])[len(prefix) :])))
+
+    assert markers == [
+        (
+            250,
+            {
+                "active": True,
+                "id": "highlight-0",
+                "occurrence": 1,
+                "text": ".omegaflow/config.yaml",
+            },
+        ),
+        (750, {"active": False, "id": "highlight-0"}),
     ]
 
 
@@ -1074,7 +1123,7 @@ def test_handoff_display_url_uses_the_captured_watch_url() -> None:
                                     "id": "watch_command",
                                     "run": "watch",
                                     "browser_handoff": True,
-                                    "follow_along": True,
+                                    "timing": "realtime",
                                     "show_prompt_after": False,
                                 }
                             ]

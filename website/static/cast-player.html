@@ -169,6 +169,13 @@
         word-break: break-word;
       }
 
+      .terminal-text-highlight {
+        color: inherit;
+        background: rgba(255, 194, 71, 0.28);
+        border-radius: 0.16em;
+        box-shadow: 0 0 0 0.08em rgba(255, 194, 71, 0.5);
+      }
+
       .stage {
         position: relative;
         min-height: 0;
@@ -894,7 +901,12 @@
       let activeClass = '';
       let activeStyle = '';
       let terminalLines = [[]];
+      const activeTerminalHighlights = new Map();
+      let cursorRow = 0;
       let cursorColumn = 0;
+      let savedCursor = {row: 0, column: 0};
+      let primaryTerminalState = null;
+      let terminalPendingInput = '';
       let audio = null;
       let audioReady = false;
       let introActive = false;
@@ -1118,16 +1130,21 @@
 
       function resetTerminalBuffer() {
         terminalLines = [[]];
+        activeTerminalHighlights.clear();
+        cursorRow = 0;
         cursorColumn = 0;
+        savedCursor = {row: 0, column: 0};
+        primaryTerminalState = null;
+        terminalPendingInput = '';
         activeClass = '';
         activeStyle = '';
       }
 
       function currentTerminalLine() {
-        if (!terminalLines.length) {
+        while (terminalLines.length <= cursorRow) {
           terminalLines.push([]);
         }
-        return terminalLines[terminalLines.length - 1];
+        return terminalLines[cursorRow];
       }
 
       function putTerminalChar(char) {
@@ -1140,16 +1157,197 @@
         cursorColumn += 1;
       }
 
-      function clearTerminalLineAfterCursor() {
-        currentTerminalLine().length = cursorColumn;
+      function clearTerminalLine(mode = 0) {
+        const line = currentTerminalLine();
+        if (mode === 2) {
+          terminalLines[cursorRow] = [];
+          return;
+        }
+        if (mode === 1) {
+          const width = Math.max(line.length, cursorColumn + 1);
+          for (let column = 0; column <= cursorColumn; column += 1) {
+            line[column] = undefined;
+          }
+          line.length = width;
+          return;
+        }
+        line.length = cursorColumn;
       }
 
-      function clearTerminalScreen() {
+      function clearTerminalScreen(mode = 2) {
+        if (mode === 0) {
+          clearTerminalLine(0);
+          terminalLines.length = cursorRow + 1;
+          return;
+        }
+        if (mode === 1) {
+          for (let row = 0; row < cursorRow; row += 1) {
+            terminalLines[row] = [];
+          }
+          clearTerminalLine(1);
+          return;
+        }
         terminalLines = [[]];
+        cursorRow = 0;
         cursorColumn = 0;
       }
 
-      function renderTerminalLine(line) {
+      function csiNumber(params, index, fallback = 1) {
+        const value = Number(params[index]);
+        return Number.isInteger(value) && value > 0 ? value : fallback;
+      }
+
+      function setTerminalCursor(row, column) {
+        cursorRow = Math.max(0, row);
+        cursorColumn = Math.max(0, column);
+        currentTerminalLine();
+      }
+
+      function switchAlternateTerminal(enabled) {
+        if (enabled) {
+          if (primaryTerminalState !== null) {
+            return;
+          }
+          primaryTerminalState = {
+            activeClass,
+            activeStyle,
+            cursorColumn,
+            cursorRow,
+            lines: terminalLines,
+            savedCursor,
+          };
+          terminalLines = [[]];
+          cursorRow = 0;
+          cursorColumn = 0;
+          savedCursor = {row: 0, column: 0};
+          activeClass = '';
+          activeStyle = '';
+          return;
+        }
+        if (primaryTerminalState === null) {
+          return;
+        }
+        ({
+          activeClass,
+          activeStyle,
+          cursorColumn,
+          cursorRow,
+          lines: terminalLines,
+          savedCursor,
+        } = primaryTerminalState);
+        primaryTerminalState = null;
+      }
+
+      function applyTerminalCsi(paramsText, command) {
+        const privateMode = paramsText.startsWith('?');
+        const rawParams = privateMode ? paramsText.slice(1) : paramsText;
+        const params = rawParams === '' ? [] : rawParams.split(';');
+        const count = csiNumber(params, 0);
+        if (command === 'm') {
+          setAnsi(paramsText);
+        } else if (command === 'A') {
+          setTerminalCursor(cursorRow - count, cursorColumn);
+        } else if (command === 'B') {
+          setTerminalCursor(cursorRow + count, cursorColumn);
+        } else if (command === 'C') {
+          cursorColumn += count;
+        } else if (command === 'D') {
+          cursorColumn = Math.max(0, cursorColumn - count);
+        } else if (command === 'E') {
+          setTerminalCursor(cursorRow + count, 0);
+        } else if (command === 'F') {
+          setTerminalCursor(cursorRow - count, 0);
+        } else if (command === 'G') {
+          cursorColumn = csiNumber(params, 0) - 1;
+        } else if (command === 'H' || command === 'f') {
+          setTerminalCursor(
+            csiNumber(params, 0) - 1,
+            csiNumber(params, 1) - 1,
+          );
+        } else if (command === 'd') {
+          setTerminalCursor(csiNumber(params, 0) - 1, cursorColumn);
+        } else if (command === 'J') {
+          clearTerminalScreen(Number(params[0] || 0));
+        } else if (command === 'K') {
+          clearTerminalLine(Number(params[0] || 0));
+        } else if (command === 'L') {
+          terminalLines.splice(cursorRow, 0, ...Array.from({length: count}, () => []));
+        } else if (command === 'M') {
+          terminalLines.splice(cursorRow, count);
+          if (!terminalLines.length) {
+            terminalLines.push([]);
+          }
+          cursorRow = Math.min(cursorRow, terminalLines.length - 1);
+        } else if (command === 'P') {
+          currentTerminalLine().splice(cursorColumn, count);
+        } else if (command === '@') {
+          currentTerminalLine().splice(
+            cursorColumn,
+            0,
+            ...Array.from({length: count}),
+          );
+        } else if (command === 'X') {
+          const line = currentTerminalLine();
+          const width = Math.max(line.length, cursorColumn + count);
+          for (let column = cursorColumn; column < cursorColumn + count; column += 1) {
+            line[column] = undefined;
+          }
+          line.length = width;
+        } else if (command === 'S') {
+          terminalLines.splice(0, count);
+          terminalLines.push(...Array.from({length: count}, () => []));
+        } else if (command === 'T') {
+          terminalLines.unshift(...Array.from({length: count}, () => []));
+        } else if (command === 's') {
+          savedCursor = {row: cursorRow, column: cursorColumn};
+        } else if (command === 'u') {
+          setTerminalCursor(savedCursor.row, savedCursor.column);
+        } else if (
+          privateMode && (command === 'h' || command === 'l') &&
+          params.includes('1049')
+        ) {
+          switchAlternateTerminal(command === 'h');
+        }
+      }
+
+      function terminalHighlightColumns() {
+        const columnsByLine = new Map();
+        for (const highlight of activeTerminalHighlights.values()) {
+          let remaining = highlight.occurrence;
+          for (let lineIndex = 0; lineIndex < terminalLines.length; lineIndex += 1) {
+            const text = terminalLines[lineIndex]
+              .map((cell) => cell?.char || ' ')
+              .join('');
+            let searchFrom = 0;
+            while (searchFrom <= text.length - highlight.text.length) {
+              const matchAt = text.indexOf(highlight.text, searchFrom);
+              if (matchAt < 0) {
+                break;
+              }
+              remaining -= 1;
+              if (remaining === 0) {
+                const columns = columnsByLine.get(lineIndex) || new Set();
+                for (
+                  let column = matchAt;
+                  column < matchAt + highlight.text.length;
+                  column += 1
+                ) {
+                  columns.add(column);
+                }
+                columnsByLine.set(lineIndex, columns);
+                break;
+              }
+              searchFrom = matchAt + Math.max(1, highlight.text.length);
+            }
+            if (remaining === 0) {
+              break;
+            }
+          }
+        }
+        return columnsByLine;
+      }
+
+      function renderTerminalLine(line, lineIndex, highlightColumns) {
         let rendered = '';
         let openRenderKey = '';
         const closeRenderSpan = () => {
@@ -1158,8 +1356,13 @@
             openRenderKey = '';
           }
         };
-        for (const cell of line) {
-          const className = cell?.className || '';
+        for (let column = 0; column < line.length; column += 1) {
+          const cell = line[column];
+          const baseClassName = cell?.className || '';
+          const highlighted = highlightColumns.get(lineIndex)?.has(column);
+          const className = [baseClassName, highlighted ? 'terminal-text-highlight' : '']
+            .filter(Boolean)
+            .join(' ');
           const style = cell?.style || '';
           const renderKey = `${className}\n${style}`;
           if (renderKey !== openRenderKey) {
@@ -1182,8 +1385,47 @@
       }
 
       function renderTerminalBuffer() {
-        terminal.innerHTML = terminalLines.map(renderTerminalLine).join('\n');
+        const highlightColumns = terminalHighlightColumns();
+        terminal.innerHTML = terminalLines
+          .map((line, lineIndex) => renderTerminalLine(line, lineIndex, highlightColumns))
+          .join('\n');
         terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      function applyTerminalHighlightMarker(value) {
+        const prefix = 'omegaflow:highlight:';
+        if (!String(value || '').startsWith(prefix)) {
+          return false;
+        }
+        let marker;
+        try {
+          marker = JSON.parse(String(value).slice(prefix.length));
+        } catch {
+          return false;
+        }
+        if (!marker || typeof marker.id !== 'string' || !marker.id) {
+          return false;
+        }
+        if (marker.active === false) {
+          activeTerminalHighlights.delete(marker.id);
+          renderTerminalBuffer();
+          return true;
+        }
+        if (
+          marker.active !== true ||
+          typeof marker.text !== 'string' ||
+          !marker.text ||
+          !Number.isInteger(marker.occurrence) ||
+          marker.occurrence < 1
+        ) {
+          return false;
+        }
+        activeTerminalHighlights.set(marker.id, {
+          text: marker.text,
+          occurrence: marker.occurrence,
+        });
+        renderTerminalBuffer();
+        return true;
       }
 
       function appendChunk(chunk) {
@@ -1191,29 +1433,45 @@
           introActive = false;
           resetTerminalBuffer();
         }
-        for (let index = 0; index < chunk.length; index += 1) {
-          const char = chunk[index];
+        const input = terminalPendingInput + chunk;
+        terminalPendingInput = '';
+        for (let index = 0; index < input.length; index += 1) {
+          const char = input[index];
           if (char === '\u001b') {
-            const match = chunk.slice(index).match(/^\u001b\[([0-9;?]*)([A-Za-z])/);
+            const remaining = input.slice(index);
+            const match = remaining.match(/^\u001b\[([0-9;?]*)([A-Za-z@])/);
             if (match) {
-              if (match[2] === 'm') {
-                setAnsi(match[1]);
-              } else if (match[2] === 'K') {
-                clearTerminalLineAfterCursor();
-              } else if (match[2] === 'J') {
-                const mode = match[1] || '0';
-                if (mode === '2' || mode === '3') {
-                  clearTerminalScreen();
-                }
-              } else if (match[2] === 'H') {
-                cursorColumn = 0;
-              }
+              applyTerminalCsi(match[1], match[2]);
               index += match[0].length - 1;
               continue;
             }
-            const oscEnd = chunk.indexOf('\u0007', index);
-            if (oscEnd > index) {
-              index = oscEnd;
+            if (remaining.startsWith('\u001b[')) {
+              terminalPendingInput = remaining;
+              break;
+            }
+            if (remaining.startsWith('\u001b]')) {
+              const bellEnd = input.indexOf('\u0007', index);
+              const stringEnd = input.indexOf('\u001b\\', index + 2);
+              const oscEnd = bellEnd >= 0 ? bellEnd : stringEnd;
+              if (oscEnd >= 0) {
+                index = oscEnd + (oscEnd === stringEnd ? 1 : 0);
+                continue;
+              }
+              terminalPendingInput = remaining;
+              break;
+            }
+            if (remaining.length === 1) {
+              terminalPendingInput = remaining;
+              break;
+            }
+            if (remaining[1] === '7') {
+              savedCursor = {row: cursorRow, column: cursorColumn};
+              index += 1;
+              continue;
+            }
+            if (remaining[1] === '8') {
+              setTerminalCursor(savedCursor.row, savedCursor.column);
+              index += 1;
               continue;
             }
           }
@@ -1222,8 +1480,9 @@
             continue;
           }
           if (char === '\n') {
-            terminalLines.push([]);
+            cursorRow += 1;
             cursorColumn = 0;
+            currentTerminalLine();
             continue;
           }
           if (char === '\b') {
@@ -2883,6 +3142,8 @@
                 applyEvent({event}) {
                   if (event.type === 'o') {
                     appendChunk(String(event.data || ''));
+                  } else if (event.type === 'm') {
+                    applyTerminalHighlightMarker(event.data);
                   }
                 },
               }),

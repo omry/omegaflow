@@ -298,11 +298,6 @@ def action_command_entries(
             raise RecordingError(
                 f"{field}.{index}.commands.{command_index}.after must use @anchor@ syntax"
             )
-        follow_along = raw_command.get("follow_along", False)
-        if not isinstance(follow_along, bool):
-            raise RecordingError(
-                f"{field}.{index}.commands.{command_index}.follow_along must be a boolean"
-            )
         browser_handoff = raw_command.get("browser_handoff", False)
         if not isinstance(browser_handoff, bool):
             raise RecordingError(
@@ -343,7 +338,6 @@ def action_command_entries(
                 "run": run,
                 "display": display,
                 "after": after,
-                "follow_along": follow_along,
                 "browser_handoff": browser_handoff,
                 "show_prompt_after": show_prompt_after,
                 "output": output,

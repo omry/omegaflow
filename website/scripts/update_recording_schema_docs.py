@@ -67,6 +67,8 @@ SCHEMA_GROUPS = {
         "RecordingActionConfig",
         "RecordingCheckConfig",
         "RecordingGuideConfig",
+        "TerminalTextHighlightConfig",
+        "TerminalEffectConfig",
         "RecordingBeatConfig",
     ],
     "publishing": [

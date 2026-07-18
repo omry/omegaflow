@@ -29,6 +29,7 @@ from .studio_config import (
     RecordingRequirementsConfig,
     RecordingStepConfig,
     StudioConfigError,
+    TerminalEffectConfig,
     narration_text_and_anchors,
 )
 
@@ -194,7 +195,7 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     after = mapping.get("after")
     if after is not None and (not isinstance(after, str) or not ANCHOR_RE.fullmatch(after)):
         raise RecordingPlanError(f"{field}.after must contain exactly one @anchor@")
-    for name in ("follow_along", "browser_handoff", "show_prompt_after"):
+    for name in ("browser_handoff", "show_prompt_after"):
         if name in mapping and not isinstance(mapping[name], bool):
             raise RecordingPlanError(f"{field}.{name} must be a boolean")
     if mapping.get("timing", "presentation") not in {"presentation", "realtime"}:
@@ -849,6 +850,65 @@ def validate_beat_pointer(
     )
 
 
+def _terminal_text_highlights(
+    beat: dict[str, Any],
+    *,
+    index: int,
+    medium: RecordingMedium,
+    anchors: tuple[NarrationAnchorPlan, ...],
+) -> tuple[TerminalTextHighlightPlan, ...]:
+    raw_effects = beat.get("effects", [])
+    if not isinstance(raw_effects, list):
+        raise RecordingPlanError(f"beats.{index}.effects must be a list")
+    if raw_effects and medium is not RecordingMedium.terminal:
+        raise RecordingPlanError(
+            f"beats.{index}.effects are invalid for browser beats"
+        )
+
+    anchor_offsets = {anchor.id: anchor.text_offset for anchor in anchors}
+    highlights: list[TerminalTextHighlightPlan] = []
+    for effect_index, raw_effect in enumerate(raw_effects):
+        field = f"beats.{index}.effects.{effect_index}"
+        effect_mapping = _mapping(raw_effect, field=field)
+        _one_present(effect_mapping, ("highlight",), field=field)
+        effect = _typed(effect_mapping, TerminalEffectConfig, field=field)
+        if effect.highlight is None:  # pragma: no cover - guarded by _one_present
+            raise RecordingPlanError(f"{field} must contain exactly one of: highlight")
+        highlight = effect.highlight
+        highlight_field = f"{field}.highlight"
+        if not highlight.text:
+            raise RecordingPlanError(f"{highlight_field}.text must be non-empty")
+        occurrence = _positive_int(
+            highlight.occurrence,
+            field=f"{highlight_field}.occurrence",
+        )
+        for boundary, reference in (("start", highlight.start), ("end", highlight.end)):
+            if not ANCHOR_RE.fullmatch(reference):
+                raise RecordingPlanError(
+                    f"{highlight_field}.{boundary} must be a narration anchor"
+                )
+            if reference[1:-1] not in anchor_offsets:
+                raise RecordingPlanError(
+                    f"{highlight_field} references unknown {boundary} anchor {reference}"
+                )
+        start_id = highlight.start[1:-1]
+        end_id = highlight.end[1:-1]
+        if anchor_offsets[start_id] >= anchor_offsets[end_id]:
+            raise RecordingPlanError(
+                f"{highlight_field} start anchor {highlight.start} must precede "
+                f"end anchor {highlight.end}"
+            )
+        highlights.append(
+            TerminalTextHighlightPlan(
+                text=highlight.text,
+                start_anchor=start_id,
+                end_anchor=end_id,
+                occurrence=occurrence,
+            )
+        )
+    return tuple(highlights)
+
+
 def validate_recording_modalities(spec: dict[str, Any]) -> None:
     validate_requirements(spec.get("requirements", {}))
     validate_parameters(spec.get("parameters", {}))
@@ -994,6 +1054,14 @@ class TerminalCheckPlan:
 
 
 @dataclass(frozen=True)
+class TerminalTextHighlightPlan:
+    text: str
+    start_anchor: str
+    end_anchor: str
+    occurrence: int
+
+
+@dataclass(frozen=True)
 class BrowserCheckPlan:
     name: str
     kind: str
@@ -1013,6 +1081,7 @@ class BeatPlan:
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
     waits: tuple[NarrationWaitPlan, ...]
+    terminal_highlights: tuple[TerminalTextHighlightPlan, ...]
     actions: tuple[TerminalActionPlan | BrowserActionPlan, ...]
     checks: tuple[TerminalCheckPlan | BrowserCheckPlan, ...]
 
@@ -1329,6 +1398,12 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         narration_entry = narration_by_beat.get(beat_id)
         narration_text, anchors, waits = _beat_narration(beat, narration_entry)
         anchor_ids = {anchor.id for anchor in anchors}
+        terminal_highlights = _terminal_text_highlights(
+            beat,
+            index=index,
+            medium=medium,
+            anchors=anchors,
+        )
 
         if medium is RecordingMedium.browser:
             browser_actions = tuple(
@@ -1462,6 +1537,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 guide=guide,
                 anchors=anchors,
                 waits=waits,
+                terminal_highlights=terminal_highlights,
                 actions=actions,
                 checks=checks,
             )
@@ -1510,8 +1586,10 @@ def _validate_browser_handoffs(beats: tuple[BeatPlan, ...]) -> None:
         command_id = command.get("id")
         if not isinstance(command_id, str) or not command_id:
             raise RecordingPlanError("browser_handoff command requires an explicit id")
-        if command.get("follow_along") is not True:
-            raise RecordingPlanError("browser_handoff command requires follow_along: true")
+        if command.get("timing") != "realtime":
+            raise RecordingPlanError(
+                "browser_handoff command requires timing: realtime"
+            )
         if command.get("show_prompt_after") is not False:
             raise RecordingPlanError(
                 "browser_handoff command requires show_prompt_after: false"

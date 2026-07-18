@@ -509,7 +509,6 @@ class RecordingInvocationConfig:
 @dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
-    follow_along: bool = False
     browser_handoff: bool = False
     show_prompt_after: bool = True
     timing: str = "presentation"
@@ -702,6 +701,21 @@ class RecordingGuideConfig:
 
 
 @dataclass
+class TerminalTextHighlightConfig:
+    text: str = ""
+    start: str = ""
+    end: str = ""
+    occurrence: int = 1
+
+
+@dataclass
+class TerminalEffectConfig:
+    """Typed envelope for presentation effects on terminal beats."""
+
+    highlight: TerminalTextHighlightConfig | None = None
+
+
+@dataclass
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
@@ -714,6 +728,7 @@ class RecordingBeatConfig:
     pointer: BrowserPointerPresentationConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
+    effects: list[TerminalEffectConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
 
 
@@ -836,6 +851,8 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingActionConfig,
     RecordingCheckConfig,
     RecordingGuideConfig,
+    TerminalTextHighlightConfig,
+    TerminalEffectConfig,
     RecordingBeatConfig,
     RecordingDefaults,
     RecordingSourceSpec,
@@ -1362,6 +1379,14 @@ def validate_recording_audio_timing_requirements(spec: dict[str, Any]) -> None:
             if not isinstance(beat, dict):
                 continue
             beat_id = beat.get("id", "<unknown>")
+            effects = beat.get("effects")
+            if isinstance(effects, list):
+                for effect in effects:
+                    if (
+                        isinstance(effect, dict)
+                        and effect.get("highlight") is not None
+                    ):
+                        reasons.append(f"terminal text highlight in beat {beat_id!r}")
             actions = beat.get("actions")
             if not isinstance(actions, list):
                 continue

@@ -96,7 +96,7 @@ with open(input_path, "rb") as shell_input:
         stdin=shell_input,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        start_new_session=True,
+        process_group=0,
     )
     Path(pgid_path).write_text(f"{process.pid}\n", encoding="utf-8")
     status = process.wait()
@@ -132,6 +132,7 @@ omegaflow_run_user_command() {
   local command="$1"
   local stdout_target="$2"
   local stderr_target="$3"
+  local timing="${4:-presentation}"
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
   local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
   local status_result="${status_pipe}.result"
@@ -181,15 +182,94 @@ print(base64.b64encode(sys.argv[1].encode()).decode())
 PY
   )
   local decoder='import base64,sys;print(base64.b64decode(sys.argv[1]).decode(),end="")'
-  printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\nprintf "%%s\\n" "$?" >%q\n' \
-    "$OMEGAFLOW_PYTHON" "$decoder" "$encoded_command" \
-    "$stdout_target" "$stderr_target" "$status_pipe" >&7 || true
+  local relay_pid=""
+  local pty_ready="${status_pipe}.pty-ready"
+  local pty_opened="${status_pipe}.pty-opened"
+  if [[ "$timing" == "realtime" ]]; then
+    rm -f "$pty_ready" "$pty_opened"
+    "$OMEGAFLOW_PYTHON" - "$pty_ready" "$pty_opened" "$stdout_target" <<'PY' &
+import errno
+import fcntl
+import os
+import pty
+import struct
+import sys
+import termios
+import time
+from pathlib import Path
+
+ready_path, opened_path, log_path = sys.argv[1:]
+master_fd, slave_fd = pty.openpty()
+try:
+    try:
+        size = os.get_terminal_size(sys.stdout.fileno())
+    except OSError:
+        size = os.terminal_size((80, 24))
+    fcntl.ioctl(
+        slave_fd,
+        termios.TIOCSWINSZ,
+        struct.pack("HHHH", size.lines, size.columns, 0, 0),
+    )
+    Path(ready_path).write_text(os.ttyname(slave_fd), encoding="utf-8")
+    deadline = time.monotonic() + 10
+    while not os.path.exists(opened_path):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("realtime command did not open its terminal")
+        time.sleep(0.01)
+    os.close(slave_fd)
+    slave_fd = -1
+    with open(log_path, "ab", buffering=0) as log:
+        while True:
+            try:
+                chunk = os.read(master_fd, 4096)
+            except OSError as exc:
+                if exc.errno == errno.EIO:
+                    break
+                raise
+            if not chunk:
+                break
+            log.write(chunk)
+            sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
+finally:
+    if slave_fd >= 0:
+        os.close(slave_fd)
+    os.close(master_fd)
+PY
+    relay_pid=$!
+    local ready_index
+    for ((ready_index = 0; ready_index < 1000; ready_index += 1)); do
+      [[ -s "$pty_ready" ]] && break
+      kill -0 "$relay_pid" 2>/dev/null || break
+      sleep 0.01
+    done
+    if [[ ! -s "$pty_ready" ]]; then
+      kill "$relay_pid" 2>/dev/null || true
+      wait "$relay_pid" 2>/dev/null || true
+      kill "$status_monitor_pid" 2>/dev/null || true
+      wait "$status_monitor_pid" 2>/dev/null || true
+      rm -f "$status_pipe" "$status_result" "$pty_ready" "$pty_opened"
+      return 125
+    fi
+    local pty_slave
+    IFS= read -r pty_slave <"$pty_ready"
+    printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
+      "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" "$decoder" \
+      "$encoded_command" "$status_pipe" >&7 || true
+  else
+    printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\nprintf "%%s\\n" "$?" >%q\n' \
+      "$OMEGAFLOW_PYTHON" "$decoder" "$encoded_command" \
+      "$stdout_target" "$stderr_target" "$status_pipe" >&7 || true
+  fi
   wait "$status_monitor_pid" 2>/dev/null || true
+  if [[ -n "$relay_pid" ]]; then
+    wait "$relay_pid" 2>/dev/null || true
+  fi
   local status=125
   if [[ -f "$status_result" ]]; then
     IFS= read -r status <"$status_result" || status=125
   fi
-  rm -f "$status_pipe" "$status_result"
+  rm -f "$status_pipe" "$status_result" "$pty_ready" "$pty_opened"
   return "$status"
 }
 
@@ -338,7 +418,7 @@ omegaflow_run_step() {
   local output_mode="$4"
   local replacement_output="$5"
   local show_prompt_after="$6"
-  local follow_along="$7"
+  local timing="$7"
   local pre_command_pause="$8"
   local pre_enter_pause="$9"
   local post_enter_pause="${10}"
@@ -346,7 +426,7 @@ omegaflow_run_step() {
   local stdout_start
   local stderr_start
   local status
-  local output_followed=false
+  local output_streamed=false
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
@@ -355,39 +435,11 @@ omegaflow_run_step() {
   omegaflow_pause "$pre_command_pause"
   omegaflow_print_command "$display" "$pre_enter_pause"
   OMEGAFLOW_PROMPT_VISIBLE=0
-  if [[ "$follow_along" == "true" && "$output_mode" == "real" ]]; then
-    local command_runner_pid
-    local stdout_offset="$stdout_start"
-    local stderr_offset="$stderr_start"
-    local stdout_end
-    local stderr_end
+  if [[ "$timing" == "realtime" && "$output_mode" == "real" ]]; then
     omegaflow_run_user_command \
-      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" &
-    command_runner_pid=$!
-    while kill -0 "$command_runner_pid" 2>/dev/null; do
-      stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
-      stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
-      if [[ "$stdout_end" -gt "$stdout_offset" ]]; then
-        omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_offset"
-        stdout_offset="$stdout_end"
-      fi
-      if [[ "$stderr_end" -gt "$stderr_offset" ]]; then
-        omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_offset" >&2
-        stderr_offset="$stderr_end"
-      fi
-      sleep 0.05
-    done
-    wait "$command_runner_pid"
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" realtime
     status=$?
-    stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
-    stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
-    if [[ "$stdout_end" -gt "$stdout_offset" ]]; then
-      omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_offset"
-    fi
-    if [[ "$stderr_end" -gt "$stderr_offset" ]]; then
-      omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_offset" >&2
-    fi
-    output_followed=true
+    output_streamed=true
   else
     omegaflow_run_user_command \
       "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
@@ -397,7 +449,7 @@ omegaflow_run_step() {
     post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
   fi
   omegaflow_pause "$post_enter_pause"
-  if [[ "$output_mode" == "real" && "$output_followed" != "true" ]]; then
+  if [[ "$output_mode" == "real" && "$output_streamed" != "true" ]]; then
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_start"
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_start" >&2
   elif [[ "$output_mode" == "replace" && -n "$replacement_output" ]]; then
@@ -1166,9 +1218,11 @@ def _validated_step_script(
     show_prompt_after = step.get("show_prompt_after", True)
     if not isinstance(show_prompt_after, bool):
         raise TerminalCaptureError("terminal step show_prompt_after must be a boolean")
-    follow_along = step.get("follow_along", False)
-    if not isinstance(follow_along, bool):
-        raise TerminalCaptureError("terminal step follow_along must be a boolean")
+    timing = step.get("timing", "presentation")
+    if timing not in {"presentation", "realtime"}:
+        raise TerminalCaptureError(
+            "terminal step timing must be presentation or realtime"
+        )
     pauses = tuple(
         _optional_pause(step, field)
         for field in (
@@ -1187,11 +1241,10 @@ def _validated_step_script(
             output["mode"],
             output["replace"],
             "true" if show_prompt_after else "false",
-            "true" if follow_along else "false",
+            timing,
             *pauses,
         )
     )
-
 
 def _optional_pause(step: Mapping[str, Any], field: str) -> str:
     value = step.get(field)

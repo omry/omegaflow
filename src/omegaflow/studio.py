@@ -589,7 +589,7 @@ beat:
   actions:
   - commands:
     - id: show_message
-      follow_along: true
+      timing: realtime
       run: for n in 3 2 1; do printf '%s\\n' "$n"; sleep 1; done; printf 'Hello World!\\n'
       expect:
         output_contains:
