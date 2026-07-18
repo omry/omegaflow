@@ -244,7 +244,7 @@ def test_embedded_transport_stays_compact_on_short_mobile_viewports(
               narration.innerHTML = Array.from({length: 32}, (_, index) => (
                 `<span class="narration-word ${index === 27 ? 'current' : 'future'}">word${index}</span>`
               )).join(' ');
-              window.updateNarrationScroll();
+              window.updateNarrationScroll({animate: true});
             }"""
         )
         narration_box = page.locator("#narration").bounding_box()

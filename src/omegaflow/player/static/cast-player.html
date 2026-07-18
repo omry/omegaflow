@@ -1975,6 +1975,8 @@
         const lineHeight = Number.isFinite(computedLineHeight)
           ? Math.max(1, computedLineHeight)
           : Math.max(1, narration.clientHeight / 2);
+        const canAnimateWithoutHidingCurrentWord =
+          narration.clientHeight / lineHeight >= 1.5;
         const narrationTop = narration.getBoundingClientRect().top;
         const currentTop = current.getBoundingClientRect().top;
         const relativeTop = Math.max(
@@ -1983,7 +1985,7 @@
         );
         const targetLine = Math.floor(relativeTop / lineHeight);
         setNarrationScrollTop(Math.min(verticalOverflow, targetLine * lineHeight), {
-          animate,
+          animate: animate && canAnimateWithoutHidingCurrentWord,
         });
       }
 
