@@ -30,31 +30,31 @@ No active release blockers.
 
 ## Release backlog
 
+- [ ] `P1` Replace the placeholder website tutorial with a complete guided
+      tutorial. The website currently links prominently to a tutorial, but its
+      chapter pages are skeletal, the checked-in tutorial recordings are
+      placeholder terminal beats with narration disabled, and their generated
+      artifacts are not embedded in the corresponding pages. Acceptance
+      checks: define a coherent path from quickstart through recording files,
+      beats, and publishing; replace placeholder copy and recordings with
+      useful instruction; build and publish each recording into a predictable
+      asset location; embed the relevant video in every chapter; keep written
+      steps usable without video; verify navigation, production website build,
+      and playback from the published site; and remove or relabel any tutorial
+      entry point that still leads to incomplete content.
+
 ## Post-release
 
-- [ ] `P2` Support narration-synchronized text highlighting in terminal beats.
-      Recording authors should be able to emphasize existing terminal text at
-      a narration cue so the viewer can follow the exact output being
-      discussed. Acceptance checks: declare the target text and timing from the
-      recording script; show and clear the highlight without changing terminal
-      output; keep highlighting deterministic across playback, seeking, and
-      replay; report missing or ambiguous targets clearly; and add player and
-      synchronization tests.
-
-- [ ] `P2` Add scripted interactive terminal capture for TUI sessions.
-      OmegaFlow should be able to record a real interactive terminal program,
-      including a Codex chat that invokes an installed Arbiter capability,
-      without reducing the session to buffered command output. Acceptance
-      checks: run the target command in a child PTY with the recording's fixed
-      terminal geometry; let recording scripts inject text, Enter, and named
-      control keys; stream ANSI and cursor updates into the existing asciinema
-      capture as they happen; provide deterministic synchronization using
-      explicit output matches and bounded terminal-idle waits; preserve action
+- [ ] `P2` Add scripted input and synchronization to realtime terminal
+      sessions. Realtime PTY capture already preserves live TUI output, but
+      recording scripts cannot yet drive an interactive session or synchronize
+      against its changing terminal state. Acceptance checks: inject text,
+      Enter, and named control keys; wait for explicit output matches and
+      bounded terminal-idle periods; preserve fixed terminal geometry, action
       timing, timeouts, exit validation, and reliable process-tree cleanup; add
-      tests for input injection, streaming output, synchronization failure, and
-      cleanup; and add a secret-safe reference recording that runs Codex with
-      inline terminal output, submits more than one chat turn, and demonstrates
-      a real Arbiter-backed operation.
+      tests for input injection, synchronization success and failure, and
+      cleanup; and add a secret-safe reference recording that submits multiple
+      turns to a Codex chat and demonstrates an Arbiter-backed operation.
 
 - [ ] `P2` Add selectable player color themes.
       Recordings should be able to choose a named color theme for the generated
@@ -98,15 +98,6 @@ No active release blockers.
       define migration behavior for existing recordings; update docs and tests
       only after the syntax decision is made.
 
-- [ ] `P2` Design a short hello-recording tutorial curriculum.
-      The current `hello` recording is useful as a tiny fixture, but a separate
-      tutorial track could use it to explain how OmegaFlow recordings are
-      authored. Acceptance checks: outline a small lesson sequence covering the
-      recording file, scene, beat, support script, output expectation, and
-      publish surface; keep it separate from the default hello script until the
-      tutorial direction is approved; and identify which parts belong in a
-      future video versus written docs.
-
 - [ ] `P1` Add a generic prompt system for OmegaFlow recordings.
       The recorder currently treats `$` as the canonical prompt, with a small
       virtualenv-prefix special case. Recordings should be able to declare the
@@ -128,27 +119,16 @@ No active release blockers.
       once the player already has focus; add tests for the supported case; and
       defer explicitly if the behavior is too browser-dependent to make robust.
 
-- [ ] Explore Reploy-backed recording and processing environments without
-      replacing local mode. Reploy could provide two complementary isolation
-      layers: a reusable processing environment containing OmegaFlow,
-      `asciinema`, Chromium, fonts, `ffmpeg`, and `ffprobe`; and a clean,
-      disposable environment per recording containing the demo's declared
-      dependencies, persistent recording shell, and only the minimal injected
-      recorder tooling needed by the selected backend. Evaluate one-shot
-      processing for CI and release builds plus reusable sessions for local
-      iteration.
-      Acceptance checks: define the artifact boundary between the environments,
-      including casts, timelines, narration, logs, failure metadata, and
-      published video; evaluate whether a Reploy processing environment can
-      safely create and control a nested Reploy recording environment; define a
-      non-nested controller/worker fallback if nesting is unavailable; compare
-      recording a remote PTY with copying a platform-compatible `asciinema`
-      binary and minimal OmegaFlow runner into the recording environment; keep
-      the current lightweight local mode fully supported; avoid requiring broad
-      Docker-socket access where a narrower Reploy API is available; make mode
-      and lifecycle selection explicit in tool config and CLI output; document
-      when to use managed versus local execution; and keep missing-dependency
-      errors clear in local mode.
+- [ ] `P2` Evaluate Reploy-backed recording and processing environments without
+      replacing local mode. Produce a short architecture decision that compares
+      a nested processing/recording environment with a non-nested
+      controller/worker shape, defines the artifact and security boundary, and
+      recommends one bounded prototype. Acceptance checks: identify the
+      required processing and recording dependencies; account for casts,
+      timelines, narration, logs, failure metadata, and published assets;
+      validate whether safe nested control is available; prefer a narrow Reploy
+      API over broad Docker-socket access; and leave the current local workflow
+      and its dependency errors unchanged.
 
 - [ ] Decide the Windows support shape.
       Native Windows cannot currently record terminal sessions through
@@ -168,12 +148,20 @@ No active release blockers.
 
 ## Done
 
-- [x] `P1` Make build progress reflect long-running active work.
-      Completed: `2026-07-18`. Interactive builds now show a moving activity
-      tracer and elapsed time for the current phase while keeping completed
-      units unchanged, so long capture and narration work stays visibly active
-      without reporting invented partial completion. Non-interactive output
-      remains concise, and realtime terminal capture retains the animated TUI.
+- [x] `P1` Show useful progress throughout video builds.
+      Completed: `2026-07-18`. Added one determinate progress surface for
+      recording actions, narration, assembly, and publishing. Interactive
+      builds keep long active phases visible with elapsed time and a moving
+      tracer while completed units remain truthful; cached and non-interactive
+      paths stay concise, realtime capture retains the animated TUI, and
+      successful, cached, forced, failed, narrow-terminal, and long-action
+      paths are covered by tests.
+
+- [x] `P2` Support narration-synchronized text highlighting in terminal beats.
+      Completed: `2026-07-18`. Added typed terminal highlight effects timed by
+      narration anchors, exact occurrence selection for repeated text,
+      deterministic player rendering and clearing, author documentation,
+      validation and playback tests, and a quickstart demonstration.
 
 - [x] `P0` Prevent duplicate voiceover when playback starts before the website
       player has fully loaded. Completed: `2026-07-18`. Playback now remains
@@ -181,14 +169,6 @@ No active release blockers.
       preventing an early click from starting a second audio path. Added a
       delayed-readiness regression and retained coverage for pause, seek,
       replay, and narration transitions.
-
-- [x] `P1` Show useful progress throughout video builds.
-      Completed: `2026-07-18`. Added one determinate build progress surface for
-      executable recording actions, narration generation and timing, final
-      assembly, and publishing. Long speech generation reports elapsed time and
-      streamed bytes without inventing a completion percentage. Cached work
-      advances the same bar, non-interactive logs show only major phases, and
-      successful, cached, forced, and failed paths are covered by tests.
 
 - [x] `P1` Add Towncrier release notes and GitHub Releases to publishing.
       Completed: `2026-07-15`. Added generated and validated release notes,
