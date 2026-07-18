@@ -377,10 +377,6 @@ class PersistentBrowserRunner:
             self.page.on("pageerror", self._observe_page_error)
             self.page.on("requestfailed", self._observe_request_failure)
             timeouts = _mapping(config.get("timeouts", {}), field="browser.timeouts")
-            self.page.set_default_timeout(int(timeouts.get("action_ms", 10_000)))
-            self.page.set_default_navigation_timeout(
-                int(timeouts.get("readiness_ms", 15_000))
-            )
             user_agent = self.page.evaluate("navigator.userAgent")
             if not isinstance(user_agent, str) or not user_agent:
                 raise BrowserCaptureError(
@@ -435,6 +431,10 @@ class PersistentBrowserRunner:
                 "run_start",
                 profile=asdict(self.profile),
                 initial_state=self.initial_visual_state,
+            )
+            self.page.set_default_timeout(int(timeouts.get("action_ms", 10_000)))
+            self.page.set_default_navigation_timeout(
+                int(timeouts.get("readiness_ms", 15_000))
             )
         except BrowserCaptureError:
             self._close_resources()

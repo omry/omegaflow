@@ -253,6 +253,18 @@ def test_visible_wait_allows_target_to_match_later(tmp_path: Path) -> None:
         runner.close()
 
 
+def test_initial_capture_is_not_constrained_by_action_timeout(tmp_path: Path) -> None:
+    runner = PersistentBrowserRunner(
+        {"timeouts": {"action_ms": 1, "readiness_ms": 1500}}
+    )
+
+    runner.start(capture_context(tmp_path))
+    try:
+        assert runner.initial_visual_state is not None
+    finally:
+        runner.close()
+
+
 def browser_plan(config: dict | None = None):
     return normalize_recording_plan(
         {
