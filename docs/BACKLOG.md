@@ -30,7 +30,22 @@ No active release blockers.
 
 ## Release backlog
 
-No active release backlog items.
+- [ ] `P0` Prevent duplicate voiceover when the primary website video starts
+      before it has fully loaded. Starting playback immediately can cause two
+      overlapping narration streams during the second segment. Acceptance
+      checks: reproduce the issue on the primary website with delayed media
+      loading; ensure only one narration stream is active throughout playback;
+      keep pause, seek, replay, and segment transitions single-voiced; and add
+      a regression test that starts playback before all media is ready.
+
+- [ ] `P1` Make build progress reflect long-running active work. The current
+      action-based bar can remain at `0/4` for most of a build and then rush
+      through every remaining unit. Acceptance checks: keep the progress
+      surface visibly active during a long first action; avoid fake precision;
+      represent the relative work of capture, narration, assembly, and publish
+      phases meaningfully; preserve concise non-interactive output and stable
+      recorded TUI playback; and add a regression test with a deliberately slow
+      first action followed by fast final phases.
 
 ## Post-release
 
