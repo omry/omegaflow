@@ -1,6 +1,8 @@
 ---
+kind: video
 id: tutorial/beat
 title: "Tutorial: Beat"
+description: See how narration, actions, and checks form a beat.
 publish:
   default: html
   surfaces:

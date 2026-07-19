@@ -36,6 +36,12 @@ omegaflow action=list
 omegaflow recording=tutorial/install
 ```
 
+An id whose `index.md` has `kind: collection` groups an ordered set of videos.
+For example, `omegaflow recording=tutorial` builds every video listed by the
+tutorial collection. `action=watch` opens one index page with a titled,
+described link to each built video. Collections also support `dry_run=true` for
+build previews; select an individual member for other single-video actions.
+
 Actions that operate across recordings do not require a selection. `list` and
 `runs` are the common examples. `inspect` and `output` can also work without
 `recording` when a `run_id` uniquely identifies a run.

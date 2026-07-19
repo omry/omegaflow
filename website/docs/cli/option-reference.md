@@ -13,7 +13,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
 | `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `gc`, `watch`, `inspect`, `output`, `runs`, or `list`. |
-| `recording` | `null` | most actions | Recording id under `studio.recording_dir`. Required by `build`, `check`, `clean`, and `watch`; optional where run-wide selection is supported. |
+| `recording` | `null` | most actions | Video or collection id under `studio.recording_dir`. Collections build ordered groups and provide a watch index; other single-video actions require a video id. |
 | `output_format` | `text` | `runs`, `clean`, build preview | Use `json` for machine-readable output from supported operations. |
 | `verbose` | `false` | `build` | Show detailed freshness and artifact information. |
 | `dry_run` | `false` | `build`, `bootstrap`, `gc` | `true` previews a build, lists bootstrap files, or reports runs that GC would remove. Bootstrap also accepts `diff`. |

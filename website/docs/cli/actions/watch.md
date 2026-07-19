@@ -28,6 +28,20 @@ omegaflow recording=demo action=watch open=false
 
 OmegaFlow prints the local player URL and serves it until you press Ctrl-C.
 
+## Watch a collection
+
+When the selected recording has `kind: collection`, `watch` opens one local
+index for all of its built videos:
+
+```bash
+omegaflow recording=tutorial action=watch
+```
+
+The index keeps the collection order, shows each video's title and description,
+and filters locally as you type. Its compact video list scrolls independently,
+so collections are not limited to a particular number of members. Selecting a
+video opens its normal player on the same local server.
+
 By default, the operating system selects a free local port. Use a fixed port
 when a scripted recording needs the displayed URL to remain stable across
 rebuilds:

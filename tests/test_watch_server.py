@@ -13,11 +13,12 @@ from omegaflow import studio
 
 
 @contextmanager
-def watch_server(root: Path):
+def watch_server(root: Path, *, pages: dict[str, bytes] | None = None):
     handler = partial(
         studio.StudioWatchRequestHandler,
         artifacts={},
         directory=str(root),
+        pages=pages,
     )
     server = studio.http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -76,3 +77,56 @@ def test_watch_server_supports_media_byte_ranges(tmp_path: Path) -> None:
             urlopen(invalid)
         assert caught.value.code == 416
         assert caught.value.headers["Content-Range"] == "bytes */10"
+
+
+def test_collection_watch_page_filters_a_bounded_scrolling_list(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    members = [
+        {
+            "id": f"tutorial/chapter-{index}",
+            "title": f"Chapter {index}",
+            "description": (
+                "Publish the finished video."
+                if index == 30
+                else f"Learn topic {index}."
+            ),
+            "url": f"/watch/{index}",
+        }
+        for index in range(1, 31)
+    ]
+    page_html = studio.render_collection_watch_page(
+        {"id": "tutorial", "title": "Tutorial"},
+        members,
+    ).encode("utf-8")
+
+    with (
+        watch_server(
+            tmp_path,
+            pages={"/collection.html": page_html},
+        ) as base_url,
+        sync_api.sync_playwright() as playwright,
+    ):
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 480})
+        page.goto(f"{base_url}/collection.html")
+
+        cards = page.locator("[data-video-card]")
+        assert cards.count() == 30
+        metrics = page.locator(".video-list").evaluate(
+            "element => ({client: element.clientHeight, scroll: element.scrollHeight})"
+        )
+        assert metrics["scroll"] > metrics["client"]
+        assert page.evaluate("document.body.scrollHeight <= window.innerHeight")
+
+        page.locator("#video-search").fill("publish")
+        assert page.locator("[data-video-card]:visible").count() == 1
+        assert page.locator("#result-count").text_content() == "1 of 30 videos"
+        assert "Chapter 30" in page.locator("[data-video-card]:visible").text_content()
+
+        page.locator("#video-search").fill("not present")
+        assert page.locator("[data-video-card]:visible").count() == 0
+        assert page.locator("#empty-state").is_visible()
+
+        browser.close()

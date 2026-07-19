@@ -1,4 +1,5 @@
 ---
+kind: video
 id: quickstart-demo
 title: Quickstart Demo
 capture:

@@ -1,4 +1,5 @@
 ---
+kind: video
 id: browser-recording-narration-smoke
 title: Browser Recording Narration Smoke Test
 outputs:

@@ -1,6 +1,8 @@
 ---
+kind: video
 id: tutorial/publishing
 title: "Tutorial: Publishing"
+description: Publish a video as standalone HTML or embed it in documentation.
 publish:
   default: html
   surfaces:

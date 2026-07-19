@@ -1,0 +1,1 @@
+Add typed `kind: video` recording sources and ordered `kind: collection` video groups, including a `recording=tutorial` collection that builds every tutorial video in chapter order and serves a titled, described watch index from one local server.

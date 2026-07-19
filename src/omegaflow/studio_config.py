@@ -218,6 +218,11 @@ class StudioStep(str, Enum):
     publish = "publish"
 
 
+class RecordingSourceKind(str, Enum):
+    video = "video"
+    collection = "collection"
+
+
 class RecordingMedium(str, Enum):
     terminal = "terminal"
     browser = "browser"
@@ -764,8 +769,18 @@ class RecordingDefaults:
 
 @dataclass
 class RecordingSourceSpec(RecordingDefaults):
+    kind: RecordingSourceKind = RecordingSourceKind.video
     id: str = ""
     title: str | None = None
+    description: str | None = None
+
+
+@dataclass
+class RecordingCollectionSourceSpec:
+    kind: RecordingSourceKind = RecordingSourceKind.collection
+    id: str = ""
+    title: str | None = None
+    members: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -776,7 +791,7 @@ class RecordingSpec(RecordingSourceSpec):
     narration: dict[str, Any] = field(default_factory=dict)
 
 
-RECORDING_IDENTITY_FIELDS = {"id", "title"}
+RECORDING_IDENTITY_FIELDS = {"kind", "id", "title", "description"}
 RECORDING_GENERATED_FIELDS = {"script"}
 
 
@@ -856,6 +871,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingBeatConfig,
     RecordingDefaults,
     RecordingSourceSpec,
+    RecordingCollectionSourceSpec,
     StudioDirectiveScene,
     StudioDirectiveBeat,
     StudioDirectiveBlock,
@@ -867,6 +883,10 @@ def register_studio_schema() -> None:
     store.store(name="studio_schema", node=StudioConfig)
     store.store(name="recording_defaults_schema", node=RecordingDefaults)
     store.store(name="recording_source_schema", node=RecordingSourceSpec)
+    store.store(
+        name="recording_collection_source_schema",
+        node=RecordingCollectionSourceSpec,
+    )
     store.store(name="recording_spec_schema", node=RecordingSpec)
     store.store(name="studio_directive_schema", node=StudioDirectiveBlock)
 
@@ -1154,11 +1174,6 @@ def split_frontmatter(script_text: str, *, source: Path) -> tuple[dict[str, Any]
     if not frontmatter_text:
         return {}, body
     config = parse_yaml_mapping(frontmatter_text, source=f"{source} frontmatter")
-    validate_config_keys(
-        config,
-        schema=RecordingSourceSpec,
-        source=f"{source} frontmatter",
-    )
     return config, body
 
 
@@ -1644,6 +1659,91 @@ def recording_script_path(
     return script_dir / validate_recording_id(recording_id) / RECORDING_SOURCE_NAME
 
 
+def recording_source_kind_from_frontmatter(
+    frontmatter: dict[str, Any],
+    *,
+    source: Path,
+) -> RecordingSourceKind:
+    raw_kind = frontmatter.get("kind", RecordingSourceKind.video.value)
+    try:
+        return RecordingSourceKind(raw_kind)
+    except (TypeError, ValueError) as exc:
+        choices = ", ".join(kind.value for kind in RecordingSourceKind)
+        raise StudioConfigError(
+            f"invalid {source} frontmatter: kind must be one of: {choices}"
+        ) from exc
+
+
+def recording_source_kind(
+    recording_id: str,
+    recording_dir: Path | None = None,
+) -> RecordingSourceKind:
+    script_path = recording_script_path(recording_id, recording_dir=recording_dir)
+    if not script_path.exists():
+        raise StudioConfigError(f"recording script not found: {script_path}")
+    frontmatter, _script_body = split_frontmatter(
+        script_path.read_text(encoding="utf-8"),
+        source=script_path,
+    )
+    if not frontmatter:
+        raise StudioConfigError(
+            f"recording script must contain frontmatter config: {script_path}"
+        )
+    return recording_source_kind_from_frontmatter(frontmatter, source=script_path)
+
+
+def recording_collection_from_script(
+    recording_id: str,
+    recording_dir: Path | None = None,
+) -> dict[str, Any]:
+    workspace_dir = recording_dir or RECORDING_SCRIPT_DIR
+    script_path = recording_script_path(recording_id, recording_dir=workspace_dir)
+    if not script_path.exists():
+        raise StudioConfigError(f"recording script not found: {script_path}")
+    frontmatter, script_body = split_frontmatter(
+        script_path.read_text(encoding="utf-8"),
+        source=script_path,
+    )
+    if not frontmatter:
+        raise StudioConfigError(
+            f"recording script must contain frontmatter config: {script_path}"
+        )
+    kind = recording_source_kind_from_frontmatter(frontmatter, source=script_path)
+    if kind is not RecordingSourceKind.collection:
+        raise StudioConfigError(f"recording source is not a collection: {script_path}")
+    if studio_directive_blocks(script_body, resolve=False):
+        raise StudioConfigError(
+            f"recording collection cannot contain studio directives: {script_path}"
+        )
+    spec = structured_config_mapping(
+        frontmatter,
+        schema=RecordingCollectionSourceSpec,
+        source=f"{script_path} frontmatter",
+    )
+    if spec["kind"] != RecordingSourceKind.collection.value:
+        raise StudioConfigError(f"recording source is not a collection: {script_path}")
+    if spec["id"] != recording_id:
+        raise StudioConfigError(
+            f"collection id must match its recording path: expected {recording_id}"
+        )
+    members = spec["members"]
+    if not members:
+        raise StudioConfigError(f"collection {recording_id} must contain members")
+    seen: set[str] = set()
+    for member in members:
+        validate_recording_id(member)
+        if member == recording_id:
+            raise StudioConfigError(
+                f"collection {recording_id} cannot contain itself"
+            )
+        if member in seen:
+            raise StudioConfigError(
+                f"collection {recording_id} contains duplicate member: {member}"
+            )
+        seen.add(member)
+    return spec
+
+
 def recording_from_script(
     recording_id: str,
     recording_dir: Path | None = None,
@@ -1665,6 +1765,16 @@ def recording_from_script(
         raise StudioConfigError(
             f"recording script must contain frontmatter config: {script_path}"
         )
+    kind = recording_source_kind_from_frontmatter(frontmatter, source=script_path)
+    if kind is not RecordingSourceKind.video:
+        raise StudioConfigError(
+            f"recording source is a collection, not a video: {script_path}"
+        )
+    validate_config_keys(
+        frontmatter,
+        schema=RecordingSourceSpec,
+        source=f"{script_path} frontmatter",
+    )
     defaults = load_recording_defaults(workspace_dir)
     spec = merge_mapping(defaults, frontmatter)
     spec.setdefault("id", recording_id)

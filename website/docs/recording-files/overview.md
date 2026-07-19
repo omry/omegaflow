@@ -7,8 +7,8 @@ slug: /recording-files
 # Recording Files
 
 By default, an OmegaFlow recording workspace is the `recordings/` directory. The
-file you edit most is `<recording-dir>/<id>/index.md`: it is the source for
-one video. Recording ids can include nested directories, such as
+file you edit most is `<recording-dir>/<id>/index.md`: it is usually the source
+for one video. Recording ids can include nested directories, such as
 `tutorial/install`, which maps to
 `recordings/tutorial/install/index.md`. Projects that keep recordings
 somewhere else can set that in [Project Configuration](../configuration.md).
@@ -25,6 +25,7 @@ recordings/:           # Recording workspace
   quickstart/:         # Bootstrap-created video directory
     index.md:          # Recording Markdown file for one video
   tutorial/:           # Optional grouping directory
+    index.md:           # Optional collection that builds child videos in order
     install/:          # Nested video directory, selected as tutorial/install
       index.md:        # Recording Markdown file for that video
   .omegaflow/:         # Default generated runtime state and local outputs
@@ -42,6 +43,7 @@ A recording Markdown file has three main parts:
 
 ````md
 ---
+kind: video
 id: quickstart
 title: Quickstart
 ---
@@ -68,6 +70,30 @@ beat:
 ```
 ````
 
+## Recording Collections
+
+An `index.md` can instead define an ordered build shortcut:
+
+```yaml
+---
+kind: collection
+id: tutorial
+title: Tutorial
+members:
+  - tutorial/recording-file
+  - tutorial/beat
+  - tutorial/publishing
+---
+```
+
+Running `omegaflow recording=tutorial` validates every member, then builds the
+videos sequentially using the normal video pipeline. A collection does not
+produce a video or recording run of its own. `dry_run=true` lists its members.
+After the videos are built, `omegaflow recording=tutorial action=watch` serves
+one index page using each member's `title` and `description`; selecting a card
+opens that member's normal player. Other single-video actions require selecting
+one member.
+
 ## Scene
 
 Every recording defines one scene. The scene names the video:
@@ -87,7 +113,7 @@ scene:
 
 | How often | File | Purpose |
 | --- | --- | --- |
-| Most often | `<recording-dir>/<id>/index.md` | The video source: recording configuration, scene, beats, narration, and commands. Nested ids such as `tutorial/install` are supported. |
+| Most often | `<recording-dir>/<id>/index.md` | A video source, or an ordered collection of video ids. Nested ids such as `tutorial/install` are supported. |
 | Often | `<recording-dir>/<id>/scripts/` | Shell scripts and small support files for that recording. |
 | Occasionally | `<recording-dir>/config.yaml` | Workspace defaults, such as capture style, output directory, audio provider, or environment key. |
 | Rarely | `<studio.data_dir>/` | Generated runs, cache, and local outputs. Defaults to `<recording-dir>/.omegaflow/`; do not edit by hand. |

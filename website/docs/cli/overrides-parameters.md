@@ -36,6 +36,7 @@ A recording can declare shell-safe parameters and their defaults:
 
 ```yaml
 ---
+kind: video
 id: greeting
 title: Greeting
 parameters:

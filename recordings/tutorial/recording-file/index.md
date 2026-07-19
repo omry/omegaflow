@@ -1,6 +1,8 @@
 ---
+kind: video
 id: tutorial/recording-file
 title: "Tutorial: Recording File"
+description: Learn how an OmegaFlow recording is organized.
 publish:
   default: html
   surfaces:

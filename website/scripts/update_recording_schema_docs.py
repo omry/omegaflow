@@ -38,6 +38,7 @@ SCHEMA_GROUPS = {
         "RecordingRequirementsConfig",
         "RecordingDefaults",
         "RecordingSourceSpec",
+        "RecordingCollectionSourceSpec",
     ],
     "beat": [
         "RecordingExpectationConfig",

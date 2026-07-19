@@ -96,8 +96,10 @@ Each `<id>/index.md` recording starts with YAML frontmatter:
 
 ```yaml
 ---
+kind: video
 id: hello
 title: Hello Video
+description: A small narrated hello-world recording.
 publish:
   default: html
   surfaces:
@@ -111,7 +113,7 @@ audio:
 
 The frontmatter header is the right place for recording-specific config:
 
-- `id` and `title`
+- `kind`, `id`, `title`, and `description`
 - one-off output overrides
 - one-off audio settings
 - recording-local setup, cleanup, or configured beats
@@ -121,8 +123,10 @@ The frontmatter header is the right place for recording-specific config:
 
 | Field | Type | Notes |
 | --- | --- | --- |
+| `kind` | `video` or `collection` | Source type. Omitted values are treated as `video` for compatibility; new files should declare it. Collections use only `id`, `title`, and `members`. |
 | `id` | string | Required per recording. Used by `omegaflow recording=<id>`. Nested ids such as `tutorial/install` are supported. Frontmatter only. |
 | `title` | string | Human-readable title for players and publish surfaces. Frontmatter only. |
+| `description` | string | Short summary used when a collection renders its watch index. Frontmatter only. |
 | `parameters` | mapping | Script parameters and defaults for `script_params`. |
 | `requirements` | mapping | Required shell commands and tools. |
 | `capture` | mapping | Recording settings such as `window_size`, `headless`, and `idle_time_limit`. |
@@ -137,6 +141,11 @@ The frontmatter header is the right place for recording-specific config:
 | `setup` | list | Commands that run before beats. See [Beat](./beat.md). |
 | `cleanup` | list | Commands that run after recording. See [Beat](./beat.md). |
 | `beats` | list | Optional configured beats. See [Beat](./beat.md). |
+
+A collection replaces the video-specific fields with an ordered `members`
+list of full recording ids. Collection members must be videos; nested
+collections are not supported. Each member's `title` and `description` appear
+in the collection watch index.
 
 Publishing surface details are covered in
 [Publishing And Runtime](./publishing-runtime.md).
@@ -423,8 +432,18 @@ class RecordingDefaults:
 
 @dataclass
 class RecordingSourceSpec(RecordingDefaults):
+    kind: RecordingSourceKind = RecordingSourceKind.video
     id: str = ""
     title: str | None = None
+    description: str | None = None
+
+
+@dataclass
+class RecordingCollectionSourceSpec:
+    kind: RecordingSourceKind = RecordingSourceKind.collection
+    id: str = ""
+    title: str | None = None
+    members: list[str] = field(default_factory=list)
 ```
 
 <!-- recording-config-schema:end -->

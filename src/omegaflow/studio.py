@@ -38,6 +38,7 @@ from .recording_plan import RecordingPlanError, normalize_recording_plan
 from .studio_config import (
     CONFIG_DIR,
     STUDIO_CONFIG_NAME,
+    RecordingSourceKind,
     StudioAction,
     StudioConfigError,
     StudioStep,
@@ -48,7 +49,9 @@ from .studio_config import (
     load_configured_env_file,
     load_recording_spec_from_hydra_cfg,
     project_config_searchpath_override,
+    recording_collection_from_script,
     recording_script_dir_from_config,
+    recording_source_kind,
     recording_spec_from_config,
     studio_data_dir_from_config,
 )
@@ -294,6 +297,15 @@ def cfg_with_step(cfg: DictConfig, step: str, **overrides: object) -> DictConfig
     data["step"] = step
     for key, value in overrides.items():
         data[key] = str(value) if isinstance(value, Path) else value
+    return OmegaConf.create(data)
+
+
+def cfg_for_recording(cfg: DictConfig, recording_id: str) -> DictConfig:
+    data = OmegaConf.to_container(cfg, resolve=False, enum_to_str=True)
+    if not isinstance(data, dict):
+        raise StudioError("composed Hydra config must be a mapping")
+    data["recording"] = recording_id
+    data["step"] = None
     return OmegaConf.create(data)
 
 
@@ -606,6 +618,7 @@ studio:
 def bootstrap_recording_text(recording_id: str, title: str) -> str:
     return f"""\
 ---
+kind: video
 id: {recording_id}
 title: {title}
 publish:
@@ -1343,9 +1356,11 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
         *args: Any,
         artifacts: dict[str, Path],
         directory: str,
+        pages: dict[str, bytes] | None = None,
         **kwargs: Any,
     ) -> None:
         self.artifacts = artifacts
+        self.pages = pages or {}
         super().__init__(*args, directory=directory, **kwargs)
 
     def translate_path(self, path: str) -> str:
@@ -1364,6 +1379,14 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def send_head(self) -> Any:
+        request_path = urlparse(self.path).path
+        page = getattr(self, "pages", {}).get(request_path)
+        if page is not None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            return io.BytesIO(page)
         range_header = self.headers.get("Range")
         if range_header is None:
             return super().send_head()
@@ -1624,13 +1647,23 @@ def watch_player_url_path(
     autoplay_countdown: bool = False,
 ) -> tuple[str, dict[str, Path]]:
     resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
-    if resolved_run_dir is None:
+    paths = (
+        presentation_build.run_paths(resolved_run_dir)
+        if resolved_run_dir is not None
+        else None
+    )
+    bundle = paths["presentation"] if paths is not None else None
+    manifest = paths["manifest"] if paths is not None else None
+    if run_dir is None and (manifest is None or not manifest.is_file()):
+        public_bundle = presentation_build.public_bundle_dir(spec)
+        public_manifest = public_bundle / presentation_build.MANIFEST_FILE
+        if public_manifest.is_file():
+            bundle = public_bundle
+            manifest = public_manifest
+    if bundle is None or manifest is None:
         raise StudioError(
             "no successful recording run found; run omegaflow action=build first"
         )
-    paths = presentation_build.run_paths(resolved_run_dir)
-    bundle = paths["presentation"]
-    manifest = paths["manifest"]
     if not manifest.is_file():
         raise StudioError(
             f"presentation manifest not found: {display_path(manifest)}; "
@@ -1648,6 +1681,212 @@ def watch_player_url_path(
     if autoplay_countdown:
         query["autoplay"] = "countdown"
     return "/cast-player.html?" + urlencode(query), artifacts
+
+
+def collection_member_player_url(recording_id: str) -> str:
+    manifest_url = (
+        WATCH_ARTIFACT_PREFIX
+        + f"members/{recording_id}/"
+        + presentation_build.MANIFEST_FILE
+    )
+    return "/cast-player.html?" + urlencode(
+        {"manifest": manifest_url, "autoplay": "countdown"}
+    )
+
+
+def render_collection_watch_page(
+    collection: dict[str, Any],
+    members: list[dict[str, str]],
+) -> str:
+    title = optional_string(collection.get("title")) or str(collection["id"])
+    cards: list[str] = []
+    number_width = max(2, len(str(len(members))))
+    for index, member in enumerate(members, 1):
+        member_title = optional_string(member.get("title")) or member["id"]
+        description = optional_string(member.get("description")) or (
+            f"Watch {member_title}."
+        )
+        search_text = " ".join((member["id"], member_title, description)).lower()
+        cards.append(
+            '        <a class="video-card" data-video-card="true" '
+            f'data-search="{html.escape(search_text, quote=True)}" '
+            f'href="{html.escape(member["url"], quote=True)}">\n'
+            f'          <span class="video-number" aria-hidden="true">'
+            f"{index:0{number_width}d}</span>\n"
+            '          <span class="video-copy">\n'
+            f"            <h2>{html.escape(member_title)}</h2>\n"
+            f"            <p>{html.escape(description)}</p>\n"
+            "          </span>\n"
+            '          <span class="video-arrow" aria-hidden="true">&rarr;</span>\n'
+            "        </a>"
+        )
+    rendered_cards = "\n".join(cards)
+    count = len(members)
+    count_label = f"{count} {'video' if count == 1 else 'videos'}"
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "  <head>\n"
+        '    <meta charset="utf-8" />\n'
+        '    <meta name="viewport" content="width=device-width, initial-scale=1" />\n'
+        f"    <title>{html.escape(title)} · OmegaFlow</title>\n"
+        "    <style>\n"
+        "      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, "
+        "system-ui, sans-serif; }\n"
+        "      * { box-sizing: border-box; }\n"
+        "      [hidden] { display: none !important; }\n"
+        "      body { margin: 0; height: 100vh; height: 100dvh; overflow: hidden; "
+        "background: #0d0f16; "
+        "color: #f3f2f7; }\n"
+        "      main { width: min(1040px, calc(100% - 40px)); height: 100%; "
+        "margin: 0 auto; padding: clamp(28px, 6vh, 64px) 0; display: grid; "
+        "grid-template-rows: auto auto minmax(0, 1fr); }\n"
+        "      header { min-width: 0; }\n"
+        "      .brand { color: #9b87ff; font-weight: 750; letter-spacing: .02em; }\n"
+        "      h1 { margin: 8px 0 4px; font-size: clamp(2rem, 5vw, 3.25rem); "
+        "line-height: 1.05; }\n"
+        "      .intro { margin: 0 0 20px; color: #b9bbca; font-size: 1rem; }\n"
+        "      .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; "
+        "align-items: center; gap: 16px; margin-bottom: 12px; }\n"
+        "      .search { display: flex; align-items: center; gap: 10px; min-width: 0; "
+        "height: 42px; padding: 0 13px; border: 1px solid #3e4357; "
+        "border-radius: 10px; background: #131620; color: #85899d; }\n"
+        "      .search:focus-within { border-color: #9b87ff; "
+        "box-shadow: 0 0 0 3px rgb(155 135 255 / 14%); }\n"
+        "      .search input { min-width: 0; width: 100%; border: 0; outline: 0; "
+        "background: transparent; color: #f3f2f7; font: inherit; }\n"
+        "      .search input::placeholder { color: #85899d; }\n"
+        "      .result-count { color: #9296a8; font-size: .9rem; white-space: nowrap; }\n"
+        "      .video-list { min-height: 0; overflow: auto; overscroll-behavior: "
+        "contain; display: grid; align-content: start; gap: 8px; padding: 1px 7px "
+        "10px 1px; scrollbar-color: #4b5066 transparent; }\n"
+        "      .video-card { display: grid; grid-template-columns: 2.5rem "
+        "minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px 16px; "
+        "border: 1px solid "
+        "#3e4357; border-radius: 14px; color: inherit; text-decoration: none; "
+        "background: #171a24; transition: border-color .15s, transform .15s, "
+        "background .15s; }\n"
+        "      .video-card:hover, .video-card:focus-visible { border-color: #9b87ff; "
+        "background: #1d2030; transform: translateY(-1px); outline: none; }\n"
+        "      .video-number { color: #8e7af7; font: 700 .82rem/1 ui-monospace, "
+        "SFMono-Regular, Consolas, monospace; }\n"
+        "      .video-copy { min-width: 0; }\n"
+        "      .video-card h2 { margin: 0 0 3px; overflow: hidden; "
+        "text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; }\n"
+        "      .video-card p { display: -webkit-box; margin: 0; overflow: hidden; "
+        "color: #b9bbca; font-size: .92rem; line-height: 1.35; "
+        "-webkit-box-orient: vertical; -webkit-line-clamp: 2; }\n"
+        "      .video-arrow { color: #a998ff; font-size: 1.25rem; font-weight: 700; }\n"
+        "      .empty-state { margin: 28px 0; color: #9296a8; text-align: center; }\n"
+        "      @media (max-width: 520px) { main { width: min(100% - 24px, 1040px); "
+        "padding: 24px 0; } .toolbar { gap: 10px; } .video-card { "
+        "grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 10px; "
+        "padding: 12px; } }\n"
+        "      @media (max-height: 560px) { main { padding: 16px 0; } "
+        "h1 { font-size: 2rem; } .intro { margin-bottom: 12px; } }\n"
+        "    </style>\n"
+        "  </head>\n"
+        "  <body>\n"
+        "    <main>\n"
+        "      <header>\n"
+        '        <div class="brand">Ω OmegaFlow</div>\n'
+        f"        <h1>{html.escape(title)}</h1>\n"
+        '        <p class="intro">Choose a video to watch.</p>\n'
+        "      </header>\n"
+        '      <div class="toolbar">\n'
+        '        <label class="search">\n'
+        '          <span aria-hidden="true">⌕</span>\n'
+        '          <input id="video-search" type="search" '
+        'placeholder="Filter videos…" aria-label="Filter videos" '
+        'autocomplete="off" spellcheck="false" />\n'
+        "        </label>\n"
+        f'        <span class="result-count" id="result-count" aria-live="polite">'
+        f"{count_label}</span>\n"
+        "      </div>\n"
+        '      <section class="video-list" aria-label="Videos">\n'
+        f"{rendered_cards}\n"
+        '        <p class="empty-state" id="empty-state" hidden>'
+        "No videos match that search.</p>\n"
+        "      </section>\n"
+        "    </main>\n"
+        "    <script>\n"
+        "      const search = document.getElementById('video-search');\n"
+        "      const count = document.getElementById('result-count');\n"
+        "      const empty = document.getElementById('empty-state');\n"
+        "      const cards = [...document.querySelectorAll('[data-video-card]')];\n"
+        "      const filterVideos = () => {\n"
+        "        const query = search.value.trim().toLowerCase();\n"
+        "        let visible = 0;\n"
+        "        for (const card of cards) {\n"
+        "          const matches = !query || card.dataset.search.includes(query);\n"
+        "          card.hidden = !matches;\n"
+        "          if (matches) visible += 1;\n"
+        "        }\n"
+        "        const noun = visible === 1 ? 'video' : 'videos';\n"
+        "        count.textContent = query && visible !== cards.length\n"
+        "          ? `${visible} of ${cards.length} videos`\n"
+        "          : `${visible} ${noun}`;\n"
+        "        empty.hidden = visible !== 0;\n"
+        "      };\n"
+        "      search.addEventListener('input', filterVideos);\n"
+        "      document.addEventListener('keydown', (event) => {\n"
+        "        if (event.key === '/' && document.activeElement !== search) {\n"
+        "          event.preventDefault();\n"
+        "          search.focus();\n"
+        "        } else if (event.key === 'Escape' && document.activeElement === search) {\n"
+        "          search.value = '';\n"
+        "          filterVideos();\n"
+        "          search.blur();\n"
+        "        }\n"
+        "      });\n"
+        "    </script>\n"
+        "  </body>\n"
+        "</html>\n"
+    )
+
+
+def collection_watch_url_path(
+    cfg: DictConfig,
+    config: dict[str, Any],
+) -> tuple[str, dict[str, Path], dict[str, bytes]]:
+    collection, member_cfgs = load_collection_build(cfg, config)
+    artifacts: dict[str, Path] = {}
+    rendered_members: list[dict[str, str]] = []
+    for member_id, member_cfg in zip(
+        collection["members"], member_cfgs, strict=True
+    ):
+        member_config = container_from_hydra_cfg(member_cfg)
+        spec = recording_spec_from_config(
+            member_config,
+            recording_id=None,
+            overrides=(),
+        )
+        try:
+            _url_path, member_artifacts = watch_player_url_path(
+                spec,
+                autoplay_countdown=True,
+            )
+        except StudioError as exc:
+            raise StudioError(
+                f"collection {collection['id']} member {member_id} cannot be "
+                f"watched: {exc}; build it with "
+                f"{studio_tool_command(member_id)}"
+            ) from exc
+        namespace = f"members/{member_id}/"
+        artifacts.update(
+            (namespace + relative, path)
+            for relative, path in member_artifacts.items()
+        )
+        rendered_members.append(
+            {
+                "id": member_id,
+                "title": optional_string(spec.get("title")) or member_id,
+                "description": optional_string(spec.get("description")) or "",
+                "url": collection_member_player_url(member_id),
+            }
+        )
+    page = render_collection_watch_page(collection, rendered_members).encode("utf-8")
+    return "/collection.html", artifacts, {"/collection.html": page}
 
 
 def configured_browser_command_name() -> str | None:
@@ -1959,6 +2198,7 @@ def run_watch_server(
     url_path: str,
     artifacts: dict[str, Path],
     *,
+    pages: dict[str, bytes] | None = None,
     managed_browser: bool = False,
     open_browser: bool = True,
     port: int = 0,
@@ -1970,6 +2210,7 @@ def run_watch_server(
             *args,
             artifacts=artifacts,
             directory=str(static_root),
+            pages=pages,
             **kwargs,
         )
 
@@ -2052,6 +2293,20 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         cfg,
         url_path,
         artifacts,
+        managed_browser=open_browser,
+        open_browser=open_browser,
+        port=configured_watch_port(config),
+    )
+
+
+def run_collection_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
+    url_path, artifacts, pages = collection_watch_url_path(cfg, config)
+    open_browser = bool_config(config, "open", True)
+    return run_watch_server(
+        cfg,
+        url_path,
+        artifacts,
+        pages=pages,
         managed_browser=open_browser,
         open_browser=open_browser,
         port=configured_watch_port(config),
@@ -2193,11 +2448,112 @@ def print_build_elapsed(cfg: DictConfig, seconds: float, *, success: bool) -> No
         fail_line(f"build failed after {format_elapsed(seconds)}")
 
 
+def load_collection_build(
+    cfg: DictConfig,
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], list[DictConfig]]:
+    recording_id = recording_id_from_value(config.get("recording"))
+    if recording_id is None:
+        raise StudioError("recording collection id must be a non-empty string")
+    recording_dir = recording_script_dir_from_config(config)
+    try:
+        collection = recording_collection_from_script(
+            recording_id,
+            recording_dir=recording_dir,
+        )
+    except StudioConfigError as exc:
+        raise StudioError(str(exc)) from exc
+
+    member_cfgs: list[DictConfig] = []
+    for member in collection["members"]:
+        try:
+            kind = recording_source_kind(member, recording_dir=recording_dir)
+        except StudioConfigError as exc:
+            raise StudioError(
+                f"collection {recording_id} member {member} is invalid: {exc}"
+            ) from exc
+        if kind is not RecordingSourceKind.video:
+            raise StudioError(
+                f"collection {recording_id} member {member} must be a video"
+            )
+        member_cfg = cfg_for_recording(cfg, member)
+        member_config = container_from_hydra_cfg(member_cfg)
+        try:
+            spec = recording_spec_from_config(
+                member_config,
+                recording_id=None,
+                overrides=(),
+            )
+            normalized_recording_plan(spec)
+        except (StudioConfigError, StudioError) as exc:
+            raise StudioError(
+                f"collection {recording_id} member {member} is invalid: {exc}"
+            ) from exc
+        member_cfgs.append(member_cfg)
+    return collection, member_cfgs
+
+
+def print_collection_build_dry_run(collection: dict[str, Any]) -> None:
+    title = collection.get("title") or collection["id"]
+    print(f"Build collection dry run: {title}")
+    print()
+    print("Videos:")
+    for index, member in enumerate(collection["members"], 1):
+        print(f"  {index}. {member}")
+    print()
+    print("No videos were built.")
+
+
+def run_collection_build(cfg: DictConfig, config: dict[str, Any]) -> int:
+    collection, member_cfgs = load_collection_build(cfg, config)
+    if bool_config(config, "dry_run"):
+        if config.get("output_format") == "json":
+            print(
+                json.dumps(
+                    {
+                        "collection": collection["id"],
+                        "title": collection.get("title"),
+                        "members": collection["members"],
+                        "dry_run": True,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        elif text_output_enabled(cfg):
+            print_collection_build_dry_run(collection)
+        return 0
+
+    members = collection["members"]
+    count = len(members)
+    noun = "video" if count == 1 else "videos"
+    title = collection.get("title") or collection["id"]
+    if text_output_enabled(cfg):
+        step_line(f"build collection: {title} ({count} {noun})")
+    for index, (member, member_cfg) in enumerate(
+        zip(members, member_cfgs, strict=True),
+        1,
+    ):
+        if text_output_enabled(cfg):
+            info_line(f"[{index}/{count}] {member}")
+        try:
+            run_build(member_cfg, show_followups=False)
+        except StudioError as exc:
+            raise StudioError(
+                f"collection {collection['id']} failed at {member}: {exc}"
+            ) from exc
+    if text_output_enabled(cfg):
+        pass_line(f"collection completed: {count} {noun}")
+    return 0
+
+
 def run_manifest_build(
     cfg: DictConfig,
     config: dict[str, Any],
     spec: dict[str, Any],
     plan: Any,
+    *,
+    show_followups: bool = True,
 ) -> int:
     started = time.monotonic()
     success = False
@@ -2308,15 +2664,22 @@ def run_manifest_build(
             print_build_elapsed(cfg, elapsed, success=success)
         if success:
             print_publish_surfaces(cfg, published_surfaces)
-    print_success_followups(cfg)
+    if show_followups:
+        print_success_followups(cfg)
     return 0
 
 
-def run_build(cfg: DictConfig) -> int:
+def run_build(cfg: DictConfig, *, show_followups: bool = True) -> int:
     config = container_from_hydra_cfg(cfg)
     spec = load_recording_spec_from_hydra_cfg(cfg)
     plan = normalized_recording_plan(spec)
-    return run_manifest_build(cfg, config, spec, plan)
+    return run_manifest_build(
+        cfg,
+        config,
+        spec,
+        plan,
+        show_followups=show_followups,
+    )
 
 
 def run_check(cfg: DictConfig) -> int:
@@ -2383,17 +2746,45 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     if step is None and action == "gc":
         return run_gc_action(config)
 
+    selected_recording_id = recording_id_from_value(config.get("recording"))
     recording_required = step is not None or action in {
         "build",
         "check",
         "clean",
         "watch",
     }
-    if recording_required and recording_id_from_value(config.get("recording")) is None:
+    if recording_required and selected_recording_id is None:
         return print_available_recording_scripts(
             selected_required=True,
             config=config,
         )
+
+    source_kind: RecordingSourceKind | None = None
+    if step is None and selected_recording_id is not None:
+        recording_dir = recording_script_dir_from_config(config)
+        try:
+            source_kind = recording_source_kind(
+                selected_recording_id,
+                recording_dir=recording_dir,
+            )
+        except StudioConfigError as exc:
+            raise StudioError(str(exc)) from exc
+        if source_kind is RecordingSourceKind.collection and action not in {
+            "build",
+            "watch",
+        }:
+            raise StudioError(
+                f"recording={selected_recording_id} is a collection; "
+                "only action=build and action=watch are supported"
+            )
+
+    if (
+        step is None
+        and action == "build"
+        and source_kind is RecordingSourceKind.collection
+        and bool_config(config, "dry_run")
+    ):
+        return run_collection_build(cfg, config)
 
     if step is None and action == "build" and bool_config(config, "dry_run"):
         return run_build_dry_run(cfg, config)
@@ -2410,10 +2801,14 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         return run_internal_step(cfg, config, step)
 
     if action == "build":
+        if source_kind is RecordingSourceKind.collection:
+            return run_collection_build(cfg, config)
         return run_build(cfg)
     if action == "check":
         return run_check(cfg)
     if action == "watch":
+        if source_kind is RecordingSourceKind.collection:
+            return run_collection_watch(cfg, config)
         return run_watch(cfg, config)
 
     if action in RECORD_ACTIONS:

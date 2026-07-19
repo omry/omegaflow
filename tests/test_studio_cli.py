@@ -1213,6 +1213,392 @@ beat:
     )
 
 
+def test_recording_source_kind_defaults_to_video_for_compatibility(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_from_script("hello", recording_dir=recordings_dir)
+
+    assert spec["kind"] == "video"
+
+
+def test_recording_video_preserves_description(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+kind: video
+id: hello
+title: Hello Video
+description: Learn how to make a narrated terminal video.
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_from_script("hello", recording_dir=recordings_dir)
+
+    assert spec["description"] == "Learn how to make a narrated terminal video."
+
+
+def test_recording_collection_preserves_declared_member_order(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    collection_dir = recordings_dir / "tutorial"
+    collection_dir.mkdir(parents=True)
+    (collection_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+title: Tutorial
+members:
+  - tutorial/recording-file
+  - tutorial/beat
+  - tutorial/publishing
+---
+
+# Tutorial
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    collection = studio_config_module.recording_collection_from_script(
+        "tutorial",
+        recording_dir=recordings_dir,
+    )
+
+    assert collection == {
+        "kind": "collection",
+        "id": "tutorial",
+        "title": "Tutorial",
+        "members": [
+            "tutorial/recording-file",
+            "tutorial/beat",
+            "tutorial/publishing",
+        ],
+    }
+
+
+def test_recording_collection_rejects_duplicate_members(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    collection_dir = recordings_dir / "tutorial"
+    collection_dir.mkdir(parents=True)
+    (collection_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+members:
+  - tutorial/beat
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        StudioConfigError,
+        match="collection tutorial contains duplicate member: tutorial/beat",
+    ):
+        studio_config_module.recording_collection_from_script(
+            "tutorial",
+            recording_dir=recordings_dir,
+        )
+
+
+def test_collection_build_delegates_to_video_pipeline_in_member_order(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    collection_dir = recordings_dir / "tutorial"
+    collection_dir.mkdir(parents=True)
+    members = ["tutorial/recording-file", "tutorial/beat"]
+    (collection_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+title: Tutorial
+members:
+  - tutorial/recording-file
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    for member in members:
+        member_dir = recordings_dir / member
+        member_dir.mkdir(parents=True)
+        (member_dir / "index.md").write_text(
+            f"""
+---
+kind: video
+id: {member}
+title: {member}
+audio:
+  enabled: false
+---
+
+```yaml studio-directive
+scene: {member}
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+    - commands:
+        - run: printf 'hello\\n'
+```
+""".lstrip(),
+            encoding="utf-8",
+        )
+    config = {
+        "project_root": str(tmp_path),
+        "recording": "tutorial",
+        "action": "build",
+        "output_format": "text",
+        "dry_run": False,
+        "force": True,
+        "load_env_file": False,
+        "rec": {},
+        "script_params": {},
+        "studio": {
+            "recording_dir": "recordings",
+            "data_dir": "recordings/.omegaflow",
+        },
+    }
+    cfg = OmegaConf.create(config)
+    built: list[tuple[str, bool]] = []
+
+    def fake_run_build(member_cfg, *, show_followups=True):
+        built.append((OmegaConf.select(member_cfg, "recording"), show_followups))
+        return 0
+
+    monkeypatch.setattr(studio, "run_build", fake_run_build)
+
+    assert studio.run_collection_build(cfg, config) == 0
+
+    assert built == [(members[0], False), (members[1], False)]
+    output = capsys.readouterr().out
+    assert "build collection: Tutorial (2 videos)" in output
+    assert "[1/2] tutorial/recording-file" in output
+    assert "[2/2] tutorial/beat" in output
+    assert "collection completed: 2 videos" in output
+
+
+def test_collection_build_dry_run_lists_members_without_building(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    config = {
+        "recording": "tutorial",
+        "output_format": "text",
+        "dry_run": True,
+    }
+    cfg = OmegaConf.create(config)
+    collection = {
+        "kind": "collection",
+        "id": "tutorial",
+        "title": "Tutorial",
+        "members": ["tutorial/recording-file", "tutorial/beat"],
+    }
+    monkeypatch.setattr(
+        studio,
+        "load_collection_build",
+        lambda _cfg, _config: (collection, []),
+    )
+    monkeypatch.setattr(
+        studio,
+        "run_build",
+        lambda *_args, **_kwargs: pytest.fail("dry run must not build videos"),
+    )
+
+    assert studio.run_collection_build(cfg, config) == 0
+
+    output = capsys.readouterr().out
+    assert "Build collection dry run: Tutorial" in output
+    assert "1. tutorial/recording-file" in output
+    assert "2. tutorial/beat" in output
+    assert "No videos were built." in output
+
+
+def test_collection_build_dry_run_supports_json_output(monkeypatch, capsys) -> None:
+    config = {
+        "recording": "tutorial",
+        "output_format": "json",
+        "dry_run": True,
+    }
+    cfg = OmegaConf.create(config)
+    collection = {
+        "kind": "collection",
+        "id": "tutorial",
+        "title": "Tutorial",
+        "members": ["tutorial/recording-file", "tutorial/beat"],
+    }
+    monkeypatch.setattr(
+        studio,
+        "load_collection_build",
+        lambda _cfg, _config: (collection, []),
+    )
+
+    assert studio.run_collection_build(cfg, config) == 0
+
+    assert json.loads(capsys.readouterr().out) == {
+        "collection": "tutorial",
+        "dry_run": True,
+        "members": ["tutorial/recording-file", "tutorial/beat"],
+        "title": "Tutorial",
+    }
+
+
+def test_tool_dispatches_collection_to_collection_build(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings" / "tutorial"
+    recordings_dir.mkdir(parents=True)
+    (recordings_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+members:
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config = {
+        "project_root": str(tmp_path),
+        "recording": "tutorial",
+        "action": "build",
+        "output_format": "text",
+        "dry_run": False,
+        "load_env_file": False,
+        "studio": {
+            "recording_dir": "recordings",
+            "data_dir": "recordings/.omegaflow",
+        },
+    }
+    calls: list[str] = []
+    monkeypatch.setattr(
+        studio,
+        "run_collection_build",
+        lambda _cfg, _config: calls.append(_config["recording"]) or 0,
+    )
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert calls == ["tutorial"]
+
+
+def test_tool_dispatches_collection_to_collection_watch(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings" / "tutorial"
+    recordings_dir.mkdir(parents=True)
+    (recordings_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+members:
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config = {
+        "project_root": str(tmp_path),
+        "recording": "tutorial",
+        "action": "watch",
+        "output_format": "text",
+        "load_env_file": False,
+        "studio": {
+            "recording_dir": "recordings",
+            "data_dir": "recordings/.omegaflow",
+        },
+    }
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        studio,
+        "run_collection_watch",
+        lambda _cfg, _config: calls.append(_config["recording"]) or 0,
+    )
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert calls == ["tutorial"]
+
+
+def test_tool_rejects_single_video_actions_for_a_collection(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings" / "tutorial"
+    recordings_dir.mkdir(parents=True)
+    (recordings_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+members:
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config = {
+        "project_root": str(tmp_path),
+        "recording": "tutorial",
+        "action": "check",
+        "output_format": "text",
+        "load_env_file": False,
+        "studio": {
+            "recording_dir": "recordings",
+            "data_dir": "recordings/.omegaflow",
+        },
+    }
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            "recording=tutorial is a collection; "
+            "only action=build and action=watch are supported"
+        ),
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+
 def test_nested_recording_id_rejects_path_traversal(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
@@ -2270,6 +2656,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert actions["wait_for_playback"]["wait_for"]["timeout_ms"] == 60000
 
     generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
+    assert "kind: video" in generated
     generated_beat = next(
         block["beat"]
         for block in studio_directive_blocks(generated)
@@ -2985,6 +3372,228 @@ def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> No
     }
 
 
+def test_watch_player_url_path_falls_back_to_public_bundle(
+    tmp_path, monkeypatch
+) -> None:
+    run_dir = tmp_path / "runs" / "hello"
+    run_dir.mkdir(parents=True)
+    bundle = tmp_path / "public" / "presentation"
+    beat = bundle / "beats" / "terminal.cast"
+    beat.parent.mkdir(parents=True)
+    manifest = bundle / "recording.presentation.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    beat.write_text('{"version": 3}\n', encoding="utf-8")
+    spec = {"_recording_id": "hello"}
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: run_dir,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "public_bundle_dir",
+        lambda _spec: bundle,
+    )
+
+    _url_path, artifacts = studio.watch_player_url_path(spec)
+
+    assert artifacts == {
+        "beats/terminal.cast": beat.resolve(),
+        "recording.presentation.json": manifest.resolve(),
+    }
+
+
+def test_render_collection_watch_page_escapes_metadata_and_links_to_players() -> None:
+    page = studio.render_collection_watch_page(
+        {"id": "tutorial", "title": "Tutorial <Videos>"},
+        [
+            {
+                "id": "tutorial/beat",
+                "title": "Beats & narration",
+                "description": "See how <actions> form a beat.",
+                "url": (
+                    "/cast-player.html?manifest=%2F__studio_artifacts__%2F"
+                    "members%2Ftutorial%2Fbeat%2Frecording.presentation.json"
+                ),
+            }
+        ],
+    )
+
+    assert "Tutorial &lt;Videos&gt;" in page
+    assert "Beats &amp; narration" in page
+    assert "See how &lt;actions&gt; form a beat." in page
+    assert (
+        'href="/cast-player.html?manifest=%2F__studio_artifacts__%2F'
+        'members%2Ftutorial%2Fbeat%2Frecording.presentation.json"'
+    ) in page
+    assert 'id="video-search"' in page
+    assert 'data-search="tutorial/beat beats &amp; narration see how ' in page
+    assert 'class="video-list"' in page
+    assert 'id="empty-state"' in page
+    assert "card.hidden = !matches" in page
+    assert "1 video" in page
+
+
+def test_collection_watch_page_renders_compact_ordered_rows_for_large_collections() -> None:
+    members = [
+        {
+            "id": f"tutorial/chapter-{index}",
+            "title": f"Chapter {index}",
+            "description": f"Learn topic {index}.",
+            "url": f"/watch/{index}",
+        }
+        for index in range(1, 16)
+    ]
+
+    page = studio.render_collection_watch_page(
+        {"id": "tutorial", "title": "Tutorial"},
+        members,
+    )
+
+    assert page.count('data-video-card="true"') == 15
+    assert '<span class="video-number" aria-hidden="true">01</span>' in page
+    assert '<span class="video-number" aria-hidden="true">15</span>' in page
+    assert "15 videos" in page
+    assert "overflow: auto" in page
+    assert "Watch video" not in page
+
+
+def test_collection_watch_url_path_namespaces_member_artifacts(monkeypatch) -> None:
+    cfg = OmegaConf.create({"recording": "tutorial"})
+    collection = {
+        "kind": "collection",
+        "id": "tutorial",
+        "title": "Tutorial",
+        "members": ["tutorial/recording-file", "tutorial/beat"],
+    }
+    member_cfgs = [
+        OmegaConf.create({"recording": "tutorial/recording-file"}),
+        OmegaConf.create({"recording": "tutorial/beat"}),
+    ]
+    monkeypatch.setattr(
+        studio,
+        "load_collection_build",
+        lambda _cfg, _config: (collection, member_cfgs),
+    )
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda config, recording_id=None, overrides=(): {
+            "_recording_id": config["recording"],
+            "title": config["recording"].rsplit("/", 1)[-1].title(),
+            "description": f"Watch {config['recording']}",
+        },
+    )
+
+    def fake_watch_player_url_path(spec, *, run_dir=None, autoplay_countdown=False):
+        assert autoplay_countdown is True
+        member = spec["_recording_id"]
+        return "/cast-player.html?manifest=ignored", {
+            "recording.presentation.json": Path(f"/{member}/manifest.json"),
+            "beats/terminal.cast": Path(f"/{member}/terminal.cast"),
+        }
+
+    monkeypatch.setattr(
+        studio,
+        "watch_player_url_path",
+        fake_watch_player_url_path,
+    )
+
+    url_path, artifacts, pages = studio.collection_watch_url_path(
+        cfg,
+        {"recording": "tutorial"},
+    )
+
+    assert url_path == "/collection.html"
+    assert artifacts == {
+        (
+            "members/tutorial/recording-file/recording.presentation.json"
+        ): Path("/tutorial/recording-file/manifest.json"),
+        "members/tutorial/recording-file/beats/terminal.cast": Path(
+            "/tutorial/recording-file/terminal.cast"
+        ),
+        "members/tutorial/beat/recording.presentation.json": Path(
+            "/tutorial/beat/manifest.json"
+        ),
+        "members/tutorial/beat/beats/terminal.cast": Path(
+            "/tutorial/beat/terminal.cast"
+        ),
+    }
+    page = pages["/collection.html"].decode("utf-8")
+    assert "Recording-File" in page
+    assert "Watch tutorial/beat" in page
+    assert (
+        "manifest=%2F__studio_artifacts__%2Fmembers%2Ftutorial%2Fbeat%2F"
+        "recording.presentation.json"
+    ) in page
+
+
+def test_collection_watch_reports_member_without_a_build(monkeypatch) -> None:
+    cfg = OmegaConf.create({"recording": "tutorial"})
+    collection = {
+        "kind": "collection",
+        "id": "tutorial",
+        "title": "Tutorial",
+        "members": ["tutorial/beat"],
+    }
+    member_cfg = OmegaConf.create({"recording": "tutorial/beat"})
+    monkeypatch.setattr(
+        studio,
+        "load_collection_build",
+        lambda _cfg, _config: (collection, [member_cfg]),
+    )
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {
+            "_recording_id": "tutorial/beat",
+            "title": "Beat",
+        },
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_player_url_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            studio.StudioError("no successful recording run found")
+        ),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            "collection tutorial member tutorial/beat cannot be watched: "
+            "no successful recording run found; build it with "
+            "omegaflow recording=tutorial/beat"
+        ),
+    ):
+        studio.collection_watch_url_path(cfg, {"recording": "tutorial"})
+
+
+def test_watch_handler_serves_generated_page_from_memory() -> None:
+    handler = studio.StudioWatchRequestHandler.__new__(
+        studio.StudioWatchRequestHandler
+    )
+    handler.path = "/collection.html?ignored=true"
+    handler.pages = {"/collection.html": b"<h1>Tutorial</h1>"}
+    handler.headers = {}
+    response: dict[str, object] = {"headers": []}
+    handler.send_response = lambda status: response.update(status=status)
+    handler.send_header = lambda name, value: response["headers"].append((name, value))
+    handler.end_headers = lambda: response.update(ended=True)
+
+    source = handler.send_head()
+
+    assert source.read() == b"<h1>Tutorial</h1>"
+    assert response == {
+        "status": 200,
+        "headers": [
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("Content-Length", "17"),
+        ],
+        "ended": True,
+    }
+
+
 @pytest.mark.parametrize("error_type", [BrokenPipeError, ConnectionResetError])
 @pytest.mark.parametrize("byte_range", [None, (0, 3)])
 def test_watch_copyfile_ignores_disconnected_client(
@@ -3142,6 +3751,59 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
         "managed_browser": False,
         "open_browser": False,
         "port": 0,
+    }
+
+
+def test_run_collection_watch_can_serve_without_opening_browser(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+    pages = {"/collection.html": b"<h1>Tutorial</h1>"}
+    monkeypatch.setattr(
+        studio,
+        "collection_watch_url_path",
+        lambda _cfg, _config: (
+            "/collection.html",
+            {"members/tutorial/beat/manifest.json": Path("manifest.json")},
+            pages,
+        ),
+    )
+
+    def fake_run_watch_server(
+        _cfg,
+        url_path,
+        artifacts,
+        *,
+        pages=None,
+        managed_browser=False,
+        open_browser=True,
+        port=0,
+    ):
+        requested.update(
+            url_path=url_path,
+            artifacts=artifacts,
+            pages=pages,
+            managed_browser=managed_browser,
+            open_browser=open_browser,
+            port=port,
+        )
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
+
+    status = studio.run_collection_watch(
+        OmegaConf.create({"output_format": "text"}),
+        {"recording": "tutorial", "open": False, "watch_port": 43123},
+    )
+
+    assert status == 0
+    assert requested == {
+        "url_path": "/collection.html",
+        "artifacts": {
+            "members/tutorial/beat/manifest.json": Path("manifest.json")
+        },
+        "pages": pages,
+        "managed_browser": False,
+        "open_browser": False,
+        "port": 43123,
     }
 
 

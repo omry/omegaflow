@@ -1,4 +1,5 @@
 ---
+kind: video
 id: browser-recording-reference
 title: Browser Recording Reference
 outputs:
