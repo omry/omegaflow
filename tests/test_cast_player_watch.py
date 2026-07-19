@@ -34,6 +34,25 @@ def test_player_uses_night_studio_brand_without_replacing_ansi_colors() -> None:
     assert ".ansi-white { color: var(--ansi-white); }" in html
 
 
+def test_player_uses_manifest_guided_mode_as_its_initial_state() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "guidedMode = presentationManifest.presentation?.guided === true;" in html
+
+
+def test_player_resolves_friendly_watch_routes_through_the_manifest_snapshot() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert "(window.location.pathname || '').startsWith('/watch/')" in html
+    assert "params.get('manifest') || implicitWatchManifest" in html
+    assert "const resolvedManifestUrl = response.url ||" in html
+    assert "manifestBaseUrl = new URL('.', resolvedManifestUrl);" in html
+
+
 def test_browser_pointer_uses_an_upright_cursor_silhouette() -> None:
     html = (
         REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
@@ -666,14 +685,78 @@ guidedPausePoints = [{time: 8.052, heading: 'Browser checkpoint'}];
 totalSeconds = 12.368;
 renderSectionMarkers();
 const starts = sectionMarkers.children.map((marker) => Number(marker.dataset.start));
+const testIds = sectionMarkers.children.map((marker) => marker.dataset.testid);
 const sectionStarts = sectionStartTimes();
 const active = sectionForSeconds(4);
 if (
   JSON.stringify(starts) !== JSON.stringify([0, 3.32, 8.052]) ||
+  JSON.stringify(testIds) !== JSON.stringify([
+    'section-marker-prepare',
+    'section-marker-browser',
+    'section-marker-verify',
+  ]) ||
   JSON.stringify(sectionStarts) !== JSON.stringify([0, 3.32, 8.052]) ||
   active.heading !== 'Browser'
 ) {
-  console.error(JSON.stringify({starts, sectionStarts, active}));
+  console.error(JSON.stringify({starts, testIds, sectionStarts, active}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_scrubber_tick_snap_only_reaches_left_from_the_ticks_right_side() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+presentationManifest = {
+  beats: [
+    {id: 'first', offset_ms: 0, duration_ms: 64000},
+    {id: 'second', offset_ms: 64000, duration_ms: 6000},
+  ],
+};
+totalSeconds = 70;
+const before = snapSeekSeconds(63.5);
+const exact = snapSeekSeconds(64);
+const after = snapSeekSeconds(66.5);
+const beyond = snapSeekSeconds(67.1);
+if (before !== 63.5 || exact !== 64 || after !== 64 || beyond !== 67.1) {
+  console.error(JSON.stringify({before, exact, after, beyond}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_guided_scrub_only_snaps_after_crossing_the_checkpoint_tick() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+totalSeconds = 70;
+guidedMode = true;
+guideContinueButton.focus = () => {};
+guidedPausePoints = [{
+  time: 64,
+  sectionStart: 50,
+  heading: 'Checkpoint',
+  guide: {success_hint: 'Continue'},
+}];
+progress.value = String((63.5 / totalSeconds) * 1000);
+commitProgressSeek();
+const before = currentSeconds;
+const beforeHidden = guideModal.hidden;
+progress.value = String((66.5 / totalSeconds) * 1000);
+commitProgressSeek();
+const after = currentSeconds;
+const afterHidden = guideModal.hidden;
+if (before !== 63.5 || !beforeHidden || after !== 64 || afterHidden) {
+  console.error(JSON.stringify({before, beforeHidden, after, afterHidden}));
   process.exit(1);
 }
 `, context);
@@ -972,8 +1055,8 @@ if (playbackRate !== 1 || prevented !== 2) {
   console.error(JSON.stringify({phase: 'player-context', playbackRate, prevented}));
   process.exit(1);
 }
-if (!rateButton.title.includes('right-click previous')) {
-  console.error(JSON.stringify({phase: 'title', title: rateButton.title}));
+if (!rateButton.dataset.tooltip.includes('right-click previous')) {
+  console.error(JSON.stringify({phase: 'tooltip', tooltip: rateButton.dataset.tooltip}));
   process.exit(1);
 }
 cyclePlaybackRate(-1);

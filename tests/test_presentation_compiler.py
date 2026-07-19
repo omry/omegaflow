@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from omegaflow.presentation import serialize_presentation_manifest
 from omegaflow.presentation_compiler import (
     artifact_freshness,
     ArtifactFreshness,
@@ -22,6 +23,14 @@ from omegaflow.presentation_compiler import (
     pointer_motion,
     solved_intervals,
     TerminalTextHighlightEvent,
+)
+from omegaflow.presentation_schema import (
+    PresentationAudioV1,
+    PresentationBeatV1,
+    PresentationHeaderV1,
+    PresentationManifestV1,
+    PresentationRecordingV1,
+    PresentationRendererV1,
 )
 from omegaflow.recording_plan import normalize_recording_plan
 
@@ -314,6 +323,125 @@ def test_wait_at_shared_member_boundary_delays_boundary_without_audio_fragmentat
         (interval.presentation_start_ms, interval.presentation_end_ms)
         for interval in timing.audio_intervals
     ] == [(0, 1000), (1200, 2200)]
+
+
+def test_guided_shared_take_keeps_a_short_audio_lead_after_checkpoint() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "guided-shared-take",
+            "beats": [
+                {
+                    "id": "one",
+                    "narration_take": "joined",
+                    "narration": "First.",
+                    "guide": {"success_hint": "Pause here."},
+                    "actions": [{"run": "printf one"}],
+                },
+                {
+                    "id": "two",
+                    "narration_take": "joined",
+                    "narration": "Second.",
+                    "actions": [{"run": "printf two"}],
+                },
+            ],
+        }
+    )
+    sidecar = timestamp_sidecar(
+        plan,
+        "joined",
+        duration_ms=2000,
+        member_ranges=[(0, 900), (1100, 2000)],
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={"joined": sidecar},
+    )
+
+    assert timing.beat("one").duration_ms == 900
+    assert timing.beat("two").offset_ms == 900
+    assert [
+        (
+            interval.presentation_start_ms,
+            interval.presentation_end_ms,
+            interval.source_start_ms,
+            interval.source_end_ms,
+        )
+        for interval in timing.audio_intervals
+    ] == [(0, 2000, 0, 2000)]
+
+    manifest = PresentationManifestV1(
+        recording=PresentationRecordingV1(
+            id="guided-shared-take",
+            duration_ms=timing.duration_ms,
+        ),
+        renderers={"terminal": PresentationRendererV1()},
+        presentation=PresentationHeaderV1(guided=True),
+        audio=PresentationAudioV1(
+            metadata="audio.json",
+            intervals=list(timing.audio_intervals),
+        ),
+        beats=[
+            PresentationBeatV1(
+                id=beat.id,
+                renderer="terminal",
+                offset_ms=timing.beat(beat.id).offset_ms,
+                duration_ms=timing.beat(beat.id).duration_ms,
+                payload=f"beats/{beat.id}.cast",
+            )
+            for beat in plan.beats
+        ],
+    )
+
+    serialized = serialize_presentation_manifest(manifest)
+
+    assert len(serialized["audio"]["intervals"]) == 1
+
+
+def test_guided_shared_take_caps_post_checkpoint_audio_lead_at_350ms() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "guided-shared-take",
+            "beats": [
+                {
+                    "id": "one",
+                    "narration_take": "joined",
+                    "narration": "First.",
+                    "guide": {"success_hint": "Pause here."},
+                    "actions": [{"run": "printf one"}],
+                },
+                {
+                    "id": "two",
+                    "narration_take": "joined",
+                    "narration": "Second.",
+                    "actions": [{"run": "printf two"}],
+                },
+            ],
+        }
+    )
+    sidecar = timestamp_sidecar(
+        plan,
+        "joined",
+        duration_ms=2800,
+        member_ranges=[(0, 900), (1900, 2800)],
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={"joined": sidecar},
+    )
+
+    assert timing.beat("one").duration_ms == 1550
+    assert timing.beat("two").offset_ms == 1550
+    assert [
+        (
+            interval.presentation_start_ms,
+            interval.presentation_end_ms,
+            interval.source_start_ms,
+            interval.source_end_ms,
+        )
+        for interval in timing.audio_intervals
+    ] == [(0, 2800, 0, 2800)]
 
 
 def test_wait_for_action_after_later_anchor_reports_cycle() -> None:
@@ -1088,6 +1216,11 @@ def test_standalone_pointer_moves_compile_without_click_feedback() -> None:
         for event in compiled.payload["events"]
         if event["kind"] == "pointer_move"
     ]
+    assert compiled.payload["initial_pointer"] == {
+        "x": 720.0,
+        "y": 450.0,
+        "visible": True,
+    }
     assert [event["action_id"] for event in pointer_events] == [
         "move-viewport",
         "move-target",
@@ -1105,6 +1238,84 @@ def test_standalone_pointer_moves_compile_without_click_feedback() -> None:
         compiled.action_completions_ms["move-viewport"]
     )
     assert not any(event["kind"] == "click" for event in compiled.payload["events"])
+
+
+def test_pointer_visibility_actions_compile_without_moving_the_pointer() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "pointer-visibility",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "pointer": {"visible": False},
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                        {"id": "show", "set_pointer": {"visible": True}},
+                        {
+                            "id": "move",
+                            "move_pointer": {"viewport": {"x": 0.4, "y": 0.12}},
+                        },
+                        {"id": "hide", "set_pointer": {"visible": False}},
+                    ],
+                }
+            ],
+        }
+    )
+    captures = [
+        {
+            "action_id": "open",
+            "kind": "open_page",
+            "completion": {"kind": "navigation"},
+            "visual": {"kind": "state", "state": state_asset("0")},
+        },
+        {
+            "action_id": "show",
+            "kind": "set_pointer",
+            "completion": {"kind": "action"},
+            "visual": {"kind": "state", "state": state_asset("0")},
+        },
+        {
+            "action_id": "move",
+            "kind": "move_pointer",
+            "target": {"point": {"x": 576, "y": 108}},
+            "completion": {"kind": "action"},
+            "visual": {"kind": "state", "state": state_asset("0")},
+        },
+        {
+            "action_id": "hide",
+            "kind": "set_pointer",
+            "completion": {"kind": "action"},
+            "visual": {"kind": "state", "state": state_asset("0")},
+        },
+    ]
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=captures,
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("0"),
+        initial_pointer={"x": 720, "y": 450, "visible": True},
+    )
+
+    visibility_events = [
+        event
+        for event in compiled.payload["events"]
+        if event["kind"] == "pointer_visibility"
+    ]
+    assert compiled.payload["initial_pointer"] == {
+        "x": 720.0,
+        "y": 450.0,
+        "visible": False,
+    }
+    assert [(event["action_id"], event["visible"]) for event in visibility_events] == [
+        ("show", True),
+        ("hide", False),
+    ]
+    assert visibility_events[0]["at_ms"] == visibility_events[0]["end_ms"]
+    assert visibility_events[1]["at_ms"] == visibility_events[1]["end_ms"]
 
 
 def test_handoff_display_url_uses_the_captured_watch_url() -> None:

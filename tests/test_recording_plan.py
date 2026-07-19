@@ -224,6 +224,54 @@ def test_browser_beat_can_override_pointer_visibility() -> None:
     assert plan.beats[0].browser_pointer_visible is False
 
 
+def test_beat_can_highlight_a_typed_player_toolbar_control() -> None:
+    spec = terminal_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["player"] = {
+        "highlight": {"control": "guided", "start": "@run@"}
+    }
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].player_highlight is not None
+    assert plan.beats[0].player_highlight.control == "guided"
+    assert plan.beats[0].player_highlight.start_anchor == "run"
+    assert plan.beats[0].player_highlight.end_anchor is None
+
+
+def test_player_toolbar_highlight_requires_narration_audio() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["player"] = {
+        "highlight": {"control": "guided", "start": "@run@"}
+    }
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"beats\.0\.player\.highlight requires audio\.enabled=true",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_beat_rejects_unknown_player_toolbar_control() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["player"] = {
+        "highlight": {"control": "download", "start": "@run@"}
+    }
+
+    with pytest.raises(RecordingPlanError, match="player.highlight.control"):
+        normalize_recording_plan(spec)
+
+
+def test_player_toolbar_highlight_rejects_unknown_narration_anchor() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["player"] = {
+        "highlight": {"control": "guided", "start": "@missing@"}
+    }
+
+    with pytest.raises(RecordingPlanError, match="unknown start anchor"):
+        normalize_recording_plan(spec)
+
+
 def test_terminal_beat_rejects_browser_pointer_visibility() -> None:
     spec = terminal_spec()
     spec["beats"][0]["pointer"] = {"visible": False}
@@ -237,6 +285,7 @@ def test_terminal_beat_rejects_browser_pointer_visibility() -> None:
 
 def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> None:
     spec = terminal_spec()
+    spec["audio"] = {"enabled": True}
     spec["beats"][0]["narration"] = (
         "@highlight_start@ Project settings. @highlight_end@ @run@ Run it. "
         "@wait:done@"
@@ -262,6 +311,26 @@ def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> No
             occurrence=2,
         ),
     )
+
+
+def test_terminal_text_highlight_requires_narration_audio() -> None:
+    spec = terminal_spec()
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "text": "config.yaml",
+                "start": "@run@",
+                "end": "@done@",
+            }
+        }
+    ]
+    spec["beats"][0]["narration"] = "@run@ Run it. @done@ Finished."
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"beats\.0\.effects\.highlight requires audio\.enabled=true",
+    ):
+        normalize_recording_plan(spec)
 
 
 @pytest.mark.parametrize(
@@ -431,8 +500,12 @@ def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
         },
         {
             "id": "move_target",
-            "move_pointer": {"target": {"role": "button", "name": "Create"}},
+            "move_pointer": {
+                "target": {"role": "button", "name": "Create"},
+                "position": {"x": 0.25, "y": 0.75},
+            },
         },
+        {"id": "show_pointer", "set_pointer": {"visible": True}},
         {"id": "press", "press": {"key": "Control+K", "target": {"text": "Search"}}},
         {"id": "scroll_target", "scroll": {"target": {"text": "Results"}}},
         {"id": "scroll_by", "scroll": {"by": {"x": 0, "y": 400}}},
@@ -457,6 +530,17 @@ def test_accepts_each_browser_action_variant(action: dict) -> None:
     plan = normalize_recording_plan(spec)
 
     assert plan.beats[0].actions[-1].id == action["id"]
+
+
+@pytest.mark.parametrize("value", [None, 1, "true"])
+def test_set_pointer_requires_boolean_visibility(value: object) -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append(
+        {"id": "show_pointer", "set_pointer": {"visible": value}}
+    )
+
+    with pytest.raises(RecordingPlanError, match="set_pointer.visible must be boolean"):
+        normalize_recording_plan(spec)
 
 
 def test_browser_action_accepts_hold_before() -> None:
@@ -491,6 +575,20 @@ def test_browser_action_rejects_invalid_hold_before(value: object) -> None:
         ({"viewport": {"x": -0.1, "y": 0.5}}, "between 0 and 1"),
         ({"viewport": {"x": 0.5, "y": 1.1}}, "between 0 and 1"),
         ({"viewport": {"x": True, "y": 0.5}}, "numbers between 0 and 1"),
+        (
+            {
+                "target": {"role": "button", "name": "Create"},
+                "position": {"x": -0.1, "y": 0.5},
+            },
+            "position values must be between 0 and 1",
+        ),
+        (
+            {
+                "viewport": {"x": 0.5, "y": 0.5},
+                "position": {"x": 0.5, "y": 0.5},
+            },
+            "position requires a target",
+        ),
     ],
 )
 def test_rejects_invalid_pointer_move_destination(

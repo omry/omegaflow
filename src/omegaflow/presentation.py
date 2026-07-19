@@ -27,12 +27,15 @@ from .presentation_schema import (
     PresentationAssetV1,
     PresentationAudioIntervalV1,
     PresentationAudioV1,
+    PresentationBeatPlayerV1,
     PresentationBeatV1,
     PresentationBrowserHeaderV1,
     PresentationChromeV1,
     PresentationGuideV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PlayerToolbarControl,
+    PresentationPlayerToolbarHighlightV1,
     PresentationWindowV1,
 )
 
@@ -50,6 +53,7 @@ EVENT_KIND_PRIORITY = (
     "focus",
     "text",
     "key",
+    "pointer_visibility",
     "pointer_move",
     "click",
     "display_url",
@@ -222,6 +226,9 @@ def validate_browser_event(
             )
         for name, coordinate in curve.items():
             _number(coordinate, field=f"{field}.curve.{name}")
+    elif kind == "pointer_visibility":
+        if not isinstance(mapping["visible"], bool):
+            raise PresentationValidationError(f"{field}.visible must be boolean")
     elif kind == "click":
         _point(mapping["point"], field=f"{field}.point")
         if mapping["button"] not in {"left", "middle", "right"}:
@@ -623,20 +630,46 @@ def _validate_audio(
         source_end = _integer(
             interval["source_end_ms"], field=f"{interval_field}.source_end_ms"
         )
-        if (
-            presentation_start < previous_presentation_end
-            or source_start != previous_source_end
-            or presentation_end <= presentation_start
-            or source_end <= source_start
-            or presentation_end > recording_duration_ms
-            or presentation_end - presentation_start != source_end - source_start
-        ):
-            raise PresentationValidationError(f"{interval_field} is not a valid mapping")
+        if presentation_end <= presentation_start:
+            raise PresentationValidationError(
+                f"{interval_field} presentation duration must be positive"
+            )
+        if source_end <= source_start:
+            raise PresentationValidationError(
+                f"{interval_field} source duration must be positive"
+            )
+        if presentation_start < previous_presentation_end:
+            raise PresentationValidationError(
+                f"{interval_field} presentation time overlaps the previous interval"
+            )
+        if source_start < previous_source_end:
+            raise PresentationValidationError(
+                f"{interval_field} source time overlaps the previous interval"
+            )
+        if presentation_end > recording_duration_ms:
+            raise PresentationValidationError(
+                f"{interval_field} presentation end exceeds the recording duration"
+            )
+        presentation_duration = presentation_end - presentation_start
+        source_duration = source_end - source_start
+        if presentation_duration != source_duration:
+            raise PresentationValidationError(
+                f"{interval_field} presentation duration is {presentation_duration}ms "
+                f"but source duration is {source_duration}ms"
+            )
+        presentation_gap = presentation_start - previous_presentation_end
+        source_gap = source_start - previous_source_end
+        if source_gap > presentation_gap:
+            raise PresentationValidationError(
+                f"{interval_field} source gap is {source_gap}ms but presentation "
+                f"gap is only {presentation_gap}ms"
+            )
         previous_presentation_end = presentation_end
         previous_source_end = source_end
     if source_duration_ms is not None and previous_source_end != source_duration_ms:
         raise PresentationValidationError(
-            f"{field}.intervals do not cover narration source time exactly once"
+            f"{field}.intervals end at {previous_source_end}ms but narration source "
+            f"duration is {source_duration_ms}ms"
         )
     return _typed(mapping, PresentationAudioV1, field=field)
 
@@ -645,6 +678,8 @@ def _validate_presentation_header(value: object) -> PresentationHeaderV1:
     field = "manifest presentation"
     mapping = _mapping(value, field=field)
     _reject_unknown(mapping, PresentationHeaderV1, field=field)
+    if not isinstance(mapping.get("guided", False), bool):
+        raise PresentationValidationError(f"{field}.guided must be a boolean")
     browser = mapping.get("browser")
     if browser is not None:
         browser_mapping = _mapping(browser, field=f"{field}.browser")
@@ -757,12 +792,57 @@ def validate_presentation_manifest(
         if guide is not None:
             guide_mapping = _mapping(guide, field=f"{field}.guide")
             _reject_unknown(guide_mapping, PresentationGuideV1, field=f"{field}.guide")
+            commands = guide_mapping.get("commands", [])
+            if not isinstance(commands, list):
+                raise PresentationValidationError(
+                    f"{field}.guide.commands must be a list"
+                )
+            for command_index, command in enumerate(commands):
+                _non_empty_string(
+                    command,
+                    field=f"{field}.guide.commands.{command_index}",
+                )
             hint = guide_mapping.get("success_hint")
             if renderer == "browser":
                 _non_empty_string(hint, field=f"{field}.guide.success_hint")
             elif hint is not None and not isinstance(hint, str):
                 raise PresentationValidationError(
                     f"{field}.guide.success_hint must be a string"
+                )
+        player = beat.get("player")
+        if player is not None:
+            player_mapping = _mapping(player, field=f"{field}.player")
+            _reject_unknown(
+                player_mapping,
+                PresentationBeatPlayerV1,
+                field=f"{field}.player",
+            )
+            highlight = _mapping(
+                player_mapping.get("highlight"),
+                field=f"{field}.player.highlight",
+            )
+            _reject_unknown(
+                highlight,
+                PresentationPlayerToolbarHighlightV1,
+                field=f"{field}.player.highlight",
+            )
+            try:
+                PlayerToolbarControl(highlight.get("control"))
+            except (TypeError, ValueError) as exc:
+                raise PresentationValidationError(
+                    f"{field}.player.highlight.control is invalid"
+                ) from exc
+            start_ms = _integer(
+                highlight.get("start_ms"),
+                field=f"{field}.player.highlight.start_ms",
+            )
+            end_ms = _integer(
+                highlight.get("end_ms"),
+                field=f"{field}.player.highlight.end_ms",
+            )
+            if end_ms <= start_ms or end_ms > duration_ms:
+                raise PresentationValidationError(
+                    f"{field}.player.highlight timing is invalid"
                 )
         transition = beat.get("transition_in")
         if transition not in {None, "cut", "fade", "window-open"}:

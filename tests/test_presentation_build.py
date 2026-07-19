@@ -252,7 +252,14 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "browser": {},
         "audio": {"enabled": False},
         "beats": [
-            {"id": "prepare", "actions": [{"run": "printf ready"}]},
+            {
+                "id": "prepare",
+                "actions": [{"run": "printf ready"}],
+                "guide": {
+                    "commands": ["python -m pip install omegaflow"],
+                    "success_hint": "Install OmegaFlow.",
+                },
+            },
             {
                 "id": "web",
                 "medium": "browser",
@@ -282,6 +289,10 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "terminal",
     ]
     assert result.manifest == run_dir / "presentation/recording.presentation.json"
+    assert manifest["beats"][0]["guide"] == {
+        "commands": ["python -m pip install omegaflow"],
+        "success_hint": "Install OmegaFlow.",
+    }
     assert not any(
         "capture" in path.relative_to(result.bundle_dir).parts
         for path in result.bundle_dir.rglob("*")

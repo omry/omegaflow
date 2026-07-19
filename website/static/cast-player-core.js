@@ -369,6 +369,15 @@
 
     let expectedOffset = 0;
     const usedRenderers = new Set();
+    const toolbarControls = new Set([
+      'previous',
+      'play',
+      'restart',
+      'next',
+      'guided',
+      'speed',
+      'mute',
+    ]);
     for (const beat of manifest.beats) {
       requirePresentation(beat && typeof beat === 'object', 'beat must be an object');
       requirePresentation(typeof beat.id === 'string' && beat.id, 'beat id is required');
@@ -377,6 +386,28 @@
       requirePresentation(Number.isInteger(beat.duration_ms) && beat.duration_ms >= 0, `beat ${beat.id} duration is invalid`);
       requirePresentation(beat.offset_ms === expectedOffset, `beat ${beat.id} is not contiguous`);
       requirePresentation(typeof beat.payload === 'string' && beat.payload, `beat ${beat.id} payload is required`);
+      if (beat.player != null) {
+        requirePresentation(
+          beat.player && typeof beat.player === 'object',
+          `beat ${beat.id} player must be an object`,
+        );
+        const highlight = beat.player.highlight;
+        requirePresentation(
+          highlight && typeof highlight === 'object',
+          `beat ${beat.id} player highlight must be an object`,
+        );
+        requirePresentation(
+          toolbarControls.has(highlight.control),
+          `beat ${beat.id} player highlight control is unsupported`,
+        );
+        requirePresentation(
+          Number.isInteger(highlight.start_ms) && highlight.start_ms >= 0 &&
+            Number.isInteger(highlight.end_ms) &&
+            highlight.end_ms > highlight.start_ms &&
+            highlight.end_ms <= beat.duration_ms,
+          `beat ${beat.id} player highlight timing is invalid`,
+        );
+      }
       expectedOffset += beat.duration_ms;
       usedRenderers.add(beat.renderer);
     }
@@ -790,7 +821,7 @@
       throw new Error('browser payload is invalid');
     }
     const clampedMs = Math.max(0, Math.min(Number(localMs) || 0, payload.duration_ms));
-    const pointerVisible = Boolean(payload.initial_pointer.visible);
+    let pointerVisible = Boolean(payload.initial_pointer.visible);
     const scene = {
       localMs: clampedMs,
       viewport: payload.viewport,
@@ -841,6 +872,9 @@
         if (progress >= 1) {
           previousState = event.end_asset;
         }
+      } else if (event.kind === 'pointer_visibility') {
+        pointerVisible = Boolean(event.visible);
+        scene.pointer = {...scene.pointer, visible: pointerVisible};
       } else if (event.kind === 'pointer_move') {
         scene.pointer = {
           ...cubicPoint(

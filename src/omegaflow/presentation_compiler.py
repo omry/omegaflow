@@ -304,6 +304,9 @@ def compile_recording_timing(
     member_end_nodes: dict[str, str] = {}
     take_end_nodes: dict[str, str] = {}
     cross_boundaries: set[tuple[str, str]] = set()
+    guided_beat_ids = frozenset(
+        beat.id for beat in plan.beats if beat.guide is not None
+    )
 
     for take in plan.narration_takes:
         timestamps = sidecars[take.id]
@@ -317,6 +320,7 @@ def compile_recording_timing(
             wait_resume_nodes=wait_resume_nodes,
             member_end_nodes=member_end_nodes,
             take_end_nodes=take_end_nodes,
+            guided_beat_ids=guided_beat_ids,
         )
         for previous, following in zip(take.members, take.members[1:]):
             cross_boundaries.add((previous.beat_id, following.beat_id))
@@ -638,12 +642,25 @@ def _add_take_audio_constraints(
     wait_resume_nodes: dict[tuple[str, str, int], str],
     member_end_nodes: dict[str, str],
     take_end_nodes: dict[str, str],
+    guided_beat_ids: frozenset[str],
 ) -> None:
+    guided_member_boundaries: dict[str, int] = {}
+    for previous, following in zip(take.members, take.members[1:]):
+        if previous.beat_id not in guided_beat_ids:
+            continue
+        previous_end = timestamps.members[previous.beat_id][1]
+        following_start = timestamps.members[following.beat_id][0]
+        guided_member_boundaries[following.beat_id] = max(
+            previous_end,
+            following_start - GUIDED_AUDIO_LEAD_MS,
+        )
+
     positions = {0, timestamps.duration_ms}
     positions.update(start for start, _ in timestamps.members.values())
     positions.update(end for _, end in timestamps.members.values())
     positions.update(timestamps.anchors.values())
     positions.update(wait[3] for wait in timestamps.waits)
+    positions.update(guided_member_boundaries.values())
     for position in sorted(positions):
         node = (
             beat_start_nodes[take.members[0].beat_id]
@@ -663,6 +680,11 @@ def _add_take_audio_constraints(
             markers_by_source.setdefault(start, []).append(
                 (member.text_start, 3, "member_start", member.beat_id)
             )
+            boundary_source = guided_member_boundaries.get(member.beat_id)
+            if boundary_source is not None:
+                markers_by_source.setdefault(boundary_source, []).append(
+                    (member.text_start, 3, "guided_boundary", member.beat_id)
+                )
     for anchor in take.anchors:
         source_ms = timestamps.anchors[(anchor.beat_id, anchor.id)]
         markers_by_source.setdefault(source_ms, []).append(
@@ -692,11 +714,22 @@ def _add_take_audio_constraints(
                 member_end_nodes[str(marker)] = cursor_node
             elif kind == "member_start":
                 beat_id = str(marker)
+                if beat_id in guided_member_boundaries:
+                    continue
                 boundary = beat_start_nodes[beat_id]
                 graph.constrain(
                     cursor_node,
                     boundary,
                     reason=f"narration member boundary for beat {beat_id}",
+                )
+                cursor_node = boundary
+            elif kind == "guided_boundary":
+                beat_id = str(marker)
+                boundary = beat_start_nodes[beat_id]
+                graph.constrain(
+                    cursor_node,
+                    boundary,
+                    reason=f"guided narration boundary for beat {beat_id}",
                 )
                 cursor_node = boundary
             elif kind == "anchor":
@@ -806,6 +839,7 @@ def _resolve_audio_intervals(
     intervals: list[PresentationAudioIntervalV1] = []
     for take in takes:
         timestamps = sidecars[take.id]
+        take_source_start = source_starts[take.id]
         source_cursor = 0
         presentation_start = solution.time(take_point_nodes[(take.id, 0)])
         for wait_index, wait in enumerate(timestamps.waits):
@@ -818,8 +852,8 @@ def _resolve_audio_intervals(
                     PresentationAudioIntervalV1(
                         presentation_start_ms=presentation_start,
                         presentation_end_ms=presentation_end,
-                        source_start_ms=source_starts[take.id] + source_cursor,
-                        source_end_ms=source_starts[take.id] + wait_source,
+                        source_start_ms=take_source_start + source_cursor,
+                        source_end_ms=take_source_start + wait_source,
                     )
                 )
             source_cursor = wait_source
@@ -833,10 +867,8 @@ def _resolve_audio_intervals(
                     presentation_end_ms=solution.time(
                         take_point_nodes[(take.id, timestamps.duration_ms)]
                     ),
-                    source_start_ms=source_starts[take.id] + source_cursor,
-                    source_end_ms=(
-                        source_starts[take.id] + timestamps.duration_ms
-                    ),
+                    source_start_ms=take_source_start + source_cursor,
+                    source_end_ms=take_source_start + timestamps.duration_ms,
                 )
             )
     return tuple(intervals)
@@ -858,6 +890,7 @@ def _duration_value(value: object, *, field: str) -> int:
 FINGERPRINT_VERSION = 1
 CAPTURE_FINGERPRINT_POLICY = "capture-v1"
 PRESENTATION_FINGERPRINT_POLICY = "presentation-v1"
+GUIDED_AUDIO_LEAD_MS = 350
 
 
 @dataclass(frozen=True)
@@ -1657,6 +1690,7 @@ def compile_browser_beat(
     )
     if beat.browser_pointer_visible is not None:
         pointer["visible"] = beat.browser_pointer_visible
+    initial_pointer_state = dict(pointer)
     assets: dict[str, CompiledAssetSource] = {}
     initial_asset = _register_state_asset(initial_state, assets)
     events: list[dict[str, Any]] = []
@@ -1755,7 +1789,7 @@ def compile_browser_beat(
             "device_scale_factor": scale,
         },
         "initial_state": initial_asset,
-        "initial_pointer": pointer,
+        "initial_pointer": initial_pointer_state,
         "initial_display_url": initial_display_url,
         "animation_policies": {"pointer": "pointer-v1", "typing": "natural-v1"},
         "events": events,
@@ -1791,6 +1825,24 @@ def _compile_browser_action(
     resolved_pointer = dict(pointer)
     target = capture.get("target")
     target = target if isinstance(target, Mapping) else None
+    if action.kind == "set_pointer":
+        visible = payload.get("visible")
+        if not isinstance(visible, bool):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                f"set_pointer action {action.id!r} visibility is invalid",
+            )
+        events.append(
+            {
+                "kind": "pointer_visibility",
+                "action_id": action.id,
+                "at_ms": cursor,
+                "end_ms": cursor,
+                "visible": visible,
+            }
+        )
+        resolved_pointer["visible"] = visible
+        return events, cursor, resolved_pointer
     if action.kind in {"click", "move_pointer"}:
         point = _target_point(target, action.id)
         move_duration, curve = pointer_motion(
@@ -1991,6 +2043,11 @@ def _compile_browser_action(
                 "asset": end_asset,
                 "transition": "cut",
             }
+        )
+    elif visual_kind == "deferred":
+        _required_string(
+            visual.get("owner_action_id"),
+            field=f"deferred browser visual owner for {action.id}",
         )
     elif visual_kind != "state":
         raise PresentationCompileError(

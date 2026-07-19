@@ -183,6 +183,7 @@ Presentation framing is also a recording header concern, not a beat setting:
 
 ```yaml
 presentation:
+  guided: true
   browser:
     window:
       mode: framed
@@ -196,7 +197,10 @@ presentation:
 ```
 
 The captured viewport never changes during playback. The renderer scales and
-letterboxes it inside any selected window frame.
+letterboxes it inside any selected window frame. Set `guided: true` to start
+the player in guided mode; beats with `guide` content then pause before the
+following beat is rendered. See [Beat](./beat.md#guide) for checkpoint and
+toolbar-highlight authoring.
 
 ## Config Schema
 
@@ -379,6 +383,7 @@ class BrowserPresentationConfig:
 
 @dataclass
 class RecordingPresentationConfig:
+    guided: bool = False
     browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
 
 

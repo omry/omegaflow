@@ -145,6 +145,50 @@
         color: var(--brand);
       }
 
+      button.icon-button[data-highlighted="true"],
+      button.rate-button[data-highlighted="true"],
+      button[data-resume-hint="true"] {
+        position: relative;
+        outline: 3px solid var(--cue);
+        outline-offset: 2px;
+        box-shadow:
+          0 0 0 5px rgba(255, 194, 71, 0.22),
+          0 0 1.15rem rgba(255, 194, 71, 0.72);
+        animation: toolbar-control-highlight 1.4s ease-in-out infinite;
+      }
+
+      button[data-highlighted="true"]::after,
+      button[data-resume-hint="true"]::after {
+        position: absolute;
+        top: -0.45rem;
+        right: -0.45rem;
+        width: 0.6rem;
+        height: 0.6rem;
+        border: 2px solid var(--panel);
+        border-radius: 50%;
+        background: var(--cue);
+        box-shadow: 0 0 0.65rem rgba(255, 194, 71, 0.95);
+        content: "";
+        pointer-events: none;
+      }
+
+      @keyframes toolbar-control-highlight {
+        50% {
+          outline-offset: 4px;
+          box-shadow:
+            0 0 0 7px rgba(255, 194, 71, 0.13),
+            0 0 1.4rem rgba(255, 194, 71, 0.9);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        button.icon-button[data-highlighted="true"],
+        button.rate-button[data-highlighted="true"],
+        button[data-resume-hint="true"] {
+          animation: none;
+        }
+      }
+
       .rate-button {
         min-width: 2.6rem;
         padding: 0 0.35rem;
@@ -496,6 +540,41 @@
         font-size: 0.88rem;
       }
 
+      .status button[data-tooltip] {
+        position: relative;
+      }
+
+      .status button[data-tooltip]::before {
+        position: absolute;
+        z-index: 20;
+        bottom: calc(100% + 0.5rem);
+        left: 50%;
+        max-width: min(22rem, 80vw);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 0.35rem 0.5rem;
+        background: #0c0f15;
+        box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.4);
+        color: var(--fg);
+        content: attr(data-tooltip);
+        font-size: 0.76rem;
+        font-weight: 600;
+        line-height: 1.25;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, 0.2rem);
+        transition: opacity 100ms ease, transform 100ms ease;
+        visibility: hidden;
+        white-space: nowrap;
+      }
+
+      .status button[data-tooltip]:hover::before,
+      .status button[data-tooltip]:focus-visible::before {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        visibility: visible;
+      }
+
       .progress {
         --position: 0%;
         --thumb-size: 0.9rem;
@@ -558,6 +637,17 @@
         position: absolute;
         inset: 0;
         pointer-events: none;
+      }
+
+      .section-regions {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .section-region {
+        position: absolute;
+        inset-block: 0;
       }
 
       .section-marker {
@@ -905,12 +995,12 @@
       <div class="status">
         <span id="clock">0:00 / 0:00</span>
         <div class="transport" aria-label="Playback controls">
-          <button class="icon-button" id="prev-section" type="button" aria-label="Previous section" title="Previous section" disabled></button>
-          <button class="icon-button" id="play" type="button" aria-label="Play" title="Play"></button>
-          <button class="icon-button" id="restart" type="button" aria-label="Restart" title="Restart" disabled></button>
-          <button class="icon-button" id="next-section" type="button" aria-label="Next section" title="Next section" disabled></button>
-          <button class="icon-button" id="guided" type="button" aria-label="Guided mode off" title="Guided mode"></button>
-          <button class="rate-button" id="rate" type="button" aria-label="Playback speed 1×" title="Playback speed">1×</button>
+          <button class="icon-button" id="prev-section" type="button" aria-label="Previous section" disabled></button>
+          <button class="icon-button" id="play" type="button" aria-label="Play"></button>
+          <button class="icon-button" id="restart" type="button" aria-label="Restart" disabled></button>
+          <button class="icon-button" id="next-section" type="button" aria-label="Next section" disabled></button>
+          <button class="icon-button" id="guided" type="button" aria-label="Guided mode off"></button>
+          <button class="rate-button" id="rate" type="button" aria-label="Playback speed 1×">1×</button>
         </div>
         <div class="progress-wrap" id="progress-wrap">
           <input
@@ -922,10 +1012,11 @@
             value="0"
             aria-label="Seek recording"
           />
+          <div class="section-regions" id="section-regions" aria-hidden="true"></div>
           <div class="section-markers" id="section-markers" aria-hidden="true"></div>
           <div class="section-tooltip" id="section-tooltip" role="tooltip" hidden></div>
         </div>
-        <button class="icon-button" id="mute" type="button" aria-label="Mute" title="Mute" disabled></button>
+        <button class="icon-button" id="mute" type="button" aria-label="Mute" disabled></button>
         <span id="voice"></span>
       </div>
     </main>
@@ -936,7 +1027,10 @@
       const playerRoot = document.getElementById('player');
       playerRoot.dataset.embedded = String(params.get('embed') === '1');
       playerRoot.dataset.layout = params.get('layout') || '';
-      const manifestUrl = params.get('manifest');
+      const implicitWatchManifest = (window.location.pathname || '').startsWith('/watch/')
+        ? 'recording.presentation.json'
+        : null;
+      const manifestUrl = params.get('manifest') || implicitWatchManifest;
       const autoplayCountdown = params.get('autoplay') === 'countdown';
       let audioMetaUrl = null;
       const introText = params.get('intro') || '';
@@ -971,6 +1065,7 @@
       const clock = document.getElementById('clock');
       const progressWrap = document.getElementById('progress-wrap');
       const progress = document.getElementById('progress');
+      const sectionRegions = document.getElementById('section-regions');
       const sectionMarkers = document.getElementById('section-markers');
       const sectionTooltip = document.getElementById('section-tooltip');
       const playbackFlash = document.getElementById('playback-flash');
@@ -1033,6 +1128,7 @@
       let pausedAtGuidedPoint = false;
       let activeGuideCheckpoint = null;
       let guideDrag = null;
+      let resumeHintTimer = null;
       let scrubbing = false;
       let playbackFlashTimers = [];
       let autoplayCountdownTimers = [];
@@ -1040,6 +1136,17 @@
       let audibleAutoplayPending = false;
       const checkpointSnapSeconds = 3.0;
       const playbackRates = [1, 1.25, 1.5, 2];
+      const playerToolbarControls = new Map([
+        ['previous', prevSectionButton],
+        ['play', playButton],
+        ['restart', restartButton],
+        ['next', nextSectionButton],
+        ['guided', guidedButton],
+        ['speed', rateButton],
+        ['mute', muteButton],
+      ]);
+      const dismissedPlayerToolbarHighlights = new Set();
+      let activePlayerToolbarHighlight = null;
 
       const icons = {
         play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
@@ -1644,6 +1751,7 @@
       function timelineMarkerPoints() {
         const beatPoints = Array.isArray(presentationManifest?.beats)
           ? presentationManifest.beats.map((beat) => ({
+            id: String(beat.id || ''),
             time: Number(beat.offset_ms) / 1000,
             heading: String(beat.heading || beat.id || 'Beat'),
             kind: 'beat',
@@ -1664,11 +1772,37 @@
       }
 
       function renderSectionMarkers() {
+        sectionRegions.textContent = '';
         sectionMarkers.textContent = '';
         hideSectionTooltip();
         const points = timelineMarkerPoints();
         if (!totalSeconds || !points.length) {
           return;
+        }
+        const beatPoints = points.filter((point) => point.kind === 'beat');
+        for (const [index, point] of beatPoints.entries()) {
+          const start = Number(point.time || 0);
+          const end = index + 1 < beatPoints.length
+            ? Number(beatPoints[index + 1].time || 0)
+            : totalSeconds;
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+            continue;
+          }
+          const startRatio = Math.min(1, Math.max(0, start / totalSeconds));
+          const endRatio = Math.min(1, Math.max(0, end / totalSeconds));
+          const startOffset = (0.5 - startRatio) * 0.9;
+          const endOffset = (0.5 - endRatio) * 0.9;
+          const region = document.createElement('span');
+          region.className = 'section-region';
+          region.style.left = `calc(${startRatio * 100}% + ${startOffset.toFixed(4)}rem)`;
+          region.style.width = `calc(${(endRatio - startRatio) * 100}% + ${(endOffset - startOffset).toFixed(4)}rem)`;
+          region.dataset.start = String(start);
+          region.dataset.end = String(end);
+          region.dataset.heading = point.heading || 'Checkpoint';
+          if (point.id) {
+            region.dataset.testid = `section-region-${point.id.replace(/[^A-Za-z0-9_-]+/g, '-')}`;
+          }
+          sectionRegions.appendChild(region);
         }
         const seen = new Set();
         for (const point of points) {
@@ -1690,6 +1824,9 @@
             `${((0.5 - ratio) * 0.9).toFixed(4)}rem`,
           );
           marker.dataset.start = String(start);
+          if (point.id) {
+            marker.dataset.testid = `section-marker-${point.id.replace(/[^A-Za-z0-9_-]+/g, '-')}`;
+          }
           marker.dataset.kind = point.debugOnly ? 'debug' : point.kind || 'checkpoint';
           marker.dataset.heading = point.heading || 'Checkpoint';
           marker.title = point.debugOnly
@@ -1748,15 +1885,19 @@
         if (!totalSeconds) {
           return null;
         }
-        const rect = progress.getBoundingClientRect();
-        if (!rect.width) {
+        const markers = [...sectionMarkers.querySelectorAll('.section-marker')];
+        if (!markers.length) {
           return null;
         }
-        const ratio = Math.min(
-          1,
-          Math.max(0, (event.clientX - rect.left) / rect.width),
-        );
-        return ratio * totalSeconds;
+        let seconds = Number(markers[0].dataset.start || 0);
+        for (const marker of markers) {
+          const rect = marker.getBoundingClientRect();
+          if (event.clientX + 0.5 < rect.left + (rect.width / 2)) {
+            break;
+          }
+          seconds = Number(marker.dataset.start || seconds);
+        }
+        return seconds;
       }
 
       function hideSectionTooltip() {
@@ -2022,7 +2163,7 @@
         return Math.max(0, milliseconds / playbackRate);
       }
 
-      function updateProgress() {
+      function updateProgress(displaySeconds = null) {
         if (presentationShell && typeof presentationShell.setPlaying === 'function') {
           presentationShell.setPlaying(playing);
         }
@@ -2041,7 +2182,10 @@
         progressWrap.dataset.complete = totalSeconds > 0 && percent >= 100
           ? 'true'
           : 'false';
-        updateNarration(clamped, {animateScroll: playing && !scrubbing});
+        const narrationSeconds = Number.isFinite(displaySeconds)
+          ? Math.max(0, Math.min(displaySeconds, totalSeconds))
+          : clamped;
+        updateNarration(narrationSeconds, {animateScroll: playing && !scrubbing});
         updateSectionMarkerState(clamped);
         updateTransportButtons();
       }
@@ -2067,7 +2211,8 @@
           button.dataset.icon = iconName;
         }
         button.setAttribute('aria-label', label);
-        button.title = label;
+        button.dataset.tooltip = label;
+        button.removeAttribute('title');
       }
 
       function clearPlaybackFlashTimers() {
@@ -2200,6 +2345,59 @@
         return sectionStartTimes().some((start) => start > seconds + 0.25);
       }
 
+      function clearPlayerToolbarHighlight() {
+        for (const button of playerToolbarControls.values()) {
+          button.removeAttribute('data-highlighted');
+        }
+        activePlayerToolbarHighlight = null;
+      }
+
+      function updatePlayerToolbarHighlight(beatIndex, presentationMs) {
+        if (!Number.isInteger(beatIndex) || beatIndex < 0) {
+          clearPlayerToolbarHighlight();
+          return;
+        }
+        const beat = presentationManifest?.beats?.[beatIndex];
+        const highlight = beat?.player?.highlight;
+        const localMs = Number(presentationMs) - Number(beat?.offset_ms);
+        const control = highlight?.control;
+        const button = playerToolbarControls.get(control);
+        if (
+          !button ||
+          !Number.isFinite(localMs) ||
+          localMs < highlight.start_ms ||
+          localMs > highlight.end_ms
+        ) {
+          clearPlayerToolbarHighlight();
+          return;
+        }
+        const key = `${beatIndex}:${control}:${highlight.start_ms}:${highlight.end_ms}`;
+        if (dismissedPlayerToolbarHighlights.has(key)) {
+          clearPlayerToolbarHighlight();
+          return;
+        }
+        if (activePlayerToolbarHighlight?.key === key) {
+          return;
+        }
+        clearPlayerToolbarHighlight();
+        button.dataset.highlighted = 'true';
+        activePlayerToolbarHighlight = {button, key};
+      }
+
+      function dismissClickedPlayerToolbarHighlight(event) {
+        if (!activePlayerToolbarHighlight) {
+          return;
+        }
+        const clicked = event.target && typeof event.target.closest === 'function'
+          ? event.target.closest('button')
+          : null;
+        if (clicked !== activePlayerToolbarHighlight.button) {
+          return;
+        }
+        dismissedPlayerToolbarHighlights.add(activePlayerToolbarHighlight.key);
+        clearPlayerToolbarHighlight();
+      }
+
       function updateTransportButtons() {
         const clamped = Math.min(currentSeconds, totalSeconds);
         const ready = Boolean(
@@ -2227,8 +2425,9 @@
           'aria-label',
           `Playback speed ${playbackRate}\u00d7. Left click for next; right click for previous.`,
         );
-        rateButton.title =
+        rateButton.dataset.tooltip =
           `Playback speed: ${playbackRate}\u00d7 (left-click next, right-click previous)`;
+        rateButton.removeAttribute('title');
         playButton.disabled = !ready;
         restartButton.disabled = !ready;
         prevSectionButton.disabled = !ready || !hasPreviousSection(clamped);
@@ -2299,7 +2498,35 @@
         }
       }
 
+      function clearGuideResumeHint() {
+        if (resumeHintTimer !== null) {
+          clearTimeout(resumeHintTimer);
+          resumeHintTimer = null;
+        }
+        guideContinueButton.removeAttribute('data-resume-hint');
+        playButton.removeAttribute('data-resume-hint');
+      }
+
+      function showGuideResumeHint(event) {
+        if (guideModal.hidden) {
+          return;
+        }
+        const target = event?.target;
+        if (
+          target &&
+          typeof target.closest === 'function' &&
+          target.closest('button, a, input, textarea, select')
+        ) {
+          return;
+        }
+        clearGuideResumeHint();
+        guideContinueButton.dataset.resumeHint = 'true';
+        playButton.dataset.resumeHint = 'true';
+        resumeHintTimer = setTimeout(clearGuideResumeHint, 2800);
+      }
+
       function hideGuideModal() {
+        clearGuideResumeHint();
         guideModal.hidden = true;
         activeGuideCheckpoint = null;
       }
@@ -2370,7 +2597,10 @@
         let nearest = null;
         let distance = Infinity;
         for (const point of guidedPausePoints) {
-          const pointDistance = Math.abs(point.time - seconds);
+          const pointDistance = seconds - point.time;
+          if (pointDistance < 0) {
+            continue;
+          }
           if (pointDistance < distance) {
             nearest = point;
             distance = pointDistance;
@@ -2387,7 +2617,10 @@
         let nearest = null;
         let distance = Infinity;
         for (const start of starts) {
-          const markerDistance = Math.abs(start - seconds);
+          const markerDistance = seconds - start;
+          if (markerDistance < 0) {
+            continue;
+          }
           if (markerDistance < distance) {
             nearest = start;
             distance = markerDistance;
@@ -2588,6 +2821,13 @@
         updateProgress();
       }
 
+      function outgoingGuideSeconds(point) {
+        return Math.max(
+          Number(point.sectionStart) || 0,
+          point.time - 0.001,
+        );
+      }
+
       function pauseForGuidedPoint(point) {
         audibleAutoplayPending = false;
         clearAudioUnlockPrompt();
@@ -2595,16 +2835,25 @@
         playing = false;
         pausedAtGuidedPoint = true;
         activeGuideCheckpoint = point;
+        if (presentationManifest && Number.isFinite(point.sectionStart)) {
+          lastPresentationBeatIndex = CastPlayerCore.beatIndexForPresentation(
+            presentationManifest,
+            point.sectionStart * 1000,
+          );
+          updatePlayerToolbarHighlight(lastPresentationBeatIndex, point.time * 1000);
+        }
         clearTimers();
         if (audio) {
           audio.pause();
         }
+        const outgoingSeconds = outgoingGuideSeconds(point);
+        renderPresentationFrame(outgoingSeconds, true);
         setVoiceStatus(
           audioReady ? 'waiting for continue' : 'voiceover unavailable',
           audioReady ? 'waiting' : 'unavailable',
         );
         showGuideModal(point);
-        updateProgress();
+        updateProgress(outgoingSeconds);
       }
 
       function scheduleEvents() {
@@ -2649,7 +2898,12 @@
               livePlaybackSeconds(),
             );
           }
-          renderPresentationFrame(currentSeconds);
+          const displaySeconds = (
+            guidedPausePoint != null && currentSeconds >= guidedPausePoint.time
+          )
+            ? outgoingGuideSeconds(guidedPausePoint)
+            : currentSeconds;
+          renderPresentationFrame(displaySeconds);
           if (presentationAudioController) {
             presentationAudioController.synchronize(currentSeconds * 1000, {
               muted,
@@ -2657,7 +2911,7 @@
               playing,
             });
           }
-          updateProgress();
+          updateProgress(displaySeconds);
         }, 33);
       }
 
@@ -2670,7 +2924,10 @@
           presentationManifest,
           globalMs,
         );
-        lastPresentationBeatIndex = index;
+        if (index !== lastPresentationBeatIndex) {
+          lastPresentationBeatIndex = index;
+        }
+        updatePlayerToolbarHighlight(index, globalMs);
         if (typeof presentationShell.setPlaying === 'function') {
           presentationShell.setPlaying(playing);
         }
@@ -2714,6 +2971,8 @@
           audio.currentTime = 0;
         }
         playing = false;
+        dismissedPlayerToolbarHighlights.clear();
+        lastPresentationBeatIndex = null;
         pausedAtGuidedPoint = false;
         hideGuideModal();
         renderAt(0);
@@ -3369,7 +3628,9 @@
         presentationManifest = CastPlayerCore.validatePresentationManifest(
           await response.json(),
         );
-        manifestBaseUrl = new URL('.', new URL(manifestUrl, document.baseURI));
+        guidedMode = presentationManifest.presentation?.guided === true;
+        const resolvedManifestUrl = response.url || new URL(manifestUrl, document.baseURI).href;
+        manifestBaseUrl = new URL('.', resolvedManifestUrl);
         if (!params.has('title') && presentationManifest.recording.title) {
           titleText = presentationManifest.recording.title;
           narration.textContent = titleText;
@@ -3417,6 +3678,7 @@
 
       playButton.addEventListener('click', togglePlayPause);
       guideContinueButton.addEventListener('click', play);
+      guideModal.addEventListener('click', showGuideResumeHint);
       guideCopyButton.addEventListener('click', copyGuideCommand);
       guideRestartButton.addEventListener('click', restartGuidedSection);
       guideTitle.addEventListener('pointerdown', startGuideDrag);
@@ -3429,8 +3691,6 @@
       guideTitle.addEventListener('pointercancel', endGuideDrag);
       guidedButton.addEventListener('click', () => {
         guidedMode = !guidedMode;
-        pausedAtGuidedPoint = false;
-        hideGuideModal();
         updateTransportButtons();
         if (playing) {
           currentSeconds = livePlaybackSeconds();
@@ -3446,6 +3706,7 @@
       nextSectionButton.addEventListener('click', () => jumpSection(1));
       muteButton.addEventListener('click', toggleMute);
       rateButton.addEventListener('click', () => cyclePlaybackRate(1));
+      playerRoot.addEventListener('click', dismissClickedPlayerToolbarHighlight, true);
       playerRoot.addEventListener('contextmenu', handlePlayerContextMenu);
       terminal.addEventListener('click', togglePlaybackFromTerminal);
       browserStage.addEventListener('click', togglePlayPause);

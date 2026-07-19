@@ -20,6 +20,12 @@ temporary profile and an audible-autoplay override. This does not change the
 autoplay policy or data in your normal browser profile. Close the browser window
 or press Ctrl-C to stop the local server.
 
+To open the player paused, without the countdown or automatic playback, use:
+
+```bash
+omegaflow recording=demo action=watch autoplay=false
+```
+
 To start the watch server without opening a browser, use:
 
 ```bash

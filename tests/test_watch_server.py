@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import shutil
+import tempfile
 import threading
 from contextlib import contextmanager
 from functools import partial
@@ -12,23 +15,213 @@ import pytest
 from omegaflow import studio
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 @contextmanager
-def watch_server(root: Path, *, pages: dict[str, bytes] | None = None):
-    handler = partial(
-        studio.StudioWatchRequestHandler,
-        artifacts={},
-        directory=str(root),
-        pages=pages,
+def watch_server(
+    root: Path,
+    *,
+    pages: dict[str, bytes] | None = None,
+    recordings: dict[str, dict[str, object]] | None = None,
+):
+    snapshot_artifacts: dict[str, dict[str, Path]] = {}
+    with tempfile.TemporaryDirectory(prefix="omegaflow-watch-test-") as snapshot_root:
+        handler = partial(
+            studio.StudioWatchRequestHandler,
+            artifacts={},
+            directory=str(root),
+            pages=pages,
+            recordings=recordings,
+            snapshot_artifacts=snapshot_artifacts,
+            snapshot_lock=threading.RLock(),
+            snapshot_directory=Path(snapshot_root),
+        )
+        server = studio.http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_port}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+
+def test_recording_watch_route_refreshes_to_latest_immutable_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    player_root = tmp_path / "player"
+    player_root.mkdir()
+    (player_root / "cast-player.html").write_text(
+        '<script src="cast-player-core.js"></script>',
+        encoding="utf-8",
     )
-    server = studio.http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}"
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join()
+    (player_root / "cast-player-core.js").write_text(
+        "window.playerLoaded = true;",
+        encoding="utf-8",
+    )
+
+    def recording_run(name: str, label: str) -> Path:
+        run_dir = tmp_path / "runs" / name
+        presentation = run_dir / "presentation"
+        (presentation / "beats").mkdir(parents=True)
+        (presentation / "recording.presentation.json").write_text(
+            f'{{"build":"{label}"}}\n',
+            encoding="utf-8",
+        )
+        (presentation / "beats" / "terminal.cast").write_text(
+            f"{label}\n",
+            encoding="utf-8",
+        )
+        return run_dir
+
+    first_run = recording_run("first", "first")
+    second_run = recording_run("second", "second")
+    latest = [first_run]
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: latest[0],
+    )
+
+    with watch_server(
+        player_root,
+        recordings={"tutorial/beat": {"_recording_id": "tutorial/beat"}},
+    ) as base_url:
+        player_url = f"{base_url}/watch/tutorial/beat/"
+        assert urlopen(f"{base_url}/watch/tutorial/beat").url == player_url
+        assert urlopen(player_url).read().decode() == (
+            '<script src="cast-player-core.js"></script>'
+        )
+        assert urlopen(f"{player_url}cast-player-core.js").read().decode() == (
+            "window.playerLoaded = true;"
+        )
+
+        with urlopen(f"{player_url}recording.presentation.json") as response:
+            first_snapshot_url = response.url
+            assert response.read() == b'{"build":"first"}\n'
+        assert "/__studio_snapshots__/" in first_snapshot_url
+
+        (first_run / "presentation" / "recording.presentation.json").write_text(
+            '{"build":"first-rebuilt"}\n',
+            encoding="utf-8",
+        )
+        (first_run / "presentation" / "beats" / "terminal.cast").write_text(
+            "first-rebuilt\n",
+            encoding="utf-8",
+        )
+        with urlopen(f"{player_url}recording.presentation.json") as response:
+            rebuilt_snapshot_url = response.url
+            assert response.read() == b'{"build":"first-rebuilt"}\n'
+        assert rebuilt_snapshot_url != first_snapshot_url
+        assert urlopen(first_snapshot_url).read() == b'{"build":"first"}\n'
+
+        latest[0] = second_run
+        with urlopen(f"{player_url}recording.presentation.json") as response:
+            second_snapshot_url = response.url
+            assert response.read() == b'{"build":"second"}\n'
+        assert second_snapshot_url != first_snapshot_url
+
+        shutil.rmtree(first_run)
+        assert urlopen(first_snapshot_url).read() == b'{"build":"first"}\n'
+        first_asset_url = first_snapshot_url.replace(
+            "recording.presentation.json",
+            "beats/terminal.cast",
+        )
+        assert urlopen(first_asset_url).read() == b"first\n"
+
+
+def test_friendly_watch_route_loads_the_player_in_a_browser(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    run_dir = tmp_path / "runs" / "hello"
+    presentation = run_dir / "presentation"
+    beats = presentation / "beats"
+    beats.mkdir(parents=True)
+    (beats / "terminal.cast").write_text(
+        '\n'.join(
+            (
+                json.dumps(
+                    {
+                        "version": 2,
+                        "width": 80,
+                        "height": 24,
+                        "timestamp": 0,
+                        "env": {"TERM": "xterm-256color"},
+                    }
+                ),
+                json.dumps([0.0, "o", "hello\r\n"]),
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    manifest = {
+        "manifest_version": 1,
+        "recording": {
+            "id": "hello",
+            "title": "Friendly hello",
+            "duration_ms": 1000,
+        },
+        "renderers": {"terminal": {"payload_version": 1}},
+        "presentation": {"guided": False},
+        "assets": {},
+        "beats": [
+            {
+                "id": "hello",
+                "heading": "Hello",
+                "renderer": "terminal",
+                "offset_ms": 0,
+                "duration_ms": 1000,
+                "payload": "beats/terminal.cast",
+                "guide": None,
+                "player": None,
+                "transition_in": "cut",
+            }
+        ],
+    }
+    (presentation / "recording.presentation.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: run_dir,
+    )
+    static_root = REPO_ROOT / "src" / "omegaflow" / "player" / "static"
+
+    with (
+        watch_server(
+            static_root,
+            recordings={"hello": {"_recording_id": "hello"}},
+        ) as base_url,
+        sync_api.sync_playwright() as playwright,
+    ):
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 500})
+        snapshot_requests: list[str] = []
+        page.on(
+            "request",
+            lambda request: snapshot_requests.append(request.url)
+            if "/__studio_snapshots__/" in request.url
+            else None,
+        )
+        page.goto(f"{base_url}/watch/hello/")
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        assert page.url == f"{base_url}/watch/hello/"
+        assert page.locator("#narration").text_content() == "Friendly hello"
+        assert any(
+            url.endswith("/recording.presentation.json")
+            for url in snapshot_requests
+        )
+        assert any(url.endswith("/beats/terminal.cast") for url in snapshot_requests)
+        browser.close()
 
 
 @pytest.mark.parametrize(

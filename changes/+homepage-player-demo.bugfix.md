@@ -1,0 +1,1 @@
+Start the embedded homepage demo automatically, align section tooltips with the centers of their scrubber sections, and make the nested quickstart open paused while demonstrating section previews and playback speed.

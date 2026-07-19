@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class PlayerToolbarControl(str, Enum):
+    previous = "previous"
+    play = "play"
+    restart = "restart"
+    next = "next"
+    guided = "guided"
+    speed = "speed"
+    mute = "mute"
 
 
 @dataclass
@@ -86,6 +97,11 @@ class BrowserClickEventV1(BrowserEventV1):
 
 
 @dataclass
+class BrowserPointerVisibilityEventV1(BrowserEventV1):
+    visible: bool = True
+
+
+@dataclass
 class BrowserFocusEventV1(BrowserEventV1):
     target: BrowserBoundsV1 = field(default_factory=BrowserBoundsV1)
 
@@ -134,6 +150,7 @@ class BrowserCompleteEventV1(BrowserEventV1):
 BROWSER_EVENT_SCHEMAS_V1: dict[str, type[BrowserEventV1]] = {
     "state": BrowserStateEventV1,
     "pointer_move": BrowserPointerMoveEventV1,
+    "pointer_visibility": BrowserPointerVisibilityEventV1,
     "click": BrowserClickEventV1,
     "focus": BrowserFocusEventV1,
     "text": BrowserTextEventV1,
@@ -200,6 +217,7 @@ class PresentationBrowserHeaderV1:
 
 @dataclass
 class PresentationHeaderV1:
+    guided: bool = False
     browser: PresentationBrowserHeaderV1 | None = None
 
 
@@ -227,7 +245,20 @@ class PresentationAssetV1:
 
 @dataclass
 class PresentationGuideV1:
+    commands: list[str] = field(default_factory=list)
     success_hint: str | None = None
+
+
+@dataclass
+class PresentationPlayerToolbarHighlightV1:
+    control: PlayerToolbarControl | None = None
+    start_ms: int = 0
+    end_ms: int = 0
+
+
+@dataclass
+class PresentationBeatPlayerV1:
+    highlight: PresentationPlayerToolbarHighlightV1 | None = None
 
 
 @dataclass
@@ -239,6 +270,7 @@ class PresentationBeatV1:
     duration_ms: int = 0
     payload: str = ""
     guide: PresentationGuideV1 | None = None
+    player: PresentationBeatPlayerV1 | None = None
     transition_in: str | None = None
 
 

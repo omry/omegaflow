@@ -3,53 +3,53 @@
     {
       "beat_id": "bootstrap",
       "id": "bootstrap",
-      "source_ms": 1360,
-      "text_offset": 26
+      "source_ms": 10160,
+      "text_offset": 186
     },
     {
       "beat_id": "bootstrap",
       "id": "project_settings_start",
-      "source_ms": 5780,
-      "text_offset": 99
+      "source_ms": 12840,
+      "text_offset": 228
     },
     {
       "beat_id": "bootstrap",
       "id": "project_settings_end",
-      "source_ms": 6480,
-      "text_offset": 116
+      "source_ms": 13560,
+      "text_offset": 246
     },
     {
       "beat_id": "bootstrap",
       "id": "recording_defaults_start",
-      "source_ms": 6900,
-      "text_offset": 120
+      "source_ms": 13560,
+      "text_offset": 246
     },
     {
       "beat_id": "bootstrap",
       "id": "recording_defaults_end",
-      "source_ms": 8260,
-      "text_offset": 140
+      "source_ms": 14820,
+      "text_offset": 266
     },
     {
       "beat_id": "bootstrap",
       "id": "quickstart_script_start",
-      "source_ms": 8700,
-      "text_offset": 151
+      "source_ms": 15260,
+      "text_offset": 270
     },
     {
       "beat_id": "bootstrap",
       "id": "quickstart_script_end",
-      "source_ms": 12180,
-      "text_offset": 213
+      "source_ms": 17540,
+      "text_offset": 321
     }
   ],
-  "duration_ms": 13056,
+  "duration_ms": 17808,
   "members": [
     {
       "beat_id": "bootstrap",
-      "source_end_ms": 13056,
+      "source_end_ms": 17808,
       "source_start_ms": 0,
-      "text_end": 213,
+      "text_end": 321,
       "text_start": 0
     }
   ],
@@ -59,235 +59,354 @@
     {
       "beat_id": "bootstrap",
       "gap_ms": 200,
-      "source_ms": 4590,
+      "source_ms": 11900,
       "target": "bootstrap_run",
-      "text_offset": 75
+      "text_offset": 213
     }
   ],
   "words": [
     {
-      "end_ms": 280,
+      "end_ms": 340,
       "start_ms": 0,
-      "text": "From",
-      "text_end": 4,
+      "text": "We'll",
+      "text_end": 5,
       "text_start": 0
     },
     {
-      "end_ms": 480,
-      "start_ms": 280,
-      "text": "your",
+      "end_ms": 640,
+      "start_ms": 340,
+      "text": "now",
       "text_end": 9,
-      "text_start": 5
+      "text_start": 6
     },
     {
-      "end_ms": 920,
-      "start_ms": 480,
-      "text": "repository",
-      "text_end": 20,
+      "end_ms": 900,
+      "start_ms": 640,
+      "text": "prepare",
+      "text_end": 17,
       "text_start": 10
     },
     {
-      "end_ms": 1360,
-      "start_ms": 920,
-      "text": "root,",
-      "text_end": 26,
-      "text_start": 21
+      "end_ms": 1200,
+      "start_ms": 900,
+      "text": "your",
+      "text_end": 22,
+      "text_start": 18
     },
     {
-      "end_ms": 1980,
-      "start_ms": 1800,
-      "text": "run",
-      "text_end": 30,
-      "text_start": 27
+      "end_ms": 1540,
+      "start_ms": 1200,
+      "text": "recording",
+      "text_end": 32,
+      "text_start": 23
     },
     {
-      "end_ms": 2500,
-      "start_ms": 1980,
-      "text": "bootstrap",
-      "text_end": 40,
-      "text_start": 31
-    },
-    {
-      "end_ms": 2920,
-      "start_ms": 2500,
-      "text": "to",
+      "end_ms": 2060,
+      "start_ms": 1540,
+      "text": "workspace.",
       "text_end": 43,
-      "text_start": 41
+      "text_start": 33
     },
     {
-      "end_ms": 3080,
-      "start_ms": 2920,
-      "text": "set",
-      "text_end": 47,
+      "end_ms": 2860,
+      "start_ms": 2800,
+      "text": "This",
+      "text_end": 48,
       "text_start": 44
     },
     {
-      "end_ms": 3220,
-      "start_ms": 3080,
-      "text": "up",
-      "text_end": 50,
-      "text_start": 48
+      "end_ms": 2980,
+      "start_ms": 2860,
+      "text": "is",
+      "text_end": 51,
+      "text_start": 49
     },
     {
-      "end_ms": 3400,
-      "start_ms": 3220,
-      "text": "the",
-      "text_end": 54,
-      "text_start": 51
+      "end_ms": 3160,
+      "start_ms": 2980,
+      "text": "a",
+      "text_end": 53,
+      "text_start": 52
     },
     {
-      "end_ms": 3720,
-      "start_ms": 3400,
+      "end_ms": 3560,
+      "start_ms": 3160,
+      "text": "one-time",
+      "text_end": 62,
+      "text_start": 54
+    },
+    {
+      "end_ms": 3820,
+      "start_ms": 3560,
+      "text": "setup",
+      "text_end": 68,
+      "text_start": 63
+    },
+    {
+      "end_ms": 4120,
+      "start_ms": 3820,
+      "text": "for",
+      "text_end": 72,
+      "text_start": 69
+    },
+    {
+      "end_ms": 4380,
+      "start_ms": 4120,
+      "text": "each",
+      "text_end": 77,
+      "text_start": 73
+    },
+    {
+      "end_ms": 4740,
+      "start_ms": 4380,
       "text": "recording",
-      "text_end": 64,
-      "text_start": 55
-    },
-    {
-      "end_ms": 4280,
-      "start_ms": 3720,
-      "text": "workspace.",
-      "text_end": 75,
-      "text_start": 65
-    },
-    {
-      "end_ms": 4980,
-      "start_ms": 4900,
-      "text": "The",
-      "text_end": 79,
-      "text_start": 76
-    },
-    {
-      "end_ms": 5220,
-      "start_ms": 4980,
-      "text": "command",
       "text_end": 87,
-      "text_start": 80
+      "text_start": 78
     },
     {
-      "end_ms": 5580,
-      "start_ms": 5220,
-      "text": "creates",
-      "text_end": 95,
+      "end_ms": 5160,
+      "start_ms": 4740,
+      "text": "environment,",
+      "text_end": 100,
       "text_start": 88
     },
     {
-      "end_ms": 5780,
-      "start_ms": 5580,
-      "text": "the",
-      "text_end": 99,
-      "text_start": 96
-    },
-    {
-      "end_ms": 6100,
-      "start_ms": 5780,
-      "text": "project",
-      "text_end": 107,
-      "text_start": 100
-    },
-    {
-      "end_ms": 6480,
-      "start_ms": 6100,
-      "text": "settings",
-      "text_end": 116,
-      "text_start": 108
-    },
-    {
-      "end_ms": 6900,
-      "start_ms": 6480,
+      "end_ms": 5760,
+      "start_ms": 5500,
       "text": "and",
-      "text_end": 120,
-      "text_start": 117
+      "text_end": 104,
+      "text_start": 101
     },
     {
-      "end_ms": 7280,
-      "start_ms": 6900,
-      "text": "recording",
-      "text_end": 130,
-      "text_start": 121
+      "end_ms": 5860,
+      "start_ms": 5760,
+      "text": "you",
+      "text_end": 108,
+      "text_start": 105
     },
     {
-      "end_ms": 8260,
-      "start_ms": 7280,
-      "text": "defaults,",
-      "text_end": 140,
-      "text_start": 131
+      "end_ms": 6060,
+      "start_ms": 5860,
+      "text": "can",
+      "text_end": 112,
+      "text_start": 109
     },
     {
-      "end_ms": 8480,
-      "start_ms": 8260,
-      "text": "along",
-      "text_end": 146,
-      "text_start": 141
+      "end_ms": 6320,
+      "start_ms": 6060,
+      "text": "commit",
+      "text_end": 119,
+      "text_start": 113
     },
     {
-      "end_ms": 8700,
-      "start_ms": 8480,
-      "text": "with",
-      "text_end": 151,
-      "text_start": 147
+      "end_ms": 6940,
+      "start_ms": 6320,
+      "text": "the",
+      "text_end": 123,
+      "text_start": 120
     },
     {
-      "end_ms": 8940,
-      "start_ms": 8700,
-      "text": "an",
-      "text_end": 154,
-      "text_start": 152
+      "end_ms": 6941,
+      "start_ms": 6940,
+      "text": "generated",
+      "text_end": 133,
+      "text_start": 124
     },
     {
-      "end_ms": 9400,
-      "start_ms": 8940,
-      "text": "OmegaFlow",
+      "end_ms": 7260,
+      "start_ms": 6941,
+      "text": "files",
+      "text_end": 139,
+      "text_start": 134
+    },
+    {
+      "end_ms": 7540,
+      "start_ms": 7260,
+      "text": "to",
+      "text_end": 142,
+      "text_start": 140
+    },
+    {
+      "end_ms": 7820,
+      "start_ms": 7540,
+      "text": "version",
+      "text_end": 150,
+      "text_start": 143
+    },
+    {
+      "end_ms": 8220,
+      "start_ms": 7820,
+      "text": "control.",
+      "text_end": 159,
+      "text_start": 151
+    },
+    {
+      "end_ms": 9140,
+      "start_ms": 9060,
+      "text": "From",
       "text_end": 164,
-      "text_start": 155
+      "text_start": 160
     },
     {
-      "end_ms": 10160,
-      "start_ms": 9400,
-      "text": "quickstart",
-      "text_end": 175,
+      "end_ms": 9340,
+      "start_ms": 9140,
+      "text": "your",
+      "text_end": 169,
       "text_start": 165
     },
     {
-      "end_ms": 10560,
-      "start_ms": 10160,
-      "text": "video",
-      "text_end": 181,
-      "text_start": 176
+      "end_ms": 9780,
+      "start_ms": 9340,
+      "text": "repository",
+      "text_end": 180,
+      "text_start": 170
     },
     {
-      "end_ms": 10780,
-      "start_ms": 10560,
-      "text": "script",
-      "text_end": 188,
-      "text_start": 182
+      "end_ms": 10160,
+      "start_ms": 9780,
+      "text": "root,",
+      "text_end": 186,
+      "text_start": 181
     },
     {
-      "end_ms": 11240,
-      "start_ms": 10780,
-      "text": "you",
-      "text_end": 192,
-      "text_start": 189
-    },
-    {
-      "end_ms": 11420,
-      "start_ms": 11240,
-      "text": "can",
-      "text_end": 196,
-      "text_start": 193
-    },
-    {
-      "end_ms": 11660,
-      "start_ms": 11420,
+      "end_ms": 10640,
+      "start_ms": 10620,
       "text": "run",
-      "text_end": 200,
-      "text_start": 197
+      "text_end": 190,
+      "text_start": 187
     },
     {
-      "end_ms": 12180,
-      "start_ms": 11660,
-      "text": "immediately.",
+      "end_ms": 10860,
+      "start_ms": 10640,
+      "text": "the",
+      "text_end": 194,
+      "text_start": 191
+    },
+    {
+      "end_ms": 11220,
+      "start_ms": 10860,
+      "text": "bootstrap",
+      "text_end": 204,
+      "text_start": 195
+    },
+    {
+      "end_ms": 11580,
+      "start_ms": 11220,
+      "text": "command.",
       "text_end": 213,
-      "text_start": 201
+      "text_start": 205
+    },
+    {
+      "end_ms": 12340,
+      "start_ms": 12220,
+      "text": "It",
+      "text_end": 216,
+      "text_start": 214
+    },
+    {
+      "end_ms": 12640,
+      "start_ms": 12340,
+      "text": "creates",
+      "text_end": 224,
+      "text_start": 217
+    },
+    {
+      "end_ms": 12840,
+      "start_ms": 12640,
+      "text": "the",
+      "text_end": 228,
+      "text_start": 225
+    },
+    {
+      "end_ms": 13180,
+      "start_ms": 12840,
+      "text": "project",
+      "text_end": 236,
+      "text_start": 229
+    },
+    {
+      "end_ms": 13560,
+      "start_ms": 13180,
+      "text": "settings,",
+      "text_end": 246,
+      "text_start": 237
+    },
+    {
+      "end_ms": 14301,
+      "start_ms": 14300,
+      "text": "recording",
+      "text_end": 256,
+      "text_start": 247
+    },
+    {
+      "end_ms": 14820,
+      "start_ms": 14301,
+      "text": "defaults,",
+      "text_end": 266,
+      "text_start": 257
+    },
+    {
+      "end_ms": 15260,
+      "start_ms": 15160,
+      "text": "and",
+      "text_end": 270,
+      "text_start": 267
+    },
+    {
+      "end_ms": 15460,
+      "start_ms": 15260,
+      "text": "a",
+      "text_end": 272,
+      "text_start": 271
+    },
+    {
+      "end_ms": 15820,
+      "start_ms": 15460,
+      "text": "quickstart",
+      "text_end": 283,
+      "text_start": 273
+    },
+    {
+      "end_ms": 16220,
+      "start_ms": 15820,
+      "text": "video",
+      "text_end": 289,
+      "text_start": 284
+    },
+    {
+      "end_ms": 16400,
+      "start_ms": 16220,
+      "text": "script",
+      "text_end": 296,
+      "text_start": 290
+    },
+    {
+      "end_ms": 16620,
+      "start_ms": 16400,
+      "text": "you",
+      "text_end": 300,
+      "text_start": 297
+    },
+    {
+      "end_ms": 16800,
+      "start_ms": 16620,
+      "text": "can",
+      "text_end": 304,
+      "text_start": 301
+    },
+    {
+      "end_ms": 17000,
+      "start_ms": 16800,
+      "text": "run",
+      "text_end": 308,
+      "text_start": 305
+    },
+    {
+      "end_ms": 17540,
+      "start_ms": 17000,
+      "text": "immediately.",
+      "text_end": 321,
+      "text_start": 309
     }
   ]
 }

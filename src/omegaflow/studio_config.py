@@ -19,6 +19,8 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
+from .presentation_schema import PlayerToolbarControl
+
 
 @dataclass(frozen=True)
 class ProjectLayout:
@@ -262,6 +264,7 @@ class StudioConfig:
     headed: bool = False
     force: bool = False
     open: bool = True
+    autoplay: bool = True
     watch_port: int | None = None
     run_id: str | None = None
     runs_since: str | None = None
@@ -454,6 +457,7 @@ class BrowserPresentationConfig:
 
 @dataclass
 class RecordingPresentationConfig:
+    guided: bool = False
     browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
 
 
@@ -584,6 +588,12 @@ class BrowserViewportPointConfig:
 class BrowserMovePointerConfig:
     viewport: BrowserViewportPointConfig | None = None
     target: BrowserTargetConfig | None = None
+    position: BrowserViewportPointConfig | None = None
+
+
+@dataclass
+class BrowserSetPointerConfig:
+    visible: bool = True
 
 
 @dataclass
@@ -636,6 +646,7 @@ class BrowserActionConfig:
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
@@ -675,6 +686,7 @@ class RecordingActionConfig(RecordingStepConfig):
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
@@ -721,6 +733,18 @@ class TerminalEffectConfig:
 
 
 @dataclass
+class PlayerToolbarHighlightConfig:
+    control: PlayerToolbarControl | None = None
+    start: str = ""
+    end: str | None = None
+
+
+@dataclass
+class BeatPlayerConfig:
+    highlight: PlayerToolbarHighlightConfig | None = None
+
+
+@dataclass
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
@@ -731,6 +755,7 @@ class RecordingBeatConfig:
     caption: str | None = None
     viewer_hold: float | None = None
     pointer: BrowserPointerPresentationConfig | None = None
+    player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
     effects: list[TerminalEffectConfig] = field(default_factory=list)
@@ -852,6 +877,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     BrowserClickConfig,
     BrowserViewportPointConfig,
     BrowserMovePointerConfig,
+    BrowserSetPointerConfig,
     BrowserSecretConfig,
     BrowserFillConfig,
     BrowserTypeKeysConfig,
@@ -868,6 +894,8 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingGuideConfig,
     TerminalTextHighlightConfig,
     TerminalEffectConfig,
+    PlayerToolbarHighlightConfig,
+    BeatPlayerConfig,
     RecordingBeatConfig,
     RecordingDefaults,
     RecordingSourceSpec,

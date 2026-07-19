@@ -311,7 +311,8 @@ Each action has an `id` and exactly one operation:
 | --- | --- |
 | `open_page` | Navigate, optionally show loading, and wait for a readiness boundary. |
 | `click` | Click a semantic target. |
-| `move_pointer` | Move the pointer to viewport-relative coordinates or the center of a semantic target. |
+| `move_pointer` | Move the pointer to viewport-relative coordinates or a normalized position within a semantic target. |
+| `set_pointer` | Show or hide the recorded pointer without moving it. |
 | `fill` | Set a field efficiently; this is the default for text entry. |
 | `type_keys` | Fall back to physical key events when a site rejects fill or paste. |
 | `press` | Send a key or shortcut, optionally to a target. |
@@ -330,8 +331,8 @@ viewport. Both coordinates are normalized from `0` to `1`:
     viewport: {x: 0.4, y: 0.12}
 ```
 
-Use `move_pointer.target` to resolve one visible DOM element and move to its
-center:
+Use `move_pointer.target` to resolve one visible DOM element. It moves to the
+center by default:
 
 ```yaml
 - id: point-at-submit
@@ -339,10 +340,33 @@ center:
     target: {role: button, name: Submit}
 ```
 
+Add normalized `position` coordinates to choose a point within that element;
+`{x: 0, y: 0}` is its top-left and `{x: 1, y: 1}` is its bottom-right:
+
+```yaml
+- id: point-inside-timeline-section
+  move_pointer:
+    target: {test_id: timeline-section}
+    position: {x: 0.5, y: 0.5}
+```
+
 Pointer moves use the same deterministic motion as the movement before a
 click. The common action fields `after`, `hold_before_ms`, and `hold_after_ms`
 can synchronize the move with narration, pause before it starts, and keep the
 pointer at its destination.
+
+Use `set_pointer` when the pointer should appear only for a specific part of a
+browser beat:
+
+```yaml
+- id: show-pointer
+  set_pointer: {visible: true}
+- id: point-at-submit
+  move_pointer:
+    target: {role: button, name: Submit}
+- id: hide-pointer
+  set_pointer: {visible: false}
+```
 
 `hold_before_ms` and `hold_after_ms` are presentation timing: they do not slow
 down browser capture or require recapturing the page. A changed hold recompiles
@@ -431,6 +455,33 @@ guide:
   - omegaflow recording=hello
   success_hint: The build writes video assets and publish surfaces.
 ```
+
+Set `presentation.guided: true` in recording configuration to start the player
+in guided mode. The player pauses at each guided checkpoint before the next
+beat is rendered. Viewers can turn guided mode off for later checkpoints; the
+checkpoint already on screen remains until they continue or restart it.
+
+### Highlight a player control
+
+Use `player.highlight` to draw attention to one toolbar control while its beat
+is playing. `start` and optional `end` reference narration anchors, so the cue
+stays synchronized if the narration is regenerated. Without `end`, the cue
+lasts through the end of the beat.
+
+```yaml
+narration: >-
+  This video runs in @guided_start@ guided mode. @guided_end@
+player:
+  highlight:
+    control: guided
+    start: "@guided_start@"
+    end: "@guided_end@"
+```
+
+Supported controls are `previous`, `play`, `restart`, `next`, `guided`, `speed`,
+and `mute`. Clicking the highlighted control dismisses its cue, and moving to
+the next beat clears it. Player highlights require `audio.enabled: true`
+because their timing comes from narration timestamps.
 
 ## Schema
 
@@ -549,6 +600,7 @@ class BrowserViewportPointConfig:
 class BrowserMovePointerConfig:
     viewport: BrowserViewportPointConfig | None = None
     target: BrowserTargetConfig | None = None
+    position: BrowserViewportPointConfig | None = None
 
 
 @dataclass
@@ -601,6 +653,7 @@ class BrowserActionConfig:
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
@@ -640,6 +693,7 @@ class RecordingActionConfig(RecordingStepConfig):
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
     press: BrowserPressConfig | None = None
@@ -696,6 +750,7 @@ class RecordingBeatConfig:
     caption: str | None = None
     viewer_hold: float | None = None
     pointer: BrowserPointerPresentationConfig | None = None
+    player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
     effects: list[TerminalEffectConfig] = field(default_factory=list)

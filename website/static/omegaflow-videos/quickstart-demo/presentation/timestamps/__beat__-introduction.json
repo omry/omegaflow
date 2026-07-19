@@ -1,0 +1,361 @@
+{
+  "anchors": [
+    {
+      "beat_id": "introduction",
+      "id": "guided_mode_start",
+      "source_ms": 10860,
+      "text_offset": 149
+    }
+  ],
+  "duration_ms": 19608,
+  "members": [
+    {
+      "beat_id": "introduction",
+      "source_end_ms": 19608,
+      "source_start_ms": 0,
+      "text_end": 282,
+      "text_start": 0
+    }
+  ],
+  "take_id": "__beat__:introduction",
+  "version": 1,
+  "waits": [],
+  "words": [
+    {
+      "end_ms": 420,
+      "start_ms": 0,
+      "text": "This",
+      "text_end": 4,
+      "text_start": 0
+    },
+    {
+      "end_ms": 920,
+      "start_ms": 420,
+      "text": "quickstart",
+      "text_end": 15,
+      "text_start": 5
+    },
+    {
+      "end_ms": 1480,
+      "start_ms": 920,
+      "text": "shows",
+      "text_end": 21,
+      "text_start": 16
+    },
+    {
+      "end_ms": 1720,
+      "start_ms": 1480,
+      "text": "how",
+      "text_end": 25,
+      "text_start": 22
+    },
+    {
+      "end_ms": 2380,
+      "start_ms": 1720,
+      "text": "to",
+      "text_end": 28,
+      "text_start": 26
+    },
+    {
+      "end_ms": 2381,
+      "start_ms": 2380,
+      "text": "install",
+      "text_end": 36,
+      "text_start": 29
+    },
+    {
+      "end_ms": 3080,
+      "start_ms": 2381,
+      "text": "OmegaFlow,",
+      "text_end": 47,
+      "text_start": 37
+    },
+    {
+      "end_ms": 3900,
+      "start_ms": 3840,
+      "text": "set",
+      "text_end": 51,
+      "text_start": 48
+    },
+    {
+      "end_ms": 4060,
+      "start_ms": 3900,
+      "text": "up",
+      "text_end": 54,
+      "text_start": 52
+    },
+    {
+      "end_ms": 4260,
+      "start_ms": 4060,
+      "text": "a",
+      "text_end": 56,
+      "text_start": 55
+    },
+    {
+      "end_ms": 4620,
+      "start_ms": 4260,
+      "text": "recording",
+      "text_end": 66,
+      "text_start": 57
+    },
+    {
+      "end_ms": 5200,
+      "start_ms": 4620,
+      "text": "workspace,",
+      "text_end": 77,
+      "text_start": 67
+    },
+    {
+      "end_ms": 6021,
+      "start_ms": 6020,
+      "text": "build",
+      "text_end": 83,
+      "text_start": 78
+    },
+    {
+      "end_ms": 6260,
+      "start_ms": 6021,
+      "text": "a",
+      "text_end": 85,
+      "text_start": 84
+    },
+    {
+      "end_ms": 6700,
+      "start_ms": 6260,
+      "text": "two-section",
+      "text_end": 97,
+      "text_start": 86
+    },
+    {
+      "end_ms": 7040,
+      "start_ms": 6700,
+      "text": "video,",
+      "text_end": 104,
+      "text_start": 98
+    },
+    {
+      "end_ms": 7800,
+      "start_ms": 7360,
+      "text": "and",
+      "text_end": 108,
+      "text_start": 105
+    },
+    {
+      "end_ms": 7940,
+      "start_ms": 7800,
+      "text": "play",
+      "text_end": 113,
+      "text_start": 109
+    },
+    {
+      "end_ms": 8100,
+      "start_ms": 7940,
+      "text": "it",
+      "text_end": 116,
+      "text_start": 114
+    },
+    {
+      "end_ms": 8220,
+      "start_ms": 8100,
+      "text": "in",
+      "text_end": 119,
+      "text_start": 117
+    },
+    {
+      "end_ms": 8700,
+      "start_ms": 8220,
+      "text": "a",
+      "text_end": 121,
+      "text_start": 120
+    },
+    {
+      "end_ms": 8701,
+      "start_ms": 8700,
+      "text": "browser.",
+      "text_end": 130,
+      "text_start": 122
+    },
+    {
+      "end_ms": 9660,
+      "start_ms": 9440,
+      "text": "This",
+      "text_end": 135,
+      "text_start": 131
+    },
+    {
+      "end_ms": 10000,
+      "start_ms": 9660,
+      "text": "video",
+      "text_end": 141,
+      "text_start": 136
+    },
+    {
+      "end_ms": 10340,
+      "start_ms": 10000,
+      "text": "runs",
+      "text_end": 146,
+      "text_start": 142
+    },
+    {
+      "end_ms": 10860,
+      "start_ms": 10340,
+      "text": "in",
+      "text_end": 149,
+      "text_start": 147
+    },
+    {
+      "end_ms": 10920,
+      "start_ms": 10860,
+      "text": "guided",
+      "text_end": 156,
+      "text_start": 150
+    },
+    {
+      "end_ms": 11240,
+      "start_ms": 10920,
+      "text": "mode,",
+      "text_end": 162,
+      "text_start": 157
+    },
+    {
+      "end_ms": 12160,
+      "start_ms": 11420,
+      "text": "which",
+      "text_end": 168,
+      "text_start": 163
+    },
+    {
+      "end_ms": 12260,
+      "start_ms": 12160,
+      "text": "pauses",
+      "text_end": 175,
+      "text_start": 169
+    },
+    {
+      "end_ms": 12680,
+      "start_ms": 12260,
+      "text": "after",
+      "text_end": 181,
+      "text_start": 176
+    },
+    {
+      "end_ms": 13080,
+      "start_ms": 12680,
+      "text": "each",
+      "text_end": 186,
+      "text_start": 182
+    },
+    {
+      "end_ms": 13360,
+      "start_ms": 13080,
+      "text": "section.",
+      "text_end": 195,
+      "text_start": 187
+    },
+    {
+      "end_ms": 14500,
+      "start_ms": 14340,
+      "text": "To",
+      "text_end": 198,
+      "text_start": 196
+    },
+    {
+      "end_ms": 14740,
+      "start_ms": 14500,
+      "text": "watch",
+      "text_end": 204,
+      "text_start": 199
+    },
+    {
+      "end_ms": 15080,
+      "start_ms": 14740,
+      "text": "without",
+      "text_end": 212,
+      "text_start": 205
+    },
+    {
+      "end_ms": 15500,
+      "start_ms": 15080,
+      "text": "pauses,",
+      "text_end": 220,
+      "text_start": 213
+    },
+    {
+      "end_ms": 16200,
+      "start_ms": 16140,
+      "text": "turn",
+      "text_end": 225,
+      "text_start": 221
+    },
+    {
+      "end_ms": 16520,
+      "start_ms": 16200,
+      "text": "off",
+      "text_end": 229,
+      "text_start": 226
+    },
+    {
+      "end_ms": 16780,
+      "start_ms": 16520,
+      "text": "Guided",
+      "text_end": 236,
+      "text_start": 230
+    },
+    {
+      "end_ms": 17120,
+      "start_ms": 16780,
+      "text": "mode",
+      "text_end": 241,
+      "text_start": 237
+    },
+    {
+      "end_ms": 17640,
+      "start_ms": 17120,
+      "text": "using",
+      "text_end": 247,
+      "text_start": 242
+    },
+    {
+      "end_ms": 18000,
+      "start_ms": 17640,
+      "text": "the",
+      "text_end": 251,
+      "text_start": 248
+    },
+    {
+      "end_ms": 18060,
+      "start_ms": 18000,
+      "text": "button",
+      "text_end": 258,
+      "text_start": 252
+    },
+    {
+      "end_ms": 18300,
+      "start_ms": 18060,
+      "text": "in",
+      "text_end": 261,
+      "text_start": 259
+    },
+    {
+      "end_ms": 18580,
+      "start_ms": 18300,
+      "text": "the",
+      "text_end": 265,
+      "text_start": 262
+    },
+    {
+      "end_ms": 18640,
+      "start_ms": 18580,
+      "text": "player",
+      "text_end": 272,
+      "text_start": 266
+    },
+    {
+      "end_ms": 19100,
+      "start_ms": 18640,
+      "text": "controls.",
+      "text_end": 282,
+      "text_start": 273
+    }
+  ]
+}

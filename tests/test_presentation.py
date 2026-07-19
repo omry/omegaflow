@@ -169,6 +169,35 @@ def test_manifest_validates_paths_assets_payloads_and_audio(tmp_path: Path) -> N
     assert parsed.audio is not None
 
 
+def test_manifest_audio_source_gap_reports_when_presentation_gap_is_too_short(
+    tmp_path: Path,
+) -> None:
+    manifest = write_browser_bundle(tmp_path, with_audio=True)
+    manifest["audio"]["intervals"] = [
+        {
+            "presentation_start_ms": 100,
+            "presentation_end_ms": 250,
+            "source_start_ms": 0,
+            "source_end_ms": 150,
+        },
+        {
+            "presentation_start_ms": 275,
+            "presentation_end_ms": 475,
+            "source_start_ms": 200,
+            "source_end_ms": 400,
+        },
+    ]
+
+    with pytest.raises(
+        PresentationValidationError,
+        match=(
+            r"manifest audio\.intervals\.1 source gap is 50ms but "
+            r"presentation gap is only 25ms"
+        ),
+    ):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
 @pytest.mark.parametrize(
     "path",
     ["/absolute/file", "../escape", "beats/../escape", "beats//payload.json", "a\\b"],
@@ -190,11 +219,14 @@ def test_manifest_rejects_timing_and_asset_integrity_errors(tmp_path: Path) -> N
         validate_presentation_manifest(manifest, manifest_dir=tmp_path / "second")
 
 
-def test_manifest_rejects_audio_source_gaps(tmp_path: Path) -> None:
+def test_manifest_rejects_mismatched_audio_interval_durations(tmp_path: Path) -> None:
     manifest = write_browser_bundle(tmp_path, with_audio=True)
     manifest["audio"]["intervals"][0]["source_start_ms"] = 1
 
-    with pytest.raises(PresentationValidationError, match="not a valid mapping"):
+    with pytest.raises(
+        PresentationValidationError,
+        match="presentation duration is 400ms but source duration is 399ms",
+    ):
         validate_presentation_manifest(manifest, manifest_dir=tmp_path)
 
 
@@ -203,4 +235,67 @@ def test_manifest_rejects_invalid_renderer_presentation_header(tmp_path: Path) -
     manifest["presentation"]["browser"]["chrome"]["mode"] = "captured"
 
     with pytest.raises(PresentationValidationError, match="chrome.mode is invalid"):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
+def test_manifest_presentation_header_accepts_typed_guided_default(tmp_path: Path) -> None:
+    manifest = write_browser_bundle(tmp_path)
+    manifest["presentation"]["guided"] = True
+
+    validated = validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    assert validated.presentation.guided is True
+
+    manifest["presentation"]["guided"] = "true"
+    with pytest.raises(PresentationValidationError, match="guided must be a boolean"):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
+def test_manifest_guide_preserves_typed_commands(tmp_path: Path) -> None:
+    manifest = write_browser_bundle(tmp_path)
+    manifest["beats"][0]["guide"] = {
+        "commands": ["python -m pip install omegaflow"],
+        "success_hint": "Install OmegaFlow.",
+    }
+
+    validated = validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    assert validated.beats[0].guide is not None
+    assert validated.beats[0].guide.commands == [
+        "python -m pip install omegaflow"
+    ]
+
+    manifest["beats"][0]["guide"]["commands"] = [""]
+    with pytest.raises(PresentationValidationError, match="guide.commands.0"):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
+def test_manifest_beat_accepts_only_known_player_toolbar_controls(tmp_path: Path) -> None:
+    manifest = write_browser_bundle(tmp_path)
+    manifest["beats"][0]["player"] = {
+        "highlight": {
+            "control": "guided",
+            "start_ms": 200,
+            "end_ms": 1000,
+        }
+    }
+
+    validated = validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    assert validated.beats[0].player is not None
+    assert validated.beats[0].player.highlight is not None
+    assert validated.beats[0].player.highlight.control == "guided"
+    assert validated.beats[0].player.highlight.start_ms == 200
+    assert validated.beats[0].player.highlight.end_ms == 1000
+
+    manifest["beats"][0]["player"]["highlight"]["control"] = "download"
+    with pytest.raises(
+        PresentationValidationError,
+        match="player.highlight.control is invalid",
+    ):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    manifest["beats"][0]["player"]["highlight"]["control"] = "guided"
+    manifest["beats"][0]["player"]["highlight"]["end_ms"] = 1500
+    with pytest.raises(PresentationValidationError, match="highlight timing is invalid"):
         validate_presentation_manifest(manifest, manifest_dir=tmp_path)

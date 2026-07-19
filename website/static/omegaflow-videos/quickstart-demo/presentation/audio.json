@@ -1,7 +1,23 @@
 {
-  "duration_ms": 57240,
+  "duration_ms": 97920,
   "recording": "quickstart-demo",
   "takes": [
+    {
+      "id": "__beat__:introduction",
+      "members": [
+        {
+          "beat_id": "introduction",
+          "text": "This quickstart shows how to install OmegaFlow, set up a recording workspace, build a two-section video, and play it in a browser. This video runs in guided mode, which pauses after each section. To watch without pauses, turn off Guided mode using the button in the player controls.",
+          "text_end": 282,
+          "text_start": 0
+        }
+      ],
+      "sha256": "181fef53d9dcbe86393fe90adaff29905b8847beb6c6cfa2ca3b54fee0c64896",
+      "source_end_ms": 19608,
+      "source_start_ms": 0,
+      "src": "audio/__beat__-introduction-181fef53d9dcbe86393fe90adaff29905b8847beb6c6cfa2ca3b54fee0c64896.mp3",
+      "timestamps": "timestamps/__beat__-introduction.json"
+    },
     {
       "id": "__beat__:install",
       "members": [
@@ -12,10 +28,10 @@
           "text_start": 0
         }
       ],
-      "sha256": "0322fc9a08605d581204db5fd86bacf4eee0365785746b28dae1a2979ec47210",
-      "source_end_ms": 13920,
-      "source_start_ms": 0,
-      "src": "audio/__beat__-install-0322fc9a08605d581204db5fd86bacf4eee0365785746b28dae1a2979ec47210.mp3",
+      "sha256": "3331ea898b07d91804c094c49765e56181bbddaa33ffb5f31ecac67664636714",
+      "source_end_ms": 34512,
+      "source_start_ms": 19608,
+      "src": "audio/__beat__-install-3331ea898b07d91804c094c49765e56181bbddaa33ffb5f31ecac67664636714.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -23,15 +39,15 @@
       "members": [
         {
           "beat_id": "bootstrap",
-          "text": "From your repository root, run bootstrap to set up the recording workspace. The command creates the project settings and recording defaults, along with an OmegaFlow quickstart video script you can run immediately.",
-          "text_end": 213,
+          "text": "We'll now prepare your recording workspace. This is a one-time setup for each recording environment, and you can commit the generated files to version control. From your repository root, run the bootstrap command. It creates the project settings, recording defaults, and a quickstart video script you can run immediately.",
+          "text_end": 321,
           "text_start": 0
         }
       ],
-      "sha256": "bbe879f7463ccdefb7a069a05d05e361c37c8d91e64b62e31f9c09fa356167c4",
-      "source_end_ms": 26976,
-      "source_start_ms": 13920,
-      "src": "audio/__beat__-bootstrap-bbe879f7463ccdefb7a069a05d05e361c37c8d91e64b62e31f9c09fa356167c4.mp3",
+      "sha256": "b93fdc6871234732ae203f31de6d157e27e54ae4ebc2cbb9f99ebf0176864c01",
+      "source_end_ms": 52320,
+      "source_start_ms": 34512,
+      "src": "audio/__beat__-bootstrap-b93fdc6871234732ae203f31de6d157e27e54ae4ebc2cbb9f99ebf0176864c01.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -39,21 +55,21 @@
       "members": [
         {
           "beat_id": "build",
-          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch Hello World video. When the build finishes, run the follow-up watch command to open the video in a browser.",
+          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch two-section video. When the build finishes, run the follow-up watch command to open the video in a browser.",
           "text_end": 188,
           "text_start": 0
         },
         {
           "beat_id": "play-in-browser",
-          "text": "OmegaFlow can script and record browser workflows just as it does terminal workflows. The watch command opens the generated player in a browser, where this script plays the video we just created. A single OmegaFlow video can move between terminal and browser beats. To learn more, start the tutorial or read the docs.",
-          "text_end": 506,
+          "text": "An OmegaFlow video can move from terminal beats into browser beats. Here, OmegaFlow scripts and records browser workflows just as it does terminal workflows. The watch command opens the generated player in a browser, where this script opens the two-section video we just created. OmegaFlow divides every video into beats. This quickstart has two, titled First Video Beat and Second Video Beat. The player lets you preview a beat by hovering over its section of the timeline. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
+          "text_end": 760,
           "text_start": 189
         }
       ],
-      "sha256": "f27f9414eec05c833e6844d1890ed6235a01b8ff660eaf573d828bd405821eb0",
-      "source_end_ms": 57240,
-      "source_start_ms": 26976,
-      "src": "audio/build-and-browser-f27f9414eec05c833e6844d1890ed6235a01b8ff660eaf573d828bd405821eb0.mp3",
+      "sha256": "021b5d66069c4929ad30d65ad835062cfc3b79fe76f9dfe178c0bbd00abe4c14",
+      "source_end_ms": 97920,
+      "source_start_ms": 52320,
+      "src": "audio/build-and-browser-021b5d66069c4929ad30d65ad835062cfc3b79fe76f9dfe178c0bbd00abe4c14.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

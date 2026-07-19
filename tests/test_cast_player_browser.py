@@ -175,6 +175,198 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
         browser.close()
 
 
+def test_guided_checkpoint_renders_authored_commands(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["presentation"]["guided"] = True
+    manifest["beats"][0]["guide"] = {
+        "commands": ["python -m pip install omegaflow"],
+        "success_hint": "Install OmegaFlow.",
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#play").click()
+        page.locator("#guide:not([hidden])").wait_for(timeout=3000)
+
+        assert page.locator("#guide-command").text_content() == (
+            "python -m pip install omegaflow"
+        )
+        assert page.locator("#guide-copy").is_visible()
+        assert page.locator("#guide-summary").text_content() == (
+            "Run this command in your terminal before continuing."
+        )
+
+        page.locator("#guide").click(position={"x": 10, "y": 10})
+        continue_button = page.locator("#guide-continue")
+        play_button = page.locator("#play")
+        assert continue_button.get_attribute("data-resume-hint") == "true"
+        assert play_button.get_attribute("data-resume-hint") == "true"
+        assert continue_button.evaluate(
+            "element => getComputedStyle(element).outlineStyle"
+        ) == "solid"
+        assert play_button.evaluate(
+            "element => getComputedStyle(element).outlineStyle"
+        ) == "solid"
+
+        continue_button.click()
+        assert continue_button.get_attribute("data-resume-hint") is None
+        assert play_button.get_attribute("data-resume-hint") is None
+        browser.close()
+
+
+def test_guided_scrubber_click_only_snaps_after_crossing_checkpoint(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["presentation"]["guided"] = True
+    manifest["recording"]["duration_ms"] = 2400
+    next_payload = json.loads((tmp_path / "beats/browser.browser.json").read_text())
+    next_payload["beat_id"] = "second"
+    (tmp_path / "beats/second.browser.json").write_text(
+        json.dumps(next_payload), encoding="utf-8"
+    )
+    manifest["beats"].append(
+        {
+            "id": "second",
+            "heading": "Second step",
+            "renderer": "browser",
+            "offset_ms": 1200,
+            "duration_ms": 1200,
+            "payload": "beats/second.browser.json",
+            "guide": {"success_hint": "Second step complete."},
+            "transition_in": "cut",
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        progress = page.locator("#progress")
+
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "element => { element.value = String(1100 / 2400 * 1000); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }"
+        )
+        assert page.locator("#guide").is_hidden()
+        assert 450 <= int(progress.input_value()) <= 465
+
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "element => { element.value = String(1300 / 2400 * 1000); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }"
+        )
+        page.locator("#guide:not([hidden])").wait_for(timeout=1000)
+        assert int(progress.input_value()) == 500
+        browser.close()
+
+
+def test_guided_checkpoint_holds_outgoing_beat_before_transition(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["recording"]["duration_ms"] = 2400
+    manifest["presentation"]["guided"] = True
+    manifest["renderers"]["terminal"] = {"payload_version": 1}
+
+    (tmp_path / "beats/outgoing.cast").write_text(
+        '{"version":3,"term":{"cols":80,"rows":24}}\n'
+        '[0.0,"o","outgoing terminal beat"]\n',
+        encoding="utf-8",
+    )
+    manifest["beats"][0] = {
+        "id": "outgoing",
+        "heading": "Outgoing terminal step",
+        "renderer": "terminal",
+        "offset_ms": 0,
+        "duration_ms": 1200,
+        "payload": "beats/outgoing.cast",
+        "guide": {"commands": ["continue"]},
+        "transition_in": None,
+    }
+
+    next_payload = json.loads(
+        (tmp_path / "beats/browser.browser.json").read_text(encoding="utf-8")
+    )
+    next_payload["beat_id"] = "next"
+    next_payload["initial_display_url"] = "https://public.example/next"
+    next_payload["events"] = []
+    (tmp_path / "beats/next.browser.json").write_text(
+        json.dumps(next_payload), encoding="utf-8"
+    )
+    manifest["beats"].append(
+        {
+            "id": "next",
+            "heading": "Next step",
+            "renderer": "browser",
+            "offset_ms": 1200,
+            "duration_ms": 1200,
+            "payload": "beats/next.browser.json",
+            "guide": None,
+            "transition_in": "cut",
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        progress = page.locator("#progress")
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "element => { element.value = '500'; "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }"
+        )
+        page.locator("#guide:not([hidden])").wait_for(timeout=3000)
+
+        assert page.locator("#terminal").is_visible()
+        assert page.locator("#terminal").text_content() == (
+            "outgoing terminal beat"
+        )
+        assert page.locator("#browser-stage").is_hidden()
+        boundary_markers = page.locator(
+            '.section-marker[data-start="1.2"]'
+        )
+        assert boundary_markers.count() == 1
+
+        page.locator("#guide-continue").click()
+        page.locator("#browser-stage").wait_for(state="visible", timeout=1000)
+        assert page.locator(".browser-chrome-url:visible").text_content() == (
+            "https://public.example/next"
+        )
+        browser.close()
+
+
 def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path) -> None:
     sync_api = pytest.importorskip("playwright.sync_api")
     write_browser_player_fixture(tmp_path)
@@ -205,6 +397,167 @@ def test_embedded_wide_browser_layout_resizes_the_complete_window(tmp_path: Path
         assert resized is not None and viewport is not None
         assert resized["width"] > initial["width"] * 1.4
         assert viewport["width"] > 0
+        browser.close()
+
+
+def test_player_toolbar_highlight_clears_on_control_click_or_next_beat(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["recording"]["duration_ms"] = 2400
+    manifest["presentation"]["guided"] = True
+    manifest["beats"][0]["player"] = {
+        "highlight": {"control": "guided", "start_ms": 300, "end_ms": 1200}
+    }
+    second_payload_path = tmp_path / "beats/next.browser.json"
+    second_payload = json.loads(
+        (tmp_path / "beats/browser.browser.json").read_text(encoding="utf-8")
+    )
+    second_payload["beat_id"] = "next"
+    second_payload_path.write_text(json.dumps(second_payload), encoding="utf-8")
+    manifest["beats"].append(
+        {
+            **manifest["beats"][0],
+            "id": "next",
+            "heading": "Next step",
+            "offset_ms": 1200,
+            "payload": "beats/next.browser.json",
+            "player": None,
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 700})
+        player_url = (
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.goto(player_url)
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        guided = page.locator("#guided")
+        assert guided.get_attribute("data-highlighted") is None
+
+        page.locator("#play").click()
+        page.wait_for_function(
+            "document.querySelector('#guided').hasAttribute('data-highlighted')"
+        )
+        assert guided.evaluate("element => getComputedStyle(element).outlineStyle") == (
+            "solid"
+        )
+        assert guided.evaluate(
+            "element => getComputedStyle(element, '::after').content"
+        ) not in {"none", "normal"}
+        guided.click()
+        assert guided.get_attribute("data-highlighted") is None
+
+        page.reload()
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        guided = page.locator("#guided")
+        assert guided.get_attribute("data-highlighted") is None
+        page.locator("#play").click()
+        page.wait_for_function(
+            "document.querySelector('#guided').hasAttribute('data-highlighted')"
+        )
+        page.locator("#guide:not([hidden])").wait_for(timeout=3000)
+        assert guided.get_attribute("data-highlighted") == "true"
+        checkpoint_clock = page.locator("#clock").text_content()
+        guided.click()
+        assert guided.get_attribute("aria-pressed") == "false"
+        assert page.locator("#guide").is_visible()
+        assert page.locator("#play").get_attribute("aria-label") == "Continue"
+        page.wait_for_timeout(150)
+        assert page.locator("#clock").text_content() == checkpoint_clock
+        page.locator("#guide-continue").click()
+        page.wait_for_function(
+            "!document.querySelector('#guided').hasAttribute('data-highlighted')"
+        )
+        assert guided.get_attribute("data-highlighted") is None
+        browser.close()
+
+
+def test_toolbar_controls_show_deterministic_tooltips(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        rate = page.locator("#rate")
+
+        rate.hover()
+        page.wait_for_function(
+            "getComputedStyle(document.querySelector('#rate'), '::before').opacity === '1'"
+        )
+
+        assert rate.get_attribute("data-tooltip") == (
+            "Playback speed: 1× (left-click next, right-click previous)"
+        )
+        assert rate.get_attribute("title") is None
+        assert rate.evaluate(
+            "element => getComputedStyle(element, '::before').opacity"
+        ) == "1"
+        browser.close()
+
+
+def test_hovering_each_scrubber_section_shows_its_heading(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["recording"]["duration_ms"] = 2400
+    next_payload = json.loads((tmp_path / "beats/browser.browser.json").read_text())
+    next_payload["beat_id"] = "controls"
+    (tmp_path / "beats/controls.browser.json").write_text(
+        json.dumps(next_payload), encoding="utf-8"
+    )
+    manifest["beats"].append(
+        {
+            "id": "controls",
+            "heading": "Control Playback",
+            "renderer": "browser",
+            "offset_ms": 1200,
+            "duration_ms": 1200,
+            "payload": "beats/controls.browser.json",
+            "guide": None,
+            "transition_in": "cut",
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        for test_id, heading in (
+            ("section-region-browser", "Browser step"),
+            ("section-region-controls", "Control Playback"),
+        ):
+            region = page.get_by_test_id(test_id)
+            bounds = region.bounding_box()
+            assert bounds is not None
+            page.mouse.move(
+                bounds["x"] + bounds["width"] / 2,
+                bounds["y"] + bounds["height"] / 2,
+            )
+            tooltip = page.locator("#section-tooltip:not([hidden])")
+            tooltip.wait_for(timeout=1000)
+            assert tooltip.text_content() == heading
+
         browser.close()
 
 
@@ -364,7 +717,60 @@ def test_playback_completion_renders_the_exact_final_browser_state(
         browser.close()
 
 
-def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
+def test_homepage_quickstart_checkpoint_holds_terminal_before_browser() -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    static_root = REPO_ROOT / "website" / "static"
+    manifest = (
+        "/omegaflow-videos/quickstart-demo/presentation/"
+        "recording.presentation.json"
+    )
+    manifest_data = json.loads(
+        (static_root / manifest.removeprefix("/")).read_text(encoding="utf-8")
+    )
+    build_beat = next(
+        beat for beat in manifest_data["beats"] if beat["id"] == "build"
+    )
+    build_checkpoint_ms = build_beat["offset_ms"] + build_beat["duration_ms"]
+    assert any(
+        interval["presentation_start_ms"] < build_checkpoint_ms
+        < interval["presentation_end_ms"]
+        for interval in manifest_data["audio"]["intervals"]
+    )
+
+    with player_site(static_root) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 700})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest={manifest}"
+            "&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        progress = page.locator("#progress")
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "(element, value) => { element.value = String(value); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }",
+            round(
+                (build_checkpoint_ms - 3500)
+                / manifest_data["recording"]["duration_ms"]
+                * 1000
+            ),
+        )
+        page.locator("#play").click()
+        page.locator("#guide:not([hidden])").wait_for(timeout=5000)
+        assert page.locator("#guide-title").text_content() == (
+            "Checkpoint: Build The Video"
+        )
+        assert page.locator("#terminal").is_visible()
+        assert page.locator("#browser-stage").is_hidden()
+
+        page.locator("#guide-continue").click()
+        page.locator("#browser-stage").wait_for(state="visible", timeout=1500)
+        browser.close()
+
+
+def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> None:
     sync_api = pytest.importorskip("playwright.sync_api")
     static_root = REPO_ROOT / "website" / "static"
     manifest = (
@@ -403,25 +809,28 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             "&embed=1&layout=wide-browser"
         )
         page.wait_for_function("!document.querySelector('#play').disabled")
+        assert page.locator("#guided").get_attribute("aria-pressed") == "true"
+        assert page.locator("#guided").get_attribute("aria-label") == "Guided mode on"
+        assert page.locator("#guided").get_attribute("data-highlighted") is None
         manifest_data = json.loads(
             (static_root / manifest.removeprefix("/")).read_text(encoding="utf-8")
         )
-        browser_beat = next(
-            beat for beat in manifest_data["beats"] if beat["renderer"] == "browser"
+        install_beat = next(
+            beat for beat in manifest_data["beats"] if beat["id"] == "install"
         )
-        browser_payload = json.loads(
-            (static_root / "omegaflow-videos/quickstart-demo/presentation"
-             / browser_beat["payload"]).read_text(encoding="utf-8")
+        assert install_beat["guide"] == {
+            "commands": ["python -m pip install omegaflow"],
+            "success_hint": (
+                "Install OmegaFlow in your project's Python environment."
+            ),
+        }
+        intro_beat = manifest_data["beats"][0]
+        intro_highlight = intro_beat["player"]["highlight"]
+        cue_seek_ms = (
+            intro_beat["offset_ms"] + intro_highlight["start_ms"] + 100
         )
-        clip_events = [
-            event for event in browser_payload["events"] if event["kind"] == "clip"
-        ]
-        assert len(clip_events) == 1
-        captured_clip = clip_events[0]
-        clip_sample_ms = captured_clip["at_ms"] + 100
-        clip_seek_ms = browser_beat["offset_ms"] + clip_sample_ms
-        progress_value = round(
-            clip_seek_ms / manifest_data["recording"]["duration_ms"] * 1000
+        cue_progress_value = round(
+            cue_seek_ms / manifest_data["recording"]["duration_ms"] * 1000
         )
         progress = page.locator("#progress")
         progress.dispatch_event("pointerdown")
@@ -429,98 +838,77 @@ def test_homepage_quickstart_bundle_loads_browser_beat_at_end() -> None:
             "(element, value) => { element.value = String(value); "
             "element.dispatchEvent(new Event('input', {bubbles: true})); "
             "element.dispatchEvent(new Event('change', {bubbles: true})); }",
+            cue_progress_value,
+        )
+        assert page.locator("#guided").get_attribute("data-highlighted") == "true"
+        assert page.locator("#guided").evaluate(
+            "element => getComputedStyle(element).outlineStyle"
+        ) == "solid"
+        browser_beat = next(
+            beat for beat in manifest_data["beats"] if beat["renderer"] == "browser"
+        )
+        browser_payload = json.loads(
+            (static_root / "omegaflow-videos/quickstart-demo/presentation"
+             / browser_beat["payload"]).read_text(encoding="utf-8")
+        )
+        assert browser_beat["player"] is None
+        assert browser_payload["initial_pointer"] == {
+            "x": 576.0,
+            "y": 180.0,
+            "visible": False,
+        }
+        pointer_visibility = [
+            (event["action_id"], event["visible"])
+            for event in browser_payload["events"]
+            if event["kind"] == "pointer_visibility"
+        ]
+        assert pointer_visibility == [
+            ("show_pointer", True),
+            ("hide_pointer", False),
+        ]
+        speed_clicks = [
+            event
+            for event in browser_payload["events"]
+            if event["kind"] == "click"
+            and event["action_id"] in {"increase_speed", "restore_speed"}
+        ]
+        assert [event["button"] for event in speed_clicks] == ["left", "right"]
+        first_visual_ms = min(
+            event["at_ms"]
+            for event in browser_payload["events"]
+            if event["kind"] in {"state", "clip", "scroll"}
+        )
+        assert first_visual_ms >= 350
+        assert not any(
+            event["kind"] == "clip" for event in browser_payload["events"]
+        )
+        second_preview = next(
+            event
+            for event in browser_payload["events"]
+            if event["kind"] == "state"
+            and event["action_id"] == "preview_playback_section"
+        )
+        preview_seek_ms = browser_beat["offset_ms"] + second_preview["at_ms"]
+        progress_value = round(
+            preview_seek_ms / manifest_data["recording"]["duration_ms"] * 1000
+        )
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "(element, value) => { element.value = String(value); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }",
             progress_value,
         )
-        active_clip = page.locator(".browser-clip:not([hidden])")
-        active_clip.wait_for()
-        active_clip.evaluate(
-            "clip => { "
-            "clip.__testMediaEvents = {play: 0, pause: 0, seeking: 0}; "
-            "clip.__testHiddenMutations = 0; "
-            "new MutationObserver(records => { "
-            "clip.__testHiddenMutations += records.length; "
-            "}).observe(clip, {attributes: true, attributeFilter: ['hidden']}); "
-            "for (const name of ['play', 'pause', 'seeking']) { "
-            "clip.addEventListener(name, () => clip.__testMediaEvents[name] += 1); "
-            "} }"
-        )
-        captured_clips = page.locator(".browser-clip")
-        assert captured_clips.count() == 1
-        early_frame = active_clip.screenshot()
-        initial_clip_time = active_clip.evaluate("clip => clip.currentTime")
-        page.locator("#play").click()
-        page.wait_for_function(
-            "initial => document.querySelector('.browser-clip:not([hidden])')"
-            ".currentTime > initial + 1.1",
-            arg=initial_clip_time,
-        )
-        countdown_frame = active_clip.screenshot()
-        assert countdown_frame != early_frame
-        clip_playback = active_clip.evaluate(
-            "clip => ({paused: clip.paused, currentTime: clip.currentTime, "
-            "events: clip.__testMediaEvents})"
-        )
-        assert clip_playback["paused"] is False
-        assert clip_playback["events"]["play"] == 1
-        assert clip_playback["events"]["pause"] == 0
-        assert clip_playback["events"]["seeking"] <= 1
-        final_clip_element = active_clip.element_handle()
-        assert final_clip_element is not None
-        page.wait_for_function(
-            "() => document.querySelector('.browser-clip').hidden",
-            timeout=12000,
-        )
-        completed_clip = final_clip_element.evaluate(
-            "clip => ({hidden: clip.hidden, paused: clip.paused, "
-            "events: {...clip.__testMediaEvents}, "
-            "hiddenMutations: clip.__testHiddenMutations})"
-        )
-        page.wait_for_timeout(400)
-        held_clip = final_clip_element.evaluate(
-            "clip => ({hidden: clip.hidden, paused: clip.paused, "
-            "events: {...clip.__testMediaEvents}, "
-            "hiddenMutations: clip.__testHiddenMutations})"
-        )
-        final_clip_index = browser_payload["events"].index(captured_clip)
-        final_state = browser_payload["events"][final_clip_index + 1]
-        assert final_state["kind"] == "state"
-        final_state_path = manifest_data["assets"][final_state["asset"]]["path"]
+        assert page.locator("#guided").get_attribute("data-highlighted") is None
         visible_state = page.locator(".browser-state-primary:not([hidden])")
         assert urlparse(visible_state.get_attribute("src")).path.endswith(
-            "/omegaflow-videos/quickstart-demo/presentation/" + final_state_path
+            "/omegaflow-videos/quickstart-demo/presentation/"
+            + manifest_data["assets"][second_preview["asset"]]["path"]
         )
-        assert completed_clip["hidden"] is True
-        assert completed_clip["paused"] is True
-        assert held_clip == completed_clip
-        assert completed_clip["events"]["play"] == 1
-        assert completed_clip["events"]["pause"] <= 1
         diagnostics = page.evaluate(
             "() => window.__omegaflowMediaDiagnostics"
         )
-        beat_diagnostics = [
-            clip
-            for clip in diagnostics["clips"]
-            if clip["beatId"] == browser_beat["id"]
-        ]
-        assert diagnostics["version"] == 1
-        assert len(beat_diagnostics) == 1
-        assert all(clip["sampleCount"] > 0 for clip in beat_diagnostics)
-        attempted = [clip for clip in beat_diagnostics if clip["playAttempts"]]
-        assert attempted, [
-            (clip["assetId"], clip["sampleCount"], clip["playAttempts"])
-            for clip in beat_diagnostics
-        ]
-        assert all(
-            clip["playResolutions"] == clip["playAttempts"]
-            for clip in attempted
-        ), [
-            (clip["playAttempts"], clip["playResolutions"])
-            for clip in attempted
-        ]
-        assert all(not clip["playRejections"] for clip in beat_diagnostics)
-        assert beat_diagnostics[-1]["last"]["hidden"] is True
-        assert completed_clip["events"]["seeking"] <= 2
-        assert completed_clip["hiddenMutations"] <= 2
+        assert diagnostics is None
 
         page.locator("#progress").evaluate(
             "element => { element.value = '1000'; "

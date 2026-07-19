@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import html
 import http.server
 import io
@@ -280,6 +281,8 @@ RECORD_ACTIONS = {
     "output": "output",
 }
 WATCH_ARTIFACT_PREFIX = "/__studio_artifacts__/"
+WATCH_SNAPSHOT_PREFIX = "/__studio_snapshots__/"
+WATCH_ROUTE_PREFIX = "/watch/"
 WATCH_HOST = "127.0.0.1"
 TEXT_BROWSER_COMMANDS = {
     "elinks",
@@ -643,7 +646,7 @@ scene: {title}
 ```
 
 The scene is the title shown by the player. Beats are the steps in the video.
-This beat runs one self-contained command and checks its output.
+The two short beats make the generated player's section navigation easy to see.
 
 When you enable audio, narration anchors can synchronize words and commands.
 For example, put `@run_demo@` in the narration, set the command's `after` field
@@ -653,18 +656,30 @@ uses plain narration.
 
 ```yaml studio-directive
 beat:
-  id: show-message
-  heading: Run The Quickstart
-  narration: Run one inline command and verify its terminal output.
-  caption: A self-contained command with an expected output check.
+  id: first-video-beat
+  heading: First Video Beat
+  narration: This is the first beat in the generated quickstart video.
+  caption: The first beat in the quickstart video.
+  viewer_hold: 3
   actions:
   - commands:
-    - id: show_message
-      timing: realtime
-      run: for n in 3 2 1; do printf '%s\\n' "$n"; sleep 1; done; printf 'Hello World!\\n'
-      expect:
-        output_contains:
-        - Hello World!
+    - id: show_first_beat
+      run: "# First video beat"
+```
+
+The second beat adds another visible section to the player timeline.
+
+```yaml studio-directive
+beat:
+  id: second-video-beat
+  heading: Second Video Beat
+  narration: This is the second beat in the generated quickstart video.
+  caption: The second beat in the quickstart video.
+  viewer_hold: 4
+  actions:
+  - commands:
+    - id: show_second_beat
+      run: "# Second video beat"
 ```
 
 Publish surfaces in the header let the same recording write a standalone HTML
@@ -1357,14 +1372,86 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
         artifacts: dict[str, Path],
         directory: str,
         pages: dict[str, bytes] | None = None,
+        recordings: dict[str, dict[str, Any]] | None = None,
+        snapshot_artifacts: dict[str, dict[str, Path]] | None = None,
+        snapshot_lock: threading.RLock | None = None,
+        snapshot_directory: Path | None = None,
         **kwargs: Any,
     ) -> None:
         self.artifacts = artifacts
         self.pages = pages or {}
+        self.recording_routes = {
+            watch_recording_url_path(recording_id): spec
+            for recording_id, spec in (recordings or {}).items()
+        }
+        self.snapshot_artifacts = (
+            snapshot_artifacts if snapshot_artifacts is not None else {}
+        )
+        self.snapshot_lock = snapshot_lock or threading.RLock()
+        self.snapshot_directory = snapshot_directory
+        self.player_directory = Path(directory)
         super().__init__(*args, directory=directory, **kwargs)
+
+    def recording_route(
+        self,
+        request_path: str,
+    ) -> tuple[str, dict[str, Any]] | None:
+        recording_routes = getattr(self, "recording_routes", {})
+        for route in sorted(recording_routes, key=len, reverse=True):
+            if request_path.startswith(route):
+                return route, recording_routes[route]
+        return None
+
+    def redirect(self, location: str, *, status: int = 302) -> None:
+        self.send_response(status)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def redirect_to_latest_snapshot(self, spec: dict[str, Any]) -> None:
+        bundle, artifacts = watch_presentation_artifacts(spec)
+        token = watch_snapshot_token(artifacts)
+        with self.snapshot_lock:
+            if token not in self.snapshot_artifacts:
+                snapshot_bundle = bundle
+                if self.snapshot_directory is not None:
+                    snapshot_bundle = self.snapshot_directory / token
+                    if not snapshot_bundle.exists():
+                        try:
+                            shutil.copytree(
+                                bundle,
+                                snapshot_bundle,
+                                copy_function=shutil.copy2,
+                            )
+                        except BaseException:
+                            shutil.rmtree(snapshot_bundle, ignore_errors=True)
+                            raise
+                self.snapshot_artifacts[token] = {
+                    path.relative_to(snapshot_bundle).as_posix(): path.resolve()
+                    for path in snapshot_bundle.rglob("*")
+                    if path.is_file()
+                }
+        location = (
+            WATCH_SNAPSHOT_PREFIX
+            + token
+            + "/"
+            + quote(presentation_build.MANIFEST_FILE, safe="/")
+        )
+        self.redirect(location, status=307)
 
     def translate_path(self, path: str) -> str:
         request_path = urlparse(path).path
+        if request_path.startswith(WATCH_SNAPSHOT_PREFIX):
+            relative = request_path[len(WATCH_SNAPSHOT_PREFIX) :]
+            token, separator, artifact_name = relative.partition("/")
+            if separator:
+                with self.snapshot_lock:
+                    artifact = self.snapshot_artifacts.get(token, {}).get(
+                        unquote(artifact_name)
+                    )
+                if artifact is not None:
+                    return str(artifact)
         if request_path.startswith(WATCH_ARTIFACT_PREFIX):
             relative = unquote(request_path[len(WATCH_ARTIFACT_PREFIX) :])
             artifact = self.artifacts.get(relative)
@@ -1372,6 +1459,14 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
                 artifact = self.artifacts.get(Path(relative).stem)
             if artifact is not None:
                 return str(artifact)
+        recording_route = self.recording_route(request_path)
+        if recording_route is not None:
+            route, _spec = recording_route
+            relative = request_path[len(route) :]
+            if relative == "":
+                return str(self.player_directory / "cast-player.html")
+            if relative == "cast-player-core.js":
+                return str(self.player_directory / "cast-player-core.js")
         return super().translate_path(path)
 
     def end_headers(self) -> None:
@@ -1379,7 +1474,17 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def send_head(self) -> Any:
-        request_path = urlparse(self.path).path
+        parsed_request = urlparse(self.path)
+        request_path = parsed_request.path
+        slash_routes = set(getattr(self, "recording_routes", {})) | {
+            route for route in getattr(self, "pages", {}) if route.endswith("/")
+        }
+        if request_path + "/" in slash_routes:
+            location = request_path + "/"
+            if parsed_request.query:
+                location += "?" + parsed_request.query
+            self.redirect(location)
+            return None
         page = getattr(self, "pages", {}).get(request_path)
         if page is not None:
             self.send_response(200)
@@ -1387,6 +1492,15 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(page)))
             self.end_headers()
             return io.BytesIO(page)
+        recording_route = self.recording_route(request_path)
+        if recording_route is not None:
+            route, spec = recording_route
+            if request_path[len(route) :] == presentation_build.MANIFEST_FILE:
+                try:
+                    self.redirect_to_latest_snapshot(spec)
+                except StudioError as exc:
+                    self.send_error(404, str(exc))
+                return None
         range_header = self.headers.get("Range")
         if range_header is None:
             return super().send_head()
@@ -1439,6 +1553,23 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:
         return
+
+
+def watch_snapshot_token(artifacts: Mapping[str, Path]) -> str:
+    digest = hashlib.sha256()
+    for name, path in sorted(artifacts.items()):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            with path.open("rb") as source:
+                while chunk := source.read(1024 * 1024):
+                    digest.update(chunk)
+        except OSError as exc:
+            raise StudioError(
+                f"could not snapshot watch artifact: {display_path(path)}"
+            ) from exc
+        digest.update(b"\0")
+    return digest.hexdigest()[:32]
 
 
 def parse_http_byte_range(value: str, *, size: int) -> tuple[int, int]:
@@ -1640,12 +1771,11 @@ def run_publish_surface(
     return outcome
 
 
-def watch_player_url_path(
+def watch_presentation_artifacts(
     spec: dict[str, Any],
     *,
     run_dir: Path | None = None,
-    autoplay_countdown: bool = False,
-) -> tuple[str, dict[str, Path]]:
+) -> tuple[Path, dict[str, Path]]:
     resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
     paths = (
         presentation_build.run_paths(resolved_run_dir)
@@ -1674,6 +1804,16 @@ def watch_player_url_path(
         for path in bundle.rglob("*")
         if path.is_file()
     }
+    return bundle.resolve(), artifacts
+
+
+def watch_player_url_path(
+    spec: dict[str, Any],
+    *,
+    run_dir: Path | None = None,
+    autoplay_countdown: bool = False,
+) -> tuple[str, dict[str, Path]]:
+    _bundle, artifacts = watch_presentation_artifacts(spec, run_dir=run_dir)
     manifest_url = WATCH_ARTIFACT_PREFIX + quote(
         presentation_build.MANIFEST_FILE, safe="/"
     )
@@ -1683,14 +1823,21 @@ def watch_player_url_path(
     return "/cast-player.html?" + urlencode(query), artifacts
 
 
+def watch_recording_url_path(
+    recording_id: str,
+    *,
+    autoplay_countdown: bool = False,
+) -> str:
+    path = WATCH_ROUTE_PREFIX + quote(recording_id, safe="/") + "/"
+    if not autoplay_countdown:
+        return path
+    return path + "?" + urlencode({"autoplay": "countdown"})
+
+
 def collection_member_player_url(recording_id: str) -> str:
-    manifest_url = (
-        WATCH_ARTIFACT_PREFIX
-        + f"members/{recording_id}/"
-        + presentation_build.MANIFEST_FILE
-    )
-    return "/cast-player.html?" + urlencode(
-        {"manifest": manifest_url, "autoplay": "countdown"}
+    return watch_recording_url_path(
+        recording_id,
+        autoplay_countdown=True,
     )
 
 
@@ -1845,12 +1992,12 @@ def render_collection_watch_page(
     )
 
 
-def collection_watch_url_path(
+def collection_watch_routes(
     cfg: DictConfig,
     config: dict[str, Any],
-) -> tuple[str, dict[str, Path], dict[str, bytes]]:
+) -> tuple[str, dict[str, bytes], dict[str, dict[str, Any]]]:
     collection, member_cfgs = load_collection_build(cfg, config)
-    artifacts: dict[str, Path] = {}
+    recordings: dict[str, dict[str, Any]] = {}
     rendered_members: list[dict[str, str]] = []
     for member_id, member_cfg in zip(
         collection["members"], member_cfgs, strict=True
@@ -1862,21 +2009,14 @@ def collection_watch_url_path(
             overrides=(),
         )
         try:
-            _url_path, member_artifacts = watch_player_url_path(
-                spec,
-                autoplay_countdown=True,
-            )
+            watch_presentation_artifacts(spec)
         except StudioError as exc:
             raise StudioError(
                 f"collection {collection['id']} member {member_id} cannot be "
                 f"watched: {exc}; build it with "
                 f"{studio_tool_command(member_id)}"
             ) from exc
-        namespace = f"members/{member_id}/"
-        artifacts.update(
-            (namespace + relative, path)
-            for relative, path in member_artifacts.items()
-        )
+        recordings[member_id] = spec
         rendered_members.append(
             {
                 "id": member_id,
@@ -1886,7 +2026,8 @@ def collection_watch_url_path(
             }
         )
     page = render_collection_watch_page(collection, rendered_members).encode("utf-8")
-    return "/collection.html", artifacts, {"/collection.html": page}
+    url_path = watch_recording_url_path(str(collection["id"]))
+    return url_path, {url_path: page}, recordings
 
 
 def configured_browser_command_name() -> str | None:
@@ -2199,11 +2340,17 @@ def run_watch_server(
     artifacts: dict[str, Path],
     *,
     pages: dict[str, bytes] | None = None,
+    recordings: dict[str, dict[str, Any]] | None = None,
     managed_browser: bool = False,
     open_browser: bool = True,
     port: int = 0,
 ) -> int:
     static_root = Path(__file__).with_name("player") / "static"
+    snapshot_artifacts: dict[str, dict[str, Path]] = {}
+    snapshot_lock = threading.RLock()
+    snapshot_directory = tempfile.TemporaryDirectory(
+        prefix="omegaflow-watch-snapshots-"
+    )
 
     def handler_factory(*args: Any, **kwargs: Any) -> StudioWatchRequestHandler:
         return StudioWatchRequestHandler(
@@ -2211,6 +2358,10 @@ def run_watch_server(
             artifacts=artifacts,
             directory=str(static_root),
             pages=pages,
+            recordings=recordings,
+            snapshot_artifacts=snapshot_artifacts,
+            snapshot_lock=snapshot_lock,
+            snapshot_directory=Path(snapshot_directory.name),
             **kwargs,
         )
 
@@ -2219,12 +2370,13 @@ def run_watch_server(
             (WATCH_HOST, port), handler_factory
         )
     except OSError as exc:
+        snapshot_directory.cleanup()
         requested = f"{WATCH_HOST}:{port}" if port else WATCH_HOST
         raise StudioError(
             f"could not start local watch server on {requested}: {exc}"
         ) from exc
 
-    with watch_server as server:
+    with snapshot_directory, watch_server as server:
         url = f"http://{WATCH_HOST}:{server.server_port}{url_path}"
         if text_output_enabled(cfg):
             step_line("watch recording")
@@ -2286,30 +2438,39 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     if run_id is not None or recording_id is None:
         raise StudioError("watch requires a recording id and does not accept run_id")
 
+    port = configured_watch_port(config)
+    autoplay = bool_config(config, "autoplay", True)
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
-    url_path, artifacts = watch_player_url_path(spec, autoplay_countdown=True)
+    watch_presentation_artifacts(spec)
+    url_path = watch_recording_url_path(
+        recording_id,
+        autoplay_countdown=autoplay,
+    )
     open_browser = bool_config(config, "open", True)
     return run_watch_server(
         cfg,
         url_path,
-        artifacts,
+        {},
+        recordings={recording_id: spec},
         managed_browser=open_browser,
         open_browser=open_browser,
-        port=configured_watch_port(config),
+        port=port,
     )
 
 
 def run_collection_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
-    url_path, artifacts, pages = collection_watch_url_path(cfg, config)
+    port = configured_watch_port(config)
+    url_path, pages, recordings = collection_watch_routes(cfg, config)
     open_browser = bool_config(config, "open", True)
     return run_watch_server(
         cfg,
         url_path,
-        artifacts,
+        {},
         pages=pages,
+        recordings=recordings,
         managed_browser=open_browser,
         open_browser=open_browser,
-        port=configured_watch_port(config),
+        port=port,
     )
 
 

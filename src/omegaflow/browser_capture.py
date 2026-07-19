@@ -152,6 +152,50 @@ def _mapping(value: object, *, field: str) -> dict[str, Any]:
     return value
 
 
+def _deferred_visual_owners(
+    actions: tuple[BrowserActionPlan, ...],
+) -> dict[int, int]:
+    """Pair a trigger with the adjacent captured wait that owns its motion."""
+
+    owners: dict[int, int] = {}
+    for wait_index, wait_action in enumerate(actions):
+        wait_config = _mapping(
+            _thaw(wait_action.config), field=f"action {wait_action.id}"
+        )
+        if (
+            wait_action.kind != "wait_for"
+            or wait_config.get("transition") != "captured"
+            or wait_config.get("after") is not None
+            or wait_config.get("hold_before_ms") is not None
+        ):
+            continue
+        trigger_index = wait_index - 1
+        while trigger_index >= 0 and actions[trigger_index].kind == "set_pointer":
+            pointer_config = _mapping(
+                _thaw(actions[trigger_index].config),
+                field=f"action {actions[trigger_index].id}",
+            )
+            if any(
+                pointer_config.get(field) is not None
+                for field in ("after", "hold_before_ms", "hold_after_ms")
+            ):
+                trigger_index = -1
+                break
+            trigger_index -= 1
+        if trigger_index < 0:
+            continue
+        trigger_config = _mapping(
+            _thaw(actions[trigger_index].config),
+            field=f"action {actions[trigger_index].id}",
+        )
+        if (
+            trigger_config.get("transition") is None
+            and trigger_config.get("hold_after_ms") is None
+        ):
+            owners[trigger_index] = wait_index
+    return owners
+
+
 def _target_description(target: Mapping[str, Any], family: str) -> str:
     parts = [f"{family}={target[family]!r}"]
     if family == "role" and target.get("name") is not None:
@@ -486,7 +530,16 @@ class PersistentBrowserRunner:
         self._current_beat_id = beat.id
         self._beat_start_ns = time.monotonic_ns()
         self._append_capture("beat_start", beat_id=beat.id)
-        for raw_action in beat.actions:
+        browser_actions = tuple(
+            action
+            for action in beat.actions
+            if isinstance(action, BrowserActionPlan)
+        )
+        deferred_visuals = _deferred_visual_owners(browser_actions)
+        deferred_video_start_ms: int | None = None
+        deferred_start_state_path: Path | None = None
+        deferred_owner_index: int | None = None
+        for action_index, raw_action in enumerate(beat.actions):
             if not isinstance(raw_action, BrowserActionPlan):
                 raise BrowserCaptureError(
                     "BROWSER_SCHEMA", f"browser beat {beat.id!r} has a terminal action"
@@ -494,13 +547,38 @@ class PersistentBrowserRunner:
             action_response_start = len(self.responses)
             if on_progress is not None:
                 on_progress("started", raw_action.id)
-            actions.append(
-                self._execute_action(
-                    beat.id,
-                    raw_action,
-                    previous_action_response_start=previous_action_response_start,
-                )
+            owner_index = deferred_visuals.get(action_index)
+            if owner_index is not None:
+                deferred_video_start_ms = self._video_elapsed_ms()
+                deferred_owner_index = owner_index
+            owns_deferred_visual = action_index == deferred_owner_index
+            captured_action = self._execute_action(
+                beat.id,
+                raw_action,
+                previous_action_response_start=previous_action_response_start,
+                defer_visual_to=(
+                    browser_actions[owner_index].id
+                    if owner_index is not None
+                    else None
+                ),
+                video_start_override_ms=(
+                    deferred_video_start_ms if owns_deferred_visual else None
+                ),
+                start_state_override_path=(
+                    deferred_start_state_path if owns_deferred_visual else None
+                ),
             )
+            actions.append(captured_action)
+            if owner_index is not None:
+                before_state = captured_action.get("before_state")
+                if isinstance(before_state, dict):
+                    deferred_start_state_path = (
+                        self._require_visuals().run_dir / before_state["path"]
+                    )
+            if owns_deferred_visual:
+                deferred_video_start_ms = None
+                deferred_start_state_path = None
+                deferred_owner_index = None
             self._append_capture("action", beat_id=beat.id, **actions[-1])
             if on_progress is not None:
                 on_progress("completed", raw_action.id)
@@ -538,22 +616,29 @@ class PersistentBrowserRunner:
         action: BrowserActionPlan,
         *,
         previous_action_response_start: int | None,
+        defer_visual_to: str | None = None,
+        video_start_override_ms: int | None = None,
+        start_state_override_path: Path | None = None,
     ) -> dict[str, Any]:
         if self.page is None or self.capture_context is None:
             raise BrowserCaptureError("BROWSER_SCHEMA", "browser runner is not started")
         config = _mapping(_thaw(action.config), field=f"action {action.id}")
         payload = _mapping(config.get(action.kind), field=f"action {action.id}.{action.kind}")
         started_ms = self._beat_elapsed_ms()
-        video_started_ms = self._video_elapsed_ms()
+        video_started_ms = (
+            self._video_elapsed_ms()
+            if video_start_override_ms is None
+            else video_start_override_ms
+        )
         self._current_action_id = action.id
         target_fact: dict[str, Any] | None = None
         completion: dict[str, Any] = {"kind": "action"}
         before_state: dict[str, Any] | None = None
-        visual: dict[str, Any]
+        visual: dict[str, Any] | None = None
         extra_redactions = self._action_redactions(action.kind, payload)
         document_origin = self._document_time_origin()
         try:
-            if action.kind not in {"open_page", "wait_for"}:
+            if action.kind not in {"open_page", "wait_for", "set_pointer"}:
                 before_state = self._require_visuals().capture_state_once(
                     action_id=action.id,
                     extra_redactions=extra_redactions,
@@ -597,6 +682,14 @@ class PersistentBrowserRunner:
                         beat_id=beat_id,
                         action_id=action.id,
                     )
+                    position = payload.get("position")
+                    if isinstance(position, dict):
+                        target_fact["point"] = {
+                            "x": target_fact["bounds"]["x"]
+                            + target_fact["bounds"]["width"] * float(position["x"]),
+                            "y": target_fact["bounds"]["y"]
+                            + target_fact["bounds"]["height"] * float(position["y"]),
+                        }
                 else:
                     viewport_position = _mapping(
                         payload.get("viewport"),
@@ -621,6 +714,11 @@ class PersistentBrowserRunner:
                     field=f"action {action.id}.move_pointer point",
                 )
                 self.page.mouse.move(float(point["x"]), float(point["y"]))
+            elif action.kind == "set_pointer":
+                # Pointer visibility belongs to the reconstructed presentation,
+                # not the live page. Do not sample the page here: it may already
+                # be moving, and the following captured action owns that motion.
+                pass
             elif action.kind in {"fill", "type_keys"}:
                 locator, target_fact = self._strict_target(
                     payload.get("target"), beat_id=beat_id, action_id=action.id
@@ -667,45 +765,58 @@ class PersistentBrowserRunner:
                 raise BrowserCaptureError(
                     "BROWSER_SCHEMA", f"unsupported browser action kind {action.kind!r}"
                 )
-            self._wait_for_render_assets()
-            if self._document_time_origin() != document_origin:
-                self._active_secret_redactions = ()
-                extra_redactions = self._current_secret_redaction(
-                    action.kind, payload
-                )
             execution_ended_ms = self._beat_elapsed_ms()
-            explicit_dynamic = config.get("transition") == "captured"
-            force_dynamic = explicit_dynamic or (
-                action.kind == "open_page" and payload.get("loading", "hide") == "show"
-            ) or (
-                action.kind == "scroll"
-                and (
-                    target_fact is None
-                    or not isinstance(target_fact.get("scroll"), dict)
-                    or target_fact["scroll"].get("eligible") is not True
+            if action.kind != "set_pointer" and defer_visual_to is None:
+                self._wait_for_render_assets()
+                if self._document_time_origin() != document_origin:
+                    self._active_secret_redactions = ()
+                    extra_redactions = self._current_secret_redaction(
+                        action.kind, payload
+                    )
+                execution_ended_ms = self._beat_elapsed_ms()
+                explicit_dynamic = config.get("transition") == "captured"
+                force_dynamic = explicit_dynamic or (
+                    action.kind == "open_page"
+                    and payload.get("loading", "hide") == "show"
+                ) or (
+                    action.kind == "scroll"
+                    and (
+                        target_fact is None
+                        or not isinstance(target_fact.get("scroll"), dict)
+                        or target_fact["scroll"].get("eligible") is not True
+                    )
                 )
-            )
-            visual = self._require_visuals().observe(
-                beat_id=beat_id,
-                action_id=action.id,
-                video_start_ms=video_started_ms,
-                video_end_ms=self._video_elapsed_ms,
-                start_state_path=(
-                    self._require_visuals().run_dir / before_state["path"]
-                    if before_state is not None
-                    else None
-                ),
-                extra_redactions=extra_redactions,
-                force_dynamic=force_dynamic,
-                explicit_dynamic=explicit_dynamic,
-            )
-            current_secret = self._current_secret_redaction(action.kind, payload)
-            if current_secret:
-                active = [dict(target) for target in self._active_secret_redactions]
-                active.extend(
-                    dict(target) for target in current_secret if target not in active
+                visual = self._require_visuals().observe(
+                    beat_id=beat_id,
+                    action_id=action.id,
+                    video_start_ms=video_started_ms,
+                    video_end_ms=self._video_elapsed_ms,
+                    start_state_path=(
+                        start_state_override_path
+                        if start_state_override_path is not None
+                        else (
+                            self._require_visuals().run_dir / before_state["path"]
+                            if before_state is not None
+                            else None
+                        )
+                    ),
+                    extra_redactions=extra_redactions,
+                    force_dynamic=force_dynamic,
+                    explicit_dynamic=explicit_dynamic,
+                    preserve_start=video_start_override_ms is not None,
                 )
-                self._active_secret_redactions = tuple(active)
+                current_secret = self._current_secret_redaction(action.kind, payload)
+                if current_secret:
+                    active = [dict(target) for target in self._active_secret_redactions]
+                    active.extend(
+                        dict(target) for target in current_secret if target not in active
+                    )
+                    self._active_secret_redactions = tuple(active)
+            elif defer_visual_to is not None:
+                visual = {
+                    "kind": "deferred",
+                    "owner_action_id": defer_visual_to,
+                }
         except BrowserVisualError as exc:
             raise BrowserCaptureError(exc.code, str(exc).split(": ", 1)[-1]) from exc
         except BrowserCaptureError:
@@ -725,8 +836,9 @@ class PersistentBrowserRunner:
             "kind": action.kind,
             "execution": {"start_ms": started_ms, "end_ms": execution_ended_ms},
             "completion": completion,
-            "visual": visual,
         }
+        if visual is not None:
+            result["visual"] = visual
         if before_state is not None:
             result["before_state"] = before_state
         if target_fact is not None:

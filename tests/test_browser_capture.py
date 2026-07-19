@@ -468,7 +468,8 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                                     "target": {
                                         "role": "button",
                                         "name": "Open dialog",
-                                    }
+                                    },
+                                    "position": {"x": 0.25, "y": 0.75},
                                 },
                             },
                             {
@@ -613,11 +614,11 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
             assert move_target["point"] == {
                 "x": pytest.approx(
                     move_target["bounds"]["x"]
-                    + move_target["bounds"]["width"] / 2
+                    + move_target["bounds"]["width"] * 0.25
                 ),
                 "y": pytest.approx(
                     move_target["bounds"]["y"]
-                    + move_target["bounds"]["height"] / 2
+                    + move_target["bounds"]["height"] * 0.75
                 ),
             }
             assert runner.page.locator("body").get_attribute("data-shortcut") == "yes"
@@ -1132,6 +1133,53 @@ def test_dynamic_fragment_retains_the_frame_before_animation_starts(
     assert green < 80
 
 
+def test_set_pointer_does_not_sample_the_page_visual(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "pointer-during-live-playback",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "open",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                    ],
+                },
+                {
+                    "id": "dynamic",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "hide", "set_pointer": {"visible": False}},
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentBrowserRunner(plan.browser)
+    runner.start(capture_context(tmp_path))
+    runner.capture_beat(plan.beats[0])
+    assert runner.visuals is not None
+
+    def unexpected_visual_sample(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("set_pointer must not sample the live page")
+
+    monkeypatch.setattr(runner.visuals, "capture_state_once", unexpected_visual_sample)
+    monkeypatch.setattr(runner.visuals, "observe", unexpected_visual_sample)
+    try:
+        actions = runner.capture_beat(plan.beats[1]).metadata["actions"]
+    finally:
+        runner.close()
+
+    pointer_action = actions[0]
+    assert pointer_action["kind"] == "set_pointer"
+    assert "before_state" not in pointer_action
+    assert "visual" not in pointer_action
+
+
 def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
     tmp_path: Path,
 ) -> None:
@@ -1177,6 +1225,10 @@ def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
         runner.complete()
 
     wait = actions[2]
+    assert actions[1]["visual"] == {
+        "kind": "deferred",
+        "owner_action_id": "await-completion",
+    }
     assert wait["completion"] == {"kind": "visible"}
     assert wait["visual"]["kind"] == "clip"
     fragment = next(
@@ -1191,7 +1243,7 @@ def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
         request["source_end_ms"] - request["source_start_ms"]
     )
     assert 3000 < authored_duration_ms <= 5000
-    assert fragment["duration_ms"] >= authored_duration_ms
+    assert abs(fragment["duration_ms"] - authored_duration_ms) <= 250
     assert fragment["encoded_bytes"] <= 2_000_000
 
 

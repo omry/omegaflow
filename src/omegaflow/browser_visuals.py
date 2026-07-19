@@ -50,6 +50,7 @@ class DynamicFragmentRequest:
     end_state_path: Path
     start_state_path: Path | None = None
     explicit_dynamic: bool = False
+    preserve_start: bool = False
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ class BrowserVisualCapture:
         extra_redactions: tuple[Mapping[str, Any], ...] = (),
         force_dynamic: bool = False,
         explicit_dynamic: bool = False,
+        preserve_start: bool = False,
     ) -> dict[str, Any]:
         samples: list[bytes] = []
         hashes: list[str] = []
@@ -198,6 +200,7 @@ class BrowserVisualCapture:
             end_state_path=self.run_dir / end_state["path"],
             start_state_path=start_state_path,
             explicit_dynamic=explicit_dynamic,
+            preserve_start=preserve_start,
         )
         self.dynamic_requests.append(request)
         return {
@@ -254,6 +257,7 @@ class BrowserVisualCapture:
                         request.start_state_path,
                         reference_ms=request.source_start_ms,
                         maximum_ms=source_end_ms,
+                        prefer_reference=request.preserve_start,
                     )
                 if (
                     previous_request is not None
@@ -515,6 +519,7 @@ def _matching_start_frame_ms(
     *,
     reference_ms: int,
     maximum_ms: int,
+    prefer_reference: bool = False,
 ) -> int:
     frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
     target = _normalized_state_frame(ffmpeg, start_state, boundary="start")
@@ -548,6 +553,7 @@ def _matching_start_frame_ms(
             "could not inspect a dynamic fragment start state",
         )
     match_index: int | None = None
+    match_distance_ms: int | None = None
     consecutive_matches = 0
     index = 0
     while True:
@@ -579,7 +585,18 @@ def _matching_start_frame_ms(
         ):
             consecutive_matches += 1
             if consecutive_matches >= FRAME_MATCH_CONSECUTIVE_FRAMES:
-                match_index = index - FRAME_MATCH_CONSECUTIVE_FRAMES + 1
+                candidate_index = index - FRAME_MATCH_CONSECUTIVE_FRAMES + 1
+                candidate_ms = (
+                    search_start_ms + candidate_index * FRAME_MATCH_DURATION_MS
+                )
+                candidate_distance_ms = abs(candidate_ms - reference_ms)
+                if (
+                    not prefer_reference
+                    or match_distance_ms is None
+                    or candidate_distance_ms < match_distance_ms
+                ):
+                    match_index = candidate_index
+                    match_distance_ms = candidate_distance_ms
         else:
             consecutive_matches = 0
         index += 1

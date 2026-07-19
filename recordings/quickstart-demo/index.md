@@ -45,6 +45,7 @@ browser:
     color_scheme: dark
     reduced_motion: reduce
 presentation:
+  guided: true
   browser:
     window:
       mode: framed
@@ -67,11 +68,30 @@ cleanup:
 # Quickstart Demo
 
 This is the short homepage demo. It creates and builds a terminal quickstart,
-then switches to a scripted browser beat that operates the real generated
+then switches to a browser beat that operates the real generated
 player.
 
 ```yaml studio-directive
 scene: Quickstart Demo
+```
+
+```yaml studio-directive
+beat:
+  id: introduction
+  heading: What This Video Covers
+  narration: >-
+    This quickstart shows how to install OmegaFlow, set up a recording
+    workspace, build a two-section video, and play it in a browser.
+    This video runs in @guided_mode_start@ guided mode, which pauses after each
+    section. To watch without pauses, turn off Guided mode using the button in
+    the player controls.
+  caption: Preview the quickstart and learn how guided mode works.
+  player:
+    highlight:
+      control: guided
+      start: "@guided_mode_start@"
+  guide:
+    success_hint: Continue when you are ready to install OmegaFlow.
 ```
 
 ```yaml studio-directive
@@ -110,12 +130,13 @@ beat:
   id: bootstrap
   heading: Bootstrap Quickstart
   narration: >-
-    From your repository root, @bootstrap@ run bootstrap to set up the recording
-    workspace. @wait:bootstrap_run+200ms@ The command creates the
-    @project_settings_start@ project settings @project_settings_end@ and
-    @recording_defaults_start@ recording defaults, @recording_defaults_end@
-    along with @quickstart_script_start@ an OmegaFlow quickstart video script
-    you can run immediately. @quickstart_script_end@
+    We'll now prepare your recording workspace. This is a one-time setup for
+    each recording environment, and you can commit the generated files to
+    version control. From your repository root, @bootstrap@ run the bootstrap
+    command. @wait:bootstrap_run+200ms@ It creates the @project_settings_start@
+    project settings, @project_settings_end@ @recording_defaults_start@
+    recording defaults, @recording_defaults_end@ and @quickstart_script_start@
+    a quickstart video script you can run immediately. @quickstart_script_end@
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -151,7 +172,7 @@ beat:
   narration_take: build-and-browser
   narration: >-
     @build@ Build the quickstart recording to turn the sample workflow into a
-    ready-to-watch Hello World video.
+    ready-to-watch two-section video.
     @wait:build_command+200ms@ When the build finishes, @watch@ run the
     follow-up watch command to open the video in a browser.
   marker: build
@@ -160,12 +181,12 @@ beat:
   - commands:
     - id: build_command
       run_file: scripts/build-demo-project.sh
-      display: omegaflow recording=quickstart
+      display: omegaflow recording=quickstart action=build
       after: "@build@"
       timing: realtime
     - id: watch_command
       # Keep the captured URL stable across homepage-video rebuilds.
-      run: omegaflow recording=quickstart action=watch watch_port=43123
+      run: omegaflow recording=quickstart action=watch watch_port=43123 autoplay=false
       display: omegaflow recording=quickstart action=watch
       after: "@watch@"
       pre_command_pause: 0.45
@@ -174,7 +195,7 @@ beat:
       show_prompt_after: false
   guide:
     commands:
-    - omegaflow recording=quickstart
+    - omegaflow recording=quickstart action=build
     success_hint: The generated video is ready to play.
 ```
 
@@ -182,15 +203,19 @@ beat:
 beat:
   id: play-in-browser
   medium: browser
-  heading: Play It In The Browser
+  heading: Explore The Player
   narration_take: build-and-browser
   narration: >-
-    @open_player@ OmegaFlow can script and record browser workflows just as it
-    does terminal workflows. The watch command opens the generated player in a
-    browser, where this script plays the video we just created.
-    A single OmegaFlow video can move between terminal and browser beats.
-    @wait:wait_for_playback+300ms@ To learn more, start the tutorial or read the
-    docs.
+    @open_player@ An OmegaFlow video can move from terminal beats into browser
+    beats. Here, OmegaFlow scripts and records browser workflows just as it does
+    terminal workflows. The watch command opens the generated player in a
+    browser, where this script opens the two-section video we just created.
+    @show_pointer@ OmegaFlow divides every video into beats. This quickstart has
+    two, titled @navigate_section@ First Video Beat and @playback_section@
+    Second Video Beat. The player lets you preview a beat by hovering over its
+    section of the timeline. @point_at_speed@ You can also use the
+    @playback_speed_start@ playback speed control. @playback_speed_end@
+    To learn more, start the tutorial or read the docs.
   marker: play-in-browser
   caption: Script browser interaction with the generated player.
   pointer:
@@ -198,6 +223,7 @@ beat:
   actions:
   - id: open_player
     after: "@open_player@"
+    hold_before_ms: 350
     open_page:
       handoff: watch_command
       display_url: $handoff
@@ -206,15 +232,44 @@ beat:
           role: button
           name: Play
           exact: true
-  - id: wait_for_playback
-    after: "@open_player@"
-    transition: captured
-    wait_for:
-      timeout_ms: 60000
-      visible:
+  - id: show_pointer
+    after: "@show_pointer@"
+    set_pointer:
+      visible: true
+  - id: preview_navigation_section
+    after: "@navigate_section@"
+    hold_after_ms: 600
+    move_pointer:
+      target:
+        test_id: section-region-first-video-beat
+      position: {x: 0.5, y: 0.5}
+  - id: preview_playback_section
+    after: "@playback_section@"
+    hold_after_ms: 600
+    move_pointer:
+      target:
+        test_id: section-region-second-video-beat
+      position: {x: 0.5, y: 0.5}
+  - id: point_at_speed
+    after: "@point_at_speed@"
+    hold_before_ms: 350
+    move_pointer:
+      target: &speed_control
         role: button
-        name: Play again
-        exact: true
+        name: Playback speed
+  - id: increase_speed
+    after: "@playback_speed_start@"
+    hold_after_ms: 600
+    click:
+      target: *speed_control
+  - id: restore_speed
+    after: "@playback_speed_end@"
+    click:
+      target: *speed_control
+      button: right
+  - id: hide_pointer
+    set_pointer:
+      visible: false
   guide:
     success_hint: The generated player is ready to publish with your docs.
 ```

@@ -24,8 +24,9 @@ recordings/
 
 The project config records the workspace and local data paths. The recording
 workspace config supplies starter capture, style, and audio defaults. The
-quickstart is a small, self-contained working recording that belongs to the
-project and can be edited or removed.
+quickstart is a small, self-contained two-section recording that also exposes
+the generated player's section and playback controls. It belongs to the project
+and can be edited or removed.
 
 ## Choose the workspace and recording id
 

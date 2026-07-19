@@ -1,1 +1,1 @@
-Allow individual browser beats to hide the mouse cursor, add standalone pointer movement to viewport-relative coordinates or the center of a semantic DOM target, and support pre-action presentation holds for browser actions.
+Allow browser beats to hide the pointer initially, show or hide it during the beat, move it independently to viewport-relative coordinates or normalized positions within semantic DOM targets, and use pre-action presentation holds.

@@ -56,17 +56,33 @@ scene: Quickstart
 
 ```yaml studio-directive
 beat:
-  id: show-message
-  heading: Run The Quickstart
-  narration: Run one inline command and verify its terminal output.
+  id: navigate-sections
+  heading: Navigate By Section
+  narration: Each beat becomes a section in the generated player.
+  viewer_hold: 3
   actions:
   - commands:
-    - id: show_message
-      timing: realtime
-      run: for n in 3 2 1; do printf '%s\\n' "$n"; sleep 1; done; printf 'Hello World!\\n'
+    - id: explain_sections
+      run: printf 'Every beat becomes a section in the player.\\n'
       expect:
         output_contains:
-        - Hello World!
+        - Every beat becomes a section in the player.
+```
+
+```yaml studio-directive
+beat:
+  id: control-playback
+  heading: Control Playback
+  narration: Preview sections and adjust playback speed in the generated player.
+  viewer_hold: 4
+  actions:
+  - commands:
+    - id: explain_playback
+      run: printf 'Hover the timeline to preview sections.\nAdjust playback speed when you need it.\n'
+      expect:
+        output_contains:
+        - Hover the timeline to preview sections.
+        - Adjust playback speed when you need it.
 ```
 ````
 

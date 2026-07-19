@@ -2,6 +2,7 @@
   'use strict';
 
   const observedAttributes = [
+    'autoplay',
     'intro',
     'intro-segment',
     'intro-seconds',
@@ -21,6 +22,9 @@
     const params = new URLSearchParams();
     params.set('manifest', options.manifest || '');
     params.set('embed', '1');
+    if (options.autoplay) {
+      params.set('autoplay', options.autoplay);
+    }
     if (options.layout) {
       params.set('layout', options.layout);
     }
@@ -41,6 +45,7 @@
 
   function iframeOptionsFromElement(element) {
     return {
+      autoplay: optionalAttribute(element, 'autoplay'),
       intro: optionalAttribute(element, 'intro'),
       introSegment: optionalAttribute(element, 'intro-segment'),
       introSeconds: optionalAttribute(element, 'intro-seconds'),

@@ -14,6 +14,7 @@ from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
 from .studio_config import (
+    BeatPlayerConfig,
     BrowserActionConfig,
     BrowserCheckConfig,
     BrowserConditionConfig,
@@ -21,6 +22,8 @@ from .studio_config import (
     BrowserRecordingConfig,
     BrowserTargetConfig,
     BrowserUrlMatcherConfig,
+    PlayerToolbarControl,
+    PlayerToolbarHighlightConfig,
     RecordingActionConfig,
     RecordingCheckConfig,
     RecordingExpectationConfig,
@@ -44,6 +47,7 @@ ACTION_KINDS = (
     "open_page",
     "click",
     "move_pointer",
+    "set_pointer",
     "fill",
     "type_keys",
     "press",
@@ -111,6 +115,23 @@ def _positive_int(value: object, *, field: str, allow_zero: bool = False) -> int
         qualifier = "non-negative" if allow_zero else "positive"
         raise RecordingPlanError(f"{field} must be {qualifier}")
     return value
+
+
+def _normalized_point(value: object, *, field: str) -> dict[str, Any]:
+    point = _mapping(value, field=field)
+    if set(point) != {"x", "y"}:
+        raise RecordingPlanError(f"{field} must contain x and y")
+    if any(
+        isinstance(point[axis], bool)
+        or not isinstance(point[axis], (int, float))
+        for axis in ("x", "y")
+    ):
+        raise RecordingPlanError(
+            f"{field} values must be numbers between 0 and 1"
+        )
+    if any(not 0 <= float(point[axis]) <= 1 for axis in ("x", "y")):
+        raise RecordingPlanError(f"{field} values must be between 0 and 1")
+    return point
 
 
 def _expectation_mapping(value: object, *, field: str) -> dict[str, Any]:
@@ -510,27 +531,29 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
                 payload["target"],
                 field=f"{field}.move_pointer.target",
             )
+            if payload.get("position") is not None:
+                _normalized_point(
+                    payload["position"],
+                    field=f"{field}.move_pointer.position",
+                )
         else:
-            viewport = _mapping(
+            if payload.get("position") is not None:
+                raise RecordingPlanError(
+                    f"{field}.move_pointer.position requires a target"
+                )
+            _normalized_point(
                 payload["viewport"],
                 field=f"{field}.move_pointer.viewport",
             )
-            if set(viewport) != {"x", "y"}:
-                raise RecordingPlanError(
-                    f"{field}.move_pointer.viewport must contain x and y"
-                )
-            if any(
-                isinstance(viewport[axis], bool)
-                or not isinstance(viewport[axis], (int, float))
-                for axis in ("x", "y")
-            ):
-                raise RecordingPlanError(
-                    f"{field}.move_pointer.viewport values must be numbers between 0 and 1"
-                )
-            if any(not 0 <= float(viewport[axis]) <= 1 for axis in ("x", "y")):
-                raise RecordingPlanError(
-                    f"{field}.move_pointer.viewport values must be between 0 and 1"
-                )
+    elif kind == "set_pointer":
+        if set(payload) != {"visible"}:
+            raise RecordingPlanError(
+                f"{field}.set_pointer must contain only visible"
+            )
+        if not isinstance(payload["visible"], bool):
+            raise RecordingPlanError(
+                f"{field}.set_pointer.visible must be boolean"
+            )
     elif kind == "click":
         validate_target(payload.get("target"), field=f"{field}.click.target")
         if payload.get("button", "left") not in {"left", "middle", "right"}:
@@ -909,6 +932,45 @@ def _terminal_text_highlights(
     return tuple(highlights)
 
 
+def _player_toolbar_highlight(
+    beat: dict[str, Any],
+    *,
+    index: int,
+    anchors: tuple[NarrationAnchorPlan, ...],
+) -> PlayerToolbarHighlightPlan | None:
+    player = beat.get("player")
+    if not isinstance(player, dict):
+        return None
+    highlight = player.get("highlight")
+    if not isinstance(highlight, dict):
+        return None
+    anchor_offsets = {anchor.id: anchor.text_offset for anchor in anchors}
+    start_reference = highlight["start"]
+    start_anchor = start_reference[1:-1]
+    if start_anchor not in anchor_offsets:
+        raise RecordingPlanError(
+            f"beats.{index}.player.highlight references unknown start anchor "
+            f"{start_reference}"
+        )
+    end_reference = highlight.get("end")
+    end_anchor = None if end_reference is None else end_reference[1:-1]
+    if end_anchor is not None:
+        if end_anchor not in anchor_offsets:
+            raise RecordingPlanError(
+                f"beats.{index}.player.highlight references unknown end anchor "
+                f"{end_reference}"
+            )
+        if anchor_offsets[start_anchor] >= anchor_offsets[end_anchor]:
+            raise RecordingPlanError(
+                f"beats.{index}.player.highlight start anchor must precede end anchor"
+            )
+    return PlayerToolbarHighlightPlan(
+        control=PlayerToolbarControl(highlight["control"]).value,
+        start_anchor=start_anchor,
+        end_anchor=end_anchor,
+    )
+
+
 def validate_recording_modalities(spec: dict[str, Any]) -> None:
     validate_requirements(spec.get("requirements", {}))
     validate_parameters(spec.get("parameters", {}))
@@ -934,6 +996,44 @@ def validate_recording_modalities(spec: dict[str, Any]) -> None:
         if medium is RecordingMedium.browser:
             has_browser = True
         validate_beat_pointer(beat, index=index, medium=medium)
+        player = beat.get("player")
+        if player is not None:
+            player_mapping = _mapping(player, field=f"beats.{index}.player")
+            unexpected = sorted(
+                set(player_mapping) - {item.name for item in fields(BeatPlayerConfig)}
+            )
+            if unexpected:
+                raise RecordingPlanError(
+                    f"beats.{index}.player has unknown fields: {', '.join(unexpected)}"
+                )
+            highlight = _mapping(
+                player_mapping.get("highlight"),
+                field=f"beats.{index}.player.highlight",
+            )
+            unexpected = sorted(
+                set(highlight)
+                - {item.name for item in fields(PlayerToolbarHighlightConfig)}
+            )
+            if unexpected:
+                raise RecordingPlanError(
+                    f"beats.{index}.player.highlight has unknown fields: "
+                    f"{', '.join(unexpected)}"
+                )
+            try:
+                PlayerToolbarControl(highlight.get("control"))
+            except (TypeError, ValueError) as exc:
+                raise RecordingPlanError(
+                    f"beats.{index}.player.highlight.control is invalid"
+                ) from exc
+            for boundary in ("start", "end"):
+                reference = highlight.get(boundary)
+                if boundary == "end" and reference is None:
+                    continue
+                if not isinstance(reference, str) or not ANCHOR_RE.fullmatch(reference):
+                    raise RecordingPlanError(
+                        f"beats.{index}.player.highlight.{boundary} must be a "
+                        "narration anchor"
+                    )
         normalize_beat_actions(beat, index=index)
         guide = beat.get("guide")
         if guide is not None:
@@ -1062,6 +1162,13 @@ class TerminalTextHighlightPlan:
 
 
 @dataclass(frozen=True)
+class PlayerToolbarHighlightPlan:
+    control: str
+    start_anchor: str
+    end_anchor: str | None
+
+
+@dataclass(frozen=True)
 class BrowserCheckPlan:
     name: str
     kind: str
@@ -1078,6 +1185,7 @@ class BeatPlan:
     explicit_narration_take: str | None
     viewer_hold_ms: int
     browser_pointer_visible: bool | None
+    player_highlight: PlayerToolbarHighlightPlan | None
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
     waits: tuple[NarrationWaitPlan, ...]
@@ -1345,6 +1453,8 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         validate_browser_config(browser_mapping) if browser_mapping is not None else None
     )
     presentation = validate_presentation_config(spec.get("presentation", {}))
+    audio = spec.get("audio", {})
+    audio_enabled = isinstance(audio, dict) and audio.get("enabled") is True
     source_dir = _recording_source_dir(spec)
     lifecycle_steps: dict[str, tuple[TerminalCheckPlan, ...]] = {}
     for lifecycle in ("setup", "cleanup"):
@@ -1404,6 +1514,19 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             medium=medium,
             anchors=anchors,
         )
+        player_highlight = _player_toolbar_highlight(
+            beat,
+            index=index,
+            anchors=anchors,
+        )
+        if terminal_highlights and not audio_enabled:
+            raise RecordingPlanError(
+                f"beats.{index}.effects.highlight requires audio.enabled=true"
+            )
+        if player_highlight is not None and not audio_enabled:
+            raise RecordingPlanError(
+                f"beats.{index}.player.highlight requires audio.enabled=true"
+            )
 
         if medium is RecordingMedium.browser:
             browser_actions = tuple(
@@ -1534,6 +1657,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 browser_pointer_visible=(
                     None if pointer_config is None else pointer_config.visible
                 ),
+                player_highlight=player_highlight,
                 guide=guide,
                 anchors=anchors,
                 waits=waits,

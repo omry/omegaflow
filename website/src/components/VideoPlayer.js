@@ -2,6 +2,7 @@ import React, {useEffect} from 'react';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
 export default function VideoPlayer({
+  autoplay,
   manifest,
   title,
   intro,
@@ -26,6 +27,7 @@ export default function VideoPlayer({
   return (
     <div className="video-player">
       <cast-player-embed
+        autoplay={autoplay || undefined}
         title={title}
         manifest={manifestSrc}
         intro={intro || undefined}

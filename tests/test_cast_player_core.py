@@ -297,6 +297,57 @@ const renderer = core.createBrowserRendererAdapter({
     assert result.returncode == 0, result.stderr
 
 
+def test_browser_pointer_visibility_can_change_during_a_beat() -> None:
+    result = run_core_script(
+        r"""
+const payload = {
+  payload_version: 1,
+  beat_id: 'browser',
+  duration_ms: 800,
+  viewport: {width: 1000, height: 500, device_scale_factor: 1},
+  initial_state: 'initial',
+  initial_pointer: {x: 10, y: 20, visible: false},
+  initial_display_url: 'https://example.test/',
+  events: [
+    {
+      kind: 'pointer_visibility', action_id: 'show', at_ms: 100, end_ms: 100,
+      visible: true,
+    },
+    {
+      kind: 'pointer_move', action_id: 'move', at_ms: 200, end_ms: 400,
+      start: {x: 10, y: 20}, end: {x: 100, y: 50},
+      curve: {x1: 25, y1: 5, x2: 75, y2: 45},
+    },
+    {
+      kind: 'pointer_visibility', action_id: 'hide', at_ms: 500, end_ms: 500,
+      visible: false,
+    },
+  ],
+};
+const renderer = core.createBrowserRendererAdapter({render() {}});
+(async () => {
+  await renderer.load({payload, beat: {id: 'browser'}, assets: {}, container: null});
+  const initiallyHidden = renderer.renderAt(50).pointer;
+  const shown = renderer.renderAt(150).pointer;
+  const moving = renderer.renderAt(300).pointer;
+  const hiddenAgain = renderer.renderAt(600).pointer;
+  if (
+    initiallyHidden.visible || !shown.visible || !moving.visible || hiddenAgain.visible ||
+    shown.x !== 10 || shown.y !== 20 || hiddenAgain.x !== 100 || hiddenAgain.y !== 50
+  ) {
+    console.error(JSON.stringify({initiallyHidden, shown, moving, hiddenAgain}));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_viewport_layout_scales_uniformly_and_letterboxes() -> None:
     result = run_core_script(
         r"""

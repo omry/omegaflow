@@ -2572,6 +2572,18 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     bootstrap_beat = beats_by_id["bootstrap"]
     actions = {action["id"]: action for action in browser_beat["actions"]}
 
+    assert beats[0]["id"] == "introduction"
+    assert (
+        "This video runs in @guided_mode_start@ guided mode"
+        in beats_by_id["introduction"]["narration"]
+    )
+    assert "turn off Guided mode" in beats_by_id["introduction"]["narration"]
+    assert beats_by_id["introduction"]["guide"] == {
+        "success_hint": "Continue when you are ready to install OmegaFlow."
+    }
+    assert beats_by_id["introduction"]["player"] == {
+        "highlight": {"control": "guided", "start": "@guided_mode_start@"}
+    }
     assert beats_by_id["install"]["narration"].startswith("OmegaFlow")
     assert "narration_take" not in beats_by_id["install"]
     assert "narration_take" not in beats_by_id["bootstrap"]
@@ -2580,11 +2592,23 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         for beat_id in ("bootstrap", "build")
     )
     assert "build next" not in beats_by_id["bootstrap"]["narration"]
+    assert "This is a one-time setup" in bootstrap_beat["narration"]
     assert (
-        "The command creates the @project_settings_start@ project settings "
-        "@project_settings_end@ and @recording_defaults_start@ recording defaults, "
-        "@recording_defaults_end@ along with @quickstart_script_start@ an OmegaFlow "
-        "quickstart video script you can run immediately. @quickstart_script_end@"
+        "commit the generated files to version control"
+        in bootstrap_beat["narration"]
+    )
+    assert "From your repository root, @bootstrap@ run" in bootstrap_beat["narration"]
+    assert (
+        "@project_settings_start@ project settings, @project_settings_end@"
+        in bootstrap_beat["narration"]
+    )
+    assert (
+        "@recording_defaults_start@ recording defaults, @recording_defaults_end@"
+        in bootstrap_beat["narration"]
+    )
+    assert (
+        "@quickstart_script_start@ a quickstart video script you can run immediately. "
+        "@quickstart_script_end@"
         in bootstrap_beat["narration"]
     )
     assert bootstrap_beat["effects"] == [
@@ -2611,6 +2635,9 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         },
     ]
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
+    assert beats_by_id["build"]["guide"]["commands"] == [
+        "omegaflow recording=quickstart action=build"
+    ]
     assert [command["id"] for command in build_commands] == [
         "build_command",
         "watch_command",
@@ -2626,43 +2653,106 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert "follow_along" not in build_commands[1]
     assert build_commands[1]["show_prompt_after"] is False
     assert build_commands[1]["run"] == (
-        "omegaflow recording=quickstart action=watch watch_port=43123"
+        "omegaflow recording=quickstart action=watch watch_port=43123 "
+        "autoplay=false"
     )
     assert build_commands[1].get("output") is None
     assert browser_beat["narration_take"] == "build-and-browser"
+    assert browser_beat["heading"] == "Explore The Player"
     assert browser_beat["pointer"] == {"visible": False}
+    assert "player" not in browser_beat
     assert browser_beat["narration"].startswith(
-        "@open_player@ OmegaFlow can script and record browser workflows "
-        "just as it does terminal workflows"
+        "@open_player@ An OmegaFlow video can move from terminal beats into "
+        "browser beats"
     )
+    assert "Here, OmegaFlow scripts and records browser workflows" in browser_beat[
+        "narration"
+    ]
+    assert "OmegaFlow divides every video into beats" in browser_beat["narration"]
+    assert "@navigate_section@ First Video Beat" in browser_beat["narration"]
+    assert "@playback_section@ Second Video Beat" in browser_beat["narration"]
+    assert "hovering over its section of the timeline" in browser_beat["narration"]
     assert "The watch command opens" in browser_beat["narration"]
-    assert browser_beat["narration"].index("A single OmegaFlow video") < (
-        browser_beat["narration"].index("@wait:wait_for_playback")
-    )
+    assert "A single OmegaFlow video" not in browser_beat["narration"]
     assert "one narration take" not in browser_beat["narration"]
-    assert browser_beat["narration"].index("@wait:wait_for_playback") < (
-        browser_beat["narration"].index("To learn more")
-    )
+    assert "@play_video@" not in browser_beat["narration"]
+    assert "@wait:wait_for_playback" not in browser_beat["narration"]
     assert spec["browser"]["viewport"]["width"] == 1152
     assert spec["browser"]["viewport"]["height"] == 360
+    assert spec["presentation"]["guided"] is True
     assert list(actions) == [
         "open_player",
-        "wait_for_playback",
+        "show_pointer",
+        "preview_navigation_section",
+        "preview_playback_section",
+        "point_at_speed",
+        "increase_speed",
+        "restore_speed",
+        "hide_pointer",
     ]
     assert actions["open_player"]["open_page"]["handoff"] == "watch_command"
     assert actions["open_player"]["open_page"]["display_url"] == "$handoff"
-    assert actions["wait_for_playback"]["after"] == "@open_player@"
-    assert actions["wait_for_playback"]["transition"] == "captured"
-    assert actions["wait_for_playback"]["wait_for"]["timeout_ms"] == 60000
+    assert actions["open_player"]["hold_before_ms"] == 350
+    speed_target = {"role": "button", "name": "Playback speed"}
+    assert actions["show_pointer"]["set_pointer"] == {"visible": True}
+    assert actions["show_pointer"]["after"] == "@show_pointer@"
+    assert actions["preview_navigation_section"]["move_pointer"]["target"] == {
+        "test_id": "section-region-first-video-beat"
+    }
+    assert actions["preview_navigation_section"]["move_pointer"]["position"] == {
+        "x": 0.5,
+        "y": 0.5,
+    }
+    assert actions["preview_navigation_section"]["after"] == "@navigate_section@"
+    assert actions["preview_playback_section"]["move_pointer"]["target"] == {
+        "test_id": "section-region-second-video-beat"
+    }
+    assert actions["preview_playback_section"]["move_pointer"]["position"] == {
+        "x": 0.5,
+        "y": 0.5,
+    }
+    assert actions["preview_playback_section"]["after"] == "@playback_section@"
+    assert actions["point_at_speed"]["move_pointer"]["target"] == speed_target
+    assert actions["point_at_speed"]["after"] == "@point_at_speed@"
+    assert actions["increase_speed"]["click"]["target"] == speed_target
+    assert actions["increase_speed"]["after"] == "@playback_speed_start@"
+    assert actions["restore_speed"]["click"] == {
+        "target": speed_target,
+        "button": "right",
+    }
+    assert actions["restore_speed"]["after"] == "@playback_speed_end@"
+    assert actions["hide_pointer"]["set_pointer"] == {"visible": False}
+    assert actions["hide_pointer"].get("after") is None
 
     generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
     assert "kind: video" in generated
-    generated_beat = next(
+    generated_beats = [
         block["beat"]
         for block in studio_directive_blocks(generated)
         if "beat" in block
+    ]
+    assert [beat["id"] for beat in generated_beats] == [
+        "first-video-beat",
+        "second-video-beat",
+    ]
+    assert generated_beats[0]["heading"] == "First Video Beat"
+    assert generated_beats[0]["narration"] == (
+        "This is the first beat in the generated quickstart video."
     )
-    assert "viewer_hold" not in generated_beat
+    assert generated_beats[0]["viewer_hold"] == 3
+    assert generated_beats[1]["heading"] == "Second Video Beat"
+    assert generated_beats[1]["narration"] == (
+        "This is the second beat in the generated quickstart video."
+    )
+    assert generated_beats[1]["viewer_hold"] == 4
+    assert generated_beats[0]["actions"][0]["commands"][0] == {
+        "id": "show_first_beat",
+        "run": "# First video beat",
+    }
+    assert generated_beats[1]["actions"][0]["commands"][0] == {
+        "id": "show_second_beat",
+        "run": "# Second video beat",
+    }
 
 
 def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:
@@ -2749,17 +2839,15 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert "file: ${outputs.asset_dir}/index.html" in recording
     assert "This Markdown file is the source for one generated terminal video." in recording
     assert "fenced `studio-directive` blocks tell" in recording
-    assert "id: show_message" in recording
-    assert (
-        "run: for n in 3 2 1; do printf '%s\\n' \"$n\"; sleep 1; "
-        "done; printf 'Hello World!\\n'"
-    ) in recording
-    assert "timing: realtime" in recording
+    assert "id: first-video-beat" in recording
+    assert 'run: "# First video beat"' in recording
+    assert "id: second-video-beat" in recording
+    assert 'run: "# Second video beat"' in recording
     assert "follow_along" not in recording
     assert "@run_demo@" in recording
     assert "@wait:show_message@" in recording
-    assert "output_contains:" in recording
-    assert "- Hello World!" in recording
+    assert "viewer_hold: 3" in recording
+    assert "viewer_hold: 4" in recording
     assert not support_dir.exists()
 
 
@@ -2784,7 +2872,8 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
 
     assert "id: quickstart" in recording
     assert "title: Quickstart" in recording
-    assert "- Hello World!" in recording
+    assert "heading: First Video Beat" in recording
+    assert "heading: Second Video Beat" in recording
     assert not support_dir.exists()
 
 
@@ -2836,10 +2925,8 @@ def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
     assert "+  recording_dir: recordings" in output
     assert "+  data_dir: recordings/.omegaflow" in output
     assert "+id: quickstart" in output
-    assert (
-        "+      run: for n in 3 2 1; do printf '%s\\n' \"$n\"; sleep 1; "
-        "done; printf 'Hello World!\\n'"
-    ) in output
+    assert '+      run: "# First video beat"' in output
+    assert '+      run: "# Second video beat"' in output
     assert "No files were written." in output
     assert not (tmp_path / ".omegaflow").exists()
     assert not workspace.exists()
@@ -2903,7 +2990,8 @@ def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
 
     assert "id: tutorial/recording-file" in recording
     assert "title: Recording File" in recording
-    assert "- Hello World!" in recording
+    assert "heading: First Video Beat" in recording
+    assert "heading: Second Video Beat" in recording
     assert not support_dir.exists()
 
 
@@ -3411,10 +3499,7 @@ def test_render_collection_watch_page_escapes_metadata_and_links_to_players() ->
                 "id": "tutorial/beat",
                 "title": "Beats & narration",
                 "description": "See how <actions> form a beat.",
-                "url": (
-                    "/cast-player.html?manifest=%2F__studio_artifacts__%2F"
-                    "members%2Ftutorial%2Fbeat%2Frecording.presentation.json"
-                ),
+                "url": "/watch/tutorial/beat/?autoplay=countdown",
             }
         ],
     )
@@ -3422,10 +3507,7 @@ def test_render_collection_watch_page_escapes_metadata_and_links_to_players() ->
     assert "Tutorial &lt;Videos&gt;" in page
     assert "Beats &amp; narration" in page
     assert "See how &lt;actions&gt; form a beat." in page
-    assert (
-        'href="/cast-player.html?manifest=%2F__studio_artifacts__%2F'
-        'members%2Ftutorial%2Fbeat%2Frecording.presentation.json"'
-    ) in page
+    assert 'href="/watch/tutorial/beat/?autoplay=countdown"' in page
     assert 'id="video-search"' in page
     assert 'data-search="tutorial/beat beats &amp; narration see how ' in page
     assert 'class="video-list"' in page
@@ -3458,7 +3540,7 @@ def test_collection_watch_page_renders_compact_ordered_rows_for_large_collection
     assert "Watch video" not in page
 
 
-def test_collection_watch_url_path_namespaces_member_artifacts(monkeypatch) -> None:
+def test_collection_watch_routes_recording_members(monkeypatch) -> None:
     cfg = OmegaConf.create({"recording": "tutorial"})
     collection = {
         "kind": "collection",
@@ -3485,47 +3567,34 @@ def test_collection_watch_url_path_namespaces_member_artifacts(monkeypatch) -> N
         },
     )
 
-    def fake_watch_player_url_path(spec, *, run_dir=None, autoplay_countdown=False):
-        assert autoplay_countdown is True
+    resolved: list[str] = []
+
+    def fake_watch_presentation_artifacts(spec, *, run_dir=None):
         member = spec["_recording_id"]
-        return "/cast-player.html?manifest=ignored", {
-            "recording.presentation.json": Path(f"/{member}/manifest.json"),
-            "beats/terminal.cast": Path(f"/{member}/terminal.cast"),
-        }
+        resolved.append(member)
+        return Path(f"/{member}"), {}
 
     monkeypatch.setattr(
         studio,
-        "watch_player_url_path",
-        fake_watch_player_url_path,
+        "watch_presentation_artifacts",
+        fake_watch_presentation_artifacts,
     )
 
-    url_path, artifacts, pages = studio.collection_watch_url_path(
+    url_path, pages, recordings = studio.collection_watch_routes(
         cfg,
         {"recording": "tutorial"},
     )
 
-    assert url_path == "/collection.html"
-    assert artifacts == {
-        (
-            "members/tutorial/recording-file/recording.presentation.json"
-        ): Path("/tutorial/recording-file/manifest.json"),
-        "members/tutorial/recording-file/beats/terminal.cast": Path(
-            "/tutorial/recording-file/terminal.cast"
-        ),
-        "members/tutorial/beat/recording.presentation.json": Path(
-            "/tutorial/beat/manifest.json"
-        ),
-        "members/tutorial/beat/beats/terminal.cast": Path(
-            "/tutorial/beat/terminal.cast"
-        ),
+    assert url_path == "/watch/tutorial/"
+    assert resolved == ["tutorial/recording-file", "tutorial/beat"]
+    assert set(recordings) == {
+        "tutorial/recording-file",
+        "tutorial/beat",
     }
-    page = pages["/collection.html"].decode("utf-8")
+    page = pages["/watch/tutorial/"].decode("utf-8")
     assert "Recording-File" in page
     assert "Watch tutorial/beat" in page
-    assert (
-        "manifest=%2F__studio_artifacts__%2Fmembers%2Ftutorial%2Fbeat%2F"
-        "recording.presentation.json"
-    ) in page
+    assert 'href="/watch/tutorial/beat/?autoplay=countdown"' in page
 
 
 def test_collection_watch_reports_member_without_a_build(monkeypatch) -> None:
@@ -3552,7 +3621,7 @@ def test_collection_watch_reports_member_without_a_build(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         studio,
-        "watch_player_url_path",
+        "watch_presentation_artifacts",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             studio.StudioError("no successful recording run found")
         ),
@@ -3566,7 +3635,7 @@ def test_collection_watch_reports_member_without_a_build(monkeypatch) -> None:
             "omegaflow recording=tutorial/beat"
         ),
     ):
-        studio.collection_watch_url_path(cfg, {"recording": "tutorial"})
+        studio.collection_watch_routes(cfg, {"recording": "tutorial"})
 
 
 def test_watch_handler_serves_generated_page_from_memory() -> None:
@@ -3635,30 +3704,32 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
     )
 
-    def fake_watch_player_url_path(
-        _spec,
-        *,
-        run_dir=None,
-        autoplay_countdown=False,
-    ):
-        requested["autoplay_countdown"] = autoplay_countdown
-        return "/cast-player.html?manifest=demo", {}
+    monkeypatch.setattr(
+        studio,
+        "watch_presentation_artifacts",
+        lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
 
     def fake_run_watch_server(
         _cfg,
         _url,
         _artifacts,
         *,
+        recordings=None,
         managed_browser=False,
         open_browser=True,
         port=0,
     ):
-        requested["managed_browser"] = managed_browser
-        requested["open_browser"] = open_browser
-        requested["port"] = port
+        requested.update(
+            url=_url,
+            artifacts=_artifacts,
+            recordings=recordings,
+            managed_browser=managed_browser,
+            open_browser=open_browser,
+            port=port,
+        )
         return 0
 
-    monkeypatch.setattr(studio, "watch_player_url_path", fake_watch_player_url_path)
     monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
 
     status = studio.run_watch(
@@ -3668,11 +3739,61 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
 
     assert status == 0
     assert requested == {
-        "autoplay_countdown": True,
+        "url": "/watch/hello/?autoplay=countdown",
+        "artifacts": {},
+        "recordings": {"hello": {"_recording_id": "hello"}},
         "managed_browser": True,
         "open_browser": True,
         "port": 43123,
     }
+
+
+def test_run_watch_can_disable_countdown_autoplay(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_presentation_artifacts",
+        lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
+
+    def fake_run_watch_server(
+        _cfg,
+        _url,
+        _artifacts,
+        **kwargs,
+    ):
+        requested.update(url=_url, **kwargs)
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
+
+    status = studio.run_watch(
+        OmegaConf.create({"output_format": "text"}),
+        {"recording": "hello", "autoplay": False},
+    )
+
+    assert status == 0
+    assert requested["url"] == "/watch/hello/"
+
+
+@pytest.mark.parametrize("value", [0, "false", None])
+def test_run_watch_rejects_invalid_autoplay(value, monkeypatch) -> None:
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
+    )
+
+    with pytest.raises(studio.StudioError, match="autoplay must be a boolean"):
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "autoplay": value},
+        )
 
 
 @pytest.mark.parametrize("value", [True, 0, -1, 65536, "43123"])
@@ -3681,14 +3802,6 @@ def test_run_watch_rejects_invalid_configured_port(monkeypatch, value) -> None:
         studio,
         "recording_spec_from_config",
         lambda _config, recording_id=None, overrides=(): {"_recording_id": "hello"},
-    )
-    monkeypatch.setattr(
-        studio,
-        "watch_player_url_path",
-        lambda _spec, *, run_dir=None, autoplay_countdown=False: (
-            "/cast-player.html?manifest=demo",
-            {},
-        ),
     )
     monkeypatch.setattr(
         studio,
@@ -3718,11 +3831,8 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         studio,
-        "watch_player_url_path",
-        lambda _spec, *, run_dir=None, autoplay_countdown=False: (
-            "/cast-player.html?manifest=demo",
-            {},
-        ),
+        "watch_presentation_artifacts",
+        lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
     )
 
     def fake_run_watch_server(
@@ -3730,13 +3840,19 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
         _url,
         _artifacts,
         *,
+        recordings=None,
         managed_browser=False,
         open_browser=True,
         port=0,
     ):
-        requested["managed_browser"] = managed_browser
-        requested["open_browser"] = open_browser
-        requested["port"] = port
+        requested.update(
+            url=_url,
+            artifacts=_artifacts,
+            recordings=recordings,
+            managed_browser=managed_browser,
+            open_browser=open_browser,
+            port=port,
+        )
         return 0
 
     monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
@@ -3748,6 +3864,9 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
 
     assert status == 0
     assert requested == {
+        "url": "/watch/hello/?autoplay=countdown",
+        "artifacts": {},
+        "recordings": {"hello": {"_recording_id": "hello"}},
         "managed_browser": False,
         "open_browser": False,
         "port": 0,
@@ -3756,14 +3875,15 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
 
 def test_run_collection_watch_can_serve_without_opening_browser(monkeypatch) -> None:
     requested: dict[str, object] = {}
-    pages = {"/collection.html": b"<h1>Tutorial</h1>"}
+    pages = {"/watch/tutorial/": b"<h1>Tutorial</h1>"}
+    recordings = {"tutorial/beat": {"_recording_id": "tutorial/beat"}}
     monkeypatch.setattr(
         studio,
-        "collection_watch_url_path",
+        "collection_watch_routes",
         lambda _cfg, _config: (
-            "/collection.html",
-            {"members/tutorial/beat/manifest.json": Path("manifest.json")},
+            "/watch/tutorial/",
             pages,
+            recordings,
         ),
     )
 
@@ -3773,6 +3893,7 @@ def test_run_collection_watch_can_serve_without_opening_browser(monkeypatch) -> 
         artifacts,
         *,
         pages=None,
+        recordings=None,
         managed_browser=False,
         open_browser=True,
         port=0,
@@ -3781,6 +3902,7 @@ def test_run_collection_watch_can_serve_without_opening_browser(monkeypatch) -> 
             url_path=url_path,
             artifacts=artifacts,
             pages=pages,
+            recordings=recordings,
             managed_browser=managed_browser,
             open_browser=open_browser,
             port=port,
@@ -3796,11 +3918,10 @@ def test_run_collection_watch_can_serve_without_opening_browser(monkeypatch) -> 
 
     assert status == 0
     assert requested == {
-        "url_path": "/collection.html",
-        "artifacts": {
-            "members/tutorial/beat/manifest.json": Path("manifest.json")
-        },
+        "url_path": "/watch/tutorial/",
+        "artifacts": {},
         "pages": pages,
+        "recordings": recordings,
         "managed_browser": False,
         "open_browser": False,
         "port": 43123,

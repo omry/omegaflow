@@ -50,14 +50,17 @@ from .presentation_compiler import (
 from .presentation_schema import (
     PresentationAssetV1,
     PresentationAudioV1,
+    PresentationBeatPlayerV1,
     PresentationBeatV1,
     PresentationBrowserHeaderV1,
     PresentationChromeV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPlayerToolbarHighlightV1,
     PresentationRecordingV1,
     PresentationRendererV1,
     PresentationWindowV1,
+    PlayerToolbarControl,
 )
 from .publish import publish_public_bundle, validate_public_staging
 from .recording_plan import (
@@ -80,7 +83,7 @@ CAPTURE_POLICY_VERSIONS = {
     "redaction": "capture-mask-v1",
 }
 PRESENTATION_POLICY_VERSIONS = {
-    "compiler": "presentation-v2",
+    "compiler": "presentation-v4",
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
@@ -881,6 +884,8 @@ def _next_pointer(compiled: CompiledBrowserBeat) -> dict[str, Any]:
     for event in compiled.payload["events"]:
         if event["kind"] == "pointer_move":
             pointer.update(event["end"])
+        elif event["kind"] == "pointer_visibility":
+            pointer["visible"] = event["visible"]
     return pointer
 
 
@@ -1043,7 +1048,8 @@ def compile_presentation_bundle(
         all_sources: dict[str, Any] = {}
         timing_by_id = {item.id: item for item in timing.beats}
         first_browser = True
-        presentation_config = thaw(plan.presentation)["browser"]
+        presentation_settings = thaw(plan.presentation)
+        presentation_config = presentation_settings["browser"]
         for beat in plan.beats:
             beat_timing = timing_by_id[beat.id]
             if beat.medium is RecordingMedium.terminal:
@@ -1095,11 +1101,39 @@ def compile_presentation_bundle(
                 first_browser = False
             guide = None
             if beat.guide is not None:
-                hint = thaw(beat.guide).get("success_hint")
-                if isinstance(hint, str) and hint:
+                guide_config = thaw(beat.guide)
+                commands = guide_config.get("commands", [])
+                hint = guide_config.get("success_hint")
+                if commands or (isinstance(hint, str) and hint):
                     from .presentation_schema import PresentationGuideV1
 
-                    guide = PresentationGuideV1(success_hint=hint)
+                    guide = PresentationGuideV1(
+                        commands=list(commands),
+                        success_hint=hint,
+                    )
+            player = (
+                None
+                if beat.player_highlight is None
+                else PresentationBeatPlayerV1(
+                    highlight=PresentationPlayerToolbarHighlightV1(
+                        control=PlayerToolbarControl(beat.player_highlight.control),
+                        start_ms=(
+                            timing.anchor_times_ms[
+                                (beat.id, beat.player_highlight.start_anchor)
+                            ]
+                            - beat_timing.offset_ms
+                        ),
+                        end_ms=(
+                            beat_timing.duration_ms
+                            if beat.player_highlight.end_anchor is None
+                            else timing.anchor_times_ms[
+                                (beat.id, beat.player_highlight.end_anchor)
+                            ]
+                            - beat_timing.offset_ms
+                        ),
+                    )
+                )
+            )
             manifest_beats.append(
                 PresentationBeatV1(
                     id=beat.id,
@@ -1109,6 +1143,7 @@ def compile_presentation_bundle(
                     duration_ms=beat_timing.duration_ms,
                     payload=payload,
                     guide=guide,
+                    player=player,
                     transition_in=transition,
                 )
             )
@@ -1164,6 +1199,7 @@ def compile_presentation_bundle(
         window = presentation_config["window"]
         chrome = presentation_config["chrome"]
         header = PresentationHeaderV1(
+            guided=bool(presentation_settings["guided"]),
             browser=(
                 PresentationBrowserHeaderV1(
                     window=PresentationWindowV1(
