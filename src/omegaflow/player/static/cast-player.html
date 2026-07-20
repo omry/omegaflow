@@ -986,7 +986,7 @@
             <p class="guide-hint" id="guide-hint"></p>
             <div class="guide-actions">
               <button id="guide-copy" type="button">Copy command</button>
-              <button id="guide-restart" type="button">Restart section</button>
+              <button id="guide-restart" type="button">Restart beat</button>
               <button id="guide-continue" type="button">Continue</button>
             </div>
           </div>
@@ -995,10 +995,10 @@
       <div class="status">
         <span id="clock">0:00 / 0:00</span>
         <div class="transport" aria-label="Playback controls">
-          <button class="icon-button" id="prev-section" type="button" aria-label="Previous section" disabled></button>
+          <button class="icon-button" id="prev-section" type="button" aria-label="Previous beat" disabled></button>
           <button class="icon-button" id="play" type="button" aria-label="Play"></button>
           <button class="icon-button" id="restart" type="button" aria-label="Restart" disabled></button>
-          <button class="icon-button" id="next-section" type="button" aria-label="Next section" disabled></button>
+          <button class="icon-button" id="next-section" type="button" aria-label="Next beat" disabled></button>
           <button class="icon-button" id="guided" type="button" aria-label="Guided mode off"></button>
           <button class="rate-button" id="rate" type="button" aria-label="Playback speed 1×">1×</button>
         </div>
@@ -1886,7 +1886,7 @@
       }
 
       function sectionTooltipText(segment) {
-        return segment.heading || segment.text || titleText || 'Section';
+        return segment.heading || segment.text || titleText || 'Beat';
       }
 
       function secondsFromProgressPointer(event) {
@@ -2448,8 +2448,8 @@
               : 'Play';
         setIconButton(playButton, playing ? 'pause' : 'play', playLabel);
         setIconButton(restartButton, 'restart', 'Restart');
-        setIconButton(prevSectionButton, 'previous', 'Previous section');
-        setIconButton(nextSectionButton, 'next', 'Next section');
+        setIconButton(prevSectionButton, 'previous', 'Previous beat');
+        setIconButton(nextSectionButton, 'next', 'Next beat');
         setIconButton(guidedButton, 'guided', guidedMode ? 'Guided mode on' : 'Guided mode off');
         guidedButton.dataset.active = guidedMode ? 'true' : 'false';
         guidedButton.setAttribute('aria-pressed', guidedMode ? 'true' : 'false');
@@ -2580,7 +2580,7 @@
             ? commands.length === 1
               ? 'Run this command in your terminal before continuing.'
               : 'Run these commands in your terminal before continuing.'
-            : 'Review this step before continuing.'
+            : 'Review this beat before continuing.'
         );
         guideCommand.hidden = !commandText;
         guideCopyButton.hidden = !commandText;
