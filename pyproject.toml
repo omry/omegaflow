@@ -38,6 +38,7 @@ path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omegaflow"]
+dev-mode-dirs = ["src"]
 artifacts = [
   "/src/omegaflow/bin/asciinema",
   "/src/omegaflow/bin/asciinema.platform",

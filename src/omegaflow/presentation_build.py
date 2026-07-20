@@ -117,6 +117,8 @@ class PresentationAudioArtifacts:
     timestamps: Mapping[str, Path]
     take_audio: Mapping[str, Path]
     warnings: tuple[str, ...] = ()
+    tts_billing: audio.AudioBillingSummary | None = None
+    transcription_billing: audio.AudioTranscriptionBillingSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -555,7 +557,12 @@ def capture_recording(
             on_progress=on_progress,
         )
     except Exception as exc:
-        _preserve_capture_diagnostics(spec, run_dir, exc)
+        _preserve_capture_diagnostics(
+            spec,
+            run_dir,
+            exc,
+            working_directory=working_directory,
+        )
         raise
     _copy_capture_logs(run_dir)
     return result
@@ -589,7 +596,11 @@ def _read_capped_failure_output(path: Path, *, max_chars: int = 12_000) -> tuple
 
 
 def _preserve_capture_diagnostics(
-    spec: Mapping[str, Any], run_dir: Path, error: BaseException
+    spec: Mapping[str, Any],
+    run_dir: Path,
+    error: BaseException,
+    *,
+    working_directory: Path,
 ) -> None:
     """Write best-effort failure artifacts without masking the primary error."""
 
@@ -640,6 +651,7 @@ def _preserve_capture_diagnostics(
             "progress_path": str(progress_path),
             "progress_truncated": progress_truncated,
             "run_dir": str(run_dir),
+            "working_directory": str(working_directory.absolute()),
             "postmortem_path": str(run_dir / "enter"),
             "recording_id": str(spec.get("id", "")),
             "run_id": run_dir.name,
@@ -852,6 +864,16 @@ def prepare_narration_audio(
                 output_path=item.output_path,
             )
         )
+    synthesized_items = audio.audio_items_requiring_synthesis(
+        audio_items,
+        settings,
+        force=force,
+    )
+    timestamp_items = audio.timestamp_items_requiring_generation(
+        audio_items,
+        transcription=transcription,
+        force=force,
+    )
     total_steps = 3 * len(audio_items)
     current_step = 0
 
@@ -965,6 +987,23 @@ def prepare_narration_audio(
     metadata_path.write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    tts_billing = (
+        audio.estimate_openai_tts_billing(synthesized_items, settings)
+        if settings.provider == "openai" and synthesized_items
+        else None
+    )
+    transcription_billing = (
+        audio.estimate_openai_transcription_billing(
+            timestamp_items,
+            transcription,
+            audio_seconds=sum(
+                take_durations[item.segment.segment_id] for item in timestamp_items
+            )
+            / 1000,
+        )
+        if settings.provider == "openai" and timestamp_items
+        else None
+    )
     return PresentationAudioArtifacts(
         metadata=metadata_path,
         timestamps=timestamp_files,
@@ -973,6 +1012,8 @@ def prepare_narration_audio(
             for item, audio_item in zip(take_items, audio_items, strict=True)
         },
         warnings=tuple(sorted(set(warnings))),
+        tts_billing=tts_billing,
+        transcription_billing=transcription_billing,
     )
 
 

@@ -60,6 +60,9 @@ audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
   env_file: .env
+setup:
+- name: prepare isolated demo environment
+  run_file: scripts/setup-demo-environment.sh
 cleanup:
 - name: remove demo project
   run_file: scripts/cleanup-demo-project.sh
@@ -109,11 +112,9 @@ beat:
   caption: Install OmegaFlow in a Python environment.
   actions:
   - commands:
-    # The homepage video is built from the current checkout, which may be an
-    # unreleased version that cannot yet be installed from PyPI. The PATH
-    # wrapper verifies that this checkout imports, while replacement output
-    # shows the public installation result users should expect after release.
-    # It does not claim to validate the published package.
+    # The PATH wrapper installs the current checkout into the demo's isolated
+    # environment. The displayed command and replacement output model the
+    # public installation flow without claiming a specific published version.
     - id: install_command
       run: python -m pip install omegaflow
       display: python -m pip install omegaflow

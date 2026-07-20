@@ -11,6 +11,7 @@ import io
 import json
 import ntpath
 import os
+import re
 import shutil
 import shlex
 import subprocess
@@ -34,7 +35,7 @@ from . import audio
 from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
-from .capture import CaptureActionItem, capture_action_items
+from .capture import CaptureActionItem, CaptureFailed, capture_action_items
 from .recording_plan import RecordingPlanError, normalize_recording_plan
 from .studio_config import (
     CONFIG_DIR,
@@ -65,6 +66,7 @@ from .terminal_style import (
     color_enabled,
     color_text,
 )
+from .terminal_capture import TerminalLifecycleStepError
 from .tool_progress import LogProgressRenderer, ProgressBarRenderer
 
 
@@ -445,21 +447,151 @@ def run_build_record_action(
         else:
             progress.update(message)
 
-    presentation_build.capture_recording(
-        spec,
-        plan,
-        run_dir,
-        headed=bool_config(config, "headed"),
-        on_progress=on_capture_progress if progress is not None else None,
-    )
+    try:
+        presentation_build.capture_recording(
+            spec,
+            plan,
+            run_dir,
+            headed=bool_config(config, "headed"),
+            on_progress=on_capture_progress if progress is not None else None,
+        )
+    except Exception as exc:
+        try:
+            report = record.read_failure_report(run_dir / "failure.json")
+        except Exception:
+            report = None
+        if report is not None:
+            raise StudioError(capture_failure_message(exc, report)) from exc
+        raise
     presentation_build.write_capture_fingerprint(spec, plan, run_dir)
     if progress is None and text_output_enabled(cfg):
         pass_line(f"captured recording: {display_path(run_dir)}")
     return run_dir
 
 
+def capture_failure_message(
+    error: BaseException,
+    report: Mapping[str, Any],
+) -> str:
+    """Format persisted capture diagnostics for the user-facing CLI."""
+
+    primary_error: BaseException = error
+    heading = "Capture failed"
+    cleanup_lines: list[str] = []
+    if isinstance(error, CaptureFailed):
+        if error.primary is not None:
+            primary_error = error.primary.error
+            heading = f"Capture failed during {error.primary.operation}"
+        elif error.cleanup:
+            primary_error = error.cleanup[0].error
+            heading = "Cleanup failed"
+        for detail in error.cleanup:
+            cleanup_error = detail.error
+            if isinstance(cleanup_error, TerminalLifecycleStepError):
+                cleanup_line = (
+                    f"warning: cleanup step {cleanup_error.step_name!r} also failed"
+                )
+                cleanup_run_file = lifecycle_run_file_display(cleanup_error)
+                if cleanup_run_file is not None:
+                    cleanup_line += f" while running {cleanup_run_file!r}"
+                cleanup_lines.append(cleanup_line)
+            else:
+                cleanup_lines.append(
+                    f"warning: cleanup also failed during {detail.operation}"
+                )
+
+    if isinstance(primary_error, TerminalLifecycleStepError):
+        operation = primary_error.operation.capitalize()
+        heading = f"{operation} step {primary_error.step_name!r} failed"
+        status_match = re.search(r"\bexit ([0-9]+)\b", str(primary_error.error))
+        if status_match is not None:
+            heading += f" (exit {status_match.group(1)})"
+        run_file = lifecycle_run_file_display(primary_error)
+        if run_file is not None:
+            heading += f" while running {run_file!r}"
+
+    output_value = report.get("stderr") or report.get("output")
+    output_lines: list[str] = []
+    if isinstance(output_value, str):
+        for line in output_value.rstrip().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("terminal step exited "):
+                continue
+            output_lines.append(line)
+    if len(output_lines) > 12:
+        output_lines = ["…", *output_lines[-12:]]
+
+    lines = [heading]
+    if output_lines:
+        lines.extend(f"  {line}" for line in output_lines)
+    elif str(primary_error):
+        lines.append(f"  {primary_error}")
+    lines.extend(cleanup_lines)
+
+    recording_id = report.get("recording_id")
+    run_id = report.get("run_id")
+    if (
+        isinstance(recording_id, str)
+        and recording_id
+        and isinstance(run_id, str)
+        and run_id
+    ):
+        lines.append(
+            "Run: "
+            f"omegaflow recording={recording_id} action=output run_id={run_id}"
+        )
+    return "\n".join(lines)
+
+
+def lifecycle_run_file_display(
+    error: TerminalLifecycleStepError,
+) -> str | None:
+    """Return an unambiguous absolute lifecycle script path."""
+
+    if error.run_file is None:
+        return None
+    return str(Path(error.run_file).absolute())
+
+
 def run_audio_action(cfg: DictConfig, action: str, label: str | None = None) -> None:
     run_step(label or f"audio {action}", audio.run_tool_from_hydra_cfg, cfg, action)
+
+
+def narration_billing_message(
+    artifacts: presentation_build.PresentationAudioArtifacts | None,
+    *,
+    color: bool | None = None,
+) -> str | None:
+    def amount(value: float) -> str:
+        return color_text(
+            audio.format_usd(value),
+            ANSI_GREEN_BOLD,
+            enabled=color,
+        )
+
+    if artifacts is None:
+        return None
+    tts = artifacts.tts_billing
+    transcription = artifacts.transcription_billing
+    if tts is None and transcription is None:
+        return None
+    if transcription is None:
+        assert tts is not None
+        return (
+            "OpenAI TTS estimated cost this build: "
+            f"{amount(tts.estimated_cost_usd)}"
+        )
+    if tts is None:
+        return (
+            "OpenAI transcription estimated cost this build: "
+            f"{amount(transcription.estimated_cost_usd)}"
+        )
+    total = tts.estimated_cost_usd + transcription.estimated_cost_usd
+    return (
+        f"OpenAI narration estimated cost this build: {amount(total)} "
+        f"(TTS {amount(tts.estimated_cost_usd)} + transcription "
+        f"{amount(transcription.estimated_cost_usd)})"
+    )
 
 
 def bool_config(config: dict[str, Any], key: str, default: bool = False) -> bool:
@@ -2737,6 +2869,7 @@ def run_manifest_build(
     )
     warnings: tuple[str, ...] = ()
     published_surfaces: list[tuple[str, PublishSurfaceOutcome, bool]] = []
+    billing_message: str | None = None
     try:
         publish_targets = resolve_build_publish_surfaces(
             config,
@@ -2765,6 +2898,7 @@ def run_manifest_build(
             force=bool_config(config, "force"),
             on_progress=on_narration_progress if narration_steps else None,
         )
+        billing_message = narration_billing_message(audio_artifacts)
         progress.begin("Assembling video")
         result = presentation_build.compile_presentation_bundle(
             spec,
@@ -2818,6 +2952,8 @@ def run_manifest_build(
                 else None
             )
         )
+        if billing_message is not None and text_output_enabled(cfg):
+            info_line(billing_message)
         if success:
             for warning in warnings:
                 info_line(f"{warning}: review recommended")

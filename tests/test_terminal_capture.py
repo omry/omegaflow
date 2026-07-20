@@ -18,6 +18,7 @@ from omegaflow.recording_plan import normalize_recording_plan
 from omegaflow.terminal_capture import (
     PersistentTerminalRunner,
     TerminalControlSession,
+    TerminalLifecycleStepError,
     extract_terminal_beat_casts,
 )
 
@@ -168,6 +169,48 @@ def test_persistent_terminal_protocol_preserves_state_and_marks_hidden_intervals
         event.get("op") for event in events if event["phase"] == "hidden_start"
     ] == ["setup", "checks", "cleanup"]
     assert not (tmp_path / "run" / "capture" / ".terminal-control").exists()
+
+
+def test_persistent_terminal_failure_identifies_named_setup_step(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "named-setup-failure",
+            "setup": [
+                {
+                    "name": "prepare shared state",
+                    "run": "export SETUP_READY=ready",
+                },
+                {
+                    "name": "prepare isolated demo environment",
+                    "run": (
+                        "test \"$SETUP_READY\" = ready; "
+                        "printf 'setup detail\\n' >&2; false"
+                    ),
+                }
+            ],
+            "beats": [{"id": "unused", "actions": []}],
+            "cleanup": [{"name": "remove demo project", "run": "true"}],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=False,
+            timeout_seconds=5.0,
+        )
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert caught.value.primary is not None
+    error = caught.value.primary.error
+    assert isinstance(error, TerminalLifecycleStepError)
+    assert error.operation == "setup"
+    assert error.step_name == "prepare isolated demo environment"
+    assert error.step_index == 2
+    assert "exit 1" in str(error)
 
 
 def test_headed_terminal_session_inherits_interactive_stdio(
@@ -365,6 +408,7 @@ def test_terminal_failure_preserves_postmortem_artifacts(
     failure = json.loads((run_dir / "failure.json").read_text(encoding="utf-8"))
     assert failure["kind"] == "capture"
     assert failure["id"] == "capture beat failure"
+    assert failure["working_directory"] == str(tmp_path.absolute())
     assert failure["postmortem_path"] == str(run_dir / "enter")
     assert "terminal step exited 7, expected 0" in failure["message"]
     assert "terminal step exited 7, expected 0" in failure["stderr"]

@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-exec "$repo_root/.venv/bin/python" -m omegaflow.studio "$@"
+demo_venv="${HOMEPAGE_DEMO_VENV:-}"
+if [[ ! -x "$demo_venv/bin/python" ]]; then
+  echo "homepage demo environment is not prepared" >&2
+  exit 1
+fi
+
+exec "$demo_venv/bin/python" -m omegaflow.studio "$@"

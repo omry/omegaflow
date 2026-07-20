@@ -543,6 +543,34 @@ def test_toolbar_controls_show_deterministic_tooltips(tmp_path: Path) -> None:
         assert rate.evaluate(
             "element => getComputedStyle(element, '::before').opacity"
         ) == "1"
+        geometry = rate.evaluate(
+            """element => {
+              const style = getComputedStyle(element, '::before');
+              const probe = document.createElement('span');
+              probe.textContent = element.dataset.tooltip;
+              Object.assign(probe.style, {
+                position: 'fixed',
+                visibility: 'hidden',
+                whiteSpace: 'nowrap',
+                fontFamily: style.fontFamily,
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                letterSpacing: style.letterSpacing,
+              });
+              document.body.append(probe);
+              const textWidth = probe.getBoundingClientRect().width;
+              probe.remove();
+              return {
+                backgroundWidth: parseFloat(style.width),
+                requiredWidth: textWidth
+                  + parseFloat(style.paddingLeft)
+                  + parseFloat(style.paddingRight)
+                  + parseFloat(style.borderLeftWidth)
+                  + parseFloat(style.borderRightWidth),
+              };
+            }"""
+        )
+        assert geometry["backgroundWidth"] >= geometry["requiredWidth"] - 1
         browser.close()
 
 

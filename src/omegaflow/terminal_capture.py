@@ -56,6 +56,25 @@ class TerminalCaptureError(RuntimeError):
     """Raised when the persistent terminal session or its protocol fails."""
 
 
+class TerminalLifecycleStepError(TerminalCaptureError):
+    """A named setup or cleanup step failed in the terminal session."""
+
+    def __init__(
+        self,
+        operation: str,
+        step_name: str,
+        step_index: int,
+        error: TerminalCaptureError,
+        run_file: str | None = None,
+    ) -> None:
+        self.operation = operation
+        self.step_name = step_name
+        self.step_index = step_index
+        self.error = error
+        self.run_file = run_file
+        super().__init__(f"{operation} step {step_name!r} failed: {error}")
+
+
 def _session_script() -> str:
     return r'''#!/usr/bin/env bash
 set +e
@@ -1059,10 +1078,32 @@ class PersistentTerminalRunner:
         configs = tuple(step.config for step in steps)
         if not configs:
             return
-        self._require_session().execute(
-            op,
-            script=_steps_script(configs, self.context),
-        )
+        session = self._require_session()
+        for index, config in enumerate(configs, start=1):
+            value = _thaw(config)
+            configured_name = value.get("name")
+            step_name = (
+                configured_name
+                if isinstance(configured_name, str) and configured_name
+                else f"{op} step {index}"
+            )
+            try:
+                session.execute(
+                    op,
+                    script=_steps_script((config,), self.context),
+                )
+            except TerminalCaptureError as exc:
+                raise TerminalLifecycleStepError(
+                    op,
+                    step_name,
+                    index,
+                    exc,
+                    run_file=(
+                        value.get("run_file")
+                        if isinstance(value.get("run_file"), str)
+                        else None
+                    ),
+                ) from exc
 
     def _require_session(self) -> TerminalControlSession:
         if self.session is None:

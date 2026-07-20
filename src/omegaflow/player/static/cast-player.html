@@ -549,7 +549,9 @@
         z-index: 20;
         bottom: calc(100% + 0.5rem);
         left: 50%;
-        max-width: min(22rem, 80vw);
+        box-sizing: border-box;
+        width: max-content;
+        max-width: min(32rem, calc(100vw - 1rem));
         border: 1px solid var(--border);
         border-radius: 5px;
         padding: 0.35rem 0.5rem;
@@ -565,7 +567,8 @@
         transform: translate(-50%, 0.2rem);
         transition: opacity 100ms ease, transform 100ms ease;
         visibility: hidden;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
 
       .status button[data-tooltip]:hover::before,

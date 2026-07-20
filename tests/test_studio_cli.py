@@ -18,6 +18,11 @@ from omegaflow import audio
 from omegaflow import record
 from omegaflow import studio
 from omegaflow import studio_config as studio_config_module
+from omegaflow.capture import (
+    CaptureCoordinator,
+    CaptureFailed,
+    CaptureFailureDetail,
+)
 from omegaflow.record import collect_run_jobs
 from omegaflow.studio_config import (
     CONFIG_DIR,
@@ -35,6 +40,12 @@ from omegaflow.studio_config import (
     studio_run_dir,
 )
 from omegaflow.tool_progress import ProgressBarRenderer
+from omegaflow.terminal_style import ANSI_GREEN_BOLD, ANSI_RESET
+from omegaflow.terminal_capture import (
+    PersistentTerminalRunner,
+    TerminalCaptureError,
+    TerminalLifecycleStepError,
+)
 
 
 def write_successful_presentation_run(
@@ -505,9 +516,117 @@ def test_failed_build_clears_progress_and_reports_failure(
     assert "build completed" not in output
 
 
+def test_capture_failure_message_surfaces_stderr_and_recovery_command() -> None:
+    setup_error = TerminalLifecycleStepError(
+        "setup",
+        "prepare isolated demo environment",
+        1,
+        TerminalCaptureError(
+            "terminal setup request 1 failed for <recording>: exit 1"
+        ),
+        run_file=(
+            "/workspace/recordings/quickstart-demo/"
+            "scripts/setup-demo-environment.sh"
+        ),
+    )
+    cleanup_error = TerminalLifecycleStepError(
+        "cleanup",
+        "remove demo project",
+        1,
+        TerminalCaptureError(
+            "terminal cleanup request 2 failed for <recording>: exit 1"
+        ),
+        run_file=(
+            "/workspace/recordings/quickstart-demo/"
+            "scripts/cleanup-demo-project.sh"
+        ),
+    )
+    error = CaptureFailed(
+        primary=CaptureFailureDetail("project setup", setup_error),
+        cleanup=(CaptureFailureDetail("project cleanup", cleanup_error),),
+    )
+    report = {
+        "recording_id": "quickstart-demo",
+        "run_id": "20260720-221308",
+        "working_directory": "/workspace",
+        "stderr": (
+            "/bin/bash: line 4: BASH_SOURCE[0]: unbound variable\n"
+            "repository environment is missing: //.venv/bin/python\n"
+            "terminal step exited 1, expected 0\n"
+        ),
+    }
+
+    assert studio.capture_failure_message(error, report) == (
+        "Setup step 'prepare isolated demo environment' failed (exit 1) "
+        "while running '/workspace/recordings/quickstart-demo/"
+        "scripts/setup-demo-environment.sh'\n"
+        "  /bin/bash: line 4: BASH_SOURCE[0]: unbound variable\n"
+        "  repository environment is missing: //.venv/bin/python\n"
+        "warning: cleanup step 'remove demo project' also failed while running "
+        "'/workspace/recordings/quickstart-demo/"
+        "scripts/cleanup-demo-project.sh'\n"
+        "Run: omegaflow recording=quickstart-demo action=output "
+        "run_id=20260720-221308"
+    )
+
+
+def test_capture_failure_preserves_primary_error_when_report_is_invalid(
+    tmp_path, monkeypatch
+) -> None:
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "demo",
+            "beats": [{"id": "broken", "actions": []}],
+        }
+    )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "failure.json").write_bytes(b"\xff")
+    original = RuntimeError("capture exploded")
+    monkeypatch.setattr(studio, "current_recording_run_dir", lambda _spec: run_dir)
+
+    def fail_capture(*_args, **_kwargs):
+        raise original
+
+    monkeypatch.setattr(studio.presentation_build, "capture_recording", fail_capture)
+
+    with pytest.raises(RuntimeError, match="capture exploded") as caught:
+        studio.run_build_record_action(
+            OmegaConf.create(
+                {
+                    "force": True,
+                    "headed": False,
+                    "verbose": False,
+                    "output_format": "text",
+                }
+            ),
+            {"_recording_id": "demo"},
+            plan,
+        )
+
+    assert caught.value is original
+
+
 def test_manifest_build_folds_internal_steps_into_concise_progress(
     tmp_path, monkeypatch, capsys
 ) -> None:
+    output_events: list[str] = []
+    progress_type = studio.BuildProgress
+
+    class TrackingBuildProgress(progress_type):
+        def finish(self, *, completion: str | None = None) -> None:
+            output_events.append("progress finished")
+            super().finish(completion=completion)
+
+    original_info_line = studio.info_line
+
+    def tracking_info_line(message: str) -> None:
+        if "estimated cost this build" in message:
+            output_events.append("billing printed")
+        original_info_line(message)
+
+    monkeypatch.setattr(studio, "BuildProgress", TrackingBuildProgress)
+    monkeypatch.setattr(studio, "info_line", tracking_info_line)
     website_surface = tmp_path / "website.md"
     website_surface.write_text(
         "<!-- studio:demo:start -->\nold\n<!-- studio:demo:end -->\n",
@@ -563,7 +682,19 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
         ):
             on_progress(message, current, 3)
             on_progress(message, current + 1, 3)
-        return SimpleNamespace(timestamps={"take": tmp_path / "take.json"})
+        return SimpleNamespace(
+            timestamps={"take": tmp_path / "take.json"},
+            tts_billing=audio.AudioBillingSummary(
+                generated_segments=1,
+                billable_characters=100,
+                estimated_cost_usd=0.0015,
+            ),
+            transcription_billing=audio.AudioTranscriptionBillingSummary(
+                generated_timestamp_files=1,
+                audio_seconds=5.0,
+                estimated_cost_usd=0.0005,
+            ),
+        )
 
     monkeypatch.setattr(
         studio.presentation_build, "prepare_narration_audio", fake_audio
@@ -617,6 +748,11 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
     output = capsys.readouterr().out
     assert "step  Recording workflow (0 actions)" in output
     assert "step  Preparing narration (1 take)" in output
+    assert (
+        "info  OpenAI narration estimated cost this build: $0.002000 "
+        "(TTS $0.001500 + transcription $0.000500)"
+        in output
+    )
     assert "step  Assembling video" in output
     assert "pass  build completed after" in output
     assert "capture recording" not in output
@@ -635,6 +771,29 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
         ("website", False, False),
         ("standalone", False, False),
     ]
+    assert output_events == ["progress finished", "billing printed"]
+
+
+def test_narration_billing_message_colors_only_dollar_amounts() -> None:
+    artifacts = SimpleNamespace(
+        tts_billing=audio.AudioBillingSummary(
+            generated_segments=1,
+            billable_characters=100,
+            estimated_cost_usd=0.0015,
+        ),
+        transcription_billing=audio.AudioTranscriptionBillingSummary(
+            generated_timestamp_files=1,
+            audio_seconds=5.0,
+            estimated_cost_usd=0.0005,
+        ),
+    )
+
+    assert studio.narration_billing_message(artifacts, color=True) == (
+        "OpenAI narration estimated cost this build: "
+        f"{ANSI_GREEN_BOLD}$0.002000{ANSI_RESET} "
+        f"(TTS {ANSI_GREEN_BOLD}$0.001500{ANSI_RESET} + transcription "
+        f"{ANSI_GREEN_BOLD}$0.000500{ANSI_RESET})"
+    )
 
 
 @pytest.mark.parametrize(
@@ -2590,6 +2749,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         if "beat" in block
     ]
     beats_by_id = {beat["id"]: beat for beat in beats}
+    install_command = beats_by_id["install"]["actions"][0]["commands"][0]
     build_commands = beats_by_id["build"]["actions"][0]["commands"]
     browser_beat = beats_by_id["play-in-browser"]
     bootstrap_beat = beats_by_id["bootstrap"]
@@ -2616,6 +2776,29 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     }
     assert beats_by_id["introduction"]["player"] == {
         "highlight": {"control": "guided", "start": "@guided_mode_start@"}
+    }
+    assert spec["setup"] == [
+        {
+            "run": None,
+            "run_file": "scripts/setup-demo-environment.sh",
+            "display": None,
+            "after": None,
+            "output": None,
+            "expect": {
+                "exit_code": 0,
+                "output_contains": [],
+                "output_regex": [],
+                "file_exists": [],
+            },
+            "name": "prepare isolated demo environment",
+            "progress": [],
+            "commands": None,
+        }
+    ]
+    assert install_command["run"] == "python -m pip install omegaflow"
+    assert install_command["display"] == "python -m pip install omegaflow"
+    assert install_command["output"] == {
+        "replace": "Successfully installed omegaflow\n"
     }
     assert beats_by_id["install"]["narration"].startswith("Start by")
     assert "narration_take" not in beats_by_id["install"]
@@ -2797,6 +2980,75 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         "id": "show_second_beat",
         "run": "# Second video beat",
     }
+
+
+def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
+    tmp_path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    recording = recording_from_script(
+        "quickstart-demo",
+        recording_dir=root / "recordings",
+    )
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "quickstart-demo-install-smoke",
+            "_script_dir": recording["_script_dir"],
+            "setup": recording["setup"],
+            "beats": [
+                {
+                    "id": "install",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        "if \"$HOMEPAGE_DEMO_VENV/bin/python\" "
+                                        "-c 'import omegaflow' 2>/dev/null; then "
+                                        "exit 91; fi"
+                                    )
+                                },
+                                {"run": "python -m pip install omegaflow"},
+                                {
+                                    "run": (
+                                        "\"$HOMEPAGE_DEMO_VENV/bin/python\" -c '"
+                                        "import os, pathlib, omegaflow; "
+                                        "root = pathlib.Path(os.environ[\"OMEGAFLOW_TEST_ROOT\"]); "
+                                        "assert pathlib.Path(omegaflow.__file__).resolve()."
+                                        "is_relative_to(root / \"src\")'"
+                                    )
+                                },
+                                {"run": "omegaflow --help >/dev/null"},
+                            ]
+                        }
+                    ],
+                }
+            ],
+            "cleanup": recording["cleanup"],
+        }
+    )
+    bin_dir = root / "recordings" / "quickstart-demo" / "bin"
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=False,
+            timeout_seconds=60.0,
+        )
+    )
+
+    coordinator.capture(
+        plan,
+        tmp_path / "run",
+        workspace=root,
+        working_directory=root,
+        environment={
+            "OMEGAFLOW_TEST_ROOT": str(root),
+            "PATH": os.pathsep.join((str(bin_dir), os.environ.get("PATH", ""))),
+        },
+    )
+
+    assert not list(
+        (tmp_path / "run" / ".tmp").glob("omegaflow-quickstart-env.*")
+    )
 
 
 def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:

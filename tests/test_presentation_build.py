@@ -421,7 +421,22 @@ def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
         for item in items:
             path = studio.audio.timeline_path_for(item)
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text('{"words": []}\n', encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    audio_module.timeline_payload(
+                        _recording_id,
+                        item,
+                        _transcription,
+                        {
+                            "text": item.segment.text,
+                            "duration": 2.0,
+                            "words": [],
+                        },
+                    )
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
     monkeypatch.setattr(studio.audio, "generate_audio", fake_generate_audio)
     monkeypatch.setattr(studio.audio, "generate_timestamps", fake_generate_timestamps)
@@ -439,6 +454,20 @@ def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
         "browser",
     ]
     assert set(artifacts.timestamps) == {"joined"}
+    assert artifacts.tts_billing is not None
+    assert artifacts.tts_billing.generated_segments == 1
+    assert artifacts.tts_billing.billable_characters == len(
+        plan.narration_takes[0].synthesis_text
+    )
+    assert artifacts.transcription_billing is not None
+    assert artifacts.transcription_billing.generated_timestamp_files == 1
+    assert artifacts.transcription_billing.audio_seconds == 2.0
+
+    reused = prepare_narration_audio(spec, plan, tmp_path / "reused-run")
+
+    assert reused is not None
+    assert reused.tts_billing is None
+    assert reused.transcription_billing is None
 
 
 def test_prepare_narration_audio_reports_each_slow_operation(

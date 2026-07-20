@@ -1071,12 +1071,17 @@ def estimate_openai_transcription_billing(
     items: list[AudioPlanItem],
     transcription: TranscriptionSettings,
     *,
+    audio_seconds: float | None = None,
     ffprobe: str = "ffprobe",
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> AudioTranscriptionBillingSummary:
-    seconds = sum(
-        audio_duration_seconds(item.output_path, ffprobe=ffprobe, run=run)
-        for item in items
+    seconds = (
+        audio_seconds
+        if audio_seconds is not None
+        else sum(
+            audio_duration_seconds(item.output_path, ffprobe=ffprobe, run=run)
+            for item in items
+        )
     )
     cost = seconds * transcription.usd_per_minute / 60
     return AudioTranscriptionBillingSummary(
