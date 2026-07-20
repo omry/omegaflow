@@ -27,7 +27,12 @@ from omegaflow.presentation_build import (
     validate_run_bundle,
     write_capture_fingerprint,
 )
-from omegaflow.recording_plan import normalize_recording_plan
+from omegaflow.recording_plan import (
+    NarrationTakeMemberPlan,
+    NarrationTakePlan,
+    NarrationTakeWaitPlan,
+    normalize_recording_plan,
+)
 
 
 def png(width: int, height: int, color: tuple[int, int, int]) -> bytes:
@@ -484,7 +489,7 @@ def test_prepare_narration_audio_reports_each_slow_operation(
     monkeypatch.setattr(studio.audio, "audio_duration_seconds", lambda _path: 1.0)
     progress: list[tuple[str, int, int]] = []
 
-    prepare_narration_audio(
+    artifacts = prepare_narration_audio(
         spec,
         plan,
         tmp_path / "run",
@@ -493,6 +498,8 @@ def test_prepare_narration_audio_reports_each_slow_operation(
         ),
     )
 
+    assert artifacts is not None
+    assert "NARRATION_TIMING_LOW_CONFIDENCE" in artifacts.warnings
     assert progress == [
         ("Generate narration: Say hello", 0, 3),
         ("Generate narration: Say hello · 2.5s · 1.5 KiB received", 0, 3),
@@ -568,7 +575,7 @@ def test_source_words_repair_zero_duration_transcription_timestamps() -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "raw_words", "expected"),
+    ("text", "raw_words", "duration_ms", "expected"),
     [
         (
             "A ready-to-watch video. When",
@@ -580,6 +587,7 @@ def test_source_words_repair_zero_duration_transcription_timestamps() -> None:
                 {"word": "video", "start": 0.9, "end": 1.2},
                 {"word": "When", "start": 1.8, "end": 2.0},
             ],
+            2500,
             [(0, 100), (200, 800), (900, 1200), (1800, 2000)],
         ),
         (
@@ -588,18 +596,163 @@ def test_source_words_repair_zero_duration_transcription_timestamps() -> None:
                 {"word": "Quickstart", "start": 0.1, "end": 0.7},
                 {"word": "works", "start": 0.8, "end": 1.1},
             ],
+            2500,
             [(100, 400), (400, 700), (800, 1100)],
+        ),
+        (
+            "A ready-to-watch two-beat video. When",
+            [
+                {"word": "A", "start": 3.44, "end": 3.68},
+                {"word": "ready", "start": 3.68, "end": 3.86},
+                {"word": "to", "start": 3.86, "end": 4.0},
+                {"word": "watch", "start": 4.0, "end": 4.28},
+                {"word": "2", "start": 4.28, "end": 4.72},
+                {"word": "beat", "start": 4.72, "end": 4.72},
+                {"word": "video", "start": 4.72, "end": 5.08},
+                {"word": "When", "start": 5.78, "end": 5.86},
+            ],
+            6000,
+            [
+                (3440, 3680),
+                (3680, 4280),
+                (4280, 4720),
+                (4720, 5080),
+                (5780, 5860),
+            ],
         ),
     ],
 )
 def test_source_words_preserve_timings_across_tokenization_differences(
     text: str,
     raw_words: list[dict[str, object]],
+    duration_ms: int,
     expected: list[tuple[int, int]],
 ) -> None:
-    words = _source_words_with_timing(text, raw_words, duration_ms=2500)
+    words = _source_words_with_timing(text, raw_words, duration_ms=duration_ms)
 
     assert [(word["start_ms"], word["end_ms"]) for word in words] == expected
+    assert all(word["timing_confidence"] == "high" for word in words)
+
+
+def test_source_words_trace_numeric_equivalence_to_raw_tokens() -> None:
+    words = _source_words_with_timing(
+        "two-beat video. When",
+        [
+            {"word": "2", "start": 4.28, "end": 4.72},
+            {"word": "beat", "start": 4.72, "end": 4.72},
+            {"word": "video", "start": 4.72, "end": 5.08},
+            {"word": "When", "start": 5.78, "end": 5.86},
+        ],
+        duration_ms=6000,
+    )
+
+    assert words[0]["timing_source"] == "transcription"
+    assert words[0]["timing_confidence"] == "high"
+    assert (words[0]["raw_word_start"], words[0]["raw_word_end"]) == (0, 2)
+
+
+def test_authored_wait_uses_silence_before_when_with_numeric_asr_token() -> None:
+    text = "A ready-to-watch two-beat video. When"
+    wait_offset = text.index("When")
+    take = NarrationTakePlan(
+        id="take",
+        explicit=True,
+        members=(
+            NarrationTakeMemberPlan(
+                beat_id="beat", text=text, text_start=0, text_end=len(text)
+            ),
+        ),
+        synthesis_text=text,
+        anchors=(),
+        waits=(
+            NarrationTakeWaitPlan(
+                beat_id="beat",
+                target="build_command",
+                text_offset=wait_offset,
+                gap_ms=200,
+            ),
+        ),
+    )
+    words = _source_words_with_timing(
+        text,
+        [
+            {"word": "A", "start": 3.44, "end": 3.68},
+            {"word": "ready", "start": 3.68, "end": 3.86},
+            {"word": "to", "start": 3.86, "end": 4.0},
+            {"word": "watch", "start": 4.0, "end": 4.28},
+            {"word": "2", "start": 4.28, "end": 4.72},
+            {"word": "beat", "start": 4.72, "end": 4.72},
+            {"word": "video", "start": 4.72, "end": 5.08},
+            {"word": "When", "start": 5.78, "end": 5.86},
+        ],
+        duration_ms=6000,
+    )
+
+    sidecar = audio_module.narration_timestamp_sidecar_payload(
+        take, duration_ms=6000, words=words
+    )
+
+    assert words[-2]["text"] == "video."
+    assert (words[-2]["end_ms"], words[-1]["start_ms"]) == (5080, 5780)
+    assert sidecar["words"][2]["timing_source"] == "transcription"
+    assert sidecar["words"][2]["timing_confidence"] == "high"
+    assert (
+        sidecar["words"][2]["raw_word_start"],
+        sidecar["words"][2]["raw_word_end"],
+    ) == (
+        4,
+        6,
+    )
+    assert sidecar["waits"][0]["source_ms"] == 5430
+
+
+@pytest.mark.parametrize(
+    ("raw_words", "mismatch_source"),
+    [
+        (
+            [
+                {"word": "Alpha", "start": 0.0, "end": 0.2},
+                {"word": "different", "start": 0.3, "end": 0.7},
+                {"word": "video", "start": 0.8, "end": 1.1},
+                {"word": "When", "start": 1.5, "end": 1.7},
+            ],
+            "interpolated",
+        ),
+        (
+            [
+                {"word": "Alpha", "start": 0.0, "end": 0.2},
+                {"word": "video", "start": 0.8, "end": 1.1},
+                {"word": "When", "start": 1.5, "end": 1.7},
+            ],
+            "interpolated",
+        ),
+        (
+            [
+                {"word": "Alpha", "start": 0.0, "end": 0.2},
+                {"word": "unexpected", "start": 0.3, "end": 0.7},
+                {"word": "misrecognized", "start": 0.7, "end": 0.8},
+                {"word": "video", "start": 0.8, "end": 1.1},
+                {"word": "When", "start": 1.5, "end": 1.7},
+            ],
+            "transcription",
+        ),
+    ],
+)
+def test_source_word_mismatch_does_not_discard_later_transcription_timing(
+    raw_words: list[dict[str, object]],
+    mismatch_source: str,
+) -> None:
+    words = _source_words_with_timing(
+        "Alpha misrecognized video. When", raw_words, duration_ms=2000
+    )
+
+    assert words[1]["timing_source"] == mismatch_source
+    assert words[1]["timing_confidence"] == (
+        "low" if mismatch_source == "interpolated" else "high"
+    )
+    assert (words[2]["start_ms"], words[2]["end_ms"]) == (800, 1100)
+    assert words[2]["timing_confidence"] == "high"
+    assert (words[3]["start_ms"], words[3]["end_ms"]) == (1500, 1700)
 
 
 def test_watch_serves_run_local_manifest_reference_graph(

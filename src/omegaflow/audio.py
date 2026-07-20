@@ -786,9 +786,30 @@ def narration_timestamp_sidecar_payload(
             text_end = word["text_end"]
             start_ms = word["start_ms"]
             end_ms = word["end_ms"]
+            timing_source = word.get("timing_source", "")
+            timing_confidence = word.get("timing_confidence", "")
+            raw_word_start = word.get("raw_word_start")
+            raw_word_end = word.get("raw_word_end")
             if not isinstance(text, str) or any(
                 isinstance(value, bool) or not isinstance(value, int)
                 for value in (text_start, text_end, start_ms, end_ms)
+            ):
+                raise TypeError
+            if (
+                timing_source not in {"", "transcription", "interpolated"}
+                or timing_confidence not in {"", "high", "low"}
+                or (raw_word_start is None) != (raw_word_end is None)
+                or (
+                    raw_word_start is not None
+                    and (
+                        isinstance(raw_word_start, bool)
+                        or not isinstance(raw_word_start, int)
+                        or isinstance(raw_word_end, bool)
+                        or not isinstance(raw_word_end, int)
+                        or raw_word_start < 0
+                        or raw_word_end <= raw_word_start
+                    )
+                )
             ):
                 raise TypeError
             typed = NarrationTimestampWordV1(
@@ -797,6 +818,10 @@ def narration_timestamp_sidecar_payload(
                 text_end=text_end,
                 start_ms=start_ms,
                 end_ms=end_ms,
+                timing_source=timing_source,
+                timing_confidence=timing_confidence,
+                raw_word_start=raw_word_start,
+                raw_word_end=raw_word_end,
             )
         except (KeyError, TypeError) as exc:
             raise AudioError(f"invalid narration timestamp word {index}") from exc

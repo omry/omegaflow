@@ -504,6 +504,22 @@ def _validate_timestamp_sidecar(take: Any, sidecar: Any) -> None:
     previous_text_end = 0
     previous_time_end = 0
     for word in sidecar.words:
+        trace = (
+            word.timing_source,
+            word.timing_confidence,
+            word.raw_word_start,
+            word.raw_word_end,
+        )
+        trace_is_legacy = trace == ("", "", None, None)
+        trace_is_transcription = (
+            word.timing_source == "transcription"
+            and word.timing_confidence == "high"
+            and isinstance(word.raw_word_start, int)
+            and isinstance(word.raw_word_end, int)
+            and word.raw_word_start >= 0
+            and word.raw_word_end > word.raw_word_start
+        )
+        trace_is_interpolated = trace == ("interpolated", "low", None, None)
         owner = next(
             (
                 bounds
@@ -514,6 +530,11 @@ def _validate_timestamp_sidecar(take: Any, sidecar: Any) -> None:
         )
         if (
             owner is None
+            or not (
+                trace_is_legacy
+                or trace_is_transcription
+                or trace_is_interpolated
+            )
             or word.text_start < previous_text_end
             or word.start_ms < previous_time_end
             or word.end_ms <= word.start_ms

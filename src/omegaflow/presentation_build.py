@@ -16,6 +16,7 @@ import sys
 import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable
 
@@ -124,6 +125,16 @@ class PresentationBuildResult:
     manifest: Path
     fingerprints: ArtifactFingerprints
     warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _AlignedSourceWord:
+    start_ms: int
+    end_ms: int
+    timing_source: str
+    timing_confidence: str
+    raw_word_start: int | None
+    raw_word_end: int | None
 
 
 def _materialize_waited_audio(
@@ -920,6 +931,8 @@ def prepare_narration_audio(
             raw.get("words", []) if isinstance(raw, dict) else [],
             duration_ms=duration_ms,
         )
+        if any(word["timing_confidence"] == "low" for word in words):
+            warnings.append("NARRATION_TIMING_LOW_CONFIDENCE")
         payload = audio.narration_timestamp_sidecar_payload(
             take_item.take,
             duration_ms=duration_ms,
@@ -982,15 +995,8 @@ def _source_words_with_timing(
         if raw_is_timed
         else []
     )
-    use_raw = (
-        raw_is_timed
-        and all(source_normalized)
-        and all(raw_normalized)
-        and "".join(source_normalized) == "".join(raw_normalized)
-    )
-    source_character_offset = 0
     raw_character_ranges: list[tuple[int, int, int, int]] = []
-    if use_raw:
+    if raw_is_timed and all(raw_normalized):
         raw_character_offset = 0
         for item, normalized in zip(raw, raw_normalized, strict=True):
             next_offset = raw_character_offset + len(normalized)
@@ -1003,27 +1009,20 @@ def _source_words_with_timing(
                 )
             )
             raw_character_offset = next_offset
+    candidate_ranges = _aligned_source_word_ranges(
+        source_normalized,
+        raw_normalized,
+        raw_character_ranges,
+        duration_ms=duration_ms,
+    )
     if duration_ms < len(source):
         raise PresentationBuildError("narration audio is too short for word timing")
     words: list[dict[str, Any]] = []
     previous_end = 0
     for index, match in enumerate(source):
-        if use_raw:
-            normalized_width = len(source_normalized[index])
-            candidate_start = _spoken_character_time_ms(
-                source_character_offset,
-                raw_character_ranges,
-                boundary="start",
-            )
-            source_character_offset += normalized_width
-            candidate_end = _spoken_character_time_ms(
-                source_character_offset,
-                raw_character_ranges,
-                boundary="end",
-            )
-        else:
-            candidate_start = round(duration_ms * match.start() / max(1, len(text)))
-            candidate_end = round(duration_ms * match.end() / max(1, len(text)))
+        candidate = candidate_ranges[index]
+        candidate_start = candidate.start_ms
+        candidate_end = candidate.end_ms
         remaining_words = len(source) - index - 1
         latest_end = duration_ms - remaining_words
         start_ms = min(max(previous_end, candidate_start), latest_end - 1)
@@ -1035,6 +1034,10 @@ def _source_words_with_timing(
                 "text_end": match.end(),
                 "start_ms": start_ms,
                 "end_ms": end_ms,
+                "timing_source": candidate.timing_source,
+                "timing_confidence": candidate.timing_confidence,
+                "raw_word_start": candidate.raw_word_start,
+                "raw_word_end": candidate.raw_word_end,
             }
         )
         previous_end = end_ms
@@ -1042,7 +1045,175 @@ def _source_words_with_timing(
 
 
 def _normalized_spoken_word(value: str) -> str:
-    return "".join(character for character in value.casefold() if character.isalnum())
+    expanded = re.sub(
+        r"[0-9]+",
+        lambda match: _spoken_integer(int(match.group(0))),
+        value.casefold(),
+    )
+    return "".join(character for character in expanded if character.isalnum())
+
+
+def _spoken_integer(value: int) -> str:
+    ones = (
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+    )
+    tens = (
+        "",
+        "",
+        "twenty",
+        "thirty",
+        "forty",
+        "fifty",
+        "sixty",
+        "seventy",
+        "eighty",
+        "ninety",
+    )
+    if value < len(ones):
+        return ones[value]
+    if value < 100:
+        return tens[value // 10] + (ones[value % 10] if value % 10 else "")
+    if value < 1000:
+        return ones[value // 100] + "hundred" + (
+            _spoken_integer(value % 100) if value % 100 else ""
+        )
+    return "".join(ones[int(character)] for character in str(value))
+
+
+def _aligned_source_word_ranges(
+    source_words: list[str],
+    raw_words: list[str],
+    raw_character_ranges: list[tuple[int, int, int, int]],
+    *,
+    duration_ms: int,
+) -> list[_AlignedSourceWord]:
+    """Map source tokens to local ASR timing without poisoning later matches."""
+
+    if not source_words:
+        return []
+    if not raw_words or not raw_character_ranges:
+        return _interpolate_source_word_ranges(
+            source_words, [None] * len(source_words), duration_ms=duration_ms
+        )
+    source_text = "".join(source_words)
+    raw_text = "".join(raw_words)
+    source_to_raw: dict[int, int] = {}
+    for block in SequenceMatcher(
+        None, source_text, raw_text, autojunk=False
+    ).get_matching_blocks():
+        for offset in range(block.size):
+            source_to_raw[block.a + offset] = block.b + offset
+
+    result: list[_AlignedSourceWord | None] = []
+    source_offset = 0
+    for word in source_words:
+        mapped = [
+            source_to_raw.get(index)
+            for index in range(source_offset, source_offset + len(word))
+        ]
+        source_offset += len(word)
+        if not mapped or any(value is None for value in mapped):
+            result.append(None)
+            continue
+        raw_offsets = [int(value) for value in mapped if value is not None]
+        if any(
+            following != previous + 1
+            for previous, following in zip(raw_offsets, raw_offsets[1:])
+        ):
+            result.append(None)
+            continue
+        start_ms = _spoken_character_time_ms(
+            raw_offsets[0], raw_character_ranges, boundary="start"
+        )
+        end_ms = _spoken_character_time_ms(
+            raw_offsets[-1] + 1, raw_character_ranges, boundary="end"
+        )
+        raw_word_indexes = [
+            index
+            for index, (start, end, _start_ms, _end_ms) in enumerate(
+                raw_character_ranges
+            )
+            if raw_offsets[0] < end and raw_offsets[-1] + 1 > start
+        ]
+        result.append(
+            _AlignedSourceWord(
+                start_ms=min(duration_ms, max(0, start_ms)),
+                end_ms=min(duration_ms, max(0, end_ms)),
+                timing_source="transcription",
+                timing_confidence="high",
+                raw_word_start=raw_word_indexes[0],
+                raw_word_end=raw_word_indexes[-1] + 1,
+            )
+        )
+    return _interpolate_source_word_ranges(
+        source_words, result, duration_ms=duration_ms
+    )
+
+
+def _interpolate_source_word_ranges(
+    source_words: list[str],
+    ranges: list[_AlignedSourceWord | None],
+    *,
+    duration_ms: int,
+) -> list[_AlignedSourceWord]:
+    """Fill only unmatched local spans, preserving later ASR landmarks."""
+
+    result = list(ranges)
+    index = 0
+    while index < len(result):
+        if result[index] is not None:
+            index += 1
+            continue
+        start = index
+        while index < len(result) and result[index] is None:
+            index += 1
+        end = index
+        previous = result[start - 1] if start else None
+        following = result[end] if end < len(result) else None
+        interval_start = previous.end_ms if previous is not None else 0
+        interval_end = following.start_ms if following is not None else duration_ms
+        interval_end = max(interval_start, interval_end)
+        weights = [max(1, len(source_words[item])) for item in range(start, end)]
+        total_weight = sum(weights)
+        consumed = 0
+        for item, weight in zip(range(start, end), weights, strict=True):
+            word_start = round(
+                interval_start
+                + (interval_end - interval_start) * consumed / total_weight
+            )
+            consumed += weight
+            word_end = round(
+                interval_start
+                + (interval_end - interval_start) * consumed / total_weight
+            )
+            result[item] = _AlignedSourceWord(
+                start_ms=word_start,
+                end_ms=word_end,
+                timing_source="interpolated",
+                timing_confidence="low",
+                raw_word_start=None,
+                raw_word_end=None,
+            )
+    return [item for item in result if item is not None]
 
 
 def _spoken_character_time_ms(

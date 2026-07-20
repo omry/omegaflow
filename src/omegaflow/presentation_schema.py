@@ -309,6 +309,10 @@ class NarrationTimestampWordV1:
     text_end: int = 0
     start_ms: int = 0
     end_ms: int = 0
+    timing_source: str = ""
+    timing_confidence: str = ""
+    raw_word_start: int | None = None
+    raw_word_end: int | None = None
 
 
 @dataclass
