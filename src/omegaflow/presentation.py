@@ -554,6 +554,7 @@ def _validate_audio(
         raise PresentationValidationError(f"{field}.intervals must be a non-empty list")
 
     source_duration_ms: int | None = None
+    playback_end_ms: int | None = None
     if root is not None:
         metadata_file = _resolved_manifest_file(
             root, metadata_path, field=f"{field}.metadata"
@@ -568,6 +569,7 @@ def _validate_audio(
         if not isinstance(takes, list) or not takes:
             raise PresentationValidationError(f"{field}.metadata.takes must be non-empty")
         expected_source_start = 0
+        expected_playback_start = 0
         take_ids: set[str] = set()
         for index, take_value in enumerate(takes):
             take_field = f"{field}.metadata.takes.{index}"
@@ -600,6 +602,47 @@ def _validate_audio(
                 raise PresentationValidationError(
                     f"{take_field}.src must contain its content hash"
                 )
+            playback_values = (
+                take.get("playback_src"),
+                take.get("playback_sha256"),
+                take.get("playback_start_ms"),
+                take.get("playback_end_ms"),
+            )
+            if any(value is not None for value in playback_values):
+                if any(value is None for value in playback_values):
+                    raise PresentationValidationError(
+                        f"{take_field} playback metadata is incomplete"
+                    )
+                playback_source = validate_relative_presentation_path(
+                    playback_values[0], field=f"{take_field}.playback_src"
+                )
+                playback_digest = playback_values[1]
+                playback_start = _integer(
+                    playback_values[2], field=f"{take_field}.playback_start_ms"
+                )
+                playback_end = _integer(
+                    playback_values[3], field=f"{take_field}.playback_end_ms"
+                )
+                if (
+                    not isinstance(playback_digest, str)
+                    or SHA256_RE.fullmatch(playback_digest) is None
+                    or playback_digest not in playback_source
+                    or playback_start != expected_playback_start
+                    or playback_end <= playback_start
+                    or playback_end > recording_duration_ms
+                ):
+                    raise PresentationValidationError(
+                        f"{take_field} playback metadata is invalid"
+                    )
+                playback_file = _resolved_manifest_file(
+                    root, playback_source, field=f"{take_field}.playback_src"
+                )
+                if hashlib.sha256(playback_file.read_bytes()).hexdigest() != playback_digest:
+                    raise PresentationValidationError(
+                        f"{take_field}.playback_sha256 does not match"
+                    )
+                expected_playback_start = playback_end
+                playback_end_ms = playback_end
         if expected_source_start != source_duration_ms:
             raise PresentationValidationError(
                 f"{field}.metadata takes do not cover narration source time"
@@ -670,6 +713,10 @@ def _validate_audio(
         raise PresentationValidationError(
             f"{field}.intervals end at {previous_source_end}ms but narration source "
             f"duration is {source_duration_ms}ms"
+        )
+    if playback_end_ms is not None and playback_end_ms != previous_presentation_end:
+        raise PresentationValidationError(
+            f"{field} playback audio does not cover its presentation intervals"
         )
     return _typed(mapping, PresentationAudioV1, field=field)
 

@@ -1121,6 +1121,7 @@
       let narrationScrollTarget = 0;
       let narrationScrollAnimation = null;
       let audioPlaybackSegments = [];
+      let audioControlSegments = [];
       let audioTakeDescriptors = [];
       let audioPresentationSeconds = 0;
       let audioTimer = null;
@@ -1181,6 +1182,12 @@
 
       function audioTimeline() {
         return CastPlayerCore.createCastAudioTimeline(audioPlaybackSegments);
+      }
+
+      function audioControlTimeline() {
+        return CastPlayerCore.createCastAudioTimeline(
+          audioControlSegments.length ? audioControlSegments : audioPlaybackSegments,
+        );
       }
 
       function escapeHtml(text) {
@@ -3230,12 +3237,37 @@
         if (metadata.version !== 3 || !Array.isArray(metadata.takes)) {
           throw new Error('audio metadata must use version 3');
         }
+        const playbackFieldCounts = metadata.takes.map((take) => [
+          take.playback_src,
+          take.playback_sha256,
+          take.playback_start_ms,
+          take.playback_end_ms,
+        ].filter((value) => value != null).length);
+        if (playbackFieldCounts.some((count) => count !== 0 && count !== 4)) {
+          throw new Error('audio playback metadata is incomplete');
+        }
+        const usesMaterializedPlayback = playbackFieldCounts.every((count) => count === 4);
         audioTakeDescriptors = metadata.takes.map((take) => ({
           id: String(take.id || ''),
-          source_end_ms: Number(take.source_end_ms),
-          source_start_ms: Number(take.source_start_ms),
-          src: new URL(take.src, manifestBaseUrl).href,
+          source_end_ms: Number(
+            usesMaterializedPlayback ? take.playback_end_ms : take.source_end_ms,
+          ),
+          source_start_ms: Number(
+            usesMaterializedPlayback ? take.playback_start_ms : take.source_start_ms,
+          ),
+          src: new URL(
+            usesMaterializedPlayback ? take.playback_src : take.src,
+            manifestBaseUrl,
+          ).href,
         }));
+        audioControlSegments = usesMaterializedPlayback
+          ? metadata.takes.map((take) => ({
+              audioStart: Number(take.playback_start_ms) / 1000,
+              audioEnd: Number(take.playback_end_ms) / 1000,
+              presentationStart: Number(take.playback_start_ms) / 1000,
+              presentationEnd: Number(take.playback_end_ms) / 1000,
+            }))
+          : [];
         narrationSegments = [];
         for (const take of metadata.takes) {
             const sidecarResponse = await fetchPresentationAsset(
@@ -3480,7 +3512,10 @@
       }
 
       function audioTimeForPresentation(seconds) {
-        return audioTimeline().audioTimeForPresentation(seconds, audio?.duration || seconds);
+        return audioControlTimeline().audioTimeForPresentation(
+          seconds,
+          audio?.duration || seconds,
+        );
       }
 
       function play(options = {}) {
@@ -3788,9 +3823,17 @@
             return;
           }
           if (presentationManifest?.audio && audioReady && audio) {
+            const controlIntervals = audioControlSegments.length
+              ? audioControlSegments.map((segment) => ({
+                  presentation_start_ms: segment.presentationStart * 1000,
+                  presentation_end_ms: segment.presentationEnd * 1000,
+                  source_start_ms: segment.audioStart * 1000,
+                  source_end_ms: segment.audioEnd * 1000,
+                }))
+              : presentationManifest.audio.intervals;
             presentationAudioController = CastPlayerCore.createPresentationAudioController({
               audio,
-              intervals: presentationManifest.audio.intervals,
+              intervals: controlIntervals,
               onPlayRejected: handleAudioPlaybackRejected,
               onPlayStarted: handleAudioPlaybackStarted,
             });

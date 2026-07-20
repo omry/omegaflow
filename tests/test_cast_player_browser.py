@@ -932,7 +932,8 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
         assert any(path.endswith("/audio.json") for path in requested_paths)
         for take in audio_metadata["takes"]:
             assert take["sha256"] in take["src"]
-            assert any(path.endswith("/" + take["src"]) for path in requested_paths)
+            playback_src = take.get("playback_src", take["src"])
+            assert any(path.endswith("/" + playback_src) for path in requested_paths)
         assert failed_requests == []
         assert bad_responses == []
         browser.close()

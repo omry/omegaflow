@@ -184,6 +184,8 @@ def validate_public_staging(
         ):
             raise PublicBundleError("narration audio metadata identity is invalid")
         expected_source_start = 0
+        expected_playback_start = 0
+        playback_end_ms: int | None = None
         take_ids: set[str] = set()
         beat_ids = {beat["id"] for beat in manifest["beats"]}
         for take in typed_audio.takes:
@@ -206,6 +208,39 @@ def validate_public_staging(
             ):
                 raise PublicBundleError("narration audio take boundaries are invalid")
             referenced.add(take_audio_path)
+            playback_values = (
+                take.playback_src,
+                take.playback_sha256,
+                take.playback_start_ms,
+                take.playback_end_ms,
+            )
+            if any(value is not None for value in playback_values):
+                if any(value is None for value in playback_values):
+                    raise PublicBundleError(
+                        "narration audio playback metadata is incomplete"
+                    )
+                relative_playback = _public_relative_path(
+                    str(take.playback_src),
+                    field=f"playback audio for take {take.id!r}",
+                )
+                playback_path = root / relative_playback
+                if (
+                    not isinstance(take.playback_sha256, str)
+                    or SHA256_RE.fullmatch(take.playback_sha256) is None
+                    or take.playback_sha256 not in relative_playback
+                    or playback_path not in files
+                    or hashlib.sha256(playback_path.read_bytes()).hexdigest()
+                    != take.playback_sha256
+                    or take.playback_start_ms != expected_playback_start
+                    or not isinstance(take.playback_end_ms, int)
+                    or take.playback_end_ms <= expected_playback_start
+                ):
+                    raise PublicBundleError(
+                        "narration audio playback boundaries are invalid"
+                    )
+                referenced.add(playback_path)
+                expected_playback_start = take.playback_end_ms
+                playback_end_ms = take.playback_end_ms
             take_ids.add(take.id)
             expected_source_start = take.source_end_ms
             text_cursor = 0
@@ -246,6 +281,12 @@ def validate_public_staging(
             _validate_timestamp_sidecar(take, sidecar)
         if expected_source_start != typed_audio.duration_ms:
             raise PublicBundleError("narration audio takes do not cover source time")
+        if playback_end_ms is not None:
+            final_interval_end = audio["intervals"][-1]["presentation_end_ms"]
+            if playback_end_ms != final_interval_end:
+                raise PublicBundleError(
+                    "narration audio playback does not cover presentation time"
+                )
 
     unreferenced = files - referenced
     if unreferenced:

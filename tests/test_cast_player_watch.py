@@ -1194,6 +1194,9 @@ fetch = async (url) => ({
             id: 'take', source_start_ms: 1000, source_end_ms: 2200,
             src: 'audio/take-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp3',
             sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            playback_src: 'audio/take-playback-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.mp3',
+            playback_sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            playback_start_ms: 2000, playback_end_ms: 3200,
             timestamps: 'timestamps/take.json',
           members: [{beat_id: 'create', text: 'Create it', text_start: 0, text_end: 9}],
         }],
@@ -1212,7 +1215,11 @@ loadAudioMeta().then(() => {
   const segment = narrationSegments[0];
   if (
       narrationSegments.length < 1 || audioTakeDescriptors.length !== 1 ||
-      !audioTakeDescriptors[0].src.endsWith('.mp3') ||
+      !audioTakeDescriptors[0].src.includes('playback-') ||
+      audioTakeDescriptors[0].source_start_ms !== 2000 ||
+      audioTakeDescriptors[0].source_end_ms !== 3200 ||
+      audioControlSegments[0].presentationStart !== 2 ||
+      audioControlSegments[0].presentationEnd !== 3.2 ||
       segment.offset !== 1.2 || segment.duration !== 1 ||
     segment.heading !== 'Create' || segment.guide.success_hint !== 'Created.' ||
     segment.wordSpans[0].textStart !== 0 || segment.wordSpans[0].start !== 0 ||

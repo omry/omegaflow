@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import shutil
 import struct
+import wave
 import zlib
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -57,6 +60,64 @@ def state(path: Path, *, color: tuple[int, int, int]) -> dict[str, object]:
         "height": 900,
         "bytes": len(content),
     }
+
+
+def test_materialized_wait_is_silence_between_complete_audio_fragments(
+    tmp_path: Path,
+) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("ffmpeg is unavailable")
+    sample_rate = 24_000
+    source_samples = [
+        round(
+            8_000
+            * math.sin(
+                2 * math.pi * (440 if index < sample_rate // 2 else 880)
+                * index
+                / sample_rate
+            )
+        )
+        for index in range(sample_rate)
+    ]
+    source = tmp_path / "source.wav"
+    with wave.open(str(source), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(sample_rate)
+        stream.writeframes(struct.pack(f"<{len(source_samples)}h", *source_samples))
+
+    output = tmp_path / "with-wait.wav"
+    presentation_build._materialize_waited_audio(  # pyright: ignore[reportPrivateUsage]
+        source,
+        output,
+        source_start_ms=0,
+        playback_start_ms=0,
+        intervals=(
+            presentation_build.PresentationAudioIntervalV1(
+                presentation_start_ms=0,
+                presentation_end_ms=500,
+                source_start_ms=0,
+                source_end_ms=500,
+            ),
+            presentation_build.PresentationAudioIntervalV1(
+                presentation_start_ms=1000,
+                presentation_end_ms=1500,
+                source_start_ms=500,
+                source_end_ms=1000,
+            ),
+        ),
+        ffmpeg=ffmpeg,
+    )
+
+    with wave.open(str(output), "rb") as stream:
+        assert stream.getframerate() == sample_rate
+        samples = struct.unpack(
+            f"<{stream.getnframes()}h", stream.readframes(stream.getnframes())
+        )
+    assert len(samples) == 3 * sample_rate // 2
+    assert max(abs(value) for value in samples[sample_rate // 2 : sample_rate]) == 0
+    assert samples[sample_rate:] == tuple(source_samples[sample_rate // 2 :])
 
 
 def write_mixed_capture(run_dir: Path) -> None:

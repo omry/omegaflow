@@ -346,6 +346,10 @@ class NarrationAudioTakeV3:
     sha256: str = ""
     source_start_ms: int = 0
     source_end_ms: int = 0
+    playback_src: str | None = None
+    playback_sha256: str | None = None
+    playback_start_ms: int | None = None
+    playback_end_ms: int | None = None
     timestamps: str = ""
     members: list[NarrationAudioMemberV2] = field(default_factory=list)
 

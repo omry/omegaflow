@@ -40,6 +40,7 @@ from .presentation_compiler import (
     ArtifactFingerprints,
     BrowserCaptureLog,
     CompiledBrowserBeat,
+    CompiledRecordingTiming,
     TerminalTextHighlightEvent,
     compile_artifact_fingerprints,
     compile_browser_beat,
@@ -49,6 +50,7 @@ from .presentation_compiler import (
 )
 from .presentation_schema import (
     PresentationAssetV1,
+    PresentationAudioIntervalV1,
     PresentationAudioV1,
     PresentationBeatPlayerV1,
     PresentationBeatV1,
@@ -83,7 +85,7 @@ CAPTURE_POLICY_VERSIONS = {
     "redaction": "capture-mask-v1",
 }
 PRESENTATION_POLICY_VERSIONS = {
-    "compiler": "presentation-v4",
+    "compiler": "presentation-v5-materialized-audio-waits",
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
@@ -122,6 +124,216 @@ class PresentationBuildResult:
     manifest: Path
     fingerprints: ArtifactFingerprints
     warnings: tuple[str, ...]
+
+
+def _materialize_waited_audio(
+    source: Path,
+    output: Path,
+    *,
+    source_start_ms: int,
+    playback_start_ms: int,
+    intervals: tuple[PresentationAudioIntervalV1, ...],
+    ffmpeg: str,
+) -> Path:
+    """Encode presentation gaps as silence without dropping source samples."""
+
+    if not intervals:
+        raise PresentationBuildError("presentation audio take has no intervals")
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        raise PresentationBuildError("ffprobe is required to prepare narration waits")
+    probe = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=sample_rate,channels,channel_layout,bit_rate",
+            "-of",
+            "json",
+            str(source),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if probe.returncode != 0:
+        detail = (probe.stderr or probe.stdout or "").strip()
+        raise PresentationBuildError(
+            f"ffprobe could not inspect narration audio: {detail or probe.returncode}"
+        )
+    try:
+        stream = json.loads(probe.stdout)["streams"][0]
+        sample_rate = int(stream["sample_rate"])
+        channels = int(stream["channels"])
+        channel_layout = str(stream.get("channel_layout") or "")
+        bit_rate = int(stream.get("bit_rate") or 0)
+    except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise PresentationBuildError(
+            "ffprobe returned invalid narration audio metadata"
+        ) from exc
+    if not channel_layout:
+        channel_layout = {1: "mono", 2: "stereo"}.get(channels, "")
+    if sample_rate <= 0 or not channel_layout:
+        raise PresentationBuildError("narration audio layout is unsupported")
+
+    filters: list[str] = []
+    labels: list[str] = []
+    previous_presentation_end = playback_start_ms
+    previous_source_end = source_start_ms
+    for index, interval in enumerate(intervals):
+        if (
+            interval.presentation_start_ms < previous_presentation_end
+            or interval.presentation_end_ms <= interval.presentation_start_ms
+            or interval.source_start_ms != previous_source_end
+            or interval.source_end_ms <= interval.source_start_ms
+        ):
+            raise PresentationBuildError("presentation audio intervals are invalid")
+        silence_ms = interval.presentation_start_ms - previous_presentation_end
+        if silence_ms:
+            label = f"silence{index}"
+            filters.append(
+                f"anullsrc=r={sample_rate}:cl={channel_layout}:"
+                f"d={silence_ms / 1000:.6f}[{label}]"
+            )
+            labels.append(label)
+        local_start_ms = interval.source_start_ms - source_start_ms
+        local_end_ms = interval.source_end_ms - source_start_ms
+        label = f"audio{index}"
+        filters.append(
+            f"[0:a]atrim=start={local_start_ms / 1000:.6f}:"
+            f"end={local_end_ms / 1000:.6f},asetpts=PTS-STARTPTS[{label}]"
+        )
+        labels.append(label)
+        previous_presentation_end = interval.presentation_end_ms
+        previous_source_end = interval.source_end_ms
+    filters.append(
+        "".join(f"[{label}]" for label in labels)
+        + f"concat=n={len(labels)}:v=0:a=1[out]"
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(source),
+        "-filter_complex",
+        ";".join(filters),
+        "-map",
+        "[out]",
+    ]
+    if output.suffix.lower() == ".mp3":
+        command.extend(["-b:a", str(bit_rate or 128_000)])
+    command.append(str(output))
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise PresentationBuildError(
+            f"ffmpeg could not prepare narration waits: {detail or result.returncode}"
+        )
+    return output
+
+
+def _stage_presentation_audio(
+    artifacts: PresentationAudioArtifacts,
+    timing: CompiledRecordingTiming,
+    staging: Path,
+) -> Path:
+    metadata = json.loads(artifacts.metadata.read_text(encoding="utf-8"))
+    takes = metadata.get("takes")
+    if not isinstance(takes, list) or not takes:
+        raise PresentationBuildError("narration audio metadata has no takes")
+    ffmpeg = shutil.which("ffmpeg")
+    previous_playback_end = 0
+    for value in takes:
+        if not isinstance(value, dict):
+            raise PresentationBuildError("narration audio take metadata is invalid")
+        take_id = value.get("id")
+        if not isinstance(take_id, str) or take_id not in artifacts.take_audio:
+            raise PresentationBuildError("narration audio take is missing")
+        source_start = value.get("source_start_ms")
+        source_end = value.get("source_end_ms")
+        source_relative = value.get("src")
+        if (
+            isinstance(source_start, bool)
+            or not isinstance(source_start, int)
+            or isinstance(source_end, bool)
+            or not isinstance(source_end, int)
+            or not isinstance(source_relative, str)
+        ):
+            raise PresentationBuildError("narration audio take boundaries are invalid")
+        intervals = tuple(
+            interval
+            for interval in timing.audio_intervals
+            if source_start <= interval.source_start_ms < interval.source_end_ms <= source_end
+        )
+        if (
+            not intervals
+            or intervals[0].source_start_ms != source_start
+            or intervals[-1].source_end_ms != source_end
+        ):
+            raise PresentationBuildError("narration audio intervals do not cover take")
+
+        source = artifacts.take_audio[take_id]
+        source_target = staging / source_relative
+        source_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, source_target)
+        playback_start = previous_playback_end
+        playback_end = intervals[-1].presentation_end_ms
+        presentation_cursor = playback_start
+        has_wait = False
+        for interval in intervals:
+            has_wait = has_wait or interval.presentation_start_ms > presentation_cursor
+            presentation_cursor = interval.presentation_end_ms
+
+        if has_wait:
+            if ffmpeg is None:
+                raise PresentationBuildError(
+                    "ffmpeg is required to prepare authored narration waits"
+                )
+            safe_id = audio.narration_take_filename_id(take_id)
+            temporary = staging / "audio" / f".{safe_id}-playback.mp3"
+            _materialize_waited_audio(
+                source,
+                temporary,
+                source_start_ms=source_start,
+                playback_start_ms=playback_start,
+                intervals=intervals,
+                ffmpeg=ffmpeg,
+            )
+            playback_content = temporary.read_bytes()
+            playback_sha256 = hashlib.sha256(playback_content).hexdigest()
+            playback_relative = f"audio/{safe_id}-playback-{playback_sha256}.mp3"
+            playback_target = staging / playback_relative
+            temporary.replace(playback_target)
+        else:
+            playback_relative = source_relative
+            playback_sha256 = str(value.get("sha256") or "")
+        value.update(
+            {
+                "playback_src": playback_relative,
+                "playback_sha256": playback_sha256,
+                "playback_start_ms": playback_start,
+                "playback_end_ms": playback_end,
+            }
+        )
+        previous_playback_end = playback_end
+
+    metadata_target = staging / "audio.json"
+    metadata_target.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return metadata_target
 
 
 def thaw(value: Any) -> Any:
@@ -1174,16 +1386,9 @@ def compile_presentation_bundle(
 
         manifest_audio = None
         if audio_artifacts is not None:
-            metadata_target = staging / "audio.json"
-            shutil.copy2(audio_artifacts.metadata, metadata_target)
-            metadata = json.loads(audio_artifacts.metadata.read_text(encoding="utf-8"))
-            take_sources = {
-                take["id"]: take["src"] for take in metadata["takes"]
-            }
-            for take_id, source in audio_artifacts.take_audio.items():
-                audio_target = staging / take_sources[take_id]
-                audio_target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, audio_target)
+            metadata_target = _stage_presentation_audio(
+                audio_artifacts, timing, staging
+            )
             (staging / "timestamps").mkdir()
             for path in audio_artifacts.timestamps.values():
                 shutil.copy2(path, staging / "timestamps" / path.name)
