@@ -196,6 +196,14 @@ html[data-theme='light'] {
   border: 0;
 }
 
+@media (min-width: 997px) and (min-height: 650px) {
+  .homeHero__video .video-player cast-player-embed,
+  .homeHero__video .video-player iframe {
+    aspect-ratio: auto;
+    height: 422px;
+  }
+}
+
 .homeBand {
   padding: 19px 0;
 }

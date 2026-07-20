@@ -212,3 +212,11 @@ def test_homepage_opens_player_paused() -> None:
 
     assert "<VideoPlayer" in homepage
     assert 'autoplay="countdown"' not in homepage
+
+
+def test_homepage_uses_full_height_player_on_tall_desktops() -> None:
+    stylesheet = (REPO_ROOT / "website/src/css/custom.css").read_text()
+
+    assert "@media (min-width: 997px) and (min-height: 650px)" in stylesheet
+    assert ".homeHero__video .video-player iframe" in stylesheet
+    assert "height: 422px" in stylesheet
