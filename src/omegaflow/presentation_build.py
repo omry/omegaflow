@@ -76,6 +76,7 @@ from .recording_plan import (
 )
 from .studio_config import RecordingMedium, project_root
 from .terminal_capture import PersistentTerminalRunner
+from .tool_progress import format_activity_elapsed
 
 
 CAPTURE_POLICY_VERSIONS = {
@@ -878,8 +879,13 @@ def prepare_narration_audio(
 
         def report_audio_activity(received: int, elapsed: float) -> None:
             if on_progress is not None:
+                details = [message]
+                elapsed_text = format_activity_elapsed(elapsed)
+                if elapsed_text is not None:
+                    details.append(elapsed_text)
+                details.append(f"{streamed_size(received)} received")
                 on_progress(
-                    f"{message} · {elapsed:.1f}s · {streamed_size(received)} received",
+                    " · ".join(details),
                     current_step,
                     total_steps,
                 )

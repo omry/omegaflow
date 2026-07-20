@@ -471,7 +471,9 @@ def test_prepare_narration_audio_reports_each_slow_operation(
         item.output_path.parent.mkdir(parents=True, exist_ok=True)
         item.output_path.write_bytes(b"take-audio")
         if on_activity is not None:
+            on_activity(1024, 2.5)
             on_activity(1536, 2.5)
+            on_activity(2048, 3.9)
         return [item.output_path]
 
     def fake_generate_timestamps(
@@ -502,7 +504,9 @@ def test_prepare_narration_audio_reports_each_slow_operation(
     assert "NARRATION_TIMING_LOW_CONFIDENCE" in artifacts.warnings
     assert progress == [
         ("Generate narration: Say hello", 0, 3),
-        ("Generate narration: Say hello · 2.5s · 1.5 KiB received", 0, 3),
+        ("Generate narration: Say hello · 1.0 KiB received", 0, 3),
+        ("Generate narration: Say hello · 1.5 KiB received", 0, 3),
+        ("Generate narration: Say hello · 3s · 2.0 KiB received", 0, 3),
         ("Generate narration: Say hello", 1, 3),
         ("Time narration: Say hello", 1, 3),
         ("Time narration: Say hello", 2, 3),

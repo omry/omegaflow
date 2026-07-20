@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import sys
@@ -24,6 +25,7 @@ from .terminal_style import (
 
 
 PROGRESS_PIPE_ENV = "OMEGAFLOW_PROGRESS_PIPE"
+ACTIVITY_ELAPSED_DISPLAY_DELAY = 3.0
 STATUS_COLORS = {
     "check": ANSI_CYAN_BOLD,
     "cmd": ANSI_GREEN_BOLD,
@@ -147,6 +149,15 @@ class ProgressPipeReporter:
 
 def status_color(status: str) -> str:
     return STATUS_COLORS.get(status, ANSI_CYAN_BOLD)
+
+
+def format_activity_elapsed(seconds: object) -> str | None:
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        return None
+    elapsed = float(seconds)
+    if not math.isfinite(elapsed) or elapsed < ACTIVITY_ELAPSED_DISPLAY_DELAY:
+        return None
+    return f"{int(elapsed)}s"
 
 
 class LogProgressRenderer:
@@ -413,8 +424,9 @@ class ProgressBarRenderer:
         parts: list[str] = []
         if current is not None and total is not None:
             parts.append(f"{min(current, total)}/{total}")
-        if active and activity_elapsed is not None:
-            parts.append(f"{activity_elapsed:.1f}s")
+        elapsed_text = format_activity_elapsed(activity_elapsed) if active else None
+        if elapsed_text is not None:
+            parts.append(elapsed_text)
         if completion:
             parts.append(completion)
         return " · ".join(parts)

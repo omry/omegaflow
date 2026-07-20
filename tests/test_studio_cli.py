@@ -122,9 +122,32 @@ def test_build_progress_keeps_a_long_first_action_visibly_active() -> None:
     assert len(active_output) > len(initial_output)
     assert "0/4" in active_output
     assert "1/4" not in active_output
-    assert " · 0." in active_output
+    assert " · 0." not in active_output
     assert "▓" in active_output
     assert active_output.count("Recording workflow (1 action)") >= 2
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "expected"),
+    [
+        (0.0, "2/4"),
+        (2.9, "2/4"),
+        (3.0, "2/4 · 3s"),
+        (3.9, "2/4 · 3s"),
+        (4.0, "2/4 · 4s"),
+        (float("inf"), "2/4"),
+        (float("nan"), "2/4"),
+    ],
+)
+def test_build_progress_only_times_sustained_activities(
+    elapsed: float, expected: str
+) -> None:
+    assert ProgressBarRenderer._detail(
+        current=2,
+        total=4,
+        active=True,
+        activity_elapsed=elapsed,
+    ) == expected
 
 
 def test_build_progress_activity_indicator_uses_an_intensity_gradient() -> None:
