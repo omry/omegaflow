@@ -2611,6 +2611,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert "pauses after each beat" in beats_by_id["introduction"]["narration"]
     assert "turn off Guided mode" in beats_by_id["introduction"]["narration"]
     assert beats_by_id["introduction"]["guide"] == {
+        "summary": "Guided mode pauses after each beat.",
         "success_hint": "Continue when you are ready to install OmegaFlow."
     }
     assert beats_by_id["introduction"]["player"] == {
@@ -2668,8 +2669,17 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     ]
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
     assert beats_by_id["build"]["guide"]["commands"] == [
-        "omegaflow recording=quickstart action=build"
+        "omegaflow recording=quickstart action=build",
+        "omegaflow recording=quickstart action=watch",
     ]
+    assert beats_by_id["install"]["guide"]["success_hint"] == (
+        "OmegaFlow is installed and the omegaflow command is available."
+    )
+    assert beats_by_id["bootstrap"]["guide"]["success_hint"] == (
+        "The recording workspace contains project settings, recording defaults, "
+        "and the quickstart script."
+    )
+    assert beats_by_id["build"]["heading"] == "Build the Video"
     assert [command["id"] for command in build_commands] == [
         "build_command",
         "watch_command",
@@ -2690,22 +2700,23 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     )
     assert build_commands[1].get("output") is None
     assert browser_beat["narration_take"] == "build-and-browser"
-    assert browser_beat["heading"] == "Explore The Player"
+    assert browser_beat["heading"] == "Explore the Player"
+    assert browser_beat["guide"] == {
+        "summary": "This beat demonstrated beat previews and playback speed.",
+        "success_hint": "To learn more, start the tutorial or read the docs.",
+    }
     assert browser_beat["pointer"] == {"visible": False}
     assert "player" not in browser_beat
     assert browser_beat["narration"].startswith(
-        "@open_player@ An OmegaFlow video can move from terminal beats into "
-        "browser beats"
+        "@open_player@ OmegaFlow scripts and records browser workflows"
     )
-    assert "Here, OmegaFlow scripts and records browser workflows" in browser_beat[
-        "narration"
-    ]
+    assert "this script explores its player" in browser_beat["narration"]
     assert "OmegaFlow divides every video into beats" not in browser_beat["narration"]
     assert "@navigate_section@ First Video Beat" in browser_beat["narration"]
     assert "@playback_section@ Second Video Beat" in browser_beat["narration"]
-    assert "hovering over it in the timeline" in browser_beat["narration"]
+    assert "Hover over either beat in the timeline" in browser_beat["narration"]
     assert all("two-section" not in beat["narration"] for beat in beats)
-    assert "The watch command opens" in browser_beat["narration"]
+    assert "the watch command opens" in browser_beat["narration"]
     assert "A single OmegaFlow video" not in browser_beat["narration"]
     assert "one narration take" not in browser_beat["narration"]
     assert "@play_video@" not in browser_beat["narration"]
@@ -2896,8 +2907,7 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "next    omegaflow recording=quickstart\n" in output
-    assert "action=build" not in output
+    assert "next    omegaflow recording=quickstart action=build\n" in output
     recording = (workspace / "quickstart" / "index.md").read_text(
         encoding="utf-8"
     )

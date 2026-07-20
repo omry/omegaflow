@@ -323,6 +323,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
                 "actions": [{"run": "printf ready"}],
                 "guide": {
                     "commands": ["python -m pip install omegaflow"],
+                    "summary": "Install the package before continuing.",
                     "success_hint": "Install OmegaFlow.",
                 },
             },
@@ -357,6 +358,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     assert result.manifest == run_dir / "presentation/recording.presentation.json"
     assert manifest["beats"][0]["guide"] == {
         "commands": ["python -m pip install omegaflow"],
+        "summary": "Install the package before continuing.",
         "success_hint": "Install OmegaFlow.",
     }
     assert not any(

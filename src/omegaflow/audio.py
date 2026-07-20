@@ -1463,7 +1463,7 @@ def audio_metadata_payload(
 def guide_payload(value: object) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
-    raw_commands = value.get("commands")
+    raw_commands = value.get("commands", [])
     if not isinstance(raw_commands, list):
         return None
     commands = [
@@ -1471,11 +1471,16 @@ def guide_payload(value: object) -> dict[str, Any] | None:
         for command in raw_commands
         if isinstance(command, str) and command.strip()
     ]
-    if not commands:
+    summary = value.get("summary")
+    success_hint = value.get("success_hint")
+    has_summary = isinstance(summary, str) and bool(summary.strip())
+    has_success_hint = isinstance(success_hint, str) and bool(success_hint.strip())
+    if not commands and not has_summary and not has_success_hint:
         return None
     payload: dict[str, Any] = {"commands": commands}
-    success_hint = value.get("success_hint")
-    if isinstance(success_hint, str) and success_hint.strip():
+    if has_summary:
+        payload["summary"] = normalize_narration_text(summary)
+    if has_success_hint:
         payload["success_hint"] = normalize_narration_text(success_hint)
     return payload
 

@@ -93,6 +93,7 @@ beat:
       control: guided
       start: "@guided_mode_start@"
   guide:
+    summary: Guided mode pauses after each beat.
     success_hint: Continue when you are ready to install OmegaFlow.
 ```
 
@@ -123,7 +124,7 @@ beat:
   guide:
     commands:
     - python -m pip install omegaflow
-    success_hint: Install OmegaFlow in your project's Python environment.
+    success_hint: OmegaFlow is installed and the omegaflow command is available.
 ```
 
 ```yaml studio-directive
@@ -163,13 +164,15 @@ beat:
   guide:
     commands:
     - omegaflow action=bootstrap
-    success_hint: Inspect and commit the generated recording workspace.
+    success_hint: >-
+      The recording workspace contains project settings, recording defaults,
+      and the quickstart script.
 ```
 
 ```yaml studio-directive
 beat:
   id: build
-  heading: Build The Video
+  heading: Build the Video
   narration_take: build-and-browser
   narration: >-
     @build@ Build the quickstart recording to turn the sample workflow into a
@@ -197,24 +200,23 @@ beat:
   guide:
     commands:
     - omegaflow recording=quickstart action=build
-    success_hint: The generated video is ready to play.
+    - omegaflow recording=quickstart action=watch
+    success_hint: The quickstart video is open in its local player.
 ```
 
 ```yaml studio-directive
 beat:
   id: play-in-browser
   medium: browser
-  heading: Explore The Player
+  heading: Explore the Player
   narration_take: build-and-browser
   narration: >-
-    @open_player@ An OmegaFlow video can move from terminal beats into browser
-    beats. Here, OmegaFlow scripts and records browser workflows just as it does
-    terminal workflows. The watch command opens the generated player in a
-    browser, where this script opens the two-beat video we just created.
-    @show_pointer@ This quickstart has two beats, titled @navigate_section@
-    First Video Beat and @playback_section@ Second Video Beat. The player lets
-    you preview a beat by hovering over it in the timeline. @point_at_speed@
-    You can also use the
+    @open_player@ OmegaFlow scripts and records browser workflows just as it
+    does terminal workflows. Here, the watch command opens the video we just
+    created, and this script explores its player. @show_pointer@ The quickstart
+    contains @navigate_section@ First Video Beat and @playback_section@ Second
+    Video Beat. Hover over either beat in the timeline to preview it.
+    @point_at_speed@ You can also use the
     @playback_speed_start@ playback speed control. @playback_speed_end@
     To learn more, start the tutorial or read the docs.
   marker: play-in-browser
@@ -272,5 +274,6 @@ beat:
     set_pointer:
       visible: false
   guide:
-    success_hint: The generated player is ready to publish with your docs.
+    summary: This beat demonstrated beat previews and playback speed.
+    success_hint: To learn more, start the tutorial or read the docs.
 ```

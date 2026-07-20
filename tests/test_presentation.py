@@ -255,6 +255,7 @@ def test_manifest_guide_preserves_typed_commands(tmp_path: Path) -> None:
     manifest = write_browser_bundle(tmp_path)
     manifest["beats"][0]["guide"] = {
         "commands": ["python -m pip install omegaflow"],
+        "summary": "Install the package before continuing.",
         "success_hint": "Install OmegaFlow.",
     }
 
@@ -264,9 +265,17 @@ def test_manifest_guide_preserves_typed_commands(tmp_path: Path) -> None:
     assert validated.beats[0].guide.commands == [
         "python -m pip install omegaflow"
     ]
+    assert validated.beats[0].guide.summary == (
+        "Install the package before continuing."
+    )
 
     manifest["beats"][0]["guide"]["commands"] = [""]
     with pytest.raises(PresentationValidationError, match="guide.commands.0"):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    manifest["beats"][0]["guide"]["commands"] = []
+    manifest["beats"][0]["guide"]["summary"] = 7
+    with pytest.raises(PresentationValidationError, match="guide.summary"):
         validate_presentation_manifest(manifest, manifest_dir=tmp_path)
 
 

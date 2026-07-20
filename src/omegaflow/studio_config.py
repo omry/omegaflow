@@ -714,6 +714,7 @@ class RecordingCheckConfig(RecordingStepConfig):
 @dataclass
 class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
+    summary: str | None = None
     success_hint: str | None = None
 
 

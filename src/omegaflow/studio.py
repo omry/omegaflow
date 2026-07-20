@@ -809,7 +809,7 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         )
         print(f"{status:>7} {display_path(path)}")
     print()
-    print(f"next    omegaflow recording={recording_id}")
+    print(f"next    omegaflow recording={recording_id} action=build")
     return 0
 
 

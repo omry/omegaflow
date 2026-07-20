@@ -246,6 +246,7 @@ class PresentationAssetV1:
 @dataclass
 class PresentationGuideV1:
     commands: list[str] = field(default_factory=list)
+    summary: str | None = None
     success_hint: str | None = None
 
 

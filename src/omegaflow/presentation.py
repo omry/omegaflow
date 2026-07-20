@@ -849,6 +849,9 @@ def validate_presentation_manifest(
                     command,
                     field=f"{field}.guide.commands.{command_index}",
                 )
+            summary = guide_mapping.get("summary")
+            if summary is not None:
+                _non_empty_string(summary, field=f"{field}.guide.summary")
             hint = guide_mapping.get("success_hint")
             if renderer == "browser":
                 _non_empty_string(hint, field=f"{field}.guide.success_hint")

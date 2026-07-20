@@ -1,5 +1,5 @@
 {
-  "duration_ms": 100104,
+  "duration_ms": 87840,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,14 +12,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 30360,
-      "playback_sha256": "4e5c0c03bb049d04cfebd389eb542662c520c77d04cc0706dc1fcdfcbbd1904e",
-      "playback_src": "audio/__beat__-introduction-4e5c0c03bb049d04cfebd389eb542662c520c77d04cc0706dc1fcdfcbbd1904e.mp3",
+      "playback_end_ms": 26256,
+      "playback_sha256": "2f2166e6207a048ca4a26f383559e104cb9e3a260a2c95553aa4f3a6a6378abc",
+      "playback_src": "audio/__beat__-introduction-2f2166e6207a048ca4a26f383559e104cb9e3a260a2c95553aa4f3a6a6378abc.mp3",
       "playback_start_ms": 0,
-      "sha256": "4e5c0c03bb049d04cfebd389eb542662c520c77d04cc0706dc1fcdfcbbd1904e",
-      "source_end_ms": 30360,
+      "sha256": "2f2166e6207a048ca4a26f383559e104cb9e3a260a2c95553aa4f3a6a6378abc",
+      "source_end_ms": 26256,
       "source_start_ms": 0,
-      "src": "audio/__beat__-introduction-4e5c0c03bb049d04cfebd389eb542662c520c77d04cc0706dc1fcdfcbbd1904e.mp3",
+      "src": "audio/__beat__-introduction-2f2166e6207a048ca4a26f383559e104cb9e3a260a2c95553aa4f3a6a6378abc.mp3",
       "timestamps": "timestamps/__beat__-introduction.json"
     },
     {
@@ -32,14 +32,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 38424,
-      "playback_sha256": "6f92a56b92f531c5c9a6d2be21c9243e013134eb0d95c97debedf910eea6206f",
-      "playback_src": "audio/__beat__-install-6f92a56b92f531c5c9a6d2be21c9243e013134eb0d95c97debedf910eea6206f.mp3",
-      "playback_start_ms": 30360,
-      "sha256": "6f92a56b92f531c5c9a6d2be21c9243e013134eb0d95c97debedf910eea6206f",
-      "source_end_ms": 38424,
-      "source_start_ms": 30360,
-      "src": "audio/__beat__-install-6f92a56b92f531c5c9a6d2be21c9243e013134eb0d95c97debedf910eea6206f.mp3",
+      "playback_end_ms": 35160,
+      "playback_sha256": "43bfe5b381d2216b617a08c447e6ee164c0cdb1f819062582649b9910016028a",
+      "playback_src": "audio/__beat__-install-43bfe5b381d2216b617a08c447e6ee164c0cdb1f819062582649b9910016028a.mp3",
+      "playback_start_ms": 26256,
+      "sha256": "43bfe5b381d2216b617a08c447e6ee164c0cdb1f819062582649b9910016028a",
+      "source_end_ms": 35160,
+      "source_start_ms": 26256,
+      "src": "audio/__beat__-install-43bfe5b381d2216b617a08c447e6ee164c0cdb1f819062582649b9910016028a.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -52,14 +52,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 57727,
-      "playback_sha256": "2e82867f88451bc9ab20bd3e215a87c078177c1e3c603556fc759fd9a2df6ec6",
-      "playback_src": "audio/__beat__-bootstrap-playback-2e82867f88451bc9ab20bd3e215a87c078177c1e3c603556fc759fd9a2df6ec6.mp3",
-      "playback_start_ms": 38424,
-      "sha256": "79509734bd777bb88032faec55bd2417ac02273f29c391f2483f79b3142296aa",
-      "source_end_ms": 56688,
-      "source_start_ms": 38424,
-      "src": "audio/__beat__-bootstrap-79509734bd777bb88032faec55bd2417ac02273f29c391f2483f79b3142296aa.mp3",
+      "playback_end_ms": 54419,
+      "playback_sha256": "09e28bd218cd5678bb2be066d5a035adb58b66ea38ac1d600fe6c3a795e0a555",
+      "playback_src": "audio/__beat__-bootstrap-playback-09e28bd218cd5678bb2be066d5a035adb58b66ea38ac1d600fe6c3a795e0a555.mp3",
+      "playback_start_ms": 35160,
+      "sha256": "22169e6f022a16f670ce9b4d925cc6896a3572ce4b40b5ee52a3705c05d32134",
+      "source_end_ms": 53472,
+      "source_start_ms": 35160,
+      "src": "audio/__beat__-bootstrap-22169e6f022a16f670ce9b4d925cc6896a3572ce4b40b5ee52a3705c05d32134.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -73,19 +73,19 @@
         },
         {
           "beat_id": "play-in-browser",
-          "text": "An OmegaFlow video can move from terminal beats into browser beats. Here, OmegaFlow scripts and records browser workflows just as it does terminal workflows. The watch command opens the generated player in a browser, where this script opens the two-beat video we just created. This quickstart has two beats, titled First Video Beat and Second Video Beat. The player lets you preview a beat by hovering over it in the timeline. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
-          "text_end": 709,
+          "text": "OmegaFlow scripts and records browser workflows just as it does terminal workflows. Here, the watch command opens the video we just created, and this script explores its player. The quickstart contains First Video Beat and Second Video Beat. Hover over either beat in the timeline to preview it. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
+          "text_end": 578,
           "text_start": 186
         }
       ],
-      "playback_end_ms": 103344,
-      "playback_sha256": "f15cbbb6850941cae982891da83298e9885b61967da2bcc7375d5b4d1bef02ac",
-      "playback_src": "audio/build-and-browser-playback-f15cbbb6850941cae982891da83298e9885b61967da2bcc7375d5b4d1bef02ac.mp3",
-      "playback_start_ms": 57727,
-      "sha256": "d1d476010b114dcb882a1e4a67fbac93dde122ed96438d14cc4e7c99a6110fb4",
-      "source_end_ms": 100104,
-      "source_start_ms": 56688,
-      "src": "audio/build-and-browser-d1d476010b114dcb882a1e4a67fbac93dde122ed96438d14cc4e7c99a6110fb4.mp3",
+      "playback_end_ms": 90606,
+      "playback_sha256": "98a09e1a0f11bd97fcb5f01ad49c9051b612320df8b47889e31b159539f9f6b1",
+      "playback_src": "audio/build-and-browser-playback-98a09e1a0f11bd97fcb5f01ad49c9051b612320df8b47889e31b159539f9f6b1.mp3",
+      "playback_start_ms": 54419,
+      "sha256": "f0b688a6b892119b4e8f1c063cf4161a83a2d3bccc33fb31ac9ada26dc3de41a",
+      "source_end_ms": 87840,
+      "source_start_ms": 53472,
+      "src": "audio/build-and-browser-f0b688a6b892119b4e8f1c063cf4161a83a2d3bccc33fb31ac9ada26dc3de41a.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

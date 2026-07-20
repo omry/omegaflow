@@ -1492,12 +1492,18 @@ def compile_presentation_bundle(
             if beat.guide is not None:
                 guide_config = thaw(beat.guide)
                 commands = guide_config.get("commands", [])
+                summary = guide_config.get("summary")
                 hint = guide_config.get("success_hint")
-                if commands or (isinstance(hint, str) and hint):
+                if (
+                    commands
+                    or (isinstance(summary, str) and summary)
+                    or (isinstance(hint, str) and hint)
+                ):
                     from .presentation_schema import PresentationGuideV1
 
                     guide = PresentationGuideV1(
                         commands=list(commands),
+                        summary=summary,
                         success_hint=hint,
                     )
             player = (

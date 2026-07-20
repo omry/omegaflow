@@ -32,7 +32,7 @@ beat:
 | `actions` | list | Commands to record. |
 | `checks` | list | Commands that validate the result. |
 | `effects` | list | Narration-synchronized terminal presentation effects. |
-| `guide` | mapping | Guided-mode commands and success hint. |
+| `guide` | mapping | Guided-mode summary, commands, and success hint. |
 
 ## Synchronizing Narration And Commands
 
@@ -446,11 +446,13 @@ viewer.
 
 ## Guide
 
-`guide` adds prompts to the player. Terminal beats can provide commands to copy;
-browser beats provide explanatory `success_hint` text only.
+`guide` adds prompts to the player. Use `summary` to author the checkpoint's
+main instruction and `success_hint` to describe the expected result or next
+step. Terminal beats can also provide commands to copy; browser beats cannot.
 
 ```yaml
 guide:
+  summary: Build the recording before continuing.
   commands:
   - omegaflow recording=hello
   success_hint: The build writes video assets and publish surfaces.
@@ -721,6 +723,7 @@ class RecordingCheckConfig(RecordingStepConfig):
 @dataclass
 class RecordingGuideConfig:
     commands: list[str] = field(default_factory=list)
+    summary: str | None = None
     success_hint: str | None = None
 
 

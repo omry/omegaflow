@@ -2570,19 +2570,29 @@
         const guide = point.guide || {};
         const commands = Array.isArray(guide.commands) ? guide.commands : [];
         const commandText = commands.join('\n');
+        const summary = String(guide.summary || '').trim();
         const hint = String(guide.success_hint || '').trim();
         guideTitle.textContent = point.heading
           ? `Checkpoint: ${point.heading}`
           : 'Checkpoint';
-        guideSummary.textContent = commands.length
-          ? commands.length === 1
-            ? 'Run this command in your terminal before continuing.'
-            : 'Run these commands in your terminal before continuing.'
-          : 'Review this step before continuing.';
+        guideSummary.textContent = summary || (
+          commands.length
+            ? commands.length === 1
+              ? 'Run this command in your terminal before continuing.'
+              : 'Run these commands in your terminal before continuing.'
+            : 'Review this step before continuing.'
+        );
         guideCommand.hidden = !commandText;
         guideCopyButton.hidden = !commandText;
         guideCommand.textContent = commandText;
+        guideCopyButton.dataset.copyLabel = commands.length === 1
+          ? 'Copy command'
+          : 'Copy commands';
+        guideCopyButton.textContent = guideCopyButton.dataset.copyLabel;
         guideHint.textContent = hint || 'Continue when your local result matches the video.';
+        guideContinueButton.textContent = point.time >= totalSeconds - 0.05
+          ? 'Finish'
+          : 'Continue';
         resetGuidePosition();
         guideModal.hidden = false;
         guideContinueButton.focus();
@@ -2598,13 +2608,13 @@
             .then(() => {
               guideCopyButton.textContent = 'Copied';
               setTimeout(() => {
-                guideCopyButton.textContent = 'Copy command';
+                guideCopyButton.textContent = guideCopyButton.dataset.copyLabel;
               }, 1200);
             })
             .catch(() => {
               guideCopyButton.textContent = 'Copy failed';
               setTimeout(() => {
-                guideCopyButton.textContent = 'Copy command';
+                guideCopyButton.textContent = guideCopyButton.dataset.copyLabel;
               }, 1200);
             });
         }
@@ -3327,12 +3337,14 @@
         const commands = rawCommands
           .map((command) => String(command || '').trim())
           .filter(Boolean);
+        const summary = String(value.summary || '').trim();
         const successHint = String(value.success_hint || '').trim();
-        if (!commands.length && !successHint) {
+        if (!commands.length && !summary && !successHint) {
           return null;
         }
         return {
           commands,
+          summary,
           success_hint: successHint,
         };
       }

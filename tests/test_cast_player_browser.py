@@ -175,14 +175,32 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
         browser.close()
 
 
-def test_guided_checkpoint_renders_authored_commands(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("commands", "copy_label"),
+    [
+        (["python -m pip install omegaflow"], "Copy command"),
+        (
+            [
+                "omegaflow recording=quickstart action=build",
+                "omegaflow recording=quickstart action=watch",
+            ],
+            "Copy commands",
+        ),
+    ],
+)
+def test_guided_checkpoint_renders_authored_commands(
+    tmp_path: Path,
+    commands: list[str],
+    copy_label: str,
+) -> None:
     sync_api = pytest.importorskip("playwright.sync_api")
     write_browser_player_fixture(tmp_path)
     manifest_path = tmp_path / "recording.presentation.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["presentation"]["guided"] = True
     manifest["beats"][0]["guide"] = {
-        "commands": ["python -m pip install omegaflow"],
+        "commands": commands,
+        "summary": "Install the package before continuing.",
         "success_hint": "Install OmegaFlow.",
     }
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -198,12 +216,31 @@ def test_guided_checkpoint_renders_authored_commands(tmp_path: Path) -> None:
         page.locator("#play").click()
         page.locator("#guide:not([hidden])").wait_for(timeout=3000)
 
-        assert page.locator("#guide-command").text_content() == (
-            "python -m pip install omegaflow"
-        )
+        assert page.locator("#guide-command").text_content() == "\n".join(commands)
         assert page.locator("#guide-copy").is_visible()
+        assert page.locator("#guide-copy").text_content() == copy_label
         assert page.locator("#guide-summary").text_content() == (
-            "Run this command in your terminal before continuing."
+            "Install the package before continuing."
+        )
+        assert page.locator("#guide-continue").text_content() == "Finish"
+
+        page.evaluate(
+            "commands => Object.defineProperty(navigator, 'clipboard', {"
+            "configurable: true, value: {writeText: text => {"
+            "window.__copiedGuideCommands = text; return Promise.resolve();"
+            "}}})",
+            commands,
+        )
+        page.locator("#guide-copy").click()
+        page.wait_for_function(
+            "expected => window.__copiedGuideCommands === expected",
+            arg="\n".join(commands),
+        )
+        assert page.locator("#guide-copy").text_content() == "Copied"
+        page.wait_for_function(
+            "expected => document.querySelector('#guide-copy').textContent === expected",
+            arg=copy_label,
+            timeout=3000,
         )
 
         page.locator("#guide").click(position={"x": 10, "y": 10})
@@ -760,8 +797,13 @@ def test_homepage_quickstart_checkpoint_holds_terminal_before_browser() -> None:
         page.locator("#play").click()
         page.locator("#guide:not([hidden])").wait_for(timeout=5000)
         assert page.locator("#guide-title").text_content() == (
-            "Checkpoint: Build The Video"
+            "Checkpoint: Build the Video"
         )
+        assert page.locator("#guide-command").text_content() == (
+            "omegaflow recording=quickstart action=build\n"
+            "omegaflow recording=quickstart action=watch"
+        )
+        assert page.locator("#guide-continue").text_content() == "Continue"
         assert page.locator("#terminal").is_visible()
         assert page.locator("#browser-stage").is_hidden()
 
@@ -820,8 +862,9 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
         )
         assert install_beat["guide"] == {
             "commands": ["python -m pip install omegaflow"],
+            "summary": None,
             "success_hint": (
-                "Install OmegaFlow in your project's Python environment."
+                "OmegaFlow is installed and the omegaflow command is available."
             ),
         }
         intro_beat = manifest_data["beats"][0]
