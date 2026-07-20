@@ -80,11 +80,13 @@ beat:
   id: introduction
   heading: What This Video Covers
   narration: >-
-    This quickstart shows how to install OmegaFlow, set up a recording
-    workspace, build a two-section video, and play it in a browser.
-    This video runs in @guided_mode_start@ guided mode, which pauses after each
-    section. To watch without pauses, turn off Guided mode using the button in
-    the player controls.
+    OmegaFlow turns scripted terminal and browser workflows into narrated,
+    rebuildable videos. OmegaFlow videos are organized into beats. This video
+    is a quickstart demo. We'll install OmegaFlow, prepare a recording
+    workspace, then build and open a two-beat quickstart video in a browser.
+    The demo runs in @guided_mode_start@ guided mode, which pauses after each
+    beat. To watch continuously, turn off Guided mode using the button in the
+    player controls.
   caption: Preview the quickstart and learn how guided mode works.
   player:
     highlight:
@@ -99,10 +101,9 @@ beat:
   id: install
   heading: Install OmegaFlow
   narration: >-
-    OmegaFlow turns scripted terminal and browser workflows into narrated,
-    rebuildable videos. Start by @install@ adding the package to your project's
-    Python environment. @wait:install_command+200ms@ When installation
-    finishes, you can run omegaflow from the command line.
+    Start by @install@ adding OmegaFlow to your project's Python environment.
+    @wait:install_command+200ms@ When installation finishes, you can run
+    omegaflow from the command line.
   marker: install
   caption: Install OmegaFlow in a Python environment.
   actions:
@@ -172,7 +173,7 @@ beat:
   narration_take: build-and-browser
   narration: >-
     @build@ Build the quickstart recording to turn the sample workflow into a
-    ready-to-watch two-section video.
+    ready-to-watch two-beat video.
     @wait:build_command+200ms@ When the build finishes, @watch@ run the
     follow-up watch command to open the video in a browser.
   marker: build
@@ -209,11 +210,11 @@ beat:
     @open_player@ An OmegaFlow video can move from terminal beats into browser
     beats. Here, OmegaFlow scripts and records browser workflows just as it does
     terminal workflows. The watch command opens the generated player in a
-    browser, where this script opens the two-section video we just created.
-    @show_pointer@ OmegaFlow divides every video into beats. This quickstart has
-    two, titled @navigate_section@ First Video Beat and @playback_section@
-    Second Video Beat. The player lets you preview a beat by hovering over its
-    section of the timeline. @point_at_speed@ You can also use the
+    browser, where this script opens the two-beat video we just created.
+    @show_pointer@ This quickstart has two beats, titled @navigate_section@
+    First Video Beat and @playback_section@ Second Video Beat. The player lets
+    you preview a beat by hovering over it in the timeline. @point_at_speed@
+    You can also use the
     @playback_speed_start@ playback speed control. @playback_speed_end@
     To learn more, start the tutorial or read the docs.
   marker: play-in-browser

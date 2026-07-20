@@ -888,7 +888,9 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
             if event["kind"] == "state"
             and event["action_id"] == "preview_playback_section"
         )
-        preview_seek_ms = browser_beat["offset_ms"] + second_preview["at_ms"]
+        preview_seek_ms = (
+            browser_beat["offset_ms"] + second_preview["at_ms"] + 100
+        )
         progress_value = round(
             preview_seek_ms / manifest_data["recording"]["duration_ms"] * 1000
         )

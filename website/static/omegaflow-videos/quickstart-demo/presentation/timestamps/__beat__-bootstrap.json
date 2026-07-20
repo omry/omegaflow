@@ -3,51 +3,51 @@
     {
       "beat_id": "bootstrap",
       "id": "bootstrap",
-      "source_ms": 10160,
+      "source_ms": 10380,
       "text_offset": 186
     },
     {
       "beat_id": "bootstrap",
       "id": "project_settings_start",
-      "source_ms": 12840,
+      "source_ms": 13100,
       "text_offset": 228
     },
     {
       "beat_id": "bootstrap",
       "id": "project_settings_end",
-      "source_ms": 13560,
+      "source_ms": 13840,
       "text_offset": 246
     },
     {
       "beat_id": "bootstrap",
       "id": "recording_defaults_start",
-      "source_ms": 13560,
+      "source_ms": 13840,
       "text_offset": 246
     },
     {
       "beat_id": "bootstrap",
       "id": "recording_defaults_end",
-      "source_ms": 14820,
+      "source_ms": 15120,
       "text_offset": 266
     },
     {
       "beat_id": "bootstrap",
       "id": "quickstart_script_start",
-      "source_ms": 15260,
+      "source_ms": 15500,
       "text_offset": 270
     },
     {
       "beat_id": "bootstrap",
       "id": "quickstart_script_end",
-      "source_ms": 17540,
+      "source_ms": 17760,
       "text_offset": 321
     }
   ],
-  "duration_ms": 17808,
+  "duration_ms": 18264,
   "members": [
     {
       "beat_id": "bootstrap",
-      "source_end_ms": 17808,
+      "source_end_ms": 18264,
       "source_start_ms": 0,
       "text_end": 321,
       "text_start": 0
@@ -59,354 +59,550 @@
     {
       "beat_id": "bootstrap",
       "gap_ms": 200,
-      "source_ms": 11900,
+      "source_ms": 12170,
       "target": "bootstrap_run",
       "text_offset": 213
     }
   ],
   "words": [
     {
-      "end_ms": 340,
+      "end_ms": 320,
+      "raw_word_end": 1,
+      "raw_word_start": 0,
       "start_ms": 0,
       "text": "We'll",
       "text_end": 5,
-      "text_start": 0
+      "text_start": 0,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 640,
-      "start_ms": 340,
+      "end_ms": 660,
+      "raw_word_end": 2,
+      "raw_word_start": 1,
+      "start_ms": 320,
       "text": "now",
       "text_end": 9,
-      "text_start": 6
+      "text_start": 6,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 900,
-      "start_ms": 640,
+      "end_ms": 1040,
+      "raw_word_end": 3,
+      "raw_word_start": 2,
+      "start_ms": 660,
       "text": "prepare",
       "text_end": 17,
-      "text_start": 10
+      "text_start": 10,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 1200,
-      "start_ms": 900,
+      "end_ms": 1380,
+      "raw_word_end": 4,
+      "raw_word_start": 3,
+      "start_ms": 1040,
       "text": "your",
       "text_end": 22,
-      "text_start": 18
+      "text_start": 18,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 1540,
-      "start_ms": 1200,
+      "end_ms": 1740,
+      "raw_word_end": 5,
+      "raw_word_start": 4,
+      "start_ms": 1380,
       "text": "recording",
       "text_end": 32,
-      "text_start": 23
+      "text_start": 23,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 2060,
-      "start_ms": 1540,
+      "end_ms": 2300,
+      "raw_word_end": 6,
+      "raw_word_start": 5,
+      "start_ms": 1740,
       "text": "workspace.",
       "text_end": 43,
-      "text_start": 33
+      "text_start": 33,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 2860,
-      "start_ms": 2800,
+      "end_ms": 2920,
+      "raw_word_end": 7,
+      "raw_word_start": 6,
+      "start_ms": 2860,
       "text": "This",
       "text_end": 48,
-      "text_start": 44
+      "text_start": 44,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 2980,
-      "start_ms": 2860,
+      "end_ms": 3040,
+      "raw_word_end": 8,
+      "raw_word_start": 7,
+      "start_ms": 2920,
       "text": "is",
       "text_end": 51,
-      "text_start": 49
+      "text_start": 49,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 3160,
-      "start_ms": 2980,
+      "end_ms": 3240,
+      "raw_word_end": 9,
+      "raw_word_start": 8,
+      "start_ms": 3040,
       "text": "a",
       "text_end": 53,
-      "text_start": 52
+      "text_start": 52,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 3560,
-      "start_ms": 3160,
+      "end_ms": 3660,
+      "raw_word_end": 11,
+      "raw_word_start": 9,
+      "start_ms": 3240,
       "text": "one-time",
       "text_end": 62,
-      "text_start": 54
+      "text_start": 54,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 3820,
-      "start_ms": 3560,
+      "end_ms": 3900,
+      "raw_word_end": 12,
+      "raw_word_start": 11,
+      "start_ms": 3660,
       "text": "setup",
       "text_end": 68,
-      "text_start": 63
+      "text_start": 63,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 4120,
-      "start_ms": 3820,
+      "end_ms": 4180,
+      "raw_word_end": 13,
+      "raw_word_start": 12,
+      "start_ms": 3900,
       "text": "for",
       "text_end": 72,
-      "text_start": 69
+      "text_start": 69,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 4380,
-      "start_ms": 4120,
+      "end_ms": 4480,
+      "raw_word_end": 14,
+      "raw_word_start": 13,
+      "start_ms": 4180,
       "text": "each",
       "text_end": 77,
-      "text_start": 73
+      "text_start": 73,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 4740,
-      "start_ms": 4380,
+      "end_ms": 4880,
+      "raw_word_end": 15,
+      "raw_word_start": 14,
+      "start_ms": 4480,
       "text": "recording",
       "text_end": 87,
-      "text_start": 78
+      "text_start": 78,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 5160,
-      "start_ms": 4740,
+      "end_ms": 5360,
+      "raw_word_end": 16,
+      "raw_word_start": 15,
+      "start_ms": 4880,
       "text": "environment,",
       "text_end": 100,
-      "text_start": 88
+      "text_start": 88,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 5760,
-      "start_ms": 5500,
+      "end_ms": 5980,
+      "raw_word_end": 17,
+      "raw_word_start": 16,
+      "start_ms": 5560,
       "text": "and",
       "text_end": 104,
-      "text_start": 101
+      "text_start": 101,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 5860,
-      "start_ms": 5760,
+      "end_ms": 6080,
+      "raw_word_end": 18,
+      "raw_word_start": 17,
+      "start_ms": 5980,
       "text": "you",
       "text_end": 108,
-      "text_start": 105
+      "text_start": 105,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 6060,
-      "start_ms": 5860,
+      "end_ms": 6300,
+      "raw_word_end": 19,
+      "raw_word_start": 18,
+      "start_ms": 6080,
       "text": "can",
       "text_end": 112,
-      "text_start": 109
+      "text_start": 109,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 6320,
-      "start_ms": 6060,
+      "end_ms": 6540,
+      "raw_word_end": 20,
+      "raw_word_start": 19,
+      "start_ms": 6300,
       "text": "commit",
       "text_end": 119,
-      "text_start": 113
+      "text_start": 113,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 6940,
-      "start_ms": 6320,
+      "end_ms": 6840,
+      "raw_word_end": 21,
+      "raw_word_start": 20,
+      "start_ms": 6540,
       "text": "the",
       "text_end": 123,
-      "text_start": 120
+      "text_start": 120,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 6941,
-      "start_ms": 6940,
+      "end_ms": 7140,
+      "raw_word_end": 22,
+      "raw_word_start": 21,
+      "start_ms": 6840,
       "text": "generated",
       "text_end": 133,
-      "text_start": 124
+      "text_start": 124,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 7260,
-      "start_ms": 6941,
+      "end_ms": 7500,
+      "raw_word_end": 23,
+      "raw_word_start": 22,
+      "start_ms": 7140,
       "text": "files",
       "text_end": 139,
-      "text_start": 134
+      "text_start": 134,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 7540,
-      "start_ms": 7260,
+      "end_ms": 7780,
+      "raw_word_end": 24,
+      "raw_word_start": 23,
+      "start_ms": 7500,
       "text": "to",
       "text_end": 142,
-      "text_start": 140
+      "text_start": 140,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 7820,
-      "start_ms": 7540,
+      "end_ms": 8060,
+      "raw_word_end": 25,
+      "raw_word_start": 24,
+      "start_ms": 7780,
       "text": "version",
       "text_end": 150,
-      "text_start": 143
+      "text_start": 143,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 8220,
-      "start_ms": 7820,
+      "end_ms": 8460,
+      "raw_word_end": 26,
+      "raw_word_start": 25,
+      "start_ms": 8060,
       "text": "control.",
       "text_end": 159,
-      "text_start": 151
+      "text_start": 151,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 9140,
-      "start_ms": 9060,
+      "end_ms": 9360,
+      "raw_word_end": 27,
+      "raw_word_start": 26,
+      "start_ms": 9260,
       "text": "From",
       "text_end": 164,
-      "text_start": 160
+      "text_start": 160,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 9340,
-      "start_ms": 9140,
+      "end_ms": 9580,
+      "raw_word_end": 28,
+      "raw_word_start": 27,
+      "start_ms": 9360,
       "text": "your",
       "text_end": 169,
-      "text_start": 165
+      "text_start": 165,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 9780,
-      "start_ms": 9340,
+      "end_ms": 9980,
+      "raw_word_end": 29,
+      "raw_word_start": 28,
+      "start_ms": 9580,
       "text": "repository",
       "text_end": 180,
-      "text_start": 170
+      "text_start": 170,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 10160,
-      "start_ms": 9780,
+      "end_ms": 10380,
+      "raw_word_end": 30,
+      "raw_word_start": 29,
+      "start_ms": 9980,
       "text": "root,",
       "text_end": 186,
-      "text_start": 181
+      "text_start": 181,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 10640,
-      "start_ms": 10620,
+      "end_ms": 10920,
+      "raw_word_end": 31,
+      "raw_word_start": 30,
+      "start_ms": 10900,
       "text": "run",
       "text_end": 190,
-      "text_start": 187
+      "text_start": 187,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 10860,
-      "start_ms": 10640,
+      "end_ms": 11140,
+      "raw_word_end": 32,
+      "raw_word_start": 31,
+      "start_ms": 10920,
       "text": "the",
       "text_end": 194,
-      "text_start": 191
+      "text_start": 191,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 11220,
-      "start_ms": 10860,
+      "end_ms": 11500,
+      "raw_word_end": 33,
+      "raw_word_start": 32,
+      "start_ms": 11140,
       "text": "bootstrap",
       "text_end": 204,
-      "text_start": 195
+      "text_start": 195,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 11580,
-      "start_ms": 11220,
+      "end_ms": 11900,
+      "raw_word_end": 34,
+      "raw_word_start": 33,
+      "start_ms": 11500,
       "text": "command.",
       "text_end": 213,
-      "text_start": 205
+      "text_start": 205,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 12340,
-      "start_ms": 12220,
+      "end_ms": 12580,
+      "raw_word_end": 35,
+      "raw_word_start": 34,
+      "start_ms": 12440,
       "text": "It",
       "text_end": 216,
-      "text_start": 214
+      "text_start": 214,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 12640,
-      "start_ms": 12340,
+      "end_ms": 12900,
+      "raw_word_end": 36,
+      "raw_word_start": 35,
+      "start_ms": 12580,
       "text": "creates",
       "text_end": 224,
-      "text_start": 217
+      "text_start": 217,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 12840,
-      "start_ms": 12640,
+      "end_ms": 13100,
+      "raw_word_end": 37,
+      "raw_word_start": 36,
+      "start_ms": 12900,
       "text": "the",
       "text_end": 228,
-      "text_start": 225
+      "text_start": 225,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 13180,
-      "start_ms": 12840,
+      "end_ms": 13460,
+      "raw_word_end": 38,
+      "raw_word_start": 37,
+      "start_ms": 13100,
       "text": "project",
       "text_end": 236,
-      "text_start": 229
+      "text_start": 229,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 13560,
-      "start_ms": 13180,
+      "end_ms": 13840,
+      "raw_word_end": 39,
+      "raw_word_start": 38,
+      "start_ms": 13460,
       "text": "settings,",
       "text_end": 246,
-      "text_start": 237
+      "text_start": 237,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 14301,
-      "start_ms": 14300,
+      "end_ms": 14541,
+      "raw_word_end": 40,
+      "raw_word_start": 39,
+      "start_ms": 14540,
       "text": "recording",
       "text_end": 256,
-      "text_start": 247
+      "text_start": 247,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 14820,
-      "start_ms": 14301,
+      "end_ms": 15120,
+      "raw_word_end": 41,
+      "raw_word_start": 40,
+      "start_ms": 14541,
       "text": "defaults,",
       "text_end": 266,
-      "text_start": 257
+      "text_start": 257,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 15260,
-      "start_ms": 15160,
+      "end_ms": 15500,
+      "raw_word_end": 42,
+      "raw_word_start": 41,
+      "start_ms": 15280,
       "text": "and",
       "text_end": 270,
-      "text_start": 267
+      "text_start": 267,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 15460,
-      "start_ms": 15260,
+      "end_ms": 15700,
+      "raw_word_end": 43,
+      "raw_word_start": 42,
+      "start_ms": 15500,
       "text": "a",
       "text_end": 272,
-      "text_start": 271
+      "text_start": 271,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 15820,
-      "start_ms": 15460,
+      "end_ms": 16060,
+      "raw_word_end": 45,
+      "raw_word_start": 43,
+      "start_ms": 15700,
       "text": "quickstart",
       "text_end": 283,
-      "text_start": 273
+      "text_start": 273,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 16220,
-      "start_ms": 15820,
+      "end_ms": 16500,
+      "raw_word_end": 46,
+      "raw_word_start": 45,
+      "start_ms": 16060,
       "text": "video",
       "text_end": 289,
-      "text_start": 284
+      "text_start": 284,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 16400,
-      "start_ms": 16220,
+      "end_ms": 16700,
+      "raw_word_end": 47,
+      "raw_word_start": 46,
+      "start_ms": 16500,
       "text": "script",
       "text_end": 296,
-      "text_start": 290
+      "text_start": 290,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 16620,
-      "start_ms": 16400,
+      "end_ms": 16980,
+      "raw_word_end": 48,
+      "raw_word_start": 47,
+      "start_ms": 16700,
       "text": "you",
       "text_end": 300,
-      "text_start": 297
+      "text_start": 297,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 16800,
-      "start_ms": 16620,
+      "end_ms": 17160,
+      "raw_word_end": 49,
+      "raw_word_start": 48,
+      "start_ms": 16980,
       "text": "can",
       "text_end": 304,
-      "text_start": 301
+      "text_start": 301,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 17000,
-      "start_ms": 16800,
+      "end_ms": 17340,
+      "raw_word_end": 50,
+      "raw_word_start": 49,
+      "start_ms": 17160,
       "text": "run",
       "text_end": 308,
-      "text_start": 305
+      "text_start": 305,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     },
     {
-      "end_ms": 17540,
-      "start_ms": 17000,
+      "end_ms": 17760,
+      "raw_word_end": 51,
+      "raw_word_start": 50,
+      "start_ms": 17340,
       "text": "immediately.",
       "text_end": 321,
-      "text_start": 309
+      "text_start": 309,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
     }
   ]
 }

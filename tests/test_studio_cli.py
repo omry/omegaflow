@@ -2574,9 +2574,18 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
 
     assert beats[0]["id"] == "introduction"
     assert (
-        "This video runs in @guided_mode_start@ guided mode"
+        "OmegaFlow turns scripted terminal and browser workflows into narrated,"
         in beats_by_id["introduction"]["narration"]
     )
+    assert (
+        "OmegaFlow videos are organized into beats"
+        in beats_by_id["introduction"]["narration"]
+    )
+    assert (
+        "The demo runs in @guided_mode_start@ guided mode"
+        in beats_by_id["introduction"]["narration"]
+    )
+    assert "pauses after each beat" in beats_by_id["introduction"]["narration"]
     assert "turn off Guided mode" in beats_by_id["introduction"]["narration"]
     assert beats_by_id["introduction"]["guide"] == {
         "success_hint": "Continue when you are ready to install OmegaFlow."
@@ -2584,7 +2593,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert beats_by_id["introduction"]["player"] == {
         "highlight": {"control": "guided", "start": "@guided_mode_start@"}
     }
-    assert beats_by_id["install"]["narration"].startswith("OmegaFlow")
+    assert beats_by_id["install"]["narration"].startswith("Start by")
     assert "narration_take" not in beats_by_id["install"]
     assert "narration_take" not in beats_by_id["bootstrap"]
     assert all(
@@ -2668,10 +2677,11 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert "Here, OmegaFlow scripts and records browser workflows" in browser_beat[
         "narration"
     ]
-    assert "OmegaFlow divides every video into beats" in browser_beat["narration"]
+    assert "OmegaFlow divides every video into beats" not in browser_beat["narration"]
     assert "@navigate_section@ First Video Beat" in browser_beat["narration"]
     assert "@playback_section@ Second Video Beat" in browser_beat["narration"]
-    assert "hovering over its section of the timeline" in browser_beat["narration"]
+    assert "hovering over it in the timeline" in browser_beat["narration"]
+    assert all("two-section" not in beat["narration"] for beat in beats)
     assert "The watch command opens" in browser_beat["narration"]
     assert "A single OmegaFlow video" not in browser_beat["narration"]
     assert "one narration take" not in browser_beat["narration"]

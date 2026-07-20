@@ -6,87 +6,87 @@
       "path": "media/45386cc70e17d73a9cabfe193842500a7f2ef153841e91f94b3d878546b3901a.webp",
       "sha256": "45386cc70e17d73a9cabfe193842500a7f2ef153841e91f94b3d878546b3901a"
     },
-    "state-38b1555dd973cf556925e525f1d333720a7b5d45c9bdcd50027f6b4270af0b5d": {
-      "bytes": 7196,
+    "state-06881f553df0d12fa466d554a7dcd4b482bd12656f075fd95f38f4a99ca3ade8": {
+      "bytes": 4668,
       "media_type": "image/webp",
-      "path": "media/a7383fb97336c31f7216a8d1056268085286a57b7e2d52d08332168573aab620.webp",
-      "sha256": "a7383fb97336c31f7216a8d1056268085286a57b7e2d52d08332168573aab620"
+      "path": "media/9702901ab70334bd7eaa12246d4dacb1368fbf70895d80dc08f07398e5a717b6.webp",
+      "sha256": "9702901ab70334bd7eaa12246d4dacb1368fbf70895d80dc08f07398e5a717b6"
     },
-    "state-be71ebaa6b4cc2cfecc4b39ab0a7b22ab2155194d6ad3797b95d41d2419aebaa": {
-      "bytes": 7368,
+    "state-91cf6ec9e0eadc2a5d9274ac1cedbb83dfbcf5697a8400f822c168528c99f340": {
+      "bytes": 9894,
       "media_type": "image/webp",
-      "path": "media/e4b509c42bcf4f5cd19d570f262751d120ddd2b377073052c8d83cae0aeb6456.webp",
-      "sha256": "e4b509c42bcf4f5cd19d570f262751d120ddd2b377073052c8d83cae0aeb6456"
+      "path": "media/db2e85154d638042edf16b0884f2d11f118190cd6535b3779ab536696cc4ef96.webp",
+      "sha256": "db2e85154d638042edf16b0884f2d11f118190cd6535b3779ab536696cc4ef96"
     },
-    "state-eaa9b320876a1bedf06f49110e39671710b5968c48c22206b5872a8221d628c0": {
-      "bytes": 4970,
+    "state-9ef2b2a3c01cc4e963bcad6afae31e193b827f9b4183589fb09771bf7151b315": {
+      "bytes": 6788,
       "media_type": "image/webp",
-      "path": "media/d7d94f77d45194635995f1319c0fd90eed3db2de632f0aec38c5f2d67f5c34f3.webp",
-      "sha256": "d7d94f77d45194635995f1319c0fd90eed3db2de632f0aec38c5f2d67f5c34f3"
+      "path": "media/d8641a050bbdec1676192a4c78046bd6246e6e5444bda445fddd424125af8f2c.webp",
+      "sha256": "d8641a050bbdec1676192a4c78046bd6246e6e5444bda445fddd424125af8f2c"
     },
-    "state-f2a37d1d8c436bb407ce4a357d4a76841a7a35978b2e235952bf32cf9dc7e735": {
-      "bytes": 10194,
+    "state-adce605bfac7e10792a35c2a754f05565b1957558037ae44eecf4b651f3ed184": {
+      "bytes": 6934,
       "media_type": "image/webp",
-      "path": "media/0c2309a0a99dc925a3a53be25a565ac78926529daa924fda4d26d5c2fe352f19.webp",
-      "sha256": "0c2309a0a99dc925a3a53be25a565ac78926529daa924fda4d26d5c2fe352f19"
+      "path": "media/afcd0ff16bec3bb3d94c17f51637eab7718bf7c8061c5529dd4119fa14da3ffb.webp",
+      "sha256": "afcd0ff16bec3bb3d94c17f51637eab7718bf7c8061c5529dd4119fa14da3ffb"
     },
-    "state-fc28755f1415e962b13b54f3cc45e456f13fe3dc14eab47d4f6067af161c3e43": {
-      "bytes": 10946,
+    "state-fa4a99393f2cd31b8addbe800f917f83715029b894fa994c1f220034f79a5fc5": {
+      "bytes": 10592,
       "media_type": "image/webp",
-      "path": "media/2d82be66bd5bce1aac62a46dc2183be54578864a30097a4b7c4e5a2043d316c4.webp",
-      "sha256": "2d82be66bd5bce1aac62a46dc2183be54578864a30097a4b7c4e5a2043d316c4"
+      "path": "media/c56a65834636102f23e9fb9fc14eb0de3ba25175be857b5fd59edaf4d52b88fd.webp",
+      "sha256": "c56a65834636102f23e9fb9fc14eb0de3ba25175be857b5fd59edaf4d52b88fd"
     }
   },
   "audio": {
     "intervals": [
       {
-        "presentation_end_ms": 19608,
+        "presentation_end_ms": 30360,
         "presentation_start_ms": 0,
-        "source_end_ms": 19608,
+        "source_end_ms": 30360,
         "source_start_ms": 0
       },
       {
-        "presentation_end_ms": 29928,
-        "presentation_start_ms": 19608,
-        "source_end_ms": 29928,
-        "source_start_ms": 19608
+        "presentation_end_ms": 34110,
+        "presentation_start_ms": 30360,
+        "source_end_ms": 34110,
+        "source_start_ms": 30360
       },
       {
-        "presentation_end_ms": 34512,
-        "presentation_start_ms": 29928,
-        "source_end_ms": 34512,
-        "source_start_ms": 29928
+        "presentation_end_ms": 38424,
+        "presentation_start_ms": 34110,
+        "source_end_ms": 38424,
+        "source_start_ms": 34110
       },
       {
-        "presentation_end_ms": 46412,
-        "presentation_start_ms": 34512,
-        "source_end_ms": 46412,
-        "source_start_ms": 34512
+        "presentation_end_ms": 50594,
+        "presentation_start_ms": 38424,
+        "source_end_ms": 50594,
+        "source_start_ms": 38424
       },
       {
-        "presentation_end_ms": 53390,
-        "presentation_start_ms": 47482,
-        "source_end_ms": 52320,
-        "source_start_ms": 46412
+        "presentation_end_ms": 57727,
+        "presentation_start_ms": 51633,
+        "source_end_ms": 56688,
+        "source_start_ms": 50594
       },
       {
-        "presentation_end_ms": 58980,
-        "presentation_start_ms": 53390,
-        "source_end_ms": 57910,
-        "source_start_ms": 52320
+        "presentation_end_ms": 63157,
+        "presentation_start_ms": 57727,
+        "source_end_ms": 62118,
+        "source_start_ms": 56688
       },
       {
-        "presentation_end_ms": 100992,
-        "presentation_start_ms": 60982,
-        "source_end_ms": 97920,
-        "source_start_ms": 57910
+        "presentation_end_ms": 103344,
+        "presentation_start_ms": 65358,
+        "source_end_ms": 100104,
+        "source_start_ms": 62118
       }
     ],
     "metadata": "audio.json"
   },
   "beats": [
     {
-      "duration_ms": 19608,
+      "duration_ms": 30360,
       "guide": {
         "commands": [],
         "success_hint": "Continue when you are ready to install OmegaFlow."
@@ -98,15 +98,15 @@
       "player": {
         "highlight": {
           "control": "guided",
-          "end_ms": 19608,
-          "start_ms": 10860
+          "end_ms": 30360,
+          "start_ms": 22300
         }
       },
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 14904,
+      "duration_ms": 8064,
       "guide": {
         "commands": [
           "python -m pip install omegaflow"
@@ -115,14 +115,14 @@
       },
       "heading": "Install OmegaFlow",
       "id": "install",
-      "offset_ms": 19608,
+      "offset_ms": 30360,
       "payload": "beats/install.cast",
       "player": null,
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 18878,
+      "duration_ms": 19303,
       "guide": {
         "commands": [
           "omegaflow action=bootstrap"
@@ -131,14 +131,14 @@
       },
       "heading": "Bootstrap Quickstart",
       "id": "bootstrap",
-      "offset_ms": 34512,
+      "offset_ms": 38424,
       "payload": "beats/bootstrap.cast",
       "player": null,
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 12992,
+      "duration_ms": 12731,
       "guide": {
         "commands": [
           "omegaflow recording=quickstart action=build"
@@ -147,21 +147,21 @@
       },
       "heading": "Build The Video",
       "id": "build",
-      "offset_ms": 53390,
+      "offset_ms": 57727,
       "payload": "beats/build.cast",
       "player": null,
       "renderer": "terminal",
       "transition_in": null
     },
     {
-      "duration_ms": 34610,
+      "duration_ms": 32886,
       "guide": {
         "commands": [],
         "success_hint": "The generated player is ready to publish with your docs."
       },
       "heading": "Explore The Player",
       "id": "play-in-browser",
-      "offset_ms": 66382,
+      "offset_ms": 70458,
       "payload": "beats/play-in-browser.browser.json",
       "player": null,
       "renderer": "browser",
@@ -183,7 +183,7 @@
     "guided": true
   },
   "recording": {
-    "duration_ms": 100992,
+    "duration_ms": 103344,
     "id": "quickstart-demo",
     "title": "Quickstart Demo"
   },
