@@ -1027,6 +1027,8 @@
     <script src="cast-player-core.js"></script>
     <script>
       const params = new URLSearchParams(window.location.search);
+      const playerPlayingMessage = 'omegaflow:player-playing';
+      const playerPauseMessage = 'omegaflow:player-pause';
       const playerRoot = document.getElementById('player');
       playerRoot.dataset.embedded = String(params.get('embed') === '1');
       playerRoot.dataset.layout = params.get('layout') || '';
@@ -2240,6 +2242,28 @@
         clearGuideResumeHint();
         clearTimers();
         releasePlayerResources();
+      }
+
+      function claimEmbeddedPlayerAudioFocus() {
+        if (
+          window.parent === window ||
+          typeof window.parent?.postMessage !== 'function'
+        ) {
+          return;
+        }
+        window.parent.postMessage({type: playerPlayingMessage, version: 1}, '*');
+      }
+
+      function handleEmbeddedPlayerMessage(event) {
+        if (
+          event?.data?.type !== playerPauseMessage ||
+          event.data.version !== 1 ||
+          window.parent === window ||
+          event.source !== window.parent
+        ) {
+          return;
+        }
+        pause();
       }
 
       function setIconButton(button, iconName, label) {
@@ -3557,6 +3581,7 @@
         pausedAtGuidedPoint = false;
         hideGuideModal();
         playing = true;
+        claimEmbeddedPlayerAudioFocus();
         updateTransportButtons();
         scheduleEvents();
         if (options.feedback === true) {
@@ -3824,6 +3849,7 @@
         startAudio();
       });
       if (typeof window.addEventListener === 'function') {
+        window.addEventListener('message', handleEmbeddedPlayerMessage);
         window.addEventListener('pagehide', disposePlayer);
       }
 

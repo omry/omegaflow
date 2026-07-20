@@ -32,9 +32,6 @@ timing:
   post_enter_pause: 0.25
   post_command_pause: 0.55
   minimum_section_spacing: 0.6
-environment:
-  path_prepend:
-  - recordings/quickstart-demo/bin
 browser:
   viewport:
     width: 1152
@@ -112,11 +109,14 @@ beat:
   caption: Install OmegaFlow in a Python environment.
   actions:
   - commands:
-    # The PATH wrapper installs the current checkout into the demo's isolated
-    # environment. The displayed command and replacement output model the
-    # public installation flow without claiming a specific published version.
+    # Install the current checkout into the demo's isolated environment. The
+    # displayed command and replacement output model the public installation
+    # flow without claiming a specific published version.
     - id: install_command
-      run: python -m pip install omegaflow
+      run: >-
+        "$HOMEPAGE_DEMO_VENV/bin/python" -m pip install
+        --disable-pip-version-check --no-build-isolation --no-deps
+        --editable "$HOMEPAGE_DEMO_REPO_ROOT"
       display: python -m pip install omegaflow
       after: "@install@"
       output:
@@ -145,10 +145,27 @@ beat:
   actions:
   - commands:
     - id: bootstrap_run
-      run_file: scripts/create-demo-project.sh
+      run: >-
+        cd "$HOMEPAGE_DEMO_ROOT" &&
+        omegaflow project_root="$HOMEPAGE_DEMO_ROOT" action=bootstrap
       display: omegaflow action=bootstrap
       after: "@bootstrap@"
       pre_command_pause: 0.45
+  checks:
+  - name: project settings created
+    run: test -f .omegaflow/config.yaml
+  - name: recording defaults created
+    run: test -f recordings/config.yaml
+  - name: quickstart script created
+    run: test -f recordings/quickstart/index.md
+  - name: obsolete quickstart helper absent
+    run: test ! -e recordings/quickstart/scripts/hello.sh
+  - name: quickstart contains both sample beats
+    run: >-
+      grep -Fq 'id: first-video-beat' recordings/quickstart/index.md &&
+      grep -Fq 'run: "# First video beat"' recordings/quickstart/index.md &&
+      grep -Fq 'id: second-video-beat' recordings/quickstart/index.md &&
+      grep -Fq 'run: "# Second video beat"' recordings/quickstart/index.md
   effects:
   - highlight:
       text: .omegaflow/config.yaml
@@ -185,7 +202,7 @@ beat:
   actions:
   - commands:
     - id: build_command
-      run_file: scripts/build-demo-project.sh
+      run: omegaflow recording=quickstart action=build force=true
       display: omegaflow recording=quickstart action=build
       after: "@build@"
       timing: realtime
@@ -198,6 +215,13 @@ beat:
       browser_handoff: true
       timing: realtime
       show_prompt_after: false
+  checks:
+  - name: presentation manifest created
+    run: >-
+      test -f
+      recordings/.omegaflow/videos/quickstart/presentation/recording.presentation.json
+  - name: standalone player created
+    run: test -f recordings/.omegaflow/videos/quickstart/index.html
   guide:
     commands:
     - omegaflow recording=quickstart action=build

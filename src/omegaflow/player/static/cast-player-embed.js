@@ -11,6 +11,8 @@
     'player',
     'title',
   ];
+  const playerPlayingMessage = 'omegaflow:player-playing';
+  const playerPauseMessage = 'omegaflow:player-pause';
 
   function optionalAttribute(element, name) {
     const value = element.getAttribute(name);
@@ -66,6 +68,52 @@
     return iframe;
   }
 
+  function castPlayerIframes() {
+    if (typeof document.querySelectorAll !== 'function') {
+      return [];
+    }
+    return [...document.querySelectorAll('cast-player-embed iframe')];
+  }
+
+  function postPlayerMessage(iframe, type) {
+    if (!iframe?.contentWindow || typeof iframe.contentWindow.postMessage !== 'function') {
+      return;
+    }
+    let targetOrigin = '*';
+    try {
+      const base = document.baseURI || global.location?.href;
+      const origin = new URL(iframe.src, base).origin;
+      if (origin && origin !== 'null') {
+        targetOrigin = origin;
+      }
+    } catch (_error) {
+      // A relative or custom player URL can still receive a best-effort command.
+    }
+    iframe.contentWindow.postMessage({type, version: 1}, targetOrigin);
+  }
+
+  function pauseCastPlayerEmbed(element) {
+    postPlayerMessage(element.querySelector('iframe'), playerPauseMessage);
+  }
+
+  function coordinateEmbeddedPlayerAudio(event) {
+    if (
+      event?.data?.type !== playerPlayingMessage ||
+      event.data.version !== 1
+    ) {
+      return;
+    }
+    const iframes = castPlayerIframes();
+    if (!iframes.some((iframe) => iframe.contentWindow === event.source)) {
+      return;
+    }
+    for (const iframe of iframes) {
+      if (iframe.contentWindow !== event.source) {
+        postPlayerMessage(iframe, playerPauseMessage);
+      }
+    }
+  }
+
   function hrefFor(value) {
     try {
       const base = document.baseURI || global.location?.href || window.location?.href;
@@ -99,6 +147,7 @@
   const api = {
     buildCastPlayerUrl,
     createCastPlayerIframe,
+    pauseCastPlayerEmbed,
     renderCastPlayerEmbed,
   };
 
@@ -120,6 +169,10 @@
         renderCastPlayerEmbed(this);
       }
 
+      disconnectedCallback() {
+        pauseCastPlayerEmbed(this);
+      }
+
       attributeChangedCallback() {
         if (this.isConnected) {
           renderCastPlayerEmbed(this);
@@ -128,5 +181,12 @@
     }
 
     global.customElements.define('cast-player-embed', CastPlayerEmbedElement);
+  }
+  if (
+    typeof global.addEventListener === 'function' &&
+    !global.__omegaflowCastPlayerAudioCoordinator
+  ) {
+    global.__omegaflowCastPlayerAudioCoordinator = true;
+    global.addEventListener('message', coordinateEmbeddedPlayerAudio);
   }
 }(typeof globalThis !== 'undefined' ? globalThis : window));

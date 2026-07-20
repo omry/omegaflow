@@ -440,6 +440,78 @@ if (lifecycleAudioPauseCalls !== 1 || lifecycleShellDisposeCalls !== 1) {
     assert result.returncode == 0, result.stderr
 
 
+def test_embedded_player_claims_audio_focus_and_yields_it_to_parent() -> None:
+    result = run_player_script(
+        r"""
+const parentMessages = [];
+const parentWindow = {
+  postMessage(message, targetOrigin) {
+    parentMessages.push({message, targetOrigin});
+  },
+};
+context.window.parent = parentWindow;
+vm.runInContext(`
+let focusAudioPauseCalls = 0;
+let focusAudioPlayCalls = 0;
+audio = {
+  paused: true,
+  currentTime: 0,
+  duration: 10,
+  muted: false,
+  playbackRate: 1,
+  pause() {
+    focusAudioPauseCalls += 1;
+    this.paused = true;
+  },
+  play() {
+    focusAudioPlayCalls += 1;
+    this.paused = false;
+    return Promise.resolve();
+  },
+};
+audioReady = true;
+events = [{time: 10, data: 'done'}];
+totalSeconds = 10;
+playbackReady = true;
+play();
+`, context);
+
+if (
+  parentMessages.length !== 1 ||
+  parentMessages[0].message.type !== 'omegaflow:player-playing' ||
+  parentMessages[0].targetOrigin !== '*' ||
+  !vm.runInContext('playing', context) ||
+  vm.runInContext('focusAudioPlayCalls', context) !== 1
+) {
+  console.error(JSON.stringify({
+    phase: 'claim', parentMessages,
+    playing: vm.runInContext('playing', context),
+    playCalls: vm.runInContext('focusAudioPlayCalls', context),
+  }));
+  process.exit(1);
+}
+
+context.window.dispatchEvent({
+  type: 'message',
+  data: {type: 'omegaflow:player-pause', version: 1},
+  source: parentWindow,
+});
+if (
+  vm.runInContext('playing', context) ||
+  vm.runInContext('focusAudioPauseCalls', context) !== 1
+) {
+  console.error(JSON.stringify({
+    phase: 'yield', playing: vm.runInContext('playing', context),
+    pauseCalls: vm.runInContext('focusAudioPauseCalls', context),
+  }));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_terminal_text_highlight_marker_adds_and_removes_exact_occurrence() -> None:
     result = run_player_script(
         r"""

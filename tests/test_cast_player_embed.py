@@ -49,10 +49,21 @@ class FakeHTMLElement {
 }
 
 const defined = new Map();
+const globalListeners = new Map();
 const context = {
   URL,
   URLSearchParams,
   HTMLElement: FakeHTMLElement,
+  addEventListener(type, listener) {
+    const listeners = globalListeners.get(type) || [];
+    listeners.push(listener);
+    globalListeners.set(type, listeners);
+  },
+  dispatchEvent(event) {
+    for (const listener of globalListeners.get(event.type) || []) {
+      listener(event);
+    }
+  },
   customElements: {
     define(name, klass) {
       defined.set(name, klass);
@@ -63,6 +74,9 @@ const context = {
   },
   document: {
     baseURI: 'https://example.test/docs/watch/',
+    querySelectorAll() {
+      return [];
+    },
     createElement(tagName) {
       return {
         tagName,
@@ -71,6 +85,12 @@ const context = {
         loading: '',
         src: '',
         title: '',
+        contentWindow: {
+          messages: [],
+          postMessage(message, targetOrigin) {
+            this.messages.push({message, targetOrigin});
+          },
+        },
       };
     },
   },
@@ -199,6 +219,57 @@ if (
   element.children[0].src !== '/cast-player.html?manifest=%2Fvideos%2Fdemo%2Frecording.presentation.json&embed=1&autoplay=countdown'
 ) {
   console.error(JSON.stringify({src: element.children[0] && element.children[0].src}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_cast_player_embed_allows_only_one_player_to_keep_audio_focus() -> None:
+    result = run_embed_script(
+        r"""
+const Element = context.customElements.get('cast-player-embed');
+const first = new Element();
+first.setAttribute('manifest', '/videos/first/recording.presentation.json');
+first.setAttribute('player', '/cast-player.html');
+first.connectedCallback();
+const second = new Element();
+second.setAttribute('manifest', '/videos/second/recording.presentation.json');
+second.setAttribute('player', '/cast-player.html');
+second.connectedCallback();
+const firstIframe = first.children[0];
+const secondIframe = second.children[0];
+context.document.querySelectorAll = (selector) => (
+  selector === 'cast-player-embed iframe' ? [firstIframe, secondIframe] : []
+);
+
+context.dispatchEvent({
+  type: 'message',
+  data: {type: 'omegaflow:player-playing', version: 1},
+  source: secondIframe.contentWindow,
+});
+
+if (
+  firstIframe.contentWindow.messages.length !== 1 ||
+  firstIframe.contentWindow.messages[0].message.type !== 'omegaflow:player-pause' ||
+  firstIframe.contentWindow.messages[0].targetOrigin !== 'https://example.test' ||
+  secondIframe.contentWindow.messages.length !== 0
+) {
+  console.error(JSON.stringify({
+    first: firstIframe.contentWindow.messages,
+    second: secondIframe.contentWindow.messages,
+  }));
+  process.exit(1);
+}
+
+second.disconnectedCallback();
+if (
+  secondIframe.contentWindow.messages.length !== 1 ||
+  secondIframe.contentWindow.messages[0].message.type !== 'omegaflow:player-pause'
+) {
+  console.error(JSON.stringify({disconnected: secondIframe.contentWindow.messages}));
   process.exit(1);
 }
 """

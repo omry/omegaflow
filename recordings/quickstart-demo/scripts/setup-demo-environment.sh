@@ -4,8 +4,8 @@
 # setup in a function so failures return to that shell, allowing the configured
 # cleanup step to run. The capture working directory is the repository root.
 omegaflow_prepare_quickstart_environment() {
-  local repo_root="$PWD"
-  local repo_python="$repo_root/.venv/bin/python"
+  export HOMEPAGE_DEMO_REPO_ROOT="$PWD"
+  local repo_python="$HOMEPAGE_DEMO_REPO_ROOT/.venv/bin/python"
   if [[ ! -x "$repo_python" ]]; then
     echo "repository environment is missing: $repo_python" >&2
     return 1
@@ -69,6 +69,13 @@ PY
     echo "OmegaFlow must not be installed before the recorded install step" >&2
     return 1
   fi
+
+  export PATH="$HOMEPAGE_DEMO_VENV/bin${PATH:+:$PATH}"
+
+  local demo_root
+  demo_root="$(mktemp -d "$temp_root/omegaflow-quickstart-demo.XXXXXX")" \
+    || return
+  export HOMEPAGE_DEMO_ROOT="$demo_root"
 }
 
 omegaflow_prepare_quickstart_environment

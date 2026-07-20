@@ -1,5 +1,5 @@
 {
-  "duration_ms": 91248,
+  "duration_ms": 90936,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,14 +12,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 27456,
-      "playback_sha256": "34ff44df939c9d3970ba1040a76a82e9d3491c6a38fea5f0ed3f01cf8d5c5b92",
-      "playback_src": "audio/__beat__-introduction-34ff44df939c9d3970ba1040a76a82e9d3491c6a38fea5f0ed3f01cf8d5c5b92.mp3",
+      "playback_end_ms": 27600,
+      "playback_sha256": "016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a",
+      "playback_src": "audio/__beat__-introduction-016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a.mp3",
       "playback_start_ms": 0,
-      "sha256": "34ff44df939c9d3970ba1040a76a82e9d3491c6a38fea5f0ed3f01cf8d5c5b92",
-      "source_end_ms": 27456,
+      "sha256": "016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a",
+      "source_end_ms": 27600,
       "source_start_ms": 0,
-      "src": "audio/__beat__-introduction-34ff44df939c9d3970ba1040a76a82e9d3491c6a38fea5f0ed3f01cf8d5c5b92.mp3",
+      "src": "audio/__beat__-introduction-016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a.mp3",
       "timestamps": "timestamps/__beat__-introduction.json"
     },
     {
@@ -32,14 +32,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 36168,
-      "playback_sha256": "93966e919e08e9f377aabca377cd7c47cf85b7a2d13948caf85984ca3b0e499f",
-      "playback_src": "audio/__beat__-install-93966e919e08e9f377aabca377cd7c47cf85b7a2d13948caf85984ca3b0e499f.mp3",
-      "playback_start_ms": 27456,
-      "sha256": "93966e919e08e9f377aabca377cd7c47cf85b7a2d13948caf85984ca3b0e499f",
-      "source_end_ms": 36168,
-      "source_start_ms": 27456,
-      "src": "audio/__beat__-install-93966e919e08e9f377aabca377cd7c47cf85b7a2d13948caf85984ca3b0e499f.mp3",
+      "playback_end_ms": 36408,
+      "playback_sha256": "6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f",
+      "playback_src": "audio/__beat__-install-6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f.mp3",
+      "playback_start_ms": 27600,
+      "sha256": "6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f",
+      "source_end_ms": 36408,
+      "source_start_ms": 27600,
+      "src": "audio/__beat__-install-6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -52,14 +52,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 55508,
-      "playback_sha256": "9998d4bad6ff4ad2b6fcacf3341b6602c65e3863711e2d973784ef891ef312b8",
-      "playback_src": "audio/__beat__-bootstrap-playback-9998d4bad6ff4ad2b6fcacf3341b6602c65e3863711e2d973784ef891ef312b8.mp3",
-      "playback_start_ms": 36168,
-      "sha256": "5f5c32f724fde1ae3b35887e5d1eedd16d1705361a2d642f0f755e3564b510e0",
-      "source_end_ms": 54480,
-      "source_start_ms": 36168,
-      "src": "audio/__beat__-bootstrap-5f5c32f724fde1ae3b35887e5d1eedd16d1705361a2d642f0f755e3564b510e0.mp3",
+      "playback_end_ms": 55538,
+      "playback_sha256": "d92d7a449866875d10c92fbdb891d202ecfc2f9fcff45294abfd4b7112cde0a3",
+      "playback_src": "audio/__beat__-bootstrap-playback-d92d7a449866875d10c92fbdb891d202ecfc2f9fcff45294abfd4b7112cde0a3.mp3",
+      "playback_start_ms": 36408,
+      "sha256": "b398f2164e3d46b836425376303bc5dc3fc9839dbbaf7e3a3e6b80cbbc471bdb",
+      "source_end_ms": 54624,
+      "source_start_ms": 36408,
+      "src": "audio/__beat__-bootstrap-b398f2164e3d46b836425376303bc5dc3fc9839dbbaf7e3a3e6b80cbbc471bdb.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -78,14 +78,14 @@
           "text_start": 186
         }
       ],
-      "playback_end_ms": 93722,
-      "playback_sha256": "c09fd6ea2fabafdd3c2e4b6ba99dab297f4a228ae1a6ba5c0e01198e394a91dc",
-      "playback_src": "audio/build-and-browser-playback-c09fd6ea2fabafdd3c2e4b6ba99dab297f4a228ae1a6ba5c0e01198e394a91dc.mp3",
-      "playback_start_ms": 55508,
-      "sha256": "d7b954c20bf533895be1df130934010b930b124ff5238be54fdd9e278f84d3c1",
-      "source_end_ms": 91248,
-      "source_start_ms": 54480,
-      "src": "audio/build-and-browser-d7b954c20bf533895be1df130934010b930b124ff5238be54fdd9e278f84d3c1.mp3",
+      "playback_end_ms": 93673,
+      "playback_sha256": "def3a511722b5bfad72c6d3467d1d910ad87f86d5462365ab46570368c097f6c",
+      "playback_src": "audio/build-and-browser-playback-def3a511722b5bfad72c6d3467d1d910ad87f86d5462365ab46570368c097f6c.mp3",
+      "playback_start_ms": 55538,
+      "sha256": "6849488f3fe62ebd7f1cab7a0adb707ceb0c6144dbebd639e6733870f710f584",
+      "source_end_ms": 90936,
+      "source_start_ms": 54624,
+      "src": "audio/build-and-browser-6849488f3fe62ebd7f1cab7a0adb707ceb0c6144dbebd639e6733870f710f584.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

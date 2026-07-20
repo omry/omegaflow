@@ -22,8 +22,9 @@ import time
 import uuid
 import webbrowser
 from collections.abc import Callable, Mapping
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, unquote, urlparse
@@ -286,6 +287,19 @@ WATCH_ARTIFACT_PREFIX = "/__studio_artifacts__/"
 WATCH_SNAPSHOT_PREFIX = "/__studio_snapshots__/"
 WATCH_ROUTE_PREFIX = "/watch/"
 WATCH_HOST = "127.0.0.1"
+WATCH_POLL_INTERVAL_SECONDS = 0.25
+WATCH_IGNORED_DIRECTORY_NAMES = {
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".omegaflow",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".sl",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+}
 TEXT_BROWSER_COMMANDS = {
     "elinks",
     "links",
@@ -2466,6 +2480,174 @@ def launch_managed_watch_browser(
     return launch_managed_native_browser(url)
 
 
+def recording_watch_source_roots(
+    config: dict[str, Any],
+    recording_id: str,
+) -> tuple[Path, ...]:
+    recording_dir = recording_script_dir_from_config(config)
+    return (
+        recording_dir / "config.yaml",
+        recording_dir / recording_id,
+    )
+
+
+def watch_source_fingerprint(roots: tuple[Path, ...]) -> str:
+    digest = hashlib.sha256()
+    files: set[Path] = set()
+    for root in roots:
+        resolved_root = root.resolve()
+        digest.update(str(resolved_root).encode("utf-8"))
+        digest.update(b"\0")
+        if resolved_root.is_file():
+            files.add(resolved_root)
+            continue
+        if not resolved_root.is_dir():
+            digest.update(b"missing\0")
+            continue
+        for path in resolved_root.rglob("*"):
+            try:
+                relative_parts = path.relative_to(resolved_root).parts
+            except ValueError:
+                continue
+            if any(
+                part in WATCH_IGNORED_DIRECTORY_NAMES
+                for part in relative_parts[:-1]
+            ):
+                continue
+            if path.is_file():
+                files.add(path)
+
+    for path in sorted(files):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        digest.update(str(path).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(stat.st_mtime_ns).encode("ascii"))
+        digest.update(b":")
+        digest.update(str(stat.st_size).encode("ascii"))
+        digest.update(b":")
+        digest.update(str(stat.st_mode & 0o777).encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def next_watch_build_run_dir(
+    config: dict[str, Any],
+    recording_id: str,
+) -> Path:
+    timestamp = datetime.now()
+    runs_dir = studio_data_dir_from_config(config) / "runs" / recording_id
+    while True:
+        run_id = timestamp.strftime(record.RUN_ID_DATETIME_FORMAT)
+        candidate = runs_dir / run_id
+        if not candidate.exists():
+            return candidate
+        timestamp += timedelta(seconds=1)
+
+
+def run_watch_rebuild(cfg: DictConfig, recording_id: str) -> int:
+    data = OmegaConf.to_container(cfg, resolve=False, enum_to_str=True)
+    if not isinstance(data, dict):
+        raise StudioError("composed Hydra config must be a mapping")
+    data["action"] = "build"
+    data["recording"] = recording_id
+    data["step"] = None
+    build_cfg = OmegaConf.create(data)
+    config = container_from_hydra_cfg(build_cfg)
+    try:
+        spec = recording_spec_from_config(
+            config,
+            recording_id=None,
+            overrides=(),
+            hydra_output_dir=str(next_watch_build_run_dir(config, recording_id)),
+        )
+    except StudioConfigError as exc:
+        raise StudioError(str(exc)) from exc
+    plan = normalized_recording_plan(spec)
+    return run_manifest_build(
+        build_cfg,
+        config,
+        spec,
+        plan,
+        show_followups=False,
+    )
+
+
+def run_watch_rebuild_loop(
+    cfg: DictConfig,
+    config: dict[str, Any],
+    recording_ids: tuple[str, ...],
+    stop_event: threading.Event,
+    *,
+    poll_interval: float = WATCH_POLL_INTERVAL_SECONDS,
+) -> None:
+    roots = {
+        recording_id: recording_watch_source_roots(config, recording_id)
+        for recording_id in recording_ids
+    }
+    fingerprints = {
+        recording_id: watch_source_fingerprint(source_roots)
+        for recording_id, source_roots in roots.items()
+    }
+    while not stop_event.wait(poll_interval):
+        pending = {
+            recording_id: watch_source_fingerprint(source_roots)
+            for recording_id, source_roots in roots.items()
+        }
+        if pending == fingerprints:
+            continue
+
+        while not stop_event.wait(poll_interval):
+            settled = {
+                recording_id: watch_source_fingerprint(source_roots)
+                for recording_id, source_roots in roots.items()
+            }
+            if settled == pending:
+                break
+            pending = settled
+        else:
+            return
+
+        changed = [
+            recording_id
+            for recording_id in recording_ids
+            if pending[recording_id] != fingerprints[recording_id]
+        ]
+        for recording_id in changed:
+            if text_output_enabled(cfg):
+                info_line(f"recording source changed: {recording_id}; rebuilding")
+            try:
+                run_watch_rebuild(cfg, recording_id)
+            except Exception as exc:
+                if text_output_enabled(cfg):
+                    fail_line(f"watch rebuild failed: {exc}")
+        fingerprints = pending
+
+
+@contextmanager
+def watch_recording_rebuilds(
+    cfg: DictConfig,
+    config: dict[str, Any],
+    recording_ids: tuple[str, ...],
+):
+    unique_recording_ids = tuple(dict.fromkeys(recording_ids))
+    stop_event = threading.Event()
+    rebuild_thread = threading.Thread(
+        target=run_watch_rebuild_loop,
+        args=(cfg, config, unique_recording_ids, stop_event),
+        daemon=True,
+        name="omegaflow-watch-rebuild",
+    )
+    rebuild_thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        rebuild_thread.join(timeout=1.0)
+
+
 def run_watch_server(
     cfg: DictConfig,
     url_path: str,
@@ -2579,31 +2761,33 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         autoplay_countdown=autoplay,
     )
     open_browser = bool_config(config, "open", True)
-    return run_watch_server(
-        cfg,
-        url_path,
-        {},
-        recordings={recording_id: spec},
-        managed_browser=open_browser,
-        open_browser=open_browser,
-        port=port,
-    )
+    with watch_recording_rebuilds(cfg, config, (recording_id,)):
+        return run_watch_server(
+            cfg,
+            url_path,
+            {},
+            recordings={recording_id: spec},
+            managed_browser=open_browser,
+            open_browser=open_browser,
+            port=port,
+        )
 
 
 def run_collection_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     port = configured_watch_port(config)
     url_path, pages, recordings = collection_watch_routes(cfg, config)
     open_browser = bool_config(config, "open", True)
-    return run_watch_server(
-        cfg,
-        url_path,
-        {},
-        pages=pages,
-        recordings=recordings,
-        managed_browser=open_browser,
-        open_browser=open_browser,
-        port=port,
-    )
+    with watch_recording_rebuilds(cfg, config, tuple(recordings)):
+        return run_watch_server(
+            cfg,
+            url_path,
+            {},
+            pages=pages,
+            recordings=recordings,
+            managed_browser=open_browser,
+            open_browser=open_browser,
+            port=port,
+        )
 
 
 def studio_tool_command(recording_id: str, *overrides: str) -> str:

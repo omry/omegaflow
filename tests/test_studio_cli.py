@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import tomllib
 from datetime import datetime
@@ -2795,7 +2796,11 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
             "commands": None,
         }
     ]
-    assert install_command["run"] == "python -m pip install omegaflow"
+    assert install_command["run"] == (
+        '"$HOMEPAGE_DEMO_VENV/bin/python" -m pip install '
+        "--disable-pip-version-check --no-build-isolation --no-deps "
+        '--editable "$HOMEPAGE_DEMO_REPO_ROOT"'
+    )
     assert install_command["display"] == "python -m pip install omegaflow"
     assert install_command["output"] == {
         "replace": "Successfully installed omegaflow\n"
@@ -2867,6 +2872,13 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         "build_command",
         "watch_command",
     ]
+    assert bootstrap_beat["actions"][0]["commands"][0]["run"] == (
+        'cd "$HOMEPAGE_DEMO_ROOT" && '
+        'omegaflow project_root="$HOMEPAGE_DEMO_ROOT" action=bootstrap'
+    )
+    assert build_commands[0]["run"] == (
+        "omegaflow recording=quickstart action=build force=true"
+    )
     assert build_commands[0]["timing"] == "realtime"
     assert "follow_along" not in build_commands[0]
     assert build_commands[1]["display"] == (
@@ -2990,6 +3002,10 @@ def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
         "quickstart-demo",
         recording_dir=root / "recordings",
     )
+    install_beat = next(
+        beat for beat in recording["beats"] if beat["id"] == "install"
+    )
+    install_command = install_beat["actions"][0]["commands"][0]["run"]
     plan = studio.normalized_recording_plan(
         {
             "id": "quickstart-demo-install-smoke",
@@ -3008,7 +3024,7 @@ def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
                                         "exit 91; fi"
                                     )
                                 },
-                                {"run": "python -m pip install omegaflow"},
+                                {"run": install_command},
                                 {
                                     "run": (
                                         "\"$HOMEPAGE_DEMO_VENV/bin/python\" -c '"
@@ -3027,7 +3043,6 @@ def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
             "cleanup": recording["cleanup"],
         }
     )
-    bin_dir = root / "recordings" / "quickstart-demo" / "bin"
     coordinator = CaptureCoordinator(
         terminal_runner_factory=lambda: PersistentTerminalRunner(
             record_cast=False,
@@ -3042,12 +3057,15 @@ def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
         working_directory=root,
         environment={
             "OMEGAFLOW_TEST_ROOT": str(root),
-            "PATH": os.pathsep.join((str(bin_dir), os.environ.get("PATH", ""))),
+            "PATH": os.environ.get("PATH", ""),
         },
     )
 
     assert not list(
         (tmp_path / "run" / ".tmp").glob("omegaflow-quickstart-env.*")
+    )
+    assert not list(
+        (tmp_path / "run" / ".tmp").glob("omegaflow-quickstart-demo.*")
     )
 
 
@@ -4041,6 +4059,125 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         "open_browser": True,
         "port": 43123,
     }
+
+
+@pytest.mark.parametrize("changed_file", ["index.md", "scripts/action.sh"])
+def test_watch_rebuilds_after_recording_source_changes(
+    tmp_path,
+    monkeypatch,
+    changed_file,
+) -> None:
+    recording_dir = tmp_path / "recordings"
+    recording_source = recording_dir / "hello"
+    script = recording_source / "scripts" / "action.sh"
+    script.parent.mkdir(parents=True)
+    (recording_source / "index.md").write_text("initial narration\n")
+    script.write_text("echo initial\n")
+    config = {
+        "recording": "hello",
+        "studio": {"recording_dir": str(recording_dir)},
+    }
+    stop_event = threading.Event()
+    rebuilt: list[str] = []
+
+    class ChangingEvent:
+        def __init__(self) -> None:
+            self.wait_count = 0
+
+        def wait(self, _timeout) -> bool:
+            self.wait_count += 1
+            if self.wait_count == 1:
+                (recording_source / changed_file).write_text("changed\n")
+            return stop_event.is_set()
+
+    def fake_rebuild(_cfg, recording_id) -> int:
+        rebuilt.append(recording_id)
+        stop_event.set()
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+
+    studio.run_watch_rebuild_loop(
+        OmegaConf.create(config),
+        config,
+        ("hello",),
+        ChangingEvent(),
+        poll_interval=0.001,
+    )
+
+    assert rebuilt == ["hello"]
+
+
+def test_watch_source_fingerprint_ignores_generated_cache_files(tmp_path) -> None:
+    recording_source = tmp_path / "recordings" / "hello"
+    recording_source.mkdir(parents=True)
+    (recording_source / "index.md").write_text("narration\n")
+    roots = (recording_source,)
+    before = studio.watch_source_fingerprint(roots)
+
+    cache = recording_source / "__pycache__"
+    cache.mkdir()
+    (cache / "action.pyc").write_bytes(b"generated")
+
+    assert studio.watch_source_fingerprint(roots) == before
+
+
+def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    cfg = OmegaConf.create(
+        {
+            "action": "watch",
+            "recording": "hello",
+            "project_root": str(tmp_path),
+            "studio": {
+                "data_dir": "recordings/.omegaflow",
+                "recording_dir": "recordings",
+            },
+        }
+    )
+    observed: dict[str, object] = {}
+
+    def fake_recording_spec(
+        config,
+        *,
+        recording_id=None,
+        overrides=(),
+        hydra_output_dir=None,
+    ):
+        observed["config"] = config
+        observed["run_dir"] = Path(hydra_output_dir)
+        return {"_recording_id": "hello"}
+
+    monkeypatch.setattr(studio, "recording_spec_from_config", fake_recording_spec)
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "plan")
+
+    def fake_manifest_build(
+        build_cfg,
+        config,
+        spec,
+        plan,
+        *,
+        show_followups=True,
+    ) -> int:
+        observed.update(
+            build_cfg=build_cfg,
+            build_config=config,
+            spec=spec,
+            plan=plan,
+            show_followups=show_followups,
+        )
+        return 0
+
+    monkeypatch.setattr(studio, "run_manifest_build", fake_manifest_build)
+
+    assert studio.run_watch_rebuild(cfg, "hello") == 0
+    assert observed["config"]["action"] == "build"
+    assert observed["run_dir"].parent == (
+        tmp_path / "recordings/.omegaflow/runs/hello"
+    )
+    assert observed["show_followups"] is False
 
 
 def test_run_watch_can_disable_countdown_autoplay(monkeypatch) -> None:
