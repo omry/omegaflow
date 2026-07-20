@@ -134,7 +134,8 @@ jobs:
           omegaflow recording=quickstart action=build force=true
           test -s recordings/.omegaflow/videos/quickstart/presentation/recording.presentation.json
           test -s recordings/.omegaflow/videos/quickstart/presentation/recording.recording.json
-          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/show-message.cast
+          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/first-video-beat.cast
+          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/second-video-beat.cast
           test -s recordings/.omegaflow/videos/quickstart/index.html
 
       - name: Upload recording artifacts
@@ -144,6 +145,7 @@ jobs:
           name: ci-recording-integration-artifacts
           path: ${{ runner.temp }}/omegaflow-integration/recordings/.omegaflow/
           if-no-files-found: ignore
+          include-hidden-files: true
 
       - name: Summary
         if: always()

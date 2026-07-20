@@ -207,9 +207,8 @@ if (
     assert result.returncode == 0, result.stderr
 
 
-def test_homepage_requests_countdown_autoplay() -> None:
-    component = (REPO_ROOT / "website/src/components/VideoPlayer.js").read_text()
+def test_homepage_opens_player_paused() -> None:
     homepage = (REPO_ROOT / "website/src/pages/index.js").read_text()
 
-    assert "autoplay={autoplay || undefined}" in component
-    assert 'autoplay="countdown"' in homepage
+    assert "<VideoPlayer" in homepage
+    assert 'autoplay="countdown"' not in homepage

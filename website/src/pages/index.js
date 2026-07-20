@@ -39,7 +39,6 @@ export default function Home() {
             </div>
             <div className="homeHero__video" aria-label="Quick start video">
               <VideoPlayer
-                autoplay="countdown"
                 title="OmegaFlow Overview"
                 manifest="/omegaflow-videos/quickstart-demo/presentation/recording.presentation.json"
                 layout="wide-browser"
