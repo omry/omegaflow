@@ -1089,6 +1089,7 @@
       let presentationShell = null;
       let presentationAudioController = null;
       let playbackReady = false;
+      let playerDisposed = false;
       let lastPresentationBeatIndex = null;
       let manifestBaseUrl = null;
       let castSeconds = 0;
@@ -2203,6 +2204,32 @@
           clearInterval(progressTimer);
           progressTimer = null;
         }
+      }
+
+      function releasePlayerResources() {
+        if (audio) {
+          audio.pause();
+        }
+        if (presentationShell) {
+          presentationShell.dispose();
+          presentationShell = null;
+        }
+      }
+
+      function disposePlayer() {
+        if (playerDisposed) {
+          return;
+        }
+        playerDisposed = true;
+        playbackReady = false;
+        playing = false;
+        audibleAutoplayPending = false;
+        cancelAutoplayCountdown();
+        clearAudioUnlockPrompt();
+        clearPlaybackFlashTimers();
+        clearGuideResumeHint();
+        clearTimers();
+        releasePlayerResources();
       }
 
       function setIconButton(button, iconName, label) {
@@ -3458,6 +3485,7 @@
 
       function play(options = {}) {
         if (
+          playerDisposed ||
           !playbackReady ||
           (!events.length && !presentationManifest?.beats?.length)
         ) {
@@ -3746,11 +3774,7 @@
         startAudio();
       });
       if (typeof window.addEventListener === 'function') {
-        window.addEventListener('pagehide', () => {
-          if (presentationShell) {
-            presentationShell.dispose();
-          }
-        });
+        window.addEventListener('pagehide', disposePlayer);
       }
 
       updateTransportButtons();
@@ -3759,6 +3783,10 @@
         .then(loadAudioMeta)
         .then(() => Promise.all([loadCast(), loadAudio()]))
         .then(() => {
+          if (playerDisposed) {
+            releasePlayerResources();
+            return;
+          }
           if (presentationManifest?.audio && audioReady && audio) {
             presentationAudioController = CastPlayerCore.createPresentationAudioController({
               audio,
@@ -3775,6 +3803,9 @@
           }
         })
         .catch((error) => {
+          if (playerDisposed) {
+            return;
+          }
           cancelAutoplayCountdown();
           terminal.textContent = error.message;
           playButton.disabled = true;

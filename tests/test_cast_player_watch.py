@@ -184,6 +184,7 @@ const html = fs.readFileSync('src/omegaflow/player/static/cast-player.html', 'ut
 const scripts = [...html.matchAll(/<script(?:\s+src="([^"]+)")?\s*>([\s\S]*?)<\/script>/g)];
 const elements = new Map();
 const documentListeners = new Map();
+const windowListeners = new Map();
 
 function element(id) {
   if (!elements.has(id)) {
@@ -252,9 +253,22 @@ function element(id) {
 const context = {
   URL,
   URLSearchParams,
-  window: {location: {search: '?manifest=/videos/demo/recording.presentation.json&title=Demo'}},
+  window: {
+    location: {search: '?manifest=/videos/demo/recording.presentation.json&title=Demo'},
+    addEventListener(type, listener) {
+      const listeners = windowListeners.get(type) || [];
+      listeners.push(listener);
+      windowListeners.set(type, listeners);
+    },
+    dispatchEvent(event) {
+      for (const listener of windowListeners.get(event.type) || []) {
+        listener(event);
+      }
+    },
+  },
   document: {
     title: '',
+    hidden: false,
     getElementById: element,
     createElement: () => element(`created-${elements.size}`),
     addEventListener(type, listener) {
@@ -356,6 +370,70 @@ if (!vm.runInContext('playing', context) || !flash.innerHTML.includes('<svg')) {
   }));
   process.exit(1);
 }
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_pagehide_stops_abandoned_player_without_pausing_a_hidden_tab() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+let lifecycleAudioPauseCalls = 0;
+let lifecycleShellDisposeCalls = 0;
+audio = {
+  paused: false,
+  pause() {
+    lifecycleAudioPauseCalls += 1;
+    this.paused = true;
+  },
+};
+presentationShell = {
+  dispose() { lifecycleShellDisposeCalls += 1; },
+};
+playbackReady = true;
+playing = true;
+timers = [1];
+audioTimer = 2;
+progressTimer = 3;
+autoplayCountdownActive = true;
+autoplayCountdownTimers = [4, 5, 6];
+
+document.hidden = true;
+document.dispatchEvent({type: 'visibilitychange'});
+if (lifecycleAudioPauseCalls !== 0 || !playing || !playbackReady) {
+  console.error(JSON.stringify({
+    phase: 'hidden', lifecycleAudioPauseCalls, playing, playbackReady,
+  }));
+  process.exit(1);
+}
+
+window.dispatchEvent({type: 'pagehide'});
+if (
+  lifecycleAudioPauseCalls !== 1 || lifecycleShellDisposeCalls !== 1 ||
+  playing || playbackReady || timers.length !== 0 || audioTimer !== null ||
+  progressTimer !== null || autoplayCountdownActive ||
+  autoplayCountdownTimers.length !== 0 || presentationShell !== null
+) {
+  console.error(JSON.stringify({
+    phase: 'pagehide', lifecycleAudioPauseCalls, lifecycleShellDisposeCalls,
+    playing, playbackReady, timerCount: timers.length, audioTimer,
+    progressTimer, autoplayCountdownActive,
+    countdownTimerCount: autoplayCountdownTimers.length,
+    hasPresentationShell: presentationShell !== null,
+  }));
+  process.exit(1);
+}
+
+window.dispatchEvent({type: 'pagehide'});
+if (lifecycleAudioPauseCalls !== 1 || lifecycleShellDisposeCalls !== 1) {
+  console.error(JSON.stringify({
+    phase: 'idempotent', lifecycleAudioPauseCalls, lifecycleShellDisposeCalls,
+  }));
+  process.exit(1);
+}
+`, context);
 """
     )
 

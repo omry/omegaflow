@@ -1,0 +1,1 @@
+Stop narration and playback timers when a watch player document is abandoned, preventing preserved VS Code browser instances from overlapping voiceover in a replacement player while leaving ordinary hidden-tab playback unchanged.
