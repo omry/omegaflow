@@ -873,6 +873,51 @@ def test_homepage_quickstart_checkpoint_holds_terminal_before_browser() -> None:
         browser.close()
 
 
+def test_homepage_quickstart_narration_does_not_advance_during_audio_wait() -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    static_root = REPO_ROOT / "website" / "static"
+    manifest = (
+        "/omegaflow-videos/quickstart-demo/presentation/"
+        "recording.presentation.json"
+    )
+    manifest_data = json.loads(
+        (static_root / manifest.removeprefix("/")).read_text(encoding="utf-8")
+    )
+    intervals = manifest_data["audio"]["intervals"]
+    wait_before_bootstrap_summary = next(
+        (left, right)
+        for left, right in zip(intervals, intervals[1:], strict=True)
+        if left["source_end_ms"] == right["source_start_ms"]
+        and right["presentation_start_ms"] - left["presentation_end_ms"] > 500
+    )
+    left, right = wait_before_bootstrap_summary
+    wait_midpoint_ms = (
+        left["presentation_end_ms"] + right["presentation_start_ms"]
+    ) / 2
+
+    with player_site(static_root) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 700})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest={manifest}"
+            "&embed=1&layout=wide-browser"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        progress_value = round(
+            wait_midpoint_ms / manifest_data["recording"]["duration_ms"] * 1000
+        )
+        progress = page.locator("#progress")
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "(element, value) => { element.value = String(value); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); }",
+            progress_value,
+        )
+
+        assert page.locator(".narration-word.current").all_text_contents() == []
+        browser.close()
+
+
 def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> None:
     sync_api = pytest.importorskip("playwright.sync_api")
     static_root = REPO_ROOT / "website" / "static"

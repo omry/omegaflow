@@ -1949,7 +1949,7 @@
           ));
           const sourceSeconds = active
             ? active.audioStart + (clamped - active.presentationStart)
-            : audioTimeForPresentation(clamped);
+            : audioTimeline().audioTimeForPresentation(clamped);
           const sourceSegment = narrationSegments.find((segment) => (
             sourceSeconds >= segment.offset &&
             sourceSeconds < segment.offset + segment.duration
