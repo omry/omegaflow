@@ -53,12 +53,13 @@ def test_player_resolves_friendly_watch_routes_through_the_manifest_snapshot() -
     assert "manifestBaseUrl = new URL('.', resolvedManifestUrl);" in html
 
 
-def test_browser_pointer_uses_an_upright_cursor_silhouette() -> None:
+def test_browser_pointer_uses_an_upright_cursor_with_a_dark_outline() -> None:
     html = (
         REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
     ).read_text(encoding="utf-8")
 
-    assert "polygon(0 0, 0 20px" in html
+    assert "stroke='%23111827'" in html
+    assert "stroke-width='2.25'" in html
     assert "border-top: 16px solid #fff" not in html
 
 
