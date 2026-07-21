@@ -1341,15 +1341,15 @@ document.dispatchEvent(event);
 if (
   !playing ||
   prevented !== 1 ||
-  playbackFlash.dataset.visible !== 'true' ||
-  playbackFlash.innerHTML !== icons.play
+  playerRoot.dataset.playbackStarted !== 'true' ||
+  playbackFlash.dataset.visible !== undefined
 ) {
   console.error(JSON.stringify({
-    phase: 'play',
+    phase: 'first-play',
     playing,
     prevented,
+    playbackStarted: playerRoot.dataset.playbackStarted,
     flashVisible: playbackFlash.dataset.visible,
-    flashIcon: playbackFlash.innerHTML,
   }));
   process.exit(1);
 }
@@ -1359,13 +1359,34 @@ if (
   playing ||
   prevented !== 2 ||
   playbackFlash.dataset.visible !== 'true' ||
-  playbackFlash.innerHTML !== icons.pause
+  playbackFlash.dataset.feedback !== 'pause' ||
+  playbackFlash.innerHTML !== playbackMarkSvg
 ) {
   console.error(JSON.stringify({
     phase: 'pause',
     playing,
     prevented,
     flashVisible: playbackFlash.dataset.visible,
+    flashFeedback: playbackFlash.dataset.feedback,
+    flashIcon: playbackFlash.innerHTML,
+  }));
+  process.exit(1);
+}
+event.defaultPrevented = false;
+document.dispatchEvent(event);
+if (
+  !playing ||
+  prevented !== 3 ||
+  playbackFlash.dataset.visible !== 'true' ||
+  playbackFlash.dataset.feedback !== 'play' ||
+  playbackFlash.innerHTML !== playbackMarkSvg
+) {
+  console.error(JSON.stringify({
+    phase: 'resume',
+    playing,
+    prevented,
+    flashVisible: playbackFlash.dataset.visible,
+    flashFeedback: playbackFlash.dataset.feedback,
     flashIcon: playbackFlash.innerHTML,
   }));
   process.exit(1);

@@ -175,6 +175,93 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
         browser.close()
 
 
+def test_player_hides_narration_behind_a_logo_cover_until_playback_starts(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        assert page.locator("#player").get_attribute("data-playback-started") == "false"
+        assert page.locator("#narration").evaluate(
+            "element => getComputedStyle(element).visibility"
+        ) == "hidden"
+        assert page.locator("#playback-cover").evaluate(
+            "element => getComputedStyle(element).opacity"
+        ) == "1"
+        logo = page.locator("#playback-cover .playback-cover-logo")
+        assert logo.is_visible()
+        logo_box = logo.bounding_box()
+        stage_box = page.locator(".stage").bounding_box()
+        assert logo_box is not None and stage_box is not None
+        assert 96 <= logo_box["width"] <= 145
+
+        page.set_viewport_size({"width": 900, "height": 360})
+        compact_logo_box = logo.bounding_box()
+        compact_stage_box = page.locator(".stage").bounding_box()
+        assert compact_logo_box is not None and compact_stage_box is not None
+        assert compact_logo_box["width"] <= compact_stage_box["height"] * 0.42 + 1
+        assert compact_logo_box["width"] < logo_box["width"]
+
+        page.locator("#play").click()
+        page.wait_for_function(
+            "document.querySelector('#player').dataset.playbackStarted === 'true'"
+        )
+        page.wait_for_function(
+            "getComputedStyle(document.querySelector('#playback-cover')).opacity === '0'"
+        )
+
+        assert page.locator("#narration").evaluate(
+            "element => getComputedStyle(element).visibility"
+        ) == "visible"
+        playback_feedback = page.locator("#playback-flash")
+        assert playback_feedback.get_attribute("data-visible") is None
+
+        page.locator("#play").click()
+        page.locator("#playback-flash[data-feedback='pause']").wait_for()
+        assert playback_feedback.locator(".playback-mark").count() == 1
+        assert playback_feedback.locator(".playback-mark-pause").evaluate(
+            "element => getComputedStyle(element).opacity"
+        ) == "1"
+        assert playback_feedback.locator(".playback-mark-play").evaluate(
+            "element => getComputedStyle(element).opacity"
+        ) == "0"
+        assert playback_feedback.evaluate(
+            "element => getComputedStyle(element).borderTopWidth"
+        ) == "0px"
+        assert playback_feedback.evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        ) == "rgba(0, 0, 0, 0)"
+
+        page.locator("#play").click()
+        page.locator("#playback-flash[data-feedback='play']").wait_for()
+        assert playback_feedback.locator(".playback-mark-play").evaluate(
+            "element => getComputedStyle(element).opacity"
+        ) == "1"
+
+        countdown_page = browser.new_page(viewport={"width": 900, "height": 600})
+        countdown_page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&autoplay=countdown"
+        )
+        countdown_page.wait_for_function(
+            "!document.querySelector('#play').disabled"
+        )
+        assert countdown_page.locator("#player").get_attribute(
+            "data-autoplay-countdown"
+        ) == "true"
+        assert countdown_page.locator("#playback-cover").is_hidden()
+        browser.close()
+
+
 @pytest.mark.parametrize(
     ("commands", "copy_label"),
     [

@@ -234,6 +234,59 @@
         height: 100%;
       }
 
+      .player[data-playback-started="false"] .narration {
+        visibility: hidden;
+      }
+
+      .playback-cover {
+        position: absolute;
+        z-index: 10;
+        inset: 0;
+        container-type: size;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        opacity: 1;
+        pointer-events: none;
+        transition:
+          opacity 360ms ease,
+          visibility 0s linear 360ms;
+        visibility: visible;
+      }
+
+      .playback-cover[hidden] {
+        display: none;
+      }
+
+      .player[data-playback-started="true"] .playback-cover {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .player[data-autoplay-countdown="true"] .playback-cover {
+        display: none;
+      }
+
+      .playback-mark.playback-cover-logo {
+        display: block;
+        width: min(9rem, 42cqh, 32cqw);
+        height: auto;
+        transform: scale(1);
+        transition: transform 360ms ease;
+      }
+
+      .player[data-playback-started="true"] .playback-cover-logo {
+        transform: scale(1.18);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .playback-cover,
+        .playback-cover-logo {
+          transition: none;
+        }
+      }
+
       .browser-stage,
       .browser-renderer-host,
       .browser-renderer {
@@ -425,21 +478,20 @@
 
       .playback-flash {
         position: absolute;
+        z-index: 11;
         top: 50%;
         left: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 5rem;
-        height: 5rem;
-        border: 1px solid rgba(248, 248, 242, 0.35);
-        border-radius: 50%;
-        background: rgba(25, 26, 36, 0.72);
-        color: var(--fg);
+        width: clamp(7rem, 24vmin, 11rem);
+        aspect-ratio: 1;
+        color: var(--cue);
+        filter: drop-shadow(0 0.3rem 0.65rem rgba(8, 10, 16, 0.42));
         opacity: 0;
         pointer-events: none;
-        transform: translate(-50%, -50%) scale(0.96);
-        transition: opacity 600ms ease, transform 600ms ease;
+        transform: translate(-50%, -50%) scale(0.9);
+        transition: opacity 520ms ease, transform 520ms ease;
       }
 
       .playback-flash[data-visible="true"] {
@@ -450,27 +502,61 @@
 
       .playback-flash[data-fading="true"] {
         opacity: 0;
-        transform: translate(-50%, -50%) scale(2);
+        transform: translate(-50%, -50%) scale(1.18);
       }
 
       .playback-flash[data-countdown="true"] {
+        width: 5rem;
+        aspect-ratio: 1;
+        border: 1px solid rgba(248, 248, 242, 0.35);
+        border-radius: 50%;
+        background: rgba(25, 26, 36, 0.72);
         color: var(--cue);
+        filter: none;
         font: 700 2.4rem/1 ui-sans-serif, system-ui, sans-serif;
         font-variant-numeric: tabular-nums;
       }
 
-      .playback-flash svg {
-        width: 2.25rem;
-        height: 2.25rem;
-        stroke: currentColor;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        fill: none;
+      .playback-mark {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      .playback-mark-play,
+      .playback-mark-pause {
+        transform-box: fill-box;
+        transform-origin: center;
+        transition: opacity 120ms ease, transform 180ms ease;
+      }
+
+      .playback-mark-pause {
+        opacity: 0;
+        transform: scale(0.82);
+      }
+
+      [data-feedback="pause"] .playback-mark-play {
+        opacity: 0;
+        transform: scale(1.12);
+      }
+
+      [data-feedback="pause"] .playback-mark-pause {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .playback-flash,
+        .playback-mark-play,
+        .playback-mark-pause {
+          transition: none;
+        }
       }
 
       .guide-modal {
         position: absolute;
+        z-index: 12;
         inset: 0;
         display: block;
         padding: 1rem;
@@ -968,7 +1054,7 @@
     </style>
   </head>
   <body>
-    <main class="player" id="player">
+    <main class="player" id="player" data-playback-started="false">
       <div class="bar">
         <a class="player-logo-link" href="https://omegaflow.dev/" target="_blank" rel="noopener noreferrer" aria-label="Open the OmegaFlow website" title="OmegaFlow">
           <svg viewBox="0 0 256 256" aria-hidden="true">
@@ -981,6 +1067,13 @@
       <div class="stage">
         <pre class="terminal" id="terminal" aria-live="polite"></pre>
         <div class="browser-stage" id="browser-stage" hidden></div>
+        <div class="playback-cover" id="playback-cover" data-feedback="play" aria-hidden="true">
+          <svg class="playback-mark playback-cover-logo" viewBox="0 0 256 256" aria-hidden="true">
+            <path class="playback-mark-omega" d="M34 205h64v-31c-29-13-47-39-47-71 0-46 33-79 77-79s77 33 77 79c0 32-18 58-47 71v31h64" fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="34"/>
+            <path class="playback-mark-play" d="m110 71 58 35-58 35z" fill="#ffc247"/>
+            <path class="playback-mark-pause" d="M105 72h19v69h-19zM138 72h19v69h-19z" fill="#ffc247"/>
+          </svg>
+        </div>
         <div class="playback-flash" id="playback-flash" aria-hidden="true"></div>
         <div class="guide-modal" id="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title" hidden>
           <div class="guide-card" id="guide-card">
@@ -1038,6 +1131,7 @@
         : null;
       const manifestUrl = params.get('manifest') || implicitWatchManifest;
       const autoplayCountdown = params.get('autoplay') === 'countdown';
+      playerRoot.dataset.autoplayCountdown = String(autoplayCountdown);
       let audioMetaUrl = null;
       const introText = params.get('intro') || '';
       const explicitIntroSeconds = params.has('introSeconds');
@@ -1166,6 +1260,12 @@
         volume: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a8 8 0 0 1 0 10"/></svg>',
         muted: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="m17 9 4 4"/><path d="m21 9-4 4"/></svg>',
       };
+      const playbackMarkSvg = `
+        <svg class="playback-mark" viewBox="0 0 256 256" aria-hidden="true">
+          <path class="playback-mark-omega" d="M34 205h64v-31c-29-13-47-39-47-71 0-46 33-79 77-79s77 33 77 79c0 32-18 58-47 71v31h64" fill="none" stroke="#8b7cff" stroke-linecap="round" stroke-linejoin="round" stroke-width="34"/>
+          <path class="playback-mark-play" d="m110 71 58 35-58 35z" fill="#ffc247"/>
+          <path class="playback-mark-pause" d="M105 72h19v69h-19zM138 72h19v69h-19z" fill="#ffc247"/>
+        </svg>`;
 
       const colorMap = {
         30: 'ansi-black',
@@ -2304,7 +2404,8 @@
       function showAudioUnlockPrompt() {
         clearPlaybackFlashTimers();
         playbackFlash.removeAttribute('data-countdown');
-        playbackFlash.innerHTML = icons.play;
+        playbackFlash.innerHTML = playbackMarkSvg;
+        playbackFlash.dataset.feedback = 'play';
         playbackFlash.dataset.audioUnlock = 'true';
         playbackFlash.dataset.visible = 'true';
         playbackFlash.dataset.fading = 'false';
@@ -2316,13 +2417,14 @@
       }
 
       function showPlaybackFlash(iconName) {
-        if (!playbackFlash || !icons[iconName]) {
+        if (!playbackFlash || !['play', 'pause'].includes(iconName)) {
           return;
         }
         clearAudioUnlockPrompt();
         clearPlaybackFlashTimers();
         playbackFlash.removeAttribute('data-countdown');
-        playbackFlash.innerHTML = icons[iconName];
+        playbackFlash.innerHTML = playbackMarkSvg;
+        playbackFlash.dataset.feedback = iconName;
         playbackFlash.dataset.visible = 'true';
         playbackFlash.dataset.fading = 'false';
         playbackFlashTimers.push(
@@ -3587,13 +3689,15 @@
           audibleAutoplayPending = false;
           clearAudioUnlockPrompt();
         }
+        const firstPlayback = playerRoot.dataset.playbackStarted !== 'true';
         pausedAtGuidedPoint = false;
         hideGuideModal();
+        playerRoot.dataset.playbackStarted = 'true';
         playing = true;
         claimEmbeddedPlayerAudioFocus();
         updateTransportButtons();
         scheduleEvents();
-        if (options.feedback === true) {
+        if (options.feedback === true && (!firstPlayback || options.autoplay === true)) {
           showPlaybackFlash('play');
         }
         startAudio();
