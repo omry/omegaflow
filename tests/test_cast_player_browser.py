@@ -175,6 +175,36 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
         browser.close()
 
 
+def test_browser_player_hides_disabled_window_decorations(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["presentation"]["browser"]["window"]["mode"] = "none"
+    manifest["presentation"]["browser"]["chrome"]["mode"] = "hidden"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator(".browser-window[data-mode='none']").wait_for()
+
+        assert page.locator(".browser-window-titlebar").is_hidden()
+        assert page.locator(".browser-chrome[data-mode='hidden']").is_hidden()
+        assert page.locator(".browser-window-titlebar").evaluate(
+            "element => getComputedStyle(element).display"
+        ) == "none"
+        assert page.locator(".browser-chrome").evaluate(
+            "element => getComputedStyle(element).display"
+        ) == "none"
+        browser.close()
+
+
 def test_player_hides_narration_behind_a_logo_cover_until_playback_starts(
     tmp_path: Path,
 ) -> None:
@@ -843,6 +873,34 @@ def test_embedded_transport_stays_compact_on_short_mobile_viewports(
         assert page.locator("#narration").evaluate(
             "element => element.scrollLeft"
         ) == maximum_scroll
+        browser.close()
+
+
+def test_browser_beat_can_hide_recording_window_and_chrome(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    hidden_browser = {
+        "window": {"mode": "none", "theme": "kde-breeze", "title": None},
+        "chrome": {"mode": "hidden"},
+    }
+    manifest["beats"][0]["browser"] = hidden_browser
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 500})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        assert page.locator(".browser-window").get_attribute("data-mode") == "none"
+        assert page.locator(".browser-window-titlebar").is_hidden()
+        assert page.locator(".browser-chrome").get_attribute("data-mode") == "hidden"
+        assert page.locator(".browser-chrome").is_hidden()
         browser.close()
 
 
