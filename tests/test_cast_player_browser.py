@@ -736,6 +736,26 @@ def test_hovering_each_scrubber_section_shows_its_heading(tmp_path: Path) -> Non
             tooltip = page.locator("#section-tooltip:not([hidden])")
             tooltip.wait_for(timeout=1000)
             assert tooltip.text_content() == heading
+            assert page.evaluate(
+                """() => {
+                  const tooltip = document.querySelector('#section-tooltip');
+                  const cover = document.querySelector('#playback-cover');
+                  tooltip.style.pointerEvents = 'auto';
+                  cover.style.pointerEvents = 'auto';
+                  const tooltipRect = tooltip.getBoundingClientRect();
+                  const coverRect = cover.getBoundingClientRect();
+                  const overlapTop = Math.max(tooltipRect.top, coverRect.top);
+                  const overlapBottom = Math.min(tooltipRect.bottom, coverRect.bottom);
+                  if (overlapBottom <= overlapTop) {
+                    return false;
+                  }
+                  const point = {
+                    x: tooltipRect.left + tooltipRect.width / 2,
+                    y: overlapTop + (overlapBottom - overlapTop) / 2,
+                  };
+                  return document.elementFromPoint(point.x, point.y) === tooltip;
+                }"""
+            )
 
         browser.close()
 
