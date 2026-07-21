@@ -262,6 +262,33 @@ def test_player_hides_narration_behind_a_logo_cover_until_playback_starts(
         browser.close()
 
 
+def test_player_reveals_startup_load_errors_instead_of_covering_them(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/missing.presentation.json"
+        )
+        page.wait_for_function(
+            "document.querySelector('#voice').getAttribute('aria-label') === "
+            "'recording unavailable'"
+        )
+
+        assert page.locator("#terminal").text_content() == (
+            "could not load presentation manifest: 404"
+        )
+        assert page.locator("#terminal").is_visible()
+        assert page.locator("#playback-cover").is_hidden()
+        assert page.locator("#play").is_disabled()
+        browser.close()
+
+
 @pytest.mark.parametrize(
     ("commands", "copy_label"),
     [
