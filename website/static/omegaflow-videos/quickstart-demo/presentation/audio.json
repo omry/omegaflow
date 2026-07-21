@@ -1,5 +1,5 @@
 {
-  "duration_ms": 90936,
+  "duration_ms": 88368,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -7,19 +7,19 @@
       "members": [
         {
           "beat_id": "introduction",
-          "text": "OmegaFlow turns scripted terminal and browser workflows into narrated, rebuildable videos. OmegaFlow videos are organized into beats. This video is a quickstart demo. We'll install OmegaFlow, prepare a recording workspace, then build and open a two-beat quickstart video in a browser. The demo runs in guided mode, which pauses after each beat. To watch continuously, turn off Guided mode using the button in the player controls.",
-          "text_end": 429,
+          "text": "With OmegaFlow, you can turn scripted terminal and browser workflows into narrated, rebuildable videos. These videos are organized into beats. This video is a quickstart demo. We'll install OmegaFlow, prepare a recording workspace, then build and open a two-beat quickstart video in a browser. The demo runs in guided mode, which pauses after each beat. To watch continuously, turn off Guided mode using the button in the player controls.",
+          "text_end": 438,
           "text_start": 0
         }
       ],
-      "playback_end_ms": 27600,
-      "playback_sha256": "016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a",
-      "playback_src": "audio/__beat__-introduction-016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a.mp3",
+      "playback_end_ms": 26616,
+      "playback_sha256": "d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8",
+      "playback_src": "audio/__beat__-introduction-d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8.mp3",
       "playback_start_ms": 0,
-      "sha256": "016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a",
-      "source_end_ms": 27600,
+      "sha256": "d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8",
+      "source_end_ms": 26616,
       "source_start_ms": 0,
-      "src": "audio/__beat__-introduction-016c9f7ebbe68bd0bdb5a4393a38260252ddd37805294a0c523c8983d139702a.mp3",
+      "src": "audio/__beat__-introduction-d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8.mp3",
       "timestamps": "timestamps/__beat__-introduction.json"
     },
     {
@@ -32,14 +32,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 36408,
-      "playback_sha256": "6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f",
-      "playback_src": "audio/__beat__-install-6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f.mp3",
-      "playback_start_ms": 27600,
-      "sha256": "6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f",
-      "source_end_ms": 36408,
-      "source_start_ms": 27600,
-      "src": "audio/__beat__-install-6df4646e38cea4e0592dc628851661b4d413ff89fbf27d20dcd38efda7421d6f.mp3",
+      "playback_end_ms": 35232,
+      "playback_sha256": "f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536",
+      "playback_src": "audio/__beat__-install-f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536.mp3",
+      "playback_start_ms": 26616,
+      "sha256": "f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536",
+      "source_end_ms": 35232,
+      "source_start_ms": 26616,
+      "src": "audio/__beat__-install-f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -52,14 +52,14 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 55538,
-      "playback_sha256": "d92d7a449866875d10c92fbdb891d202ecfc2f9fcff45294abfd4b7112cde0a3",
-      "playback_src": "audio/__beat__-bootstrap-playback-d92d7a449866875d10c92fbdb891d202ecfc2f9fcff45294abfd4b7112cde0a3.mp3",
-      "playback_start_ms": 36408,
-      "sha256": "b398f2164e3d46b836425376303bc5dc3fc9839dbbaf7e3a3e6b80cbbc471bdb",
-      "source_end_ms": 54624,
-      "source_start_ms": 36408,
-      "src": "audio/__beat__-bootstrap-b398f2164e3d46b836425376303bc5dc3fc9839dbbaf7e3a3e6b80cbbc471bdb.mp3",
+      "playback_end_ms": 55007,
+      "playback_sha256": "4dceb73c49148646524195e4455978f1f07f463872dac267b27485695582fbb3",
+      "playback_src": "audio/__beat__-bootstrap-playback-4dceb73c49148646524195e4455978f1f07f463872dac267b27485695582fbb3.mp3",
+      "playback_start_ms": 35232,
+      "sha256": "2ece27472895b8383e352e2a75d6e002230f28b7aad38bc03760ec1c33483ac0",
+      "source_end_ms": 53952,
+      "source_start_ms": 35232,
+      "src": "audio/__beat__-bootstrap-2ece27472895b8383e352e2a75d6e002230f28b7aad38bc03760ec1c33483ac0.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -78,14 +78,14 @@
           "text_start": 186
         }
       ],
-      "playback_end_ms": 93673,
-      "playback_sha256": "def3a511722b5bfad72c6d3467d1d910ad87f86d5462365ab46570368c097f6c",
-      "playback_src": "audio/build-and-browser-playback-def3a511722b5bfad72c6d3467d1d910ad87f86d5462365ab46570368c097f6c.mp3",
-      "playback_start_ms": 55538,
-      "sha256": "6849488f3fe62ebd7f1cab7a0adb707ceb0c6144dbebd639e6733870f710f584",
-      "source_end_ms": 90936,
-      "source_start_ms": 54624,
-      "src": "audio/build-and-browser-6849488f3fe62ebd7f1cab7a0adb707ceb0c6144dbebd639e6733870f710f584.mp3",
+      "playback_end_ms": 91440,
+      "playback_sha256": "e64e69bb9bfe1904c4eb1175b06e2c09d92918364dfa1275bcc08430e176b5b2",
+      "playback_src": "audio/build-and-browser-playback-e64e69bb9bfe1904c4eb1175b06e2c09d92918364dfa1275bcc08430e176b5b2.mp3",
+      "playback_start_ms": 55007,
+      "sha256": "24610f1062eb24381cc2d91e90f7ef1543bf7391a89101477d907c1c1190f63b",
+      "source_end_ms": 88368,
+      "source_start_ms": 53952,
+      "src": "audio/build-and-browser-24610f1062eb24381cc2d91e90f7ef1543bf7391a89101477d907c1c1190f63b.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],

@@ -2758,11 +2758,12 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
 
     assert beats[0]["id"] == "introduction"
     assert (
-        "OmegaFlow turns scripted terminal and browser workflows into narrated,"
+        "With OmegaFlow, you can turn scripted terminal and browser workflows "
+        "into narrated,"
         in beats_by_id["introduction"]["narration"]
     )
     assert (
-        "OmegaFlow videos are organized into beats"
+        "These videos are organized into beats"
         in beats_by_id["introduction"]["narration"]
     )
     assert (

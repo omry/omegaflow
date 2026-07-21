@@ -80,9 +80,9 @@ beat:
   id: introduction
   heading: What This Video Covers
   narration: >-
-    OmegaFlow turns scripted terminal and browser workflows into narrated,
-    rebuildable videos. OmegaFlow videos are organized into beats. This video
-    is a quickstart demo. We'll install OmegaFlow, prepare a recording
+    With OmegaFlow, you can turn scripted terminal and browser workflows into
+    narrated, rebuildable videos. These videos are organized into beats. This
+    video is a quickstart demo. We'll install OmegaFlow, prepare a recording
     workspace, then build and open a two-beat quickstart video in a browser.
     The demo runs in @guided_mode_start@ guided mode, which pauses after each
     beat. To watch continuously, turn off Guided mode using the button in the
