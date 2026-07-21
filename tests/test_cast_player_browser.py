@@ -660,22 +660,55 @@ def test_embedded_transport_stays_compact_on_short_mobile_viewports(
             """() => {
               const narration = document.querySelector('#narration');
               narration.innerHTML = Array.from({length: 32}, (_, index) => (
-                `<span class="narration-word ${index === 27 ? 'current' : 'future'}">word${index}</span>`
+                `<span class="narration-word ${
+                  index < 2 ? 'past' : index === 2 ? 'current' : 'future'
+                }">word${index}</span>`
               )).join(' ');
               window.updateNarrationScroll({animate: true});
             }"""
         )
+        assert page.locator("#narration").evaluate(
+            "element => getComputedStyle(element).whiteSpace"
+        ) == "nowrap"
+        assert page.locator("#narration").evaluate("element => element.scrollLeft") == 0
+
+        page.evaluate(
+            """() => {
+              const words = document.querySelectorAll('.narration-word');
+              words.forEach((word, index) => {
+                word.className = `narration-word ${
+                  index < 18 ? 'past' : index === 18 ? 'current' : 'future'
+                }`;
+              });
+              window.updateNarrationScroll({animate: true});
+            }"""
+        )
+        advanced_scroll = page.locator("#narration").evaluate(
+            "element => element.scrollLeft"
+        )
         narration_box = page.locator("#narration").bounding_box()
         current_word_box = page.locator(".narration-word.current").bounding_box()
         assert narration_box is not None and current_word_box is not None
-        assert current_word_box["x"] >= narration_box["x"] - 1
-        assert current_word_box["x"] + current_word_box["width"] <= (
-            narration_box["x"] + narration_box["width"] + 1
+        assert advanced_scroll > 0
+        assert current_word_box["x"] == pytest.approx(narration_box["x"], abs=1)
+
+        page.evaluate(
+            """() => {
+              const words = document.querySelectorAll('.narration-word');
+              words.forEach((word, index) => {
+                word.className = `narration-word ${
+                  index < 31 ? 'past' : index === 31 ? 'current' : 'future'
+                }`;
+              });
+              window.updateNarrationScroll({animate: true});
+            }"""
         )
-        assert current_word_box["y"] >= narration_box["y"] - 1
-        assert current_word_box["y"] + current_word_box["height"] <= (
-            narration_box["y"] + narration_box["height"] + 1
+        maximum_scroll = page.locator("#narration").evaluate(
+            "element => element.scrollWidth - element.clientWidth"
         )
+        assert page.locator("#narration").evaluate(
+            "element => element.scrollLeft"
+        ) == maximum_scroll
         browser.close()
 
 

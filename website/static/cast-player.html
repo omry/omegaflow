@@ -962,7 +962,7 @@
 
         .narration {
           height: 1.35em;
-          white-space: normal;
+          white-space: nowrap;
         }
       }
     </style>
@@ -2091,24 +2091,33 @@
         const horizontalOverflow = narration.scrollWidth - narration.clientWidth;
         const current = narration.querySelector('.narration-word.current');
         if (verticalOverflow <= 1 && horizontalOverflow > 1) {
+          const past = narration.querySelectorAll('.narration-word.past');
+          const focus = current
+            || narration.querySelector('.narration-word.future')
+            || past[past.length - 1]
+            || null;
           cancelNarrationScrollAnimation();
           narrationScrollTarget = 0;
           narration.scrollTop = 0;
-          if (!current) {
+          if (!focus) {
             narration.scrollLeft = 0;
             return;
           }
           const narrationRect = narration.getBoundingClientRect();
-          const currentRect = current.getBoundingClientRect();
-          const relativeLeft = currentRect.left - narrationRect.left + narration.scrollLeft;
-          const centered = relativeLeft - Math.max(
-            0,
-            (narration.clientWidth - currentRect.width) / 2,
+          const focusRect = focus.getBoundingClientRect();
+          const focusOutsideVisibleLine = (
+            focusRect.left < narrationRect.left ||
+            focusRect.right > narrationRect.right
           );
-          narration.scrollLeft = Math.min(
-            horizontalOverflow,
-            Math.max(0, centered),
-          );
+          if (focusOutsideVisibleLine) {
+            narration.scrollLeft = Math.min(
+              horizontalOverflow,
+              Math.max(
+                0,
+                narration.scrollLeft + focusRect.left - narrationRect.left,
+              ),
+            );
+          }
           return;
         }
         narration.scrollLeft = 0;
@@ -2158,7 +2167,6 @@
           narration.title = text;
           narrationRenderedTitle = text;
         }
-        narration.scrollLeft = 0;
         updateNarrationScroll({animate: animateScroll});
       }
 
