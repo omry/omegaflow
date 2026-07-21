@@ -489,11 +489,44 @@ global.ResizeObserver = class {
     console.error(JSON.stringify({layoutBox, frame}));
     process.exit(1);
   }
+  renderer.renderAt(200);
+  const primary = find(root, 'browser-state-primary');
+  const secondary = find(root, 'browser-state-secondary');
+  if (
+    primary.hidden || secondary.hidden ||
+    primary.getAttribute('src') !== 'final.webp' ||
+    secondary.getAttribute('src') !== 'initial.webp' ||
+    primary.style.opacity !== '0.5' || secondary.style.opacity !== '1'
+  ) {
+    console.error(JSON.stringify({
+      phase: 'fade-midpoint',
+      primaryHidden: primary.hidden,
+      secondaryHidden: secondary.hidden,
+      primarySource: primary.getAttribute('src'),
+      secondarySource: secondary.getAttribute('src'),
+      primaryOpacity: primary.style.opacity,
+      secondaryOpacity: secondary.style.opacity,
+    }));
+    process.exit(1);
+  }
+  renderer.renderAt(300);
+  if (
+    primary.hidden || !secondary.hidden ||
+    primary.style.opacity !== '1' || secondary.style.opacity !== '1'
+  ) {
+    console.error(JSON.stringify({
+      phase: 'fade-complete',
+      primaryHidden: primary.hidden,
+      secondaryHidden: secondary.hidden,
+      primaryOpacity: primary.style.opacity,
+      secondaryOpacity: secondary.style.opacity,
+    }));
+    process.exit(1);
+  }
   renderer.renderAt(250);
   const chrome = find(root, 'browser-chrome');
   const url = find(root, 'browser-chrome-url');
   const text = find(root, 'browser-text-overlay');
-  const primary = find(root, 'browser-state-primary');
   const viewportElement = find(root, 'browser-viewport');
   const viewportHost = find(root, 'browser-viewport-host');
   if (

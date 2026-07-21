@@ -1207,6 +1207,8 @@
       const visual = scene.visual;
       elements.primary.hidden = true;
       elements.secondary.hidden = true;
+      elements.primary.style.opacity = '1';
+      elements.secondary.style.opacity = '1';
       for (const [assetId, clip] of elements.clips.entries()) {
         const active = visual.kind === 'clip' && visual.asset === assetId;
         const hidden = !active;
@@ -1233,7 +1235,6 @@
         ) {
           setImage(elements.secondary, visual.previousAsset);
           elements.secondary.hidden = false;
-          elements.secondary.style.opacity = String(1 - visual.progress);
           elements.primary.style.opacity = String(visual.progress);
         }
       } else if (visual.kind === 'clip') {
