@@ -26,6 +26,7 @@ SCHEMA_GROUPS = {
         "BrowserTimeoutsConfig",
         "BrowserRedactionConfig",
         "BrowserRecordingConfig",
+        "BrowserWindowModeConfig",
         "BrowserWindowPresentationConfig",
         "BrowserChromePresentationConfig",
         "BrowserTransitionsPresentationConfig",

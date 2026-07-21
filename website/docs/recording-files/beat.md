@@ -270,6 +270,23 @@ override or the recording-wide `presentation.browser.pointer.visible` default.
     visible: false
 ```
 
+Browser beats inherit their window and browser chrome from the recording's
+`presentation.browser` defaults. Override either mode on a beat when its
+captured viewport should appear without one or both decorations:
+
+```yaml
+- id: full-application-view
+  medium: browser
+  window:
+    mode: none
+  chrome:
+    mode: hidden
+```
+
+Window mode is `none` or `framed`. Chrome mode is `hidden`, `minimal`, or
+`full`. The recording-level window theme and title continue to apply when a
+beat changes only the window mode.
+
 ```yaml
 - id: create-project
   medium: browser
@@ -753,6 +770,8 @@ class RecordingBeatConfig:
     caption: str | None = None
     viewer_hold: float | None = None
     pointer: BrowserPointerPresentationConfig | None = None
+    window: BrowserWindowModeConfig | None = None
+    chrome: BrowserChromePresentationConfig | None = None
     player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)

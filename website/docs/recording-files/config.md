@@ -179,7 +179,8 @@ Playwright storage-state path. Use `storage_state_path` instead when the path is
 safe to keep in recording config. The file content remains private and its hash,
 not its secrets, participates in capture freshness.
 
-Presentation framing is also a recording header concern, not a beat setting:
+Presentation framing in the recording header supplies the defaults for every
+browser beat:
 
 ```yaml
 presentation:
@@ -200,7 +201,8 @@ The captured viewport never changes during playback. The renderer scales and
 letterboxes it inside any selected window frame. Set `guided: true` to start
 the player in guided mode; beats with `guide` content then pause before the
 following beat is rendered. See [Beat](./beat.md#guide) for checkpoint and
-toolbar-highlight authoring.
+toolbar-highlight authoring. Individual browser beats can override the window
+and browser chrome modes; see [Browser beats](./beat.md#browser-beats).
 
 ## Config Schema
 
@@ -335,8 +337,12 @@ class BrowserRecordingConfig:
 
 
 @dataclass
-class BrowserWindowPresentationConfig:
+class BrowserWindowModeConfig:
     mode: str = "none"
+
+
+@dataclass
+class BrowserWindowPresentationConfig(BrowserWindowModeConfig):
     theme: str = "kde-breeze"
     title: str | None = None
     opening_transition: str = "cut"

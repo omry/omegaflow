@@ -721,6 +721,33 @@ def _validate_audio(
     return _typed(mapping, PresentationAudioV1, field=field)
 
 
+def _validate_browser_presentation_header(
+    value: object,
+    *,
+    field: str,
+) -> PresentationBrowserHeaderV1:
+    browser_mapping = _mapping(value, field=field)
+    _reject_unknown(browser_mapping, PresentationBrowserHeaderV1, field=field)
+    _require_fields(
+        browser_mapping,
+        _allowed_fields(PresentationBrowserHeaderV1),
+        field=field,
+    )
+    window = _mapping(browser_mapping["window"], field=f"{field}.window")
+    _reject_unknown(window, PresentationWindowV1, field=f"{field}.window")
+    if window.get("mode") not in {"none", "framed"}:
+        raise PresentationValidationError(f"{field}.window.mode is invalid")
+    _non_empty_string(window.get("theme"), field=f"{field}.window.theme")
+    title = window.get("title")
+    if title is not None and not isinstance(title, str):
+        raise PresentationValidationError(f"{field}.window.title must be a string")
+    chrome = _mapping(browser_mapping["chrome"], field=f"{field}.chrome")
+    _reject_unknown(chrome, PresentationChromeV1, field=f"{field}.chrome")
+    if chrome.get("mode") not in {"hidden", "minimal", "full"}:
+        raise PresentationValidationError(f"{field}.chrome.mode is invalid")
+    return _typed(browser_mapping, PresentationBrowserHeaderV1, field=field)
+
+
 def _validate_presentation_header(value: object) -> PresentationHeaderV1:
     field = "manifest presentation"
     mapping = _mapping(value, field=field)
@@ -729,29 +756,7 @@ def _validate_presentation_header(value: object) -> PresentationHeaderV1:
         raise PresentationValidationError(f"{field}.guided must be a boolean")
     browser = mapping.get("browser")
     if browser is not None:
-        browser_mapping = _mapping(browser, field=f"{field}.browser")
-        _reject_unknown(
-            browser_mapping, PresentationBrowserHeaderV1, field=f"{field}.browser"
-        )
-        _require_fields(
-            browser_mapping,
-            _allowed_fields(PresentationBrowserHeaderV1),
-            field=f"{field}.browser",
-        )
-        window = _mapping(browser_mapping["window"], field=f"{field}.browser.window")
-        _reject_unknown(window, PresentationWindowV1, field=f"{field}.browser.window")
-        if window.get("mode") not in {"none", "framed"}:
-            raise PresentationValidationError(f"{field}.browser.window.mode is invalid")
-        _non_empty_string(window.get("theme"), field=f"{field}.browser.window.theme")
-        title = window.get("title")
-        if title is not None and not isinstance(title, str):
-            raise PresentationValidationError(
-                f"{field}.browser.window.title must be a string"
-            )
-        chrome = _mapping(browser_mapping["chrome"], field=f"{field}.browser.chrome")
-        _reject_unknown(chrome, PresentationChromeV1, field=f"{field}.browser.chrome")
-        if chrome.get("mode") not in {"hidden", "minimal", "full"}:
-            raise PresentationValidationError(f"{field}.browser.chrome.mode is invalid")
+        _validate_browser_presentation_header(browser, field=f"{field}.browser")
     return _typed(mapping, PresentationHeaderV1, field=field)
 
 
@@ -894,6 +899,16 @@ def validate_presentation_manifest(
                 raise PresentationValidationError(
                     f"{field}.player.highlight timing is invalid"
                 )
+        browser = beat.get("browser")
+        if browser is not None:
+            if renderer != "browser":
+                raise PresentationValidationError(
+                    f"{field}.browser is invalid for terminal beats"
+                )
+            _validate_browser_presentation_header(
+                browser,
+                field=f"{field}.browser",
+            )
         transition = beat.get("transition_in")
         if transition not in {None, "cut", "fade", "window-open"}:
             raise PresentationValidationError(f"{field}.transition_in is invalid")

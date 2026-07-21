@@ -714,6 +714,42 @@ def test_requires_display_url_for_full_chrome() -> None:
         normalize_recording_plan(spec)
 
 
+def test_browser_beat_presentation_overrides_are_typed_and_normalized() -> None:
+    spec = browser_spec()
+    spec["presentation"]["browser"].update(
+        {
+            "window": {"mode": "framed", "title": "Default"},
+            "chrome": {"mode": "full"},
+        }
+    )
+    spec["beats"][0]["window"] = {"mode": "none"}
+    spec["beats"][0]["chrome"] = {"mode": "hidden"}
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].browser_window is not None
+    assert plan.beats[0].browser_window["mode"] == "none"
+    assert plan.beats[0].browser_chrome is not None
+    assert plan.beats[0].browser_chrome["mode"] == "hidden"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("window", {"mode": "floating"}, r"beats\.0\.window\.mode"),
+        ("chrome", {"mode": "captured"}, r"beats\.0\.chrome\.mode"),
+    ],
+)
+def test_browser_beat_rejects_invalid_presentation_overrides(
+    field: str, value: dict[str, str], message: str
+) -> None:
+    spec = browser_spec()
+    spec["beats"][0][field] = value
+
+    with pytest.raises(RecordingPlanError, match=message):
+        normalize_recording_plan(spec)
+
+
 def test_normalizes_recorder_owned_browser_handoff() -> None:
     plan = normalize_recording_plan(browser_handoff_spec())
 

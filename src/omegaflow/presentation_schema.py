@@ -272,6 +272,7 @@ class PresentationBeatV1:
     payload: str = ""
     guide: PresentationGuideV1 | None = None
     player: PresentationBeatPlayerV1 | None = None
+    browser: PresentationBrowserHeaderV1 | None = None
     transition_in: str | None = None
 
 

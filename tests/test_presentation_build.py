@@ -316,6 +316,12 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "title": "Mixed demo",
         "outputs": {"asset_dir": str(output_dir)},
         "browser": {},
+        "presentation": {
+            "browser": {
+                "window": {"mode": "framed", "title": "Default"},
+                "chrome": {"mode": "full"},
+            }
+        },
         "audio": {"enabled": False},
         "beats": [
             {
@@ -330,6 +336,8 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
             {
                 "id": "web",
                 "medium": "browser",
+                "window": {"mode": "none"},
+                "chrome": {"mode": "hidden"},
                 "actions": [
                     {
                         "id": "open",
@@ -356,6 +364,22 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "terminal",
     ]
     assert result.manifest == run_dir / "presentation/recording.presentation.json"
+    assert manifest["presentation"]["browser"] == {
+        "window": {
+            "mode": "framed",
+            "theme": "kde-breeze",
+            "title": "Default",
+        },
+        "chrome": {"mode": "full"},
+    }
+    assert manifest["beats"][1]["browser"] == {
+        "window": {
+            "mode": "none",
+            "theme": "kde-breeze",
+            "title": "Default",
+        },
+        "chrome": {"mode": "hidden"},
+    }
     assert manifest["beats"][0]["guide"] == {
         "commands": ["python -m pip install omegaflow"],
         "summary": "Install the package before continuing.",

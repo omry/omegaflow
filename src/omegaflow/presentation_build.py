@@ -1327,6 +1327,28 @@ def _next_display_url(compiled: CompiledBrowserBeat) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _browser_presentation_header(
+    config: Mapping[str, Any],
+    *,
+    window_override: Mapping[str, Any] | None = None,
+    chrome_override: Mapping[str, Any] | None = None,
+) -> PresentationBrowserHeaderV1:
+    window = dict(config["window"])
+    chrome = dict(config["chrome"])
+    if window_override is not None:
+        window.update(window_override)
+    if chrome_override is not None:
+        chrome.update(chrome_override)
+    return PresentationBrowserHeaderV1(
+        window=PresentationWindowV1(
+            mode=window["mode"],
+            theme=window["theme"],
+            title=window.get("title"),
+        ),
+        chrome=PresentationChromeV1(mode=chrome["mode"]),
+    )
+
+
 def _browser_pass(
     plan: RecordingPlan,
     log: BrowserCaptureLog,
@@ -1482,6 +1504,7 @@ def compile_presentation_bundle(
         presentation_config = presentation_settings["browser"]
         for beat in plan.beats:
             beat_timing = timing_by_id[beat.id]
+            beat_browser = None
             if beat.medium is RecordingMedium.terminal:
                 payload = f"beats/{beat.id}.cast"
                 materialize_terminal_beat(
@@ -1528,6 +1551,20 @@ def compile_presentation_bundle(
                     if first_browser
                     else presentation_config["transitions"].get("default", "cut")
                 )
+                if beat.browser_window is not None or beat.browser_chrome is not None:
+                    beat_browser = _browser_presentation_header(
+                        presentation_config,
+                        window_override=(
+                            None
+                            if beat.browser_window is None
+                            else thaw(beat.browser_window)
+                        ),
+                        chrome_override=(
+                            None
+                            if beat.browser_chrome is None
+                            else thaw(beat.browser_chrome)
+                        ),
+                    )
                 first_browser = False
             guide = None
             if beat.guide is not None:
@@ -1580,6 +1617,7 @@ def compile_presentation_bundle(
                     payload=payload,
                     guide=guide,
                     player=player,
+                    browser=beat_browser,
                     transition_in=transition,
                 )
             )
@@ -1625,17 +1663,10 @@ def compile_presentation_bundle(
             medium.value: PresentationRendererV1()
             for medium in {beat.medium for beat in plan.beats}
         }
-        window = presentation_config["window"]
-        chrome = presentation_config["chrome"]
         header = PresentationHeaderV1(
             guided=bool(presentation_settings["guided"]),
             browser=(
-                PresentationBrowserHeaderV1(
-                    window=PresentationWindowV1(
-                        mode=window["mode"], theme=window["theme"], title=window.get("title")
-                    ),
-                    chrome=PresentationChromeV1(mode=chrome["mode"]),
-                )
+                _browser_presentation_header(presentation_config)
                 if has_browser
                 else None
             )

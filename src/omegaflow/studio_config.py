@@ -409,8 +409,12 @@ class BrowserRecordingConfig:
 
 
 @dataclass
-class BrowserWindowPresentationConfig:
+class BrowserWindowModeConfig:
     mode: str = "none"
+
+
+@dataclass
+class BrowserWindowPresentationConfig(BrowserWindowModeConfig):
     theme: str = "kde-breeze"
     title: str | None = None
     opening_transition: str = "cut"
@@ -756,6 +760,8 @@ class RecordingBeatConfig:
     caption: str | None = None
     viewer_hold: float | None = None
     pointer: BrowserPointerPresentationConfig | None = None
+    window: BrowserWindowModeConfig | None = None
+    chrome: BrowserChromePresentationConfig | None = None
     player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
@@ -854,6 +860,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     BrowserTargetConfig,
     BrowserRedactionConfig,
     BrowserRecordingConfig,
+    BrowserWindowModeConfig,
     BrowserWindowPresentationConfig,
     BrowserChromePresentationConfig,
     BrowserTransitionsPresentationConfig,

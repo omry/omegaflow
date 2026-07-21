@@ -408,6 +408,20 @@
           `beat ${beat.id} player highlight timing is invalid`,
         );
       }
+      if (beat.browser != null) {
+        requirePresentation(
+          beat.renderer === 'browser' && typeof beat.browser === 'object',
+          `beat ${beat.id} browser presentation is invalid`,
+        );
+        requirePresentation(
+          beat.browser.window && ['none', 'framed'].includes(beat.browser.window.mode),
+          `beat ${beat.id} browser window mode is invalid`,
+        );
+        requirePresentation(
+          beat.browser.chrome && ['hidden', 'minimal', 'full'].includes(beat.browser.chrome.mode),
+          `beat ${beat.id} browser chrome mode is invalid`,
+        );
+      }
       expectedOffset += beat.duration_ms;
       usedRenderers.add(beat.renderer);
     }
@@ -1396,7 +1410,9 @@
         decodedAssetBytes = Math.round(
           viewportConfig.width * viewportConfig.height * scale * scale * 4 * 4,
         );
-        const browserPresentation = nextContext.presentation.browser || {};
+        const browserPresentation = (
+          nextContext.beat.browser || nextContext.presentation.browser || {}
+        );
         const windowConfig = browserPresentation.window || {mode: 'none'};
         const chromeConfig = browserPresentation.chrome || {mode: 'hidden'};
         windowDecoration = {

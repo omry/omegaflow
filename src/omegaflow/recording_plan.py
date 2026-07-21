@@ -17,11 +17,13 @@ from .studio_config import (
     BeatPlayerConfig,
     BrowserActionConfig,
     BrowserCheckConfig,
+    BrowserChromePresentationConfig,
     BrowserConditionConfig,
     BrowserPointerPresentationConfig,
     BrowserRecordingConfig,
     BrowserTargetConfig,
     BrowserUrlMatcherConfig,
+    BrowserWindowModeConfig,
     PlayerToolbarControl,
     PlayerToolbarHighlightConfig,
     RecordingActionConfig,
@@ -873,6 +875,46 @@ def validate_beat_pointer(
     )
 
 
+def validate_beat_browser_presentation(
+    beat: dict[str, Any],
+    *,
+    index: int,
+    medium: RecordingMedium,
+) -> tuple[BrowserWindowModeConfig | None, BrowserChromePresentationConfig | None]:
+    window_value = beat.get("window")
+    chrome_value = beat.get("chrome")
+    if window_value is None and chrome_value is None:
+        return None, None
+    if medium is not RecordingMedium.browser:
+        field = "window" if window_value is not None else "chrome"
+        raise RecordingPlanError(
+            f"beats.{index}.{field} is invalid for terminal beats"
+        )
+    window = (
+        None
+        if window_value is None
+        else _typed(
+            _mapping(window_value, field=f"beats.{index}.window"),
+            BrowserWindowModeConfig,
+            field=f"beats.{index}.window",
+        )
+    )
+    chrome = (
+        None
+        if chrome_value is None
+        else _typed(
+            _mapping(chrome_value, field=f"beats.{index}.chrome"),
+            BrowserChromePresentationConfig,
+            field=f"beats.{index}.chrome",
+        )
+    )
+    if window is not None and window.mode not in {"none", "framed"}:
+        raise RecordingPlanError(f"beats.{index}.window.mode must be none or framed")
+    if chrome is not None and chrome.mode not in {"hidden", "minimal", "full"}:
+        raise RecordingPlanError(f"beats.{index}.chrome.mode is invalid")
+    return window, chrome
+
+
 def _terminal_text_highlights(
     beat: dict[str, Any],
     *,
@@ -996,6 +1038,7 @@ def validate_recording_modalities(spec: dict[str, Any]) -> None:
         if medium is RecordingMedium.browser:
             has_browser = True
         validate_beat_pointer(beat, index=index, medium=medium)
+        validate_beat_browser_presentation(beat, index=index, medium=medium)
         player = beat.get("player")
         if player is not None:
             player_mapping = _mapping(player, field=f"beats.{index}.player")
@@ -1185,6 +1228,8 @@ class BeatPlan:
     explicit_narration_take: str | None
     viewer_hold_ms: int
     browser_pointer_visible: bool | None
+    browser_window: FrozenMapping | None
+    browser_chrome: FrozenMapping | None
     player_highlight: PlayerToolbarHighlightPlan | None
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
@@ -1492,6 +1537,11 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         except (TypeError, ValueError) as exc:
             raise RecordingPlanError(f"beats.{index}.medium is invalid") from exc
         pointer_config = validate_beat_pointer(beat, index=index, medium=medium)
+        window_config, chrome_config = validate_beat_browser_presentation(
+            beat,
+            index=index,
+            medium=medium,
+        )
         normalized = normalize_beat_actions(beat, index=index)
         if medium is RecordingMedium.terminal:
             normalized = replace(
@@ -1582,8 +1632,13 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                         raise RecordingPlanError(
                             f"relative open_page URL in {action.id!r} requires browser.base_url"
                         )
+                    effective_chrome_mode = (
+                        presentation.browser.chrome.mode
+                        if chrome_config is None
+                        else chrome_config.mode
+                    )
                     if (
-                        presentation.browser.chrome.mode == "full"
+                        effective_chrome_mode == "full"
                         and payload.get("display_url") is None
                     ):
                         raise RecordingPlanError(
@@ -1656,6 +1711,12 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 viewer_hold_ms=viewer_hold_ms,
                 browser_pointer_visible=(
                     None if pointer_config is None else pointer_config.visible
+                ),
+                browser_window=(
+                    None if window_config is None else freeze_value(window_config)
+                ),
+                browser_chrome=(
+                    None if chrome_config is None else freeze_value(chrome_config)
                 ),
                 player_highlight=player_highlight,
                 guide=guide,
