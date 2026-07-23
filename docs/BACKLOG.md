@@ -45,6 +45,15 @@ No active release blockers.
 
 ## Post-release
 
+- [ ] `P2` Add sequential playback for recording collections. Collections
+      currently provide shortcuts for building and reviewing related videos,
+      but viewers must open each member separately. Acceptance checks: preserve
+      each member as an independent presentation; add an optional collection
+      experience that can continue to the next video in declared order; show
+      the current video and upcoming member clearly; preserve direct links,
+      guided checkpoints, and normal standalone playback; and cover completion,
+      manual next/previous navigation, refresh, and missing-member failures.
+
 - [ ] `P2` Add scripted input and synchronization to realtime terminal
       sessions. Realtime PTY capture already preserves live TUI output, but
       recording scripts cannot yet drive an interactive session or synchronize
@@ -130,14 +139,46 @@ No active release blockers.
       API over broad Docker-socket access; and leave the current local workflow
       and its dependency errors unchanged.
 
-- [ ] Decide the Windows support shape.
-      Native Windows cannot currently record terminal sessions through
-      asciinema, but OmegaFlow can still support artifact-processing workflows
-      such as watching existing recordings, updating audio, retiming casts, and
-      publishing surfaces. Acceptance checks: inventory recorder-free commands;
-      define support tiers for native Windows, WSL, and Linux/macOS; evaluate a
-      cross-platform recorder when practical; make supported commands explicit;
-      and document the recommended Windows path.
+- [ ] Define and implement direct native Windows support, starting with
+      browser-only recordings. Playwright makes browser capture useful on
+      Windows even though asciinema cannot provide native terminal capture.
+      Acceptance checks: run browser-only build, check, watch, narration, and
+      publishing workflows on a Windows CI runner; remove or isolate POSIX-only
+      assumptions in browser-only capture, lifecycle commands, diagnostics, and
+      packaging; publish a Windows wheel that does not claim a bundled terminal
+      recorder; fail terminal beats with a targeted capability message; define
+      explicit support tiers for native Windows, WSL, and Linux/macOS; and
+      evaluate a native terminal recorder separately from the browser milestone.
+
+- [ ] `P2` Explore experimental recording support for Electron applications
+      through Playwright. Electron provides a narrower semantic automation
+      target than arbitrary native desktop applications and may extend browser
+      beats to tools such as VS Code without defining a general desktop-control
+      abstraction. Acceptance checks: prototype both a small Electron fixture
+      and an isolated VS Code instance; validate launch, window lifecycle,
+      semantic renderer and webview actions, pointer capture, and deterministic
+      frames; compare direct Electron control with a DevTools-protocol
+      connection; document native-menu, OS-dialog, inspection-fuse, graphical
+      session, version, and platform limitations; keep the feature explicitly
+      experimental; and make a go/no-go recommendation before committing to a
+      stable recording contract.
+
+- [ ] Explore recording native desktop applications as a cross-platform
+      recording medium alongside terminal and browser beats. Desktop
+      applications generally need a real rendered desktop even when nobody is
+      watching it, so "headless" may mean an isolated unattended graphical
+      session rather than no display server. Acceptance checks: define a common
+      semantic action and capture contract for Windows, macOS, and Linux;
+      evaluate platform adapters such as Windows UI Automation, macOS
+      accessibility APIs, and Linux accessibility protocols without falling
+      back to pixel coordinates as the primary interface; compare local virtual
+      desktops, sandboxes, remote sessions, and disposable VMs as replaceable
+      session backends; capture pixels inside the controlled session rather than
+      depending on a remote-display stream; preserve semantic actions, pointer
+      state, and deterministic frame output in the existing presentation model;
+      document isolation, permissions, credentials, GPU, display-size, focus,
+      and session-lifecycle constraints; and recommend one narrow prototype
+      without making its platform or automation driver the product abstraction.
 
 - [ ] Export recordings to a standard video file.
       OmegaFlow should produce a shareable video artifact in addition to its
