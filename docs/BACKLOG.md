@@ -30,6 +30,24 @@ No active release blockers.
 
 ## Release backlog
 
+- [ ] `P1` Remove all news fragments and replace the complete repository history
+      with one reviewed release root before release. This intentionally includes
+      already pushed history and requires force-pushing the replacement.
+      Acceptance checks: preserve the approved final tree and generated media;
+      verify that no news fragments remain; review the resulting release root;
+      verify that the canonical remote branch contains only the replacement
+      history; and rerun the complete local CI suite.
+
+- [ ] `P1` Relicense OmegaFlow from MIT to MPL 2.0 before release.
+      Keep distributed modifications to OmegaFlow source files available under
+      the same license while allowing a separately implemented hosted service
+      to remain proprietary. Acceptance checks: verify that the project has the
+      rights needed to relicense all covered code; replace the repository
+      license and update package metadata, source notices, and documentation;
+      document that recipients who already obtained revisions under MIT retain
+      their MIT license rights; and verify package, documentation, and release
+      builds with the new license metadata.
+
 - [ ] `P1` Replace the placeholder website tutorial with a complete guided
       tutorial. The website currently links prominently to a tutorial, but its
       chapter pages are skeletal, the checked-in tutorial recordings are
@@ -42,6 +60,16 @@ No active release blockers.
       steps usable without video; verify navigation, production website build,
       and playback from the published site; and remove or relabel any tutorial
       entry point that still leads to incomplete content.
+
+- [ ] `P1` Curate the recordings directory before release. Separate durable
+      product examples and documentation recordings from implementation proofs
+      of concept, remove obsolete POC recordings, and associate each retained
+      documentation recording with the page or collection that owns it.
+      Acceptance checks: inventory every recording; classify it as retained,
+      reorganized, or removed; keep stable recording identifiers where they
+      remain user-facing; make collection and page ownership explicit; update
+      references and generated assets; and verify all retained collections,
+      website embeds, and recording builds after the cleanup.
 
 ## Post-release
 
@@ -95,6 +123,24 @@ No active release blockers.
       asset directory; use it in supported publish surfaces; provide a sensible
       default when no thumbnail is configured; and add tests or fixture checks
       that prove the selected frame is deterministic.
+
+- [ ] `P2` Consider a single-file format for interactive OmegaFlow videos.
+      Evaluate whether the semantic presentation bundle can be packaged as one
+      self-contained HTML file or archive without undermining incremental
+      loading, media seeking, browser caching, readable diffs, or the current
+      player model. Acceptance checks: compare the viable container options and
+      their size/runtime tradeoffs; decide whether single-file output should be
+      canonical, an optional export, or rejected; and record the decision
+      before implementing a new output format.
+
+- [ ] `P2` Consider publishing the OmegaFlow player separately from each
+      website. Evaluate a Docusaurus plugin, a centrally hosted player such as
+      `player.omegaflow.dev`, and CDN delivery through Cloudflare. Acceptance
+      checks: compare version pinning, cache invalidation, offline and
+      self-hosted use, privacy and security boundaries, availability failure
+      modes, and upgrade behavior; decide whether generated video bundles
+      should contain, reference, or optionally override the player runtime; and
+      record the selected distribution model before implementation.
 
 - [ ] `P1` Support publishing OmegaFlow videos to GitHub surfaces.
       Authors should have a GitHub-friendly way to share a generated recording,
