@@ -154,6 +154,7 @@ omegaflow_run_user_command() {
   local stderr_target="$3"
   local timing="${4:-presentation}"
   local encoded_environment="${5:-}"
+  local input_json="${6:-[]}"
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
   local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
   local status_result="${status_pipe}.result"
@@ -252,34 +253,84 @@ PY
   local pty_ready="${status_pipe}.pty-ready"
   local pty_opened="${status_pipe}.pty-opened"
   local secret_leak="${status_pipe}.secret-leak"
+  local input_error="${status_pipe}.input-error"
   if [[ "$timing" == "realtime" ]]; then
-    rm -f "$pty_ready" "$pty_opened" "$secret_leak"
+    rm -f "$pty_ready" "$pty_opened" "$secret_leak" "$input_error"
     "$OMEGAFLOW_PYTHON" - \
       "$pty_ready" "$pty_opened" "$stdout_target" \
-      "$encoded_environment" "$secret_leak" <<'PY' &
+      "$encoded_environment" "$secret_leak" "$input_json" "$input_error" <<'PY' &
 import base64
 import errno
 import fcntl
 import json
 import os
 import pty
+import re
+import select
 import struct
 import sys
 import termios
 import time
 from pathlib import Path
 
-ready_path, opened_path, log_path, encoded_environment, leak_path = sys.argv[1:]
+(
+    ready_path,
+    opened_path,
+    log_path,
+    encoded_environment,
+    leak_path,
+    input_json,
+    input_error_path,
+) = sys.argv[1:]
 environment = (
     json.loads(base64.b64decode(encoded_environment).decode())
     if encoded_environment
     else {}
 )
+actions = json.loads(input_json)
 secrets = tuple(
     value.encode()
     for value in environment.values()
     if isinstance(value, str) and value
 )
+key_bytes = {
+    "enter": b"\r",
+    "tab": b"\t",
+    "escape": b"\x1b",
+    "backspace": b"\x7f",
+    "delete": b"\x1b[3~",
+    "up": b"\x1b[A",
+    "down": b"\x1b[B",
+    "right": b"\x1b[C",
+    "left": b"\x1b[D",
+    "home": b"\x1b[H",
+    "end": b"\x1b[F",
+    "page_up": b"\x1b[5~",
+    "page_down": b"\x1b[6~",
+}
+ansi_pattern = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))"
+)
+
+
+def visible_terminal_text(raw):
+    text = []
+    raw_ends = []
+    cursor = 0
+    for match in ansi_pattern.finditer(raw):
+        for index in range(cursor, match.start()):
+            text.append(raw[index])
+            raw_ends.append(index + 1)
+        cursor = match.end()
+    for index in range(cursor, len(raw)):
+        text.append(raw[index])
+        raw_ends.append(index + 1)
+    if len(text) > 65536:
+        text = text[-65536:]
+        raw_ends = raw_ends[-65536:]
+    return "".join(text), raw_ends
+
+
 master_fd, slave_fd = pty.openpty()
 try:
     try:
@@ -299,7 +350,14 @@ try:
         time.sleep(0.01)
     os.close(slave_fd)
     slave_fd = -1
+    flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
     state = {"pending": b"", "leaked": False}
+    visible_raw = ""
+    action_index = 0
+    action_started = time.monotonic()
+    next_send = action_started
+    pending_text = ""
     with open(log_path, "ab", buffering=0) as log:
         def emit(data):
             if not data:
@@ -343,19 +401,94 @@ try:
                 break
             return bytes(output)
 
-        while True:
-            try:
-                chunk = os.read(master_fd, 4096)
-            except OSError as exc:
-                if exc.errno == errno.EIO:
-                    break
-                raise
-            if not chunk:
-                break
-            emit(redact(chunk))
+        command_closed = False
+        while not command_closed:
+            readable, _, _ = select.select([master_fd], [], [], 0.01)
+            if readable:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        command_closed = True
+                        chunk = b""
+                    else:
+                        raise
+                if not chunk:
+                    command_closed = True
+                else:
+                    emit(redact(chunk))
+                    visible_raw = (
+                        visible_raw + chunk.decode("utf-8", errors="replace")
+                    )[-131072:]
+
+            now = time.monotonic()
+            if (
+                command_closed
+                or action_index >= len(actions)
+                or now < next_send
+            ):
+                continue
+            action = actions[action_index]
+            if action.get("wait_for") is not None:
+                timeout = action.get("timeout")
+                timeout = 10.0 if timeout is None else float(timeout)
+                visible_text, raw_ends = visible_terminal_text(visible_raw)
+                match_at = visible_text.find(action["wait_for"])
+                if match_at >= 0:
+                    match_end = match_at + len(action["wait_for"])
+                    visible_raw = visible_raw[raw_ends[match_end - 1] :]
+                    action_index += 1
+                    action_started = now
+                elif now - action_started >= timeout:
+                    raise TimeoutError(
+                        f"terminal input step {action_index + 1} timed out "
+                        "waiting for terminal output"
+                    )
+            elif action.get("pause") is not None:
+                next_send = now + float(action["pause"])
+                action_index += 1
+                action_started = next_send
+            elif action.get("text") is not None:
+                if not pending_text:
+                    visible_raw = ""
+                    pending_text = action["text"]
+                char, pending_text = pending_text[0], pending_text[1:]
+                os.write(
+                    master_fd,
+                    b"\r" if char == "\n" else char.encode("utf-8"),
+                )
+                interval = action.get("interval")
+                next_send = now + (
+                    0.035 if interval is None else float(interval)
+                )
+                if not pending_text:
+                    action_index += 1
+                    action_started = now
+            elif action.get("key") is not None:
+                visible_raw = ""
+                os.write(master_fd, key_bytes[action["key"]])
+                action_index += 1
+                action_started = now
+            elif action.get("control") is not None:
+                visible_raw = ""
+                os.write(
+                    master_fd,
+                    bytes([ord(action["control"].lower()) & 0x1F]),
+                )
+                action_index += 1
+                action_started = now
         emit(redact(b"", final=True))
+    if action_index < len(actions):
+        raise RuntimeError(
+            f"terminal command exited before input step {action_index + 1} completed"
+        )
     if state["leaked"]:
         Path(leak_path).write_text("redacted\n", encoding="utf-8")
+except Exception as exc:
+    if "state" in locals() and state["leaked"]:
+        Path(leak_path).write_text("redacted\n", encoding="utf-8")
+    Path(input_error_path).write_text(f"{exc}\n", encoding="utf-8")
+    raise
 finally:
     if slave_fd >= 0:
         os.close(slave_fd)
@@ -373,7 +506,9 @@ PY
       wait "$relay_pid" 2>/dev/null || true
       kill "$status_monitor_pid" 2>/dev/null || true
       wait "$status_monitor_pid" 2>/dev/null || true
-      rm -f "$status_pipe" "$status_result" "$pty_ready" "$pty_opened"
+      rm -f \
+        "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" \
+        "$input_error"
       return 125
     fi
     local pty_slave
@@ -399,8 +534,14 @@ PY
       >>"$stderr_target"
     status=125
   fi
+  if [[ -f "$input_error" ]]; then
+    printf '%s' 'terminal input failed: ' >>"$stderr_target"
+    cat "$input_error" >>"$stderr_target"
+    status=125
+  fi
   rm -f \
-    "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" "$secret_leak"
+    "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" "$secret_leak" \
+    "$input_error"
   return "$status"
 }
 
@@ -592,6 +733,7 @@ omegaflow_run_step() {
   local post_enter_pause="${10}"
   local post_command_pause="${11}"
   local encoded_environment="${12}"
+  local input_json="${13}"
   local stdout_start
   local stderr_start
   local status
@@ -607,7 +749,7 @@ omegaflow_run_step() {
   if [[ "$timing" == "realtime" && "$output_mode" == "real" ]]; then
     omegaflow_run_user_command \
       "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
-      realtime "$encoded_environment"
+      realtime "$encoded_environment" "$input_json"
     status=$?
     output_streamed=true
   else
@@ -947,6 +1089,13 @@ class TerminalControlSession:
                 )
             except OSError:
                 stderr_text = ""
+            input_errors = re.findall(
+                r"^terminal input failed: (.+)$",
+                stderr_text,
+                flags=re.MULTILINE,
+            )
+            if input_errors:
+                error = input_errors[-1]
             if "delegated secret appeared in terminal command output" in stderr_text:
                 error = "delegated secret appeared in terminal command output"
             raise TerminalCaptureError(
@@ -1478,6 +1627,14 @@ def _validated_step_script(
         if scoped_environment
         else ""
     )
+    input_steps = step.get("input", [])
+    if not isinstance(input_steps, (list, tuple)):
+        raise TerminalCaptureError("terminal step input must be a list")
+    if input_steps and timing != "realtime":
+        raise TerminalCaptureError("terminal step input requires realtime timing")
+    if input_steps and output["mode"] != "real":
+        raise TerminalCaptureError("terminal step input requires output: real")
+    input_json = json.dumps(_thaw(input_steps), separators=(",", ":"))
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
@@ -1490,6 +1647,7 @@ def _validated_step_script(
             timing,
             *pauses,
             encoded_environment,
+            input_json,
         )
     )
 

@@ -222,6 +222,11 @@
         box-shadow: 0 0 0 0.08em rgba(255, 194, 71, 0.5);
       }
 
+      .terminal-cursor {
+        color: var(--bg);
+        background: var(--cue);
+      }
+
       .stage {
         position: relative;
         min-height: 0;
@@ -1233,9 +1238,14 @@
       const activeTerminalHighlights = new Map();
       let cursorRow = 0;
       let cursorColumn = 0;
+      let terminalCursorVisible = true;
       let savedCursor = {row: 0, column: 0};
+      let savedTerminalCharacterState = null;
       let primaryTerminalState = null;
       let terminalPendingInput = '';
+      let terminalCharacterSets = ['ascii', 'ascii', 'ascii', 'ascii'];
+      let activeTerminalCharacterSet = 0;
+      let singleShiftTerminalCharacterSet = null;
       let audio = null;
       let audioReady = false;
       let introActive = false;
@@ -1311,6 +1321,39 @@
         96: 'ansi-bright-cyan',
         97: 'ansi-bright-white',
       };
+      const decSpecialGraphics = new Map(Object.entries({
+        '`': '◆',
+        a: '▒',
+        b: '␉',
+        c: '␌',
+        d: '␍',
+        e: '␊',
+        f: '°',
+        g: '±',
+        h: '␤',
+        i: '␋',
+        j: '┘',
+        k: '┐',
+        l: '┌',
+        m: '└',
+        n: '┼',
+        o: '⎺',
+        p: '⎻',
+        q: '─',
+        r: '⎼',
+        s: '⎽',
+        t: '├',
+        u: '┤',
+        v: '┴',
+        w: '┬',
+        x: '│',
+        y: '≤',
+        z: '≥',
+        '{': 'π',
+        '|': '≠',
+        '}': '£',
+        '~': '·',
+      }));
 
       function audioTimeline() {
         return CastPlayerCore.createCastAudioTimeline(audioPlaybackSegments);
@@ -1487,9 +1530,14 @@
         activeTerminalHighlights.clear();
         cursorRow = 0;
         cursorColumn = 0;
+        terminalCursorVisible = true;
         savedCursor = {row: 0, column: 0};
+        savedTerminalCharacterState = null;
         primaryTerminalState = null;
         terminalPendingInput = '';
+        terminalCharacterSets = ['ascii', 'ascii', 'ascii', 'ascii'];
+        activeTerminalCharacterSet = 0;
+        singleShiftTerminalCharacterSet = null;
         activeClass = '';
         activeStyle = '';
       }
@@ -1503,8 +1551,14 @@
 
       function putTerminalChar(char) {
         const line = currentTerminalLine();
+        const characterSet = singleShiftTerminalCharacterSet ??
+          activeTerminalCharacterSet;
+        singleShiftTerminalCharacterSet = null;
+        const renderedChar = terminalCharacterSets[characterSet] === 'dec-special'
+          ? decSpecialGraphics.get(char) || char
+          : char;
         line[cursorColumn] = {
-          char,
+          char: renderedChar,
           className: activeClass,
           style: activeStyle,
         };
@@ -1567,13 +1621,21 @@
             activeStyle,
             cursorColumn,
             cursorRow,
+            activeTerminalCharacterSet,
+            characterSets: [...terminalCharacterSets],
+            singleShiftTerminalCharacterSet,
             lines: terminalLines,
             savedCursor,
+            savedTerminalCharacterState,
           };
           terminalLines = [[]];
           cursorRow = 0;
           cursorColumn = 0;
           savedCursor = {row: 0, column: 0};
+          savedTerminalCharacterState = null;
+          terminalCharacterSets = ['ascii', 'ascii', 'ascii', 'ascii'];
+          activeTerminalCharacterSet = 0;
+          singleShiftTerminalCharacterSet = null;
           activeClass = '';
           activeStyle = '';
           return;
@@ -1586,10 +1648,30 @@
           activeStyle,
           cursorColumn,
           cursorRow,
+          activeTerminalCharacterSet,
+          characterSets: terminalCharacterSets,
+          singleShiftTerminalCharacterSet,
           lines: terminalLines,
           savedCursor,
+          savedTerminalCharacterState,
         } = primaryTerminalState);
         primaryTerminalState = null;
+      }
+
+      function designateTerminalCharacterSet(intermediate, finalByte) {
+        const slot = {
+          '(': 0,
+          ')': 1,
+          '*': 2,
+          '+': 3,
+          '-': 1,
+          '.': 2,
+          '/': 3,
+        }[intermediate];
+        if (slot === undefined) {
+          return;
+        }
+        terminalCharacterSets[slot] = finalByte === '0' ? 'dec-special' : 'ascii';
       }
 
       function applyTerminalCsi(paramsText, command) {
@@ -1656,11 +1738,13 @@
           savedCursor = {row: cursorRow, column: cursorColumn};
         } else if (command === 'u') {
           setTerminalCursor(savedCursor.row, savedCursor.column);
-        } else if (
-          privateMode && (command === 'h' || command === 'l') &&
-          params.includes('1049')
-        ) {
-          switchAlternateTerminal(command === 'h');
+        } else if (privateMode && (command === 'h' || command === 'l')) {
+          if (params.includes('1049')) {
+            switchAlternateTerminal(command === 'h');
+          }
+          if (params.includes('25')) {
+            terminalCursorVisible = command === 'h';
+          }
         }
       }
 
@@ -1704,17 +1788,31 @@
       function renderTerminalLine(line, lineIndex, highlightColumns) {
         let rendered = '';
         let openRenderKey = '';
+        const renderWidth = (
+          terminalCursorVisible && lineIndex === cursorRow
+            ? Math.max(line.length, cursorColumn + 1)
+            : line.length
+        );
         const closeRenderSpan = () => {
           if (openRenderKey) {
             rendered += '</span>';
             openRenderKey = '';
           }
         };
-        for (let column = 0; column < line.length; column += 1) {
+        for (let column = 0; column < renderWidth; column += 1) {
           const cell = line[column];
           const baseClassName = cell?.className || '';
           const highlighted = highlightColumns.get(lineIndex)?.has(column);
-          const className = [baseClassName, highlighted ? 'terminal-text-highlight' : '']
+          const cursor = (
+            terminalCursorVisible &&
+            lineIndex === cursorRow &&
+            column === cursorColumn
+          );
+          const className = [
+            baseClassName,
+            highlighted ? 'terminal-text-highlight' : '',
+            cursor ? 'terminal-cursor' : '',
+          ]
             .filter(Boolean)
             .join(' ');
           const style = cell?.style || '';
@@ -1803,6 +1901,24 @@
               terminalPendingInput = remaining;
               break;
             }
+            const characterSetMatch = remaining.match(
+              /^\u001b([()*+\-./])([ -~])/,
+            );
+            if (characterSetMatch) {
+              designateTerminalCharacterSet(
+                characterSetMatch[1],
+                characterSetMatch[2],
+              );
+              index += characterSetMatch[0].length - 1;
+              continue;
+            }
+            if (
+              remaining.length < 3 &&
+              /^\u001b[()*+\-./]?$/.test(remaining)
+            ) {
+              terminalPendingInput = remaining;
+              break;
+            }
             if (remaining.startsWith('\u001b]')) {
               const bellEnd = input.indexOf('\u0007', index);
               const stringEnd = input.indexOf('\u001b\\', index + 2);
@@ -1818,16 +1934,59 @@
               terminalPendingInput = remaining;
               break;
             }
+            if (remaining[1] === '=' || remaining[1] === '>') {
+              index += 1;
+              continue;
+            }
+            if (remaining[1] === 'N' || remaining[1] === 'O') {
+              singleShiftTerminalCharacterSet = remaining[1] === 'N' ? 2 : 3;
+              index += 1;
+              continue;
+            }
             if (remaining[1] === '7') {
               savedCursor = {row: cursorRow, column: cursorColumn};
+              savedTerminalCharacterState = {
+                activeTerminalCharacterSet,
+                characterSets: [...terminalCharacterSets],
+                singleShiftTerminalCharacterSet,
+              };
               index += 1;
               continue;
             }
             if (remaining[1] === '8') {
               setTerminalCursor(savedCursor.row, savedCursor.column);
+              if (savedTerminalCharacterState !== null) {
+                ({
+                  activeTerminalCharacterSet,
+                  characterSets: terminalCharacterSets,
+                  singleShiftTerminalCharacterSet,
+                } = savedTerminalCharacterState);
+                terminalCharacterSets = [...terminalCharacterSets];
+              }
               index += 1;
               continue;
             }
+            const lockingShift = {
+              n: 2,
+              o: 3,
+            }[remaining[1]];
+            if (lockingShift !== undefined) {
+              activeTerminalCharacterSet = lockingShift;
+              index += 1;
+              continue;
+            }
+            if (['|', '}', '~'].includes(remaining[1])) {
+              index += 1;
+              continue;
+            }
+          }
+          if (char === '\u000e') {
+            activeTerminalCharacterSet = 1;
+            continue;
+          }
+          if (char === '\u000f') {
+            activeTerminalCharacterSet = 0;
+            continue;
           }
           if (char === '\r') {
             cursorColumn = 0;

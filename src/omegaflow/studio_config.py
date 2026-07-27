@@ -520,6 +520,17 @@ class RecordingInvocationConfig:
 
 
 @dataclass
+class TerminalInputStepConfig:
+    wait_for: str | None = None
+    text: str | None = None
+    key: str | None = None
+    control: str | None = None
+    pause: float | None = None
+    timeout: float | None = None
+    interval: float | None = None
+
+
+@dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
     browser_handoff: bool = False
@@ -530,6 +541,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
     post_command_pause: float | None = None
+    input: list[TerminalInputStepConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -876,6 +888,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingExpectationConfig,
     RecordingRequirementsConfig,
     RecordingInvocationConfig,
+    TerminalInputStepConfig,
     RecordingCommandConfig,
     RecordingStepConfig,
     BrowserUrlMatcherConfig,

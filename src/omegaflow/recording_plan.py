@@ -65,6 +65,24 @@ CHECK_KINDS = ("url", "visible", "hidden", "text", "value", "count", "response")
 URL_MATCH_KINDS = ("equals", "contains", "matches")
 ACTION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 ANCHOR_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_-]*@\Z")
+TERMINAL_INPUT_OPERATIONS = ("wait_for", "text", "key", "control", "pause")
+TERMINAL_INPUT_KEYS = frozenset(
+    {
+        "enter",
+        "tab",
+        "escape",
+        "backspace",
+        "delete",
+        "up",
+        "down",
+        "left",
+        "right",
+        "home",
+        "end",
+        "page_up",
+        "page_down",
+    }
+)
 TERMINAL_STEP_FIELDS = {item.name for item in fields(RecordingStepConfig)}
 BROWSER_ACTION_FIELDS = {item.name for item in fields(BrowserActionConfig)}
 BROWSER_CHECK_FIELDS = {item.name for item in fields(BrowserCheckConfig)}
@@ -200,6 +218,58 @@ def _optional_non_negative_number(value: object, *, field: str) -> None:
         raise RecordingPlanError(f"{field} must be a non-negative number")
 
 
+def validate_terminal_input_step(value: object, *, field: str) -> None:
+    mapping = _mapping(value, field=field)
+    operations = [
+        name for name in TERMINAL_INPUT_OPERATIONS if mapping.get(name) is not None
+    ]
+    if len(operations) != 1:
+        raise RecordingPlanError(f"{field} must define exactly one operation")
+    operation = operations[0]
+    allowed = {operation}
+    if operation == "wait_for":
+        allowed.add("timeout")
+    elif operation == "text":
+        allowed.add("interval")
+    unexpected = sorted(set(mapping) - allowed)
+    if unexpected:
+        name = unexpected[0]
+        if name == "timeout":
+            raise RecordingPlanError(
+                f"{field}.timeout is only valid with wait_for"
+            )
+        if name == "interval":
+            raise RecordingPlanError(
+                f"{field}.interval is only valid with text"
+            )
+        raise RecordingPlanError(
+            f"{field} has fields invalid for {operation}: {', '.join(unexpected)}"
+        )
+    if operation in {"wait_for", "text"} and (
+        not isinstance(mapping[operation], str) or not mapping[operation]
+    ):
+        raise RecordingPlanError(
+            f"{field}.{operation} must be a non-empty string"
+        )
+    if operation == "key" and mapping[operation] not in TERMINAL_INPUT_KEYS:
+        raise RecordingPlanError(f"{field}.key is an unsupported key")
+    if operation == "control" and (
+        not isinstance(mapping[operation], str)
+        or re.fullmatch(r"[A-Za-z]", mapping[operation]) is None
+    ):
+        raise RecordingPlanError(
+            f"{field}.control must be a single ASCII letter"
+        )
+    if operation == "pause":
+        _optional_non_negative_number(mapping[operation], field=f"{field}.pause")
+    if "timeout" in mapping:
+        _optional_non_negative_number(mapping["timeout"], field=f"{field}.timeout")
+    if "interval" in mapping:
+        _optional_non_negative_number(
+            mapping["interval"], field=f"{field}.interval"
+        )
+
+
 def validate_terminal_command(value: object, *, field: str) -> None:
     mapping = _mapping(value, field=field)
     has_run = isinstance(mapping.get("run"), str) and bool(mapping["run"])
@@ -247,6 +317,22 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     if mapping.get("timing", "presentation") not in {"presentation", "realtime"}:
         raise RecordingPlanError(
             f"{field}.timing must be presentation or realtime"
+        )
+    input_steps = mapping.get("input", [])
+    if not isinstance(input_steps, list):
+        raise RecordingPlanError(f"{field}.input must be a list")
+    if input_steps and mapping.get("timing", "presentation") != "realtime":
+        raise RecordingPlanError(f"{field}.input requires timing: realtime")
+    if (
+        input_steps
+        and mapping.get("output") is not None
+        and mapping.get("output") != "real"
+    ):
+        raise RecordingPlanError(f"{field}.input requires output: real")
+    for index, input_step in enumerate(input_steps):
+        validate_terminal_input_step(
+            input_step,
+            field=f"{field}.input.{index}",
         )
     for name in (
         "pre_command_pause",

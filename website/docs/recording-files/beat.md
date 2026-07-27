@@ -184,7 +184,7 @@ Step fields:
 | `commands` | list | Command entries for one action. |
 
 Command entries also accept `id`, `show_prompt_after`, `timing`, `with_env`,
-and pre/post command pause fields.
+`input`, and pre/post command pause fields.
 
 `with_env` is a narrow exception for trusted nested OmegaFlow operations that
 need an OmegaFlow service credential:
@@ -208,6 +208,48 @@ Command output is buffered until the command finishes by default. Set
 output timing and terminal-state updates. Use realtime timing for progress bars
 and terminal interfaces that redraw in place. Output replacement and suppression
 remain non-streaming.
+
+#### Drive a realtime terminal interface
+
+Add ordered `input` steps to a realtime command when OmegaFlow needs to operate
+an interactive terminal program:
+
+```yaml
+actions:
+- commands:
+  - run: nano artwork.svg
+    timing: realtime
+    input:
+    - wait_for: Write Out
+      timeout: 5
+    - key: down
+    - control: k
+    - key: up
+    - key: end
+    - key: enter
+    - text: Updated title
+      interval: 0.02
+    - control: o
+    - wait_for: File Name to Write
+      timeout: 5
+    - key: enter
+    - control: x
+```
+
+Each input step defines exactly one operation:
+
+| Operation | Behavior |
+| --- | --- |
+| `wait_for` | Wait for a new occurrence of the text in captured terminal output. An optional `timeout` is measured in seconds and defaults to 10. |
+| `text` | Type text into the program. Newlines submit Enter. An optional `interval` controls seconds between characters and defaults to 0.035. |
+| `key` | Press `enter`, `tab`, `escape`, `backspace`, `delete`, an arrow key, `home`, `end`, `page_up`, or `page_down`. |
+| `control` | Press Control with one ASCII letter, such as `x`. |
+| `pause` | Wait for the specified number of seconds before the next input step. |
+
+Input is supported only on `timing: realtime` command entries with real output.
+OmegaFlow waits for the program to exit after all input has been sent. A
+readiness timeout or a program that exits before its remaining input steps
+fails the recording and identifies the unfinished step.
 
 #### Hand a browser URL to the next beat
 
@@ -551,6 +593,17 @@ class RecordingInvocationConfig:
 
 
 @dataclass
+class TerminalInputStepConfig:
+    wait_for: str | None = None
+    text: str | None = None
+    key: str | None = None
+    control: str | None = None
+    pause: float | None = None
+    timeout: float | None = None
+    interval: float | None = None
+
+
+@dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
     browser_handoff: bool = False
@@ -561,6 +614,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
     post_command_pause: float | None = None
+    input: list[TerminalInputStepConfig] = field(default_factory=list)
 
 
 @dataclass

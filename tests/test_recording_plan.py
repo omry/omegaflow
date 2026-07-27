@@ -138,6 +138,71 @@ def test_terminal_command_rejects_non_allowlisted_scoped_environment() -> None:
         normalize_recording_plan(spec)
 
 
+def test_realtime_terminal_command_accepts_typed_input_steps() -> None:
+    spec = terminal_spec()
+    command = spec["beats"][0]["actions"][0]["commands"][0]
+    command["timing"] = "realtime"
+    command["input"] = [
+        {"wait_for": "Ready", "timeout": 3},
+        {"text": "updated", "interval": 0.01},
+        {"key": "enter"},
+        {"control": "x"},
+        {"pause": 0.1},
+    ]
+
+    plan = normalize_recording_plan(spec)
+
+    normalized = plan.beats[0].actions[0].config["commands"][0]
+    assert normalized["input"][0]["wait_for"] == "Ready"
+    assert normalized["input"][1]["interval"] == 0.01
+    assert normalized["input"][2]["key"] == "enter"
+
+
+@pytest.mark.parametrize(
+    ("input_step", "message"),
+    [
+        ({"text": "a", "key": "enter"}, "exactly one operation"),
+        ({"key": "f13"}, "unsupported key"),
+        ({"control": "xx"}, "single ASCII letter"),
+        ({"pause": -1}, "non-negative number"),
+        ({"wait_for": ""}, "non-empty string"),
+        ({"text": "value", "timeout": 1}, "timeout is only valid with wait_for"),
+        ({"key": "enter", "interval": 0.1}, "interval is only valid with text"),
+    ],
+)
+def test_realtime_terminal_command_rejects_invalid_input_steps(
+    input_step: dict[str, object], message: str
+) -> None:
+    spec = terminal_spec()
+    command = spec["beats"][0]["actions"][0]["commands"][0]
+    command["timing"] = "realtime"
+    command["input"] = [input_step]
+
+    with pytest.raises(RecordingPlanError, match=message):
+        normalize_recording_plan(spec)
+
+
+def test_terminal_command_input_requires_realtime_timing() -> None:
+    spec = terminal_spec()
+    command = spec["beats"][0]["actions"][0]["commands"][0]
+    command["input"] = [{"key": "enter"}]
+
+    with pytest.raises(RecordingPlanError, match="input requires timing: realtime"):
+        normalize_recording_plan(spec)
+
+
+@pytest.mark.parametrize("output", ["suppress", {"replace": "hidden"}])
+def test_terminal_command_input_requires_real_output(output: object) -> None:
+    spec = terminal_spec()
+    command = spec["beats"][0]["actions"][0]["commands"][0]
+    command["timing"] = "realtime"
+    command["output"] = output
+    command["input"] = [{"key": "enter"}]
+
+    with pytest.raises(RecordingPlanError, match="input requires output: real"):
+        normalize_recording_plan(spec)
+
+
 def test_terminal_step_does_not_silently_drop_scoped_environment() -> None:
     spec = {
         "id": "scoped-environment",

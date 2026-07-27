@@ -1215,6 +1215,238 @@ def test_terminal_realtime_command_receives_a_pty(
     assert any("True True True" in str(event[2]) for event in events)
 
 
+def test_terminal_realtime_command_drives_typed_input_after_screen_readiness(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    program = "\n".join(
+        [
+            "import os",
+            "import sys",
+            "import tty",
+            "tty.setraw(sys.stdin.fileno())",
+            "print('Editor ready', flush=True)",
+            "value = b''",
+            "while len(value) < 7:",
+            "    value += os.read(sys.stdin.fileno(), 7 - len(value))",
+            "print('Received: ' + value.hex(), flush=True)",
+        ]
+    )
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-input",
+            "beats": [
+                {
+                    "id": "edit",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f"{shlex.quote(sys.executable)} -c "
+                                        f"{shlex.quote(program)}"
+                                    ),
+                                    "timing": "realtime",
+                                    "input": [
+                                        {"wait_for": "Editor ready", "timeout": 2},
+                                        {"pause": 0},
+                                        {"text": "ab\n", "interval": 0},
+                                        {"key": "left"},
+                                        {"control": "x"},
+                                    ],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    cast = (tmp_path / "run/capture/terminal-beats/edit.cast").read_text(
+        encoding="utf-8"
+    )
+    assert "Editor ready" in _cast_output(cast)
+    assert "Received: 61620d1b5b4418" in _cast_output(cast)
+
+
+def test_terminal_realtime_input_timeout_is_bounded_and_cleans_up(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-input-timeout",
+            "beats": [
+                {
+                    "id": "edit",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f"{shlex.quote(sys.executable)} -c "
+                                        + shlex.quote(
+                                            'print("Different text", flush=True); '
+                                            "input()"
+                                        )
+                                    ),
+                                    "timing": "realtime",
+                                    "input": [
+                                        {"wait_for": "Never appears", "timeout": 0.1}
+                                    ],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=3.0,
+        )
+    )
+
+    started = time.monotonic()
+    with pytest.raises(CaptureFailed) as caught:
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert time.monotonic() - started < 3
+    assert caught.value.primary is not None
+    assert "terminal input step 1 timed out waiting for terminal output" in str(
+        caught.value.primary.error
+    )
+    assert not (tmp_path / "run/capture/.terminal-control").exists()
+
+
+def test_terminal_realtime_wait_requires_fresh_output_for_repeated_text(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    program = "\n".join(
+        [
+            "import os",
+            "import sys",
+            "import tty",
+            "tty.setraw(sys.stdin.fileno())",
+            "print('Prompt', flush=True)",
+            "os.read(sys.stdin.fileno(), 1)",
+            "os.read(sys.stdin.fileno(), 1)",
+        ]
+    )
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-input-repeated-readiness",
+            "beats": [
+                {
+                    "id": "edit",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f"{shlex.quote(sys.executable)} -c "
+                                        f"{shlex.quote(program)}"
+                                    ),
+                                    "timing": "realtime",
+                                    "input": [
+                                        {"wait_for": "Prompt", "timeout": 2},
+                                        {"text": "a", "interval": 0},
+                                        {"wait_for": "Prompt", "timeout": 0.1},
+                                        {"text": "b", "interval": 0},
+                                    ],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=3.0,
+        )
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert caught.value.primary is not None
+    assert "terminal input step 3 timed out waiting for terminal output" in str(
+        caught.value.primary.error
+    )
+
+
+def test_terminal_realtime_input_reports_command_exit_before_remaining_step(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-input-early-exit",
+            "beats": [
+                {
+                    "id": "edit",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": "printf 'Done\\n'",
+                                    "timing": "realtime",
+                                    "input": [{"wait_for": "Never appears"}],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=3.0,
+        )
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert caught.value.primary is not None
+    assert "terminal command exited before input step 1 completed" in str(
+        caught.value.primary.error
+    )
+
+
 def test_terminal_realtime_captures_interactive_build_progress(
     tmp_path: Path,
 ) -> None:

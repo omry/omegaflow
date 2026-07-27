@@ -137,6 +137,65 @@ def write_browser_player_fixture(root: Path) -> None:
     )
 
 
+def write_terminal_player_fixture(root: Path) -> None:
+    shutil.copy2(
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html",
+        root / "cast-player.html",
+    )
+    shutil.copy2(
+        REPO_ROOT / "src/omegaflow/player/static/cast-player-core.js",
+        root / "cast-player-core.js",
+    )
+    (root / "beats").mkdir()
+    payload_path = root / "beats/nano.cast"
+    shutil.copy2(
+        REPO_ROOT / "tests/fixtures/nano-character-sets.cast",
+        payload_path,
+    )
+    manifest = {
+        "manifest_version": 1,
+        "signatures": "signatures.json",
+        "recording": {
+            "id": "nano-player",
+            "title": "Nano terminal playback",
+            "duration_ms": 1100,
+        },
+        "renderers": {"terminal": {"payload_version": 1}},
+        "presentation": {"browser": None, "guided": False},
+        "assets": {},
+        "beats": [
+            {
+                "id": "nano",
+                "heading": "Edit artwork",
+                "renderer": "terminal",
+                "offset_ms": 0,
+                "duration_ms": 1100,
+                "payload": "beats/nano.cast",
+                "guide": None,
+                "transition_in": None,
+            }
+        ],
+    }
+    (root / "recording.presentation.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    payload = payload_path.read_bytes()
+    (root / "signatures.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "files": {
+                    "beats/nano.cast": {
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "bytes": len(payload),
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_browser_player_fixture_has_valid_payload_signature(tmp_path: Path) -> None:
     write_browser_player_fixture(tmp_path)
 
@@ -149,6 +208,47 @@ def test_browser_player_fixture_has_valid_payload_signature(tmp_path: Path) -> N
         "sha256": hashlib.sha256(payload).hexdigest(),
         "bytes": len(payload),
     }
+
+
+def test_generated_player_replays_nano_without_control_sequence_artifacts(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_terminal_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 720})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#progress").evaluate(
+            "element => { "
+            "element.dispatchEvent(new Event('pointerdown', {bubbles: true})); "
+            "element.value = '500'; "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); }"
+        )
+        page.wait_for_function(
+            "document.querySelector('#terminal').textContent.includes('GNU nano 7.2')"
+        )
+
+        terminal_text = page.locator("#terminal").text_content()
+        assert terminal_text is not None
+        assert "Help" in terminal_text
+        assert "Write Out" in terminal_text
+        assert "Read File" in terminal_text
+        assert "\x1b" not in terminal_text
+        assert "(B" not in terminal_text
+        assert ")0" not in terminal_text
+
+        page.locator("#progress").evaluate(
+            "element => { element.value = '1090'; "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); }"
+        )
+        page.wait_for_function("document.querySelector('#terminal').textContent === ''")
+        browser.close()
 
 
 @pytest.mark.parametrize("viewport", [(1280, 800), (390, 844)])
@@ -579,7 +679,7 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
         page.locator("#guide:not([hidden])").wait_for(timeout=3000)
 
         assert page.locator("#terminal").is_visible()
-        assert page.locator("#terminal").text_content() == (
+        assert page.locator("#terminal").text_content().rstrip() == (
             "outgoing terminal beat"
         )
         assert page.locator("#browser-stage").is_hidden()

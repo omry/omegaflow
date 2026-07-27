@@ -612,7 +612,11 @@ appendChunk('primary\\nsecond');
 appendChunk('\\u001b[1F\\u001b[3CX\\r\\u001b[2Kreplacement');
 `, context);
 const edited = element('terminal').innerHTML;
-if (!edited.startsWith('replacement\nsecond')) {
+const editedText = edited.replace(
+  /<span class="terminal-cursor">([^<]*)<\/span>/g,
+  '$1',
+);
+if (!editedText.startsWith('replacement \nsecond')) {
   console.error(JSON.stringify({phase: 'edited', edited}));
   process.exit(1);
 }
@@ -620,7 +624,11 @@ vm.runInContext(`
 appendChunk('\\u001b[?1049hfull-screen\\u001b[2;4H!');
 `, context);
 const alternate = element('terminal').innerHTML;
-if (!alternate.startsWith('full-screen') || !alternate.includes('   !')) {
+const alternateText = alternate.replace(
+  /<span class="terminal-cursor">([^<]*)<\/span>/g,
+  '$1',
+);
+if (!alternateText.startsWith('full-screen') || !alternateText.includes('   !')) {
   console.error(JSON.stringify({phase: 'alternate', alternate}));
   process.exit(1);
 }
@@ -628,6 +636,131 @@ vm.runInContext(`appendChunk('\\u001b[?1049l');`, context);
 const restored = element('terminal').innerHTML;
 if (restored !== edited) {
   console.error(JSON.stringify({phase: 'restored', edited, restored}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_renders_and_honors_cursor_visibility() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('ab');
+`, context);
+const visibleAtEnd = element('terminal').innerHTML;
+if (visibleAtEnd !== 'ab<span class="terminal-cursor"> </span>') {
+  console.error(JSON.stringify({phase: 'visible-at-end', visibleAtEnd}));
+  process.exit(1);
+}
+vm.runInContext(`appendChunk('\\u001b[?25l');`, context);
+const hidden = element('terminal').innerHTML;
+if (hidden !== 'ab') {
+  console.error(JSON.stringify({phase: 'hidden', hidden}));
+  process.exit(1);
+}
+vm.runInContext(`appendChunk('\\u001b[?25h\\u001b[1D');`, context);
+const visibleOverCharacter = element('terminal').innerHTML;
+if (visibleOverCharacter !== 'a<span class="terminal-cursor">b</span>') {
+  console.error(JSON.stringify({
+    phase: 'visible-over-character',
+    visibleOverCharacter,
+  }));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_replays_nano_character_set_sequences_without_artifacts() -> None:
+    result = run_player_script(
+        r"""
+const castLines = fs
+  .readFileSync('tests/fixtures/nano-character-sets.cast', 'utf8')
+  .trim()
+  .split(/\r?\n/);
+context.nanoEvents = castLines.slice(1).map((line) => JSON.parse(line));
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk(nanoEvents[0][2]);
+`, context);
+const rendered = element('terminal').innerHTML;
+const renderedText = rendered.replace(
+  /<span class="terminal-cursor">([^<]*)<\/span>/g,
+  '$1',
+);
+if (
+  !renderedText.includes('GNU nano 7.2') ||
+  !renderedText.includes('Help') ||
+  !renderedText.includes('Write Out') ||
+  !renderedText.includes('Read File') ||
+  renderedText.includes('\\u001b') ||
+  renderedText.includes('(B') ||
+  renderedText.includes(')0') ||
+  renderedText.includes('=')
+) {
+  console.error(JSON.stringify({rendered}));
+  process.exit(1);
+}
+vm.runInContext(`appendChunk(nanoEvents[1][2]);`, context);
+const renderedAfterExit = element('terminal').innerHTML;
+if (renderedAfterExit !== '') {
+  console.error(JSON.stringify({renderedAfterExit}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_applies_dec_graphics_across_split_designations() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('\\u001b(');
+appendChunk('Bplain ');
+appendChunk('\\u001b)0\\u000eq');
+appendChunk('q\\u000f \\u001b(0lqk\\u001b(B text');
+appendChunk(' \\u001b*0\\u001bNqA \\u001bnq\\u000fZ \\u001b|done');
+`, context);
+const rendered = element('terminal').innerHTML;
+const expected = 'plain ── ┌─┐ text ─A ─Z done';
+const renderedText = rendered.replace(
+  /<span class="terminal-cursor">([^<]*)<\/span>/g,
+  '$1',
+);
+if (renderedText !== `${expected} `) {
+  console.error(JSON.stringify({expected, rendered}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_tui_restores_character_set_state_with_dec_saved_cursor() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('A\\u001b(B\\u001b7\\u001b(0l\\u001b8q');
+`, context);
+const rendered = element('terminal').innerHTML;
+const expected = 'Aq';
+const renderedText = rendered.replace(
+  /<span class="terminal-cursor">([^<]*)<\/span>/g,
+  '$1',
+);
+if (renderedText !== `${expected} `) {
+  console.error(JSON.stringify({expected, rendered}));
   process.exit(1);
 }
 """

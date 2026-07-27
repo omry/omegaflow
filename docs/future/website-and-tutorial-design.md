@@ -5,9 +5,11 @@
 - Feedback collection complete; consolidated design and implementation sequence
   recorded here
 - Scope: public website, documentation hierarchy, and tutorial curriculum
-- Product implementation has not started. Prerequisite capabilities must be
-  implemented, demonstrated, and approved one at a time before tutorial
-  authoring begins.
+- Prerequisite implementation is underway. Typed project bootstrap,
+  deterministic command environments, scoped private TTS access, and terminal
+  ASCII/DEC character-set playback are complete.
+- Tutorial authoring has not started. Remaining prerequisite capabilities must
+  be implemented, demonstrated, and approved one at a time first.
 
 ## Context
 
@@ -1123,7 +1125,7 @@ then run the environment probe to prove the same name is absent from the
 recorded process. Show permissions, ignore behavior, and secret-safe output
 without displaying a credential value.
 
-### Prerequisite 3: faithful terminal control-sequence playback
+### Prerequisite 3: terminal character-set playback
 
 Teach the terminal player to consume ANSI character-set designation sequences
 and related control variants instead of rendering bytes such as `ESC ( B`.
