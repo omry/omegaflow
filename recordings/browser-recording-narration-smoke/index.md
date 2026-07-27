@@ -30,7 +30,6 @@ presentation:
 audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
-  env_file: .env
 publish:
   default: html
   surfaces:

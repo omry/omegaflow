@@ -688,11 +688,11 @@ and the shortest relevant dependency chain.
    concurrent terminal-and-browser scheduling, lifecycle cleanup, progress
    attribution, and tests. Implemented.
 7. Demonstrate synchronized terminal-to-browser-to-terminal influence.
-   Implemented by `recording=cross-capture-synchronization-smoke`.
+   Implemented and covered by focused cross-capture scheduling and retiming
+   tests.
 8. Namespace private runner artifacts and persistent runtime state so multiple
    captured panes of the same medium can run concurrently.
-   Implemented and exercised by
-   `recording=two-terminal-synchronization-smoke`.
+   Implemented and covered by focused concurrent same-medium capture tests.
 
 No public configuration is accepted before its corresponding execution path is
 available.

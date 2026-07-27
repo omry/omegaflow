@@ -5,10 +5,12 @@
 omegaflow_cleanup_quickstart_environment() {
   local demo_root="${HOMEPAGE_DEMO_ROOT:-}"
   local demo_env_root="${HOMEPAGE_DEMO_ENV_ROOT:-}"
+  local demo_temp_root="${HOMEPAGE_DEMO_PROJECT_TEMP_ROOT:-}"
   local temp_root="${TMPDIR:-/tmp}"
   temp_root="${temp_root%/}"
+  demo_temp_root="${demo_temp_root%/}"
   case "$demo_root" in
-    "$temp_root"/omegaflow-quickstart-demo.*)
+    "$demo_temp_root"/omegaflow-quickstart-demo.*)
       cd / || return
       rm -rf -- "$demo_root" || return
       ;;

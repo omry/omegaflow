@@ -45,6 +45,7 @@ for distribution_name in (
     "packaging",
     "pathspec",
     "pluggy",
+    "Pygments",
     "PyYAML",
     "trove-classifiers",
 ):
@@ -72,8 +73,15 @@ PY
 
   export PATH="$HOMEPAGE_DEMO_VENV/bin${PATH:+:$PATH}"
 
+  # The capture TMPDIR lives below the OmegaFlow repository. Put the disposable
+  # project in the system temporary root so bootstrap does not mistake the
+  # enclosing OmegaFlow checkout for the demo project's repository.
+  export HOMEPAGE_DEMO_PROJECT_TEMP_ROOT="/tmp"
   local demo_root
-  demo_root="$(mktemp -d "$temp_root/omegaflow-quickstart-demo.XXXXXX")" \
+  demo_root="$(
+    mktemp -d \
+      "$HOMEPAGE_DEMO_PROJECT_TEMP_ROOT/omegaflow-quickstart-demo.XXXXXX"
+  )" \
     || return
   export HOMEPAGE_DEMO_ROOT="$demo_root"
 }

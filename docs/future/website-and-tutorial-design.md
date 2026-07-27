@@ -1106,10 +1106,9 @@ Stop wholesale host-environment inheritance while retaining non-secret
 `environment.variables`, `path_prepend`, OmegaFlow-owned terminal plumbing, and
 automatic `OMEGAFLOW_VERSION`. This slice does not load a secret file.
 
-Demonstration: an environment-probe recording shows that a configured
+Verification: focused command-environment tests prove that a configured
 non-secret variable and `OMEGAFLOW_VERSION` reach the application while an
-arbitrary host variable does not. Show both the recording source and captured
-output.
+arbitrary host variable does not.
 
 ### Prerequisite 2: private OmegaFlow TTS environment
 

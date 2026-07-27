@@ -56,7 +56,6 @@ presentation:
 audio:
   enabled: true
   env: OPENAI_OMEGAFLOW_API_KEY
-  env_file: .env
 setup:
 - name: prepare isolated demo environment
   run_file: scripts/setup-demo-environment.sh
@@ -83,7 +82,7 @@ beat:
     With OmegaFlow, you can turn scripted terminal and browser workflows into
     narrated, rebuildable videos. These videos are organized into beats. This
     video is a quickstart demo. We'll install OmegaFlow, prepare a recording
-    workspace, then build and open a two-beat quickstart video in a browser.
+    workspace, then build and open a two-beat test video in a browser.
     The demo runs in @guided_mode_start@ guided mode, which pauses after each
     beat. To watch continuously, turn off Guided mode using the button in the
     player controls.
@@ -139,7 +138,7 @@ beat:
     command. @wait:bootstrap_run+200ms@ It creates the @project_settings_start@
     project settings, @project_settings_end@ @recording_defaults_start@
     recording defaults, @recording_defaults_end@ and @quickstart_script_start@
-    a quickstart video script you can run immediately. @quickstart_script_end@
+    a test video script you can run immediately. @quickstart_script_end@
   marker: bootstrap
   caption: Run bootstrap from your repository root.
   actions:
@@ -147,8 +146,8 @@ beat:
     - id: bootstrap_run
       run: >-
         cd "$HOMEPAGE_DEMO_ROOT" &&
-        omegaflow project_root="$HOMEPAGE_DEMO_ROOT" action=bootstrap
-      display: omegaflow action=bootstrap
+        omegaflow project_root="$HOMEPAGE_DEMO_ROOT" bootstrap=project
+      display: omegaflow bootstrap=project
       after: "@bootstrap@"
       pre_command_pause: 0.45
   checks:
@@ -156,35 +155,38 @@ beat:
     run: test -f .omegaflow/config.yaml
   - name: recording defaults created
     run: test -f recordings/config.yaml
-  - name: quickstart script created
-    run: test -f recordings/quickstart/index.md
-  - name: obsolete quickstart helper absent
-    run: test ! -e recordings/quickstart/scripts/hello.sh
-  - name: quickstart contains both sample beats
+  - name: test video script created
+    run: test -f recordings/test-video/index.md
+  - name: obsolete test video helper absent
+    run: test ! -e recordings/test-video/scripts/hello.sh
+  - name: test video contains both sample beats
     run: >-
-      grep -Fq 'id: first-video-beat' recordings/quickstart/index.md &&
-      grep -Fq 'run: "# First video beat"' recordings/quickstart/index.md &&
-      grep -Fq 'id: second-video-beat' recordings/quickstart/index.md &&
-      grep -Fq 'run: "# Second video beat"' recordings/quickstart/index.md
+      grep -Fq 'id: first-video-beat' recordings/test-video/index.md &&
+      grep -Fq 'run: "# First video beat"' recordings/test-video/index.md &&
+      grep -Fq 'id: second-video-beat' recordings/test-video/index.md &&
+      grep -Fq 'run: "# Second video beat"' recordings/test-video/index.md
   effects:
   - highlight:
-      text: .omegaflow/config.yaml
+      targets:
+      - text: .omegaflow/config.yaml
       start: "@project_settings_start@"
       end: "@project_settings_end@"
   - highlight:
-      text: recordings/config.yaml
+      targets:
+      - text: recordings/config.yaml
       start: "@recording_defaults_start@"
       end: "@recording_defaults_end@"
   - highlight:
-      text: recordings/quickstart/index.md
+      targets:
+      - text: recordings/test-video/index.md
       start: "@quickstart_script_start@"
       end: "@quickstart_script_end@"
   guide:
     commands:
-    - omegaflow action=bootstrap
+    - omegaflow bootstrap=project
     success_hint: >-
       The recording workspace contains project settings, recording defaults,
-      and the quickstart script.
+      and the test video script.
 ```
 
 ```yaml studio-directive
@@ -193,23 +195,23 @@ beat:
   heading: Build the Video
   narration_take: build-and-browser
   narration: >-
-    @build@ Build the quickstart recording to turn the sample workflow into a
+    @build@ Build the test video recording to turn the sample workflow into a
     ready-to-watch two-beat video.
     @wait:build_command+200ms@ When the build finishes, @watch@ run the
     follow-up watch command to open the video in a browser.
   marker: build
-  caption: Build the generated quickstart recording.
+  caption: Build the generated test video recording.
   actions:
   - commands:
     - id: build_command
-      run: omegaflow recording=quickstart action=build force=true
-      display: omegaflow recording=quickstart action=build
+      run: omegaflow recording=test-video action=build force=true
+      display: omegaflow recording=test-video action=build
       after: "@build@"
       timing: realtime
     - id: watch_command
       # Keep the captured URL stable across homepage-video rebuilds.
-      run: omegaflow recording=quickstart action=watch watch_port=43123 autoplay=false
-      display: omegaflow recording=quickstart action=watch
+      run: omegaflow recording=test-video action=watch watch_port=43123 autoplay=false
+      display: omegaflow recording=test-video action=watch
       after: "@watch@"
       pre_command_pause: 0.45
       browser_handoff: true
@@ -219,14 +221,14 @@ beat:
   - name: presentation manifest created
     run: >-
       test -f
-      recordings/.omegaflow/videos/quickstart/presentation/recording.presentation.json
+      recordings/.omegaflow/videos/test-video/presentation/recording.presentation.json
   - name: standalone player created
-    run: test -f recordings/.omegaflow/videos/quickstart/index.html
+    run: test -f recordings/.omegaflow/videos/test-video/index.html
   guide:
     commands:
-    - omegaflow recording=quickstart action=build
-    - omegaflow recording=quickstart action=watch
-    success_hint: The quickstart video is open in its local player.
+    - omegaflow recording=test-video action=build
+    - omegaflow recording=test-video action=watch
+    success_hint: The test video is open in its local player.
 ```
 
 ```yaml studio-directive
@@ -238,7 +240,7 @@ beat:
   narration: >-
     @open_player@ OmegaFlow scripts and records browser workflows just as it
     does terminal workflows. Here, the watch command opens the video we just
-    created, and this script explores its player. @show_pointer@ The quickstart
+    created, and this script explores its player. @show_pointer@ The test video
     contains @navigate_section@ First Video Beat and @playback_section@ Second
     Video Beat. Hover over either beat in the timeline to preview it.
     @point_at_speed@ You can also use the

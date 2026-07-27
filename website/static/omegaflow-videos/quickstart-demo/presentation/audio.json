@@ -1,5 +1,5 @@
 {
-  "duration_ms": 88368,
+  "duration_ms": 88824,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -7,19 +7,17 @@
       "members": [
         {
           "beat_id": "introduction",
-          "text": "With OmegaFlow, you can turn scripted terminal and browser workflows into narrated, rebuildable videos. These videos are organized into beats. This video is a quickstart demo. We'll install OmegaFlow, prepare a recording workspace, then build and open a two-beat quickstart video in a browser. The demo runs in guided mode, which pauses after each beat. To watch continuously, turn off Guided mode using the button in the player controls.",
-          "text_end": 438,
+          "text": "With OmegaFlow, you can turn scripted terminal and browser workflows into narrated, rebuildable videos. These videos are organized into beats. This video is a quickstart demo. We'll install OmegaFlow, prepare a recording workspace, then build and open a two-beat test video in a browser. The demo runs in guided mode, which pauses after each beat. To watch continuously, turn off Guided mode using the button in the player controls.",
+          "text_end": 432,
           "text_start": 0
         }
       ],
-      "playback_end_ms": 26616,
-      "playback_sha256": "d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8",
-      "playback_src": "audio/__beat__-introduction-d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8.mp3",
+      "playback_end_ms": 26400,
+      "playback_src": "audio/__beat__-introduction.mp3",
       "playback_start_ms": 0,
-      "sha256": "d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8",
-      "source_end_ms": 26616,
+      "source_end_ms": 26400,
       "source_start_ms": 0,
-      "src": "audio/__beat__-introduction-d4b56f1c7a63af191c2a5b0368a7e0dc9a26b006a8c4b495db3b927ac1346db8.mp3",
+      "src": "audio/__beat__-introduction.mp3",
       "timestamps": "timestamps/__beat__-introduction.json"
     },
     {
@@ -32,14 +30,12 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 35232,
-      "playback_sha256": "f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536",
-      "playback_src": "audio/__beat__-install-f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536.mp3",
-      "playback_start_ms": 26616,
-      "sha256": "f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536",
-      "source_end_ms": 35232,
-      "source_start_ms": 26616,
-      "src": "audio/__beat__-install-f4ef60344680b50b678d0954d02433379a8876e5c0ea35e7dba33291776f9536.mp3",
+      "playback_end_ms": 34320,
+      "playback_src": "audio/__beat__-install.mp3",
+      "playback_start_ms": 26400,
+      "source_end_ms": 34320,
+      "source_start_ms": 26400,
+      "src": "audio/__beat__-install.mp3",
       "timestamps": "timestamps/__beat__-install.json"
     },
     {
@@ -47,19 +43,17 @@
       "members": [
         {
           "beat_id": "bootstrap",
-          "text": "We'll now prepare your recording workspace. This is a one-time setup for each recording environment, and you can commit the generated files to version control. From your repository root, run the bootstrap command. It creates the project settings, recording defaults, and a quickstart video script you can run immediately.",
-          "text_end": 321,
+          "text": "We'll now prepare your recording workspace. This is a one-time setup for each recording environment, and you can commit the generated files to version control. From your repository root, run the bootstrap command. It creates the project settings, recording defaults, and a test video script you can run immediately.",
+          "text_end": 315,
           "text_start": 0
         }
       ],
-      "playback_end_ms": 55007,
-      "playback_sha256": "4dceb73c49148646524195e4455978f1f07f463872dac267b27485695582fbb3",
-      "playback_src": "audio/__beat__-bootstrap-playback-4dceb73c49148646524195e4455978f1f07f463872dac267b27485695582fbb3.mp3",
-      "playback_start_ms": 35232,
-      "sha256": "2ece27472895b8383e352e2a75d6e002230f28b7aad38bc03760ec1c33483ac0",
-      "source_end_ms": 53952,
-      "source_start_ms": 35232,
-      "src": "audio/__beat__-bootstrap-2ece27472895b8383e352e2a75d6e002230f28b7aad38bc03760ec1c33483ac0.mp3",
+      "playback_end_ms": 53403,
+      "playback_src": "audio/__beat__-bootstrap-playback.mp3",
+      "playback_start_ms": 34320,
+      "source_end_ms": 52320,
+      "source_start_ms": 34320,
+      "src": "audio/__beat__-bootstrap.mp3",
       "timestamps": "timestamps/__beat__-bootstrap.json"
     },
     {
@@ -67,27 +61,25 @@
       "members": [
         {
           "beat_id": "build",
-          "text": "Build the quickstart recording to turn the sample workflow into a ready-to-watch two-beat video. When the build finishes, run the follow-up watch command to open the video in a browser.",
+          "text": "Build the test video recording to turn the sample workflow into a ready-to-watch two-beat video. When the build finishes, run the follow-up watch command to open the video in a browser.",
           "text_end": 185,
           "text_start": 0
         },
         {
           "beat_id": "play-in-browser",
-          "text": "OmegaFlow scripts and records browser workflows just as it does terminal workflows. Here, the watch command opens the video we just created, and this script explores its player. The quickstart contains First Video Beat and Second Video Beat. Hover over either beat in the timeline to preview it. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
+          "text": "OmegaFlow scripts and records browser workflows just as it does terminal workflows. Here, the watch command opens the video we just created, and this script explores its player. The test video contains First Video Beat and Second Video Beat. Hover over either beat in the timeline to preview it. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
           "text_end": 578,
           "text_start": 186
         }
       ],
-      "playback_end_ms": 91440,
-      "playback_sha256": "e64e69bb9bfe1904c4eb1175b06e2c09d92918364dfa1275bcc08430e176b5b2",
-      "playback_src": "audio/build-and-browser-playback-e64e69bb9bfe1904c4eb1175b06e2c09d92918364dfa1275bcc08430e176b5b2.mp3",
-      "playback_start_ms": 55007,
-      "sha256": "24610f1062eb24381cc2d91e90f7ef1543bf7391a89101477d907c1c1190f63b",
-      "source_end_ms": 88368,
-      "source_start_ms": 53952,
-      "src": "audio/build-and-browser-24610f1062eb24381cc2d91e90f7ef1543bf7391a89101477d907c1c1190f63b.mp3",
+      "playback_end_ms": 90954,
+      "playback_src": "audio/build-and-browser-playback.mp3",
+      "playback_start_ms": 53403,
+      "source_end_ms": 88824,
+      "source_start_ms": 52320,
+      "src": "audio/build-and-browser.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
   ],
-  "version": 3
+  "version": 1
 }

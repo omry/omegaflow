@@ -1,0 +1,41 @@
+{
+  "files": {
+    "beats/browser.browser.json": {
+      "bytes": 2954,
+      "sha256": "0da3b82804fb54f97f774095aa936b7d714b2e24e7afc46ca1f672d7c942ab38"
+    },
+    "beats/prepare.cast": {
+      "bytes": 222,
+      "sha256": "64773c91f5fc73581f71cd6f3e0c9e59f3afc755d09ae0a48fa61b88996545b4"
+    },
+    "beats/verify.cast": {
+      "bytes": 196,
+      "sha256": "8e60f9eec060c6aaffb8e0c3ab3d2c61b556e38c1c3b156c46ab3ff452a32cad"
+    },
+    "media/193f15bad8a103d2c153be4481bce889ec858ab9a7cf689f3c9ddcd564a2bad9.webp": {
+      "bytes": 86,
+      "sha256": "193f15bad8a103d2c153be4481bce889ec858ab9a7cf689f3c9ddcd564a2bad9"
+    },
+    "media/35b3a9597996848c54dd880715698c9c4b8bf07c78548ddcd80976be17b1c584.webp": {
+      "bytes": 10434,
+      "sha256": "35b3a9597996848c54dd880715698c9c4b8bf07c78548ddcd80976be17b1c584"
+    },
+    "media/83ed0a61ca92bae1b5dba240bdbbc523cc0c25eedeefc4f0ab121f5e4454f240.webp": {
+      "bytes": 10618,
+      "sha256": "83ed0a61ca92bae1b5dba240bdbbc523cc0c25eedeefc4f0ab121f5e4454f240"
+    },
+    "media/f252e23563cda088d5ad8d7c312e51904c70993844a621c3e5101685d975e4e2.webp": {
+      "bytes": 11856,
+      "sha256": "f252e23563cda088d5ad8d7c312e51904c70993844a621c3e5101685d975e4e2"
+    },
+    "recording.presentation.json": {
+      "bytes": 3887,
+      "sha256": "4bb91480e396f5a57be99cccd0d08a8b2866dcd59e9f4288e9da2814216a1991"
+    },
+    "recording.recording.json": {
+      "bytes": 544,
+      "sha256": "cad038bc38dda6d0d69c2d399c4af786ab8fd0f04e71a421fa66f1fcef5b5069"
+    }
+  },
+  "version": 1
+}

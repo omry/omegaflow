@@ -2462,6 +2462,30 @@ def test_audio_uses_private_omegaflow_service_environment_without_mutation(
     assert secret_name not in os.environ
 
 
+@pytest.mark.parametrize(
+    "recording_id",
+    [
+        "quickstart-demo",
+        "browser-recording-narration-smoke",
+    ],
+)
+def test_repository_recordings_use_the_private_tts_service_environment(
+    recording_id,
+) -> None:
+    config = compose_studio_config(None, (f"recording={recording_id}",))
+    spec = recording_spec_from_config(
+        config,
+        recording_id=None,
+        overrides=(),
+        hydra_output_dir=f"/tmp/omegaflow-test-{recording_id}",
+    )
+
+    settings = audio.audio_settings(spec)
+
+    assert settings.env == "OPENAI_OMEGAFLOW_API_KEY"
+    assert settings.env_file is None
+
+
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
@@ -3734,6 +3758,90 @@ beat:
     ]
 
 
+def test_terminal_highlight_demo_combines_exact_and_multiline_regex_targets() -> None:
+    recordings_dir = Path(__file__).resolve().parents[1] / "recordings"
+    spec = recording_from_script(
+        "terminal-highlight-ranges-demo",
+        recording_dir=recordings_dir,
+    )
+
+    plan = normalize_recording_plan(spec)
+    demonstrated_narration = (
+        "Highlight will start @exact_start@ now, and will end now.@exact_end@"
+    )
+    source = (
+        recordings_dir / "terminal-highlight-ranges-demo" / "index.md"
+    ).read_text(encoding="utf-8")
+    assert source.count(demonstrated_narration) == 2
+
+    assert [(pane.id, pane.kind.value) for pane in plan.panes] == [
+        ("definition", "visualization"),
+        ("terminal", "terminal"),
+    ]
+    assert len(plan.beats) == 1
+    beat = plan.beats[0]
+    assert [track.pane_id for track in beat.pane_tracks] == [
+        "definition",
+        "terminal",
+    ]
+    definition_beats = beat.pane_tracks[0].beats
+    assert [pane_beat.id for pane_beat in definition_beats] == [
+        "exact-overview",
+        "regex-target",
+        "combined-targets",
+    ]
+    assert definition_beats[0].start_join is None
+    assert [
+        pane_beat.start_join.event.qualified_id
+        for pane_beat in definition_beats[1:]
+        if pane_beat.start_join is not None
+    ] == [
+        "voiceover.regex_start.started",
+        "voiceover.combined_start.started",
+    ]
+    definition_effects = [
+        highlight
+        for highlight in beat.effects
+        if highlight.pane_id == "definition"
+    ]
+    assert len(definition_effects) == 3
+    assert all(highlight.color == "brand" for highlight in definition_effects)
+    assert [
+        [(target.pattern, target.occurrence) for target in highlight.targets]
+        for highlight in definition_effects
+    ] == [
+        [("@exact_start@", 1), ("@exact_start@", 2)],
+        [("@exact_end@", 1), ("@exact_end@", 2)],
+        [("now, and will end now.", 1)],
+    ]
+    terminal_beat = beat.pane_tracks[1].beats[0]
+    terminal_effects = [
+        highlight
+        for highlight in beat.effects
+        if highlight.pane_id == "terminal"
+    ]
+    assert [
+        [(target.kind, target.pattern) for target in highlight.targets]
+        for highlight in terminal_effects
+    ] == [
+        [("text", "Renderer: ready")],
+        [("regex", r"Elapsed since start of video:\n.*")],
+        [
+            ("text", "Renderer: ready"),
+            ("regex", r"Elapsed since start of video:\n.*"),
+        ],
+    ]
+    assert all(
+        target.occurrence == 1
+        for highlight in terminal_effects
+        for target in highlight.targets
+    )
+    assert (
+        terminal_beat.actions[0].config["commands"][0]["timing"]
+        == "realtime"
+    )
+
+
 def test_studio_directive_schema_does_not_inject_defaults() -> None:
     script = """
 ```yaml studio-directive
@@ -3849,7 +3957,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         in bootstrap_beat["narration"]
     )
     assert (
-        "@quickstart_script_start@ a quickstart video script you can run immediately. "
+        "@quickstart_script_start@ a test video script you can run immediately. "
         "@quickstart_script_end@"
         in bootstrap_beat["narration"]
     )
@@ -3870,7 +3978,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         },
         {
             "highlight": {
-                "targets": [{"text": "recordings/quickstart/index.md"}],
+                "targets": [{"text": "recordings/test-video/index.md"}],
                 "start": "@quickstart_script_start@",
                 "end": "@quickstart_script_end@",
             }
@@ -3878,15 +3986,15 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     ]
     assert beats_by_id["build"]["narration_take"] == "build-and-browser"
     assert beats_by_id["build"]["guide"]["commands"] == [
-        "omegaflow recording=quickstart action=build",
-        "omegaflow recording=quickstart action=watch",
+        "omegaflow recording=test-video action=build",
+        "omegaflow recording=test-video action=watch",
     ]
     assert beats_by_id["install"]["guide"]["success_hint"] == (
         "OmegaFlow is installed and the omegaflow command is available."
     )
     assert beats_by_id["bootstrap"]["guide"]["success_hint"] == (
         "The recording workspace contains project settings, recording defaults, "
-        "and the quickstart script."
+        "and the test video script."
     )
     assert beats_by_id["build"]["heading"] == "Build the Video"
     assert [command["id"] for command in build_commands] == [
@@ -3895,15 +4003,15 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     ]
     assert bootstrap_beat["actions"][0]["commands"][0]["run"] == (
         'cd "$HOMEPAGE_DEMO_ROOT" && '
-        'omegaflow project_root="$HOMEPAGE_DEMO_ROOT" action=bootstrap'
+        'omegaflow project_root="$HOMEPAGE_DEMO_ROOT" bootstrap=project'
     )
     assert build_commands[0]["run"] == (
-        "omegaflow recording=quickstart action=build force=true"
+        "omegaflow recording=test-video action=build force=true"
     )
     assert build_commands[0]["timing"] == "realtime"
     assert "follow_along" not in build_commands[0]
     assert build_commands[1]["display"] == (
-        "omegaflow recording=quickstart action=watch"
+        "omegaflow recording=test-video action=watch"
     )
     assert build_commands[1]["after"] == "@watch@"
     assert build_commands[1]["browser_handoff"] is True
@@ -3911,7 +4019,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert "follow_along" not in build_commands[1]
     assert build_commands[1]["show_prompt_after"] is False
     assert build_commands[1]["run"] == (
-        "omegaflow recording=quickstart action=watch watch_port=43123 "
+        "omegaflow recording=test-video action=watch watch_port=43123 "
         "autoplay=false"
     )
     assert build_commands[1].get("output") is None
@@ -4013,6 +4121,98 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         "id": "show_second_beat",
         "run": "# Second video beat",
     }
+
+
+def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
+    tmp_path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    recording = recording_from_script(
+        "quickstart-demo",
+        recording_dir=root / "recordings",
+    )
+    install_beat = next(
+        beat for beat in recording["beats"] if beat["id"] == "install"
+    )
+    install_command = install_beat["actions"][0]["commands"][0]["run"]
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "quickstart-demo-install-smoke",
+            "_script_dir": recording["_script_dir"],
+            "setup": recording["setup"],
+            "beats": [
+                {
+                    "id": "install",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        "if \"$HOMEPAGE_DEMO_VENV/bin/python\" "
+                                        "-c 'import omegaflow' 2>/dev/null; then "
+                                        "exit 91; fi"
+                                    )
+                                },
+                                {"run": install_command},
+                                {
+                                    "run": (
+                                        "\"$HOMEPAGE_DEMO_VENV/bin/python\" -c '"
+                                        "import os, pathlib, omegaflow; "
+                                        "root = pathlib.Path(os.environ[\"OMEGAFLOW_TEST_ROOT\"]); "
+                                        "assert pathlib.Path(omegaflow.__file__).resolve()."
+                                        "is_relative_to(root / \"src\")'"
+                                    )
+                                },
+                                {"run": "omegaflow --help >/dev/null"},
+                                {
+                                    "run": (
+                                        'printf "%s\\n" "$HOMEPAGE_DEMO_ROOT" '
+                                        '> "$OMEGAFLOW_RUN_DIR/demo-root.txt" && '
+                                        'cd "$HOMEPAGE_DEMO_ROOT" && '
+                                        "omegaflow "
+                                        'project_root="$HOMEPAGE_DEMO_ROOT" '
+                                        "bootstrap=project "
+                                        '> "$OMEGAFLOW_RUN_DIR/bootstrap-output.txt"'
+                                    )
+                                },
+                            ]
+                        }
+                    ],
+                }
+            ],
+            "cleanup": recording["cleanup"],
+        }
+    )
+    repository = tmp_path / "repository"
+    (repository / ".sl").mkdir(parents=True)
+    run_dir = repository / "recordings" / ".omegaflow" / "runs" / "test"
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=False,
+            timeout_seconds=60.0,
+        )
+    )
+
+    coordinator.capture(
+        plan,
+        run_dir,
+        workspace=root,
+        working_directory=root,
+        environment={
+            "OMEGAFLOW_TEST_ROOT": str(root),
+            "PATH": os.environ.get("PATH", ""),
+        },
+    )
+
+    bootstrap_output = (run_dir / "bootstrap-output.txt").read_text(encoding="utf-8")
+    demo_root = Path(
+        (run_dir / "demo-root.txt").read_text(encoding="utf-8").strip()
+    )
+    assert "could not verify whether" not in bootstrap_output
+    assert not demo_root.is_relative_to(repository)
+    assert not demo_root.exists()
+    assert not list((run_dir / ".tmp").glob("omegaflow-quickstart-env.*"))
+    assert not list((run_dir / ".tmp").glob("omegaflow-quickstart-demo.*"))
 
 
 def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:
