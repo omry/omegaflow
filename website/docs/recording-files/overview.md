@@ -14,7 +14,7 @@ for one video. Recording ids can include nested directories, such as
 somewhere else can set that in [Project Configuration](../configuration.md).
 
 ```bash
-omegaflow action=bootstrap  # Create the default quickstart recording
+omegaflow bootstrap=project  # Create the default test video
 ```
 
 ```yaml
@@ -22,7 +22,7 @@ omegaflow action=bootstrap  # Create the default quickstart recording
   config.yaml:        # Tool defaults such as studio.recording_dir
 recordings/:           # Recording workspace
   config.yaml:         # Workspace defaults for recordings
-  quickstart/:         # Bootstrap-created video directory
+  test-video/:         # Bootstrap-created video directory
     index.md:          # Recording Markdown file for one video
   tutorial/:           # Optional grouping directory
     index.md:           # Optional collection that builds child videos in order
@@ -44,14 +44,14 @@ A recording Markdown file has three main parts:
 ````md
 ---
 kind: video
-id: quickstart
-title: Quickstart
+id: test-video
+title: Test Video
 ---
 
-# Quickstart
+# Test Video
 
 ```yaml studio-directive
-scene: Quickstart
+scene: Test Video
 ```
 
 ```yaml studio-directive

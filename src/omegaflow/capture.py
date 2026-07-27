@@ -7,7 +7,6 @@ they observe the same working directory, environment, and temporary storage.
 
 from __future__ import annotations
 
-import os
 import shutil
 import stat
 import time
@@ -133,15 +132,18 @@ class CaptureContext:
                 "capture working directory is not a directory: "
                 f"{resolved_working_directory}"
             )
-        resolved_environment = dict(os.environ)
+        resolved_environment: dict[str, str] = {}
         if environment is not None:
             for key, value in environment.items():
                 if value is None:
                     resolved_environment.pop(key, None)
                 else:
                     resolved_environment[key] = value
+        private_home = paths.temporary / "home"
+        _prepare_private_directory(private_home)
         resolved_environment.update(
             {
+                "HOME": str(private_home),
                 "OMEGAFLOW_RUN_DIR": str(paths.run),
                 "TMPDIR": str(paths.temporary),
                 BROWSER_HANDOFF_ROOT_ENV: str(paths.temporary / "browser-handoffs"),

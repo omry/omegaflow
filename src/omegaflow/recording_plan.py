@@ -37,6 +37,9 @@ from .studio_config import (
     TerminalEffectConfig,
     narration_text_and_anchors,
 )
+from .service_environment import (
+    ALLOWED_SERVICE_ENVIRONMENT_NAMES,
+)
 
 
 class RecordingPlanError(StudioConfigError):
@@ -221,6 +224,26 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     for name in ("browser_handoff", "show_prompt_after"):
         if name in mapping and not isinstance(mapping[name], bool):
             raise RecordingPlanError(f"{field}.{name} must be a boolean")
+    with_env = mapping.get("with_env", [])
+    if not isinstance(with_env, list) or any(
+        not isinstance(name, str) or not name for name in with_env
+    ):
+        raise RecordingPlanError(
+            f"{field}.with_env must be a list of non-empty strings"
+        )
+    duplicates = sorted(
+        {name for name in with_env if with_env.count(name) > 1}
+    )
+    if duplicates:
+        raise RecordingPlanError(
+            f"{field}.with_env contains duplicate names: {', '.join(duplicates)}"
+        )
+    unsupported = sorted(set(with_env) - ALLOWED_SERVICE_ENVIRONMENT_NAMES)
+    if unsupported:
+        raise RecordingPlanError(
+            f"{field}.with_env name {unsupported[0]!r} is not an allowlisted "
+            "OmegaFlow service environment name"
+        )
     if mapping.get("timing", "presentation") not in {"presentation", "realtime"}:
         raise RecordingPlanError(
             f"{field}.timing must be presentation or realtime"
@@ -795,6 +818,14 @@ def normalize_beat_actions(
             action_mapping = _mapping(
                 action, field=f"{field}.actions.{action_index}"
             )
+            if (
+                action_mapping.get("with_env") is not None
+                and action_mapping.get("commands") is None
+            ):
+                raise RecordingPlanError(
+                    f"{field}.actions.{action_index}.with_env is supported only "
+                    "on entries inside commands"
+                )
             browser_kinds = [
                 kind for kind in ACTION_KINDS if action_mapping.get(kind) is not None
             ]

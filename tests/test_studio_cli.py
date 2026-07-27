@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -33,6 +34,7 @@ from omegaflow.studio_config import (
     compose_studio_config,
     discover_project_layout,
     list_recording_ids,
+    load_configured_env_file,
     recording_from_script,
     recording_script_dir_from_config,
     recording_spec_from_config,
@@ -1216,6 +1218,34 @@ def test_project_root_is_hydra_config_and_environment_does_not_override_it(
     assert discover_project_layout(start=configured).root == configured
 
 
+def test_required_commands_use_the_recorded_command_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    configured_bin = tmp_path / "configured-bin"
+    configured_bin.mkdir()
+    configured_tool = configured_bin / "configured-tool"
+    configured_tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    configured_tool.chmod(0o755)
+    host_bin = tmp_path / "host-bin"
+    host_bin.mkdir()
+    host_tool = host_bin / "host-only-tool"
+    host_tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    host_tool.chmod(0o755)
+    monkeypatch.setenv("PATH", str(host_bin))
+
+    record.check_required_commands(
+        {
+            "environment": {"path_prepend": [str(configured_bin)]},
+            "requirements": {"commands": ["configured-tool"]},
+        }
+    )
+
+    with pytest.raises(record.RecordingError, match="host-only-tool"):
+        record.check_required_commands(
+            {"requirements": {"commands": ["host-only-tool"]}}
+        )
+
+
 def test_studio_run_dir_uses_data_directory() -> None:
     assert (
         studio_run_dir(
@@ -1274,6 +1304,21 @@ env_file: .env.studio
     assert config["studio"]["recording_dir"] == "demos"
     assert config["studio"]["data_dir"] == "demos/.omegaflow"
     assert config["env_file"] == ".env.studio"
+
+
+def test_studio_config_does_not_load_a_process_env_file_by_default(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("MUST_NOT_LOAD=secret\n", encoding="utf-8")
+    monkeypatch.delenv("MUST_NOT_LOAD", raising=False)
+
+    config = compose_studio_config(None, ())
+
+    assert config["load_env_file"] is False
+    assert config["env_file"] is None
+    assert load_configured_env_file({}) == {}
+    assert "MUST_NOT_LOAD" not in os.environ
 
 
 def test_runs_action_uses_config_data_dir(tmp_path, monkeypatch, capsys) -> None:
@@ -2003,7 +2048,9 @@ def test_copy_run_artifact_allows_same_path(tmp_path) -> None:
     assert artifact.read_text(encoding="utf-8") == '{"version": 2}\n'
 
 
-def test_audio_env_file_is_recording_local_config(tmp_path, monkeypatch) -> None:
+def test_audio_env_file_is_recording_local_config_without_global_mutation(
+    tmp_path, monkeypatch
+) -> None:
     env_file = tmp_path / ".env.audio"
     env_file.write_text("OPENAI_RECORDING_KEY=file-secret\n", encoding="utf-8")
     monkeypatch.setenv("OPENAI_RECORDING_KEY", "process-secret")
@@ -2032,7 +2079,37 @@ def test_audio_env_file_is_recording_local_config(tmp_path, monkeypatch) -> None
     loaded = audio.load_audio_env_file(settings)
 
     assert loaded == {"OPENAI_RECORDING_KEY": "file-secret"}
-    assert os.environ["OPENAI_RECORDING_KEY"] == "file-secret"
+    assert os.environ["OPENAI_RECORDING_KEY"] == "process-secret"
+    assert audio.audio_environment(settings, None)["OPENAI_RECORDING_KEY"] == (
+        "file-secret"
+    )
+
+
+def test_audio_uses_private_omegaflow_service_environment_without_mutation(
+    tmp_path, monkeypatch
+) -> None:
+    secret_name = "OPENAI_OMEGAFLOW_API_KEY"
+    private_dir = tmp_path / ".omegaflow"
+    private_dir.mkdir()
+    private_file = private_dir / "omegaflow-secret.env"
+    private_file.write_text(f"{secret_name}=file-secret\n", encoding="utf-8")
+    private_file.chmod(0o600)
+    monkeypatch.delenv(secret_name, raising=False)
+    settings = audio.AudioSettings(
+        enabled=True,
+        provider="openai",
+        env=secret_name,
+        model="gpt-4o-mini-tts",
+        voice="marin",
+        format="mp3",
+        cache_dir=tmp_path / "cache",
+        project_root=tmp_path,
+    )
+
+    resolved = audio.audio_environment(settings, None)
+
+    assert resolved[secret_name] == "file-secret"
+    assert secret_name not in os.environ
 
 
 def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
@@ -2964,7 +3041,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert actions["hide_pointer"]["set_pointer"] == {"visible": False}
     assert actions["hide_pointer"].get("after") is None
 
-    generated = studio.bootstrap_recording_text("quickstart", "Quickstart")
+    generated = studio.bootstrap_recording_text("test-video", "Test Video")
     assert "kind: video" in generated
     generated_beats = [
         block["beat"]
@@ -2977,12 +3054,12 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     ]
     assert generated_beats[0]["heading"] == "First Video Beat"
     assert generated_beats[0]["narration"] == (
-        "This is the first beat in the generated quickstart video."
+        "This is the first beat in the generated test video."
     )
     assert generated_beats[0]["viewer_hold"] == 3
     assert generated_beats[1]["heading"] == "Second Video Beat"
     assert generated_beats[1]["narration"] == (
-        "This is the second beat in the generated quickstart video."
+        "This is the second beat in the generated test video."
     )
     assert generated_beats[1]["viewer_hold"] == 4
     assert generated_beats[0]["actions"][0]["commands"][0] == {
@@ -3112,13 +3189,12 @@ def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:
     assert before.capture_fingerprint != after.capture_fingerprint
 
 
-def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
+def test_bootstrap_creates_composable_project_workspace(tmp_path, monkeypatch) -> None:
     workspace = tmp_path / "recordings"
 
     status = studio.run_bootstrap(
         {
             "workspace": str(workspace),
-            "recording": "demo-recording",
             "force": False,
         }
     )
@@ -3128,10 +3204,10 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
         encoding="utf-8"
     )
     shared_config = (workspace / "config.yaml").read_text(encoding="utf-8")
-    recording = (workspace / "demo-recording" / "index.md").read_text(
+    recording = (workspace / "test-video" / "index.md").read_text(
         encoding="utf-8"
     )
-    support_dir = workspace / "demo-recording" / "scripts"
+    support_dir = workspace / "test-video" / "scripts"
 
     assert "studio:" in tool_config
     assert "recording_dir: recordings" in tool_config
@@ -3148,7 +3224,7 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     }
     assert "id:" not in shared_config
     assert "title:" not in shared_config
-    assert "id: demo-recording" in recording
+    assert "id: test-video" in recording
     assert "type: standalone_html" in recording
     assert "cast:" not in recording
     assert "file: ${outputs.asset_dir}/index.html" in recording
@@ -3166,7 +3242,439 @@ def test_bootstrap_creates_recording_workspace(tmp_path, monkeypatch) -> None:
     assert not support_dir.exists()
 
 
-def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
+def test_project_bootstrap_is_a_typed_operation_with_default_build_preserved() -> None:
+    bootstrap = compose_studio_config(None, ("bootstrap=project",))
+    default = compose_studio_config(None, ())
+
+    assert bootstrap["bootstrap"] == "project"
+    assert bootstrap["action"] is None
+    assert default["bootstrap"] is None
+    assert default["action"] is None
+    assert studio.validate_action(default["action"]) == "build"
+
+
+def test_project_bootstrap_creates_the_minimal_project_tree(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(None, ("bootstrap=project",))
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    files = sorted(
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    )
+    assert files == [
+        ".omegaflow/.gitignore",
+        ".omegaflow/config.yaml",
+        ".omegaflow/omegaflow-secret.env",
+        "recordings/.gitignore",
+        "recordings/config.yaml",
+        "recordings/test-video/index.md",
+    ]
+    assert (tmp_path / ".omegaflow" / ".gitignore").read_text(
+        encoding="utf-8"
+    ) == "/omegaflow-secret.env\n"
+    secret_file = tmp_path / ".omegaflow" / "omegaflow-secret.env"
+    assert secret_file.read_text(
+        encoding="utf-8"
+    ) == "# OPENAI_OMEGAFLOW_API_KEY=\n"
+    assert secret_file.stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "recordings" / ".gitignore").read_text(
+        encoding="utf-8"
+    ) == "**/app.secret.env\n"
+    recording = (
+        tmp_path / "recordings" / "test-video" / "index.md"
+    ).read_text(encoding="utf-8")
+    assert "id: test-video" in recording
+    assert "title: Test Video" in recording
+    assert "quickstart" not in recording.lower()
+
+
+def test_project_bootstrap_anchors_tool_files_at_project_root(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "workspace=media/recordings"),
+    )
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert (tmp_path / ".omegaflow" / "config.yaml").is_file()
+    assert not (tmp_path / "media" / ".omegaflow").exists()
+    tool_config = (tmp_path / ".omegaflow" / "config.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "recording_dir: media/recordings" in tool_config
+    assert "data_dir: media/recordings/.omegaflow" in tool_config
+
+
+def test_project_bootstrap_adds_secret_rule_to_existing_tool_ignore(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text("# user rules\n", encoding="utf-8")
+    config = compose_studio_config(None, ("bootstrap=project",))
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert (tool_dir / ".gitignore").read_text(encoding="utf-8") == (
+        "# user rules\n/omegaflow-secret.env\n"
+    )
+    assert (tool_dir / "config.yaml").exists()
+    assert (tool_dir / "omegaflow-secret.env").exists()
+    assert (tmp_path / "recordings").exists()
+
+
+def test_project_bootstrap_refuses_tracked_secret_target_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    if shutil.which("git") is None:
+        pytest.skip("git is required for tracked-secret validation")
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=tmp_path,
+        check=True,
+    )
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text(
+        studio.BOOTSTRAP_TOOL_GITIGNORE,
+        encoding="utf-8",
+    )
+    secret_file = tool_dir / "omegaflow-secret.env"
+    secret_file.write_text("tracked-value\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "-f", ".omegaflow/omegaflow-secret.env"],
+        cwd=tmp_path,
+        check=True,
+    )
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "force=true"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=r"omegaflow-secret\.env.*tracked or staged",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert secret_file.read_text(encoding="utf-8") == "tracked-value\n"
+    assert not (tool_dir / "config.yaml").exists()
+    assert not (tmp_path / "recordings").exists()
+
+
+def test_project_bootstrap_refuses_sapling_tracked_secret_target_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".sl").mkdir()
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text(
+        studio.BOOTSTRAP_TOOL_GITIGNORE,
+        encoding="utf-8",
+    )
+    secret_file = tool_dir / "omegaflow-secret.env"
+    secret_file.write_text("tracked-value\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        studio.shutil,
+        "which",
+        lambda command: "/usr/bin/sl" if command == "sl" else None,
+    )
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        assert capture_output is True
+        assert text is True
+        if command[-1] == "root":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{tmp_path}\n",
+                stderr="",
+            )
+        assert command[-2:] == [
+            "files",
+            ".omegaflow/omegaflow-secret.env",
+        ]
+        assert env is not None
+        assert env["CHGDISABLE"] == "1"
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=".omegaflow/omegaflow-secret.env\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(studio.subprocess, "run", fake_run)
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "force=true"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=r"omegaflow-secret\.env.*tracked or staged",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert secret_file.read_text(encoding="utf-8") == "tracked-value\n"
+    assert not (tool_dir / "config.yaml").exists()
+    assert not (tmp_path / "recordings").exists()
+
+
+def test_project_bootstrap_warns_and_continues_when_repository_cannot_be_inspected(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".sl").mkdir()
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text(
+        studio.BOOTSTRAP_TOOL_GITIGNORE,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio.shutil, "which", lambda _command: None)
+    config = compose_studio_config(None, ("bootstrap=project",))
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    output = capsys.readouterr().out
+    assert "warn " in output
+    assert "could not verify whether .omegaflow/omegaflow-secret.env" in output
+    assert "Sapling executable is unavailable" in output
+    assert "continuing without VCS verification" in output
+    assert (tool_dir / "omegaflow-secret.env").is_file()
+    assert (tool_dir / "config.yaml").is_file()
+    assert (tmp_path / "recordings" / "test-video" / "index.md").is_file()
+
+
+def test_sapling_untracked_secret_is_safe_to_bootstrap(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / ".sl").mkdir()
+    secret_file = tmp_path / ".omegaflow" / "omegaflow-secret.env"
+    monkeypatch.setattr(
+        studio.shutil,
+        "which",
+        lambda command: "/usr/bin/sl" if command == "sl" else None,
+    )
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[-1] == "root":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{tmp_path}\n",
+                stderr="",
+            )
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="")
+
+    monkeypatch.setattr(studio.subprocess, "run", fake_run)
+
+    assert studio.vcs_tracks_path(tmp_path, secret_file) is False
+
+
+def test_project_bootstrap_refuses_symlinked_secret_target_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text(
+        studio.BOOTSTRAP_TOOL_GITIGNORE,
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.env"
+    outside.write_text("outside-value\n", encoding="utf-8")
+    (tool_dir / "omegaflow-secret.env").symlink_to(outside)
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "force=true"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=r"omegaflow-secret\.env.*symbolic link",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert outside.read_text(encoding="utf-8") == "outside-value\n"
+    assert not (tool_dir / "config.yaml").exists()
+    assert not (tmp_path / "recordings").exists()
+
+
+@pytest.mark.parametrize(
+    "relative_target",
+    [
+        ".omegaflow/config.yaml",
+        "recordings/config.yaml",
+        "recordings/test-video/index.md",
+    ],
+)
+@pytest.mark.parametrize("dry_run", [None, "diff"])
+def test_project_bootstrap_refuses_symlinked_generated_target_before_writing(
+    tmp_path,
+    monkeypatch,
+    relative_target,
+    dry_run,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside_text = "studio:\n  recording_dir: recordings\n"
+    outside.write_text(outside_text, encoding="utf-8")
+    target = tmp_path / relative_target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(outside)
+    overrides = ["bootstrap=project", "force=true"]
+    if dry_run is not None:
+        overrides.append(f"dry_run={dry_run}")
+    config = compose_studio_config(None, tuple(overrides))
+
+    with pytest.raises(
+        studio.StudioError,
+        match="symbolic link",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert outside.read_text(encoding="utf-8") == outside_text
+    assert not (tmp_path / ".omegaflow" / "omegaflow-secret.env").exists()
+
+
+def test_bootstrap_private_file_is_restricted_when_created(
+    tmp_path, monkeypatch
+) -> None:
+    observed_modes: list[int] = []
+    real_open = os.open
+
+    def observing_open(
+        path: os.PathLike[str] | str,
+        flags: int,
+        mode: int = 0o777,
+    ) -> int:
+        fd = real_open(path, flags, mode)
+        observed_modes.append(os.fstat(fd).st_mode & 0o777)
+        return fd
+
+    monkeypatch.setattr(studio.os, "open", observing_open)
+    secret_file = tmp_path / "omegaflow-secret.env"
+
+    assert studio.write_bootstrap_file(
+        secret_file,
+        studio.BOOTSTRAP_TOOL_SECRET_ENV,
+        mode=0o600,
+    ) == "created"
+
+    assert observed_modes == [0o600]
+    assert secret_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_project_bootstrap_rejects_action_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "action=build"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match="bootstrap and action are mutually exclusive",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_bootstrap_preserves_existing_files_until_forced(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(None, ("bootstrap=project",))
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+    capsys.readouterr()
+
+    secret_file = tmp_path / ".omegaflow" / "omegaflow-secret.env"
+    tool_ignore = tmp_path / ".omegaflow" / ".gitignore"
+    recordings_ignore = tmp_path / "recordings" / ".gitignore"
+    recording_file = tmp_path / "recordings" / "test-video" / "index.md"
+    secret_file.write_text(
+        "OPENAI_OMEGAFLOW_API_KEY=user-owned-secret\n",
+        encoding="utf-8",
+    )
+    secret_file.chmod(0o640)
+    tool_ignore.write_text(
+        "# user tool rule\n/omegaflow-secret.env\n",
+        encoding="utf-8",
+    )
+    recordings_ignore.write_text(
+        "# user recording rule\n**/app.secret.env\n",
+        encoding="utf-8",
+    )
+    recording_file.write_text("user-owned recording\n", encoding="utf-8")
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+    output = capsys.readouterr().out
+    assert secret_file.read_text(encoding="utf-8") == (
+        "OPENAI_OMEGAFLOW_API_KEY=user-owned-secret\n"
+    )
+    assert secret_file.stat().st_mode & 0o777 == 0o640
+    assert recording_file.read_text(encoding="utf-8") == "user-owned recording\n"
+    assert "exists .omegaflow/omegaflow-secret.env" in output
+    assert "exists recordings/test-video/index.md" in output
+
+    forced = compose_studio_config(
+        None,
+        ("bootstrap=project", "force=true"),
+    )
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(forced)) == 0
+    output = capsys.readouterr().out
+    assert secret_file.read_text(
+        encoding="utf-8"
+    ) == "OPENAI_OMEGAFLOW_API_KEY=user-owned-secret\n"
+    assert secret_file.stat().st_mode & 0o777 == 0o640
+    assert tool_ignore.read_text(encoding="utf-8") == (
+        "# user tool rule\n/omegaflow-secret.env\n"
+    )
+    assert recordings_ignore.read_text(encoding="utf-8") == (
+        "# user recording rule\n**/app.secret.env\n"
+    )
+    assert "id: test-video" in recording_file.read_text(encoding="utf-8")
+    assert "exists .omegaflow/omegaflow-secret.env" in output
+    assert "updated recordings/test-video/index.md" in output
+
+
+def test_action_bootstrap_is_not_a_compatibility_alias() -> None:
+    with pytest.raises(StudioConfigError):
+        compose_studio_config(None, ("action=bootstrap",))
+
+
+def test_bootstrap_default_recording_is_test_video(tmp_path, capsys) -> None:
     workspace = tmp_path / "recordings"
 
     status = studio.run_bootstrap(
@@ -3178,14 +3686,14 @@ def test_bootstrap_default_recording_is_quickstart(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "next    omegaflow recording=quickstart action=build\n" in output
-    recording = (workspace / "quickstart" / "index.md").read_text(
+    assert "next    omegaflow recording=test-video action=build\n" in output
+    recording = (workspace / "test-video" / "index.md").read_text(
         encoding="utf-8"
     )
-    support_dir = workspace / "quickstart" / "scripts"
+    support_dir = workspace / "test-video" / "scripts"
 
-    assert "id: quickstart" in recording
-    assert "title: Quickstart" in recording
+    assert "id: test-video" in recording
+    assert "title: Test Video" in recording
     assert "heading: First Video Beat" in recording
     assert "heading: Second Video Beat" in recording
     assert not support_dir.exists()
@@ -3205,14 +3713,14 @@ def test_bootstrap_dry_run_does_not_write(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "Bootstrap dry run: quickstart" in output
+    assert "Bootstrap dry run: test-video" in output
     assert "Recording workspace:" in output
     assert "Files:" in output
     assert "create" in output
     assert ".omegaflow/config.yaml" in output
     assert "recordings/config.yaml" in output
-    assert "recordings/quickstart/index.md" in output
-    assert "recordings/quickstart/scripts/hello.sh" not in output
+    assert "recordings/test-video/index.md" in output
+    assert "recordings/test-video/scripts/hello.sh" not in output
     assert "No files were written." in output
     assert not (tmp_path / ".omegaflow").exists()
     assert not workspace.exists()
@@ -3232,18 +3740,52 @@ def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "Bootstrap dry run diff: quickstart" in output
+    assert "Bootstrap dry run diff: test-video" in output
     assert "--- /dev/null" in output
     assert f"+++ {tmp_path}/.omegaflow/config.yaml" in output
     assert "+studio:" in output
     assert "+  recording_dir: recordings" in output
     assert "+  data_dir: recordings/.omegaflow" in output
-    assert "+id: quickstart" in output
+    assert "+id: test-video" in output
     assert '+      run: "# First video beat"' in output
     assert '+      run: "# Second video beat"' in output
     assert "No files were written." in output
     assert not (tmp_path / ".omegaflow").exists()
     assert not workspace.exists()
+
+
+def test_bootstrap_dry_run_diff_does_not_disclose_existing_secret(
+    tmp_path, capsys
+) -> None:
+    workspace = tmp_path / "recordings"
+    tool_dir = tmp_path / ".omegaflow"
+    tool_dir.mkdir()
+    (tool_dir / ".gitignore").write_text(
+        studio.BOOTSTRAP_TOOL_GITIGNORE,
+        encoding="utf-8",
+    )
+    secret_file = tool_dir / "omegaflow-secret.env"
+    secret_file.write_text(
+        "OPENAI_OMEGAFLOW_API_KEY=TOP-SECRET-SENTINEL\n",
+        encoding="utf-8",
+    )
+    secret_file.chmod(0o600)
+
+    status = studio.run_bootstrap(
+        {
+            "workspace": str(workspace),
+            "dry_run": "diff",
+            "force": False,
+        }
+    )
+
+    output = capsys.readouterr().out
+    assert status == 0
+    assert "TOP-SECRET-SENTINEL" not in output
+    assert "omegaflow-secret.env (private content hidden)" in output
+    assert secret_file.read_text(encoding="utf-8") == (
+        "OPENAI_OMEGAFLOW_API_KEY=TOP-SECRET-SENTINEL\n"
+    )
 
 
 def test_bootstrap_dry_run_diff_uses_color_when_enabled(
@@ -3285,28 +3827,22 @@ def test_bootstrap_dry_run_rejects_unknown_mode(tmp_path) -> None:
         raise AssertionError("expected unknown bootstrap dry_run mode to fail")
 
 
-def test_bootstrap_creates_nested_recording_workspace(tmp_path) -> None:
-    workspace = tmp_path / "recordings"
-
-    status = studio.run_bootstrap(
-        {
-            "workspace": str(workspace),
-            "recording": "tutorial/recording-file",
-            "force": False,
-        }
+def test_project_bootstrap_rejects_recording_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(
+        None,
+        ("bootstrap=project", "recording=custom"),
     )
 
-    assert status == 0
-    recording = (
-        workspace / "tutorial" / "recording-file" / "index.md"
-    ).read_text(encoding="utf-8")
-    support_dir = workspace / "tutorial" / "recording-file" / "scripts"
+    with pytest.raises(
+        studio.StudioError,
+        match="bootstrap does not accept recording",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
 
-    assert "id: tutorial/recording-file" in recording
-    assert "title: Recording File" in recording
-    assert "heading: First Video Beat" in recording
-    assert "heading: Second Video Beat" in recording
-    assert not support_dir.exists()
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_success_followups_show_user_facing_actions(capsys) -> None:

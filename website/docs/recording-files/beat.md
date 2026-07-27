@@ -183,8 +183,25 @@ Step fields:
 | `expect` | mapping | Exit code, output, regex, or file-existence expectations. |
 | `commands` | list | Command entries for one action. |
 
-Command entries also accept `id`, `show_prompt_after`, `timing`, and pre/post
-command pause fields.
+Command entries also accept `id`, `show_prompt_after`, `timing`, `with_env`,
+and pre/post command pause fields.
+
+`with_env` is a narrow exception for trusted nested OmegaFlow operations that
+need an OmegaFlow service credential:
+
+```yaml
+actions:
+- commands:
+  - id: build_test_video
+    run: omegaflow recording=test-video action=build
+    with_env:
+    - OPENAI_OMEGAFLOW_API_KEY
+```
+
+The allowlisted value reaches that command and its descendants only. It is
+removed before the next command, unavailable to setup, cleanup, checks, and
+browser actions, and rejected if the command emits it. A recording using
+`with_env` is always captured again instead of reusing an earlier capture.
 
 Command output is buffered until the command finishes by default. Set
 `timing: realtime` to run the command in a pseudo-terminal and preserve its live
@@ -537,6 +554,7 @@ class RecordingInvocationConfig:
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
     browser_handoff: bool = False
+    with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
     timing: str = "presentation"
     pre_command_pause: float | None = None

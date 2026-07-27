@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import shutil
 import struct
+import sys
 import wave
 import zlib
 from pathlib import Path
@@ -14,9 +16,11 @@ import pytest
 
 import omegaflow.presentation_build as presentation_build
 import omegaflow.studio as studio
+from omegaflow import __version__
 from omegaflow import audio as audio_module
 from omegaflow.capture import CaptureContext
 from omegaflow.presentation_build import (
+    _auth_state_sha256,
     _capture_environment,
     _source_words_with_timing,
     capture_recording,
@@ -285,6 +289,123 @@ def test_capture_environment_applies_color_and_removes_no_color(
     assert "NO_COLOR" not in context.environment
 
 
+def test_capture_environment_constructs_deterministic_command_environment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    configured_bin = tmp_path / "tools"
+    configured_bin.mkdir()
+    monkeypatch.setenv("PATH", "/host-only/bin")
+    monkeypatch.setenv("HOST_ONLY_APPLICATION_VALUE", "must-not-leak")
+
+    working_directory, environment = _capture_environment(
+        {
+            "environment": {
+                "working_directory": str(tmp_path),
+                "path_prepend": [str(configured_bin)],
+                "variables": {
+                    "EXPLICIT_APPLICATION_VALUE": "visible",
+                    "OMEGAFLOW_VERSION": "forged",
+                },
+            }
+        }
+    )
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+        working_directory=working_directory,
+        environment=environment,
+    )
+
+    assert context.environment["EXPLICIT_APPLICATION_VALUE"] == "visible"
+    assert context.environment["OMEGAFLOW_VERSION"] == __version__
+    assert context.environment["PATH"].split(os.pathsep) == [
+        str(configured_bin.resolve()),
+        str(Path(sys.executable).parent),
+        *os.defpath.split(os.pathsep),
+    ]
+    assert "HOST_ONLY_APPLICATION_VALUE" not in context.environment
+    assert "/host-only/bin" not in context.environment["PATH"]
+
+
+def test_browser_auth_fingerprint_uses_explicit_recording_environment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    configured = tmp_path / "configured-auth.json"
+    configured.write_text('{"cookies": [], "origins": []}', encoding="utf-8")
+    host = tmp_path / "host-auth.json"
+    host.write_text('{"host": "must-not-be-used"}', encoding="utf-8")
+    monkeypatch.setenv("BROWSER_AUTH_STATE", str(host))
+
+    digest = _auth_state_sha256(
+        {
+            "environment": {
+                "working_directory": str(tmp_path),
+                "variables": {"BROWSER_AUTH_STATE": configured.name},
+            },
+            "browser": {"auth": {"storage_state_env": "BROWSER_AUTH_STATE"}},
+        }
+    )
+
+    assert digest == hashlib.sha256(configured.read_bytes()).hexdigest()
+
+
+def test_omegaflow_version_participates_in_capture_freshness(monkeypatch) -> None:
+    spec = {
+        "id": "versioned-environment",
+        "beats": [
+            {
+                "id": "probe",
+                "narration": "Probe the environment.",
+                "actions": [{"run": "true"}],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    monkeypatch.setattr(presentation_build, "__version__", "1.0")
+    first = presentation_build.artifact_fingerprints(spec, plan)
+    monkeypatch.setattr(presentation_build, "__version__", "2.0")
+    second = presentation_build.artifact_fingerprints(spec, plan)
+
+    assert first.capture_fingerprint != second.capture_fingerprint
+
+
+def test_capture_with_delegated_environment_is_never_reused(
+    tmp_path: Path, monkeypatch
+) -> None:
+    spec = {
+        "id": "delegated-environment",
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": "true",
+                                "with_env": ["OPENAI_OMEGAFLOW_API_KEY"],
+                            }
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    monkeypatch.setattr(
+        presentation_build,
+        "read_fingerprint",
+        lambda _run_dir: {"version": 1},
+    )
+    monkeypatch.setattr(
+        presentation_build,
+        "capture_artifacts_exist",
+        lambda _plan, _run_dir: True,
+    )
+
+    assert not presentation_build.capture_is_fresh(spec, plan, tmp_path)
+
+
 def test_capture_environment_disables_color(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CLICOLOR_FORCE", "1")
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -306,6 +427,21 @@ def test_capture_environment_disables_color(tmp_path: Path, monkeypatch) -> None
     assert "CLICOLOR_FORCE" not in context.environment
     assert "FORCE_COLOR" not in context.environment
     assert "PY_COLORS" not in context.environment
+
+
+def test_capture_environment_rejects_private_service_names() -> None:
+    with pytest.raises(
+        presentation_build.PresentationBuildError, match="use with_env"
+    ):
+        _capture_environment(
+            {
+                "environment": {
+                    "variables": {
+                        "OPENAI_OMEGAFLOW_API_KEY": "must-not-be-recorded"
+                    }
+                }
+            }
+        )
 
 
 def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:

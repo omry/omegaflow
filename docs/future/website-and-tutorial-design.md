@@ -585,14 +585,15 @@ This is a terminal-browser-terminal story with a visible before/after result.
 Browser primitives are taught once while constructing the second beat; later
 milestones reuse that beat to teach narration, guidance, and publishing.
 
-### Application distribution and acceptance
+### Application distribution and release acceptance
 
 Tiny Canvas and its immutable draft artwork are versioned package assets in the
 wheel and source distribution. `omegaflow bootstrap=tutorial` materializes an
 editable, user-owned copy only after confirming that `bootstrap=project` has
 created a valid OmegaFlow project.
 
-Automated acceptance must use the exact distribution under test:
+After the implementation and tutorial are complete, final release acceptance
+must use the exact distribution under test:
 
 1. Build the wheel and source distribution.
 2. Install the wheel and documented browser dependencies in a clean
@@ -1030,12 +1031,18 @@ command lookup. OmegaFlow never renders configured values in its own output;
 documentation warns that this mapping is not secret storage.
 
 `.omegaflow/omegaflow-secret.env` is private to scoped OmegaFlow service
-operations. A `with_env(<allowlisted-name>)` boundary makes one value available
-only while that operation runs; initially only TTS may request
-`OPENAI_OMEGAFLOW_API_KEY`. Never pass it to recorded terminal or browser
-processes, actions, checks, setup, cleanup, or applications. `llm-auth` is not
-the default because its repository-root `.env` policy conflicts with valid
-OmegaFlow subprojects.
+operations. OmegaFlow resolves `OPENAI_OMEGAFLOW_API_KEY` for TTS without
+mutating its process environment. A parent-process value is the fileless CI
+source; otherwise OmegaFlow reads the private project file.
+
+Recorded commands receive no service secret by default. A trusted nested
+OmegaFlow build may opt one command and its descendants into an allowlisted
+value with `with_env: [OPENAI_OMEGAFLOW_API_KEY]`. This exception is valid only
+on a terminal `commands` entry; it does not extend to later commands, checks,
+setup, cleanup, browser processes, or unrelated applications. OmegaFlow
+redacts and rejects emitted values and disables capture reuse for any recording
+that delegates a service secret. `llm-auth` is not the default because its
+repository-root `.env` policy conflicts with valid OmegaFlow subprojects.
 
 Application secrets are separate. A recording declares required names through
 typed `environment.secrets`. Resolve each name from exactly one source:
@@ -1074,26 +1081,14 @@ Every prerequisite follows the same sequence:
 1. Confirm the smallest user-facing contract and forbidden behavior.
 2. Add a focused test that fails for the missing behavior.
 3. Implement only that capability and preserve unrelated worktree changes.
-4. Run focused tests, relevant regression suites, lint/type checks, and the
-   installed-distribution path appropriate to the feature.
+4. Run focused tests, relevant regression suites, and lint/type checks.
 5. Build a minimal public demonstration using ordinary OmegaFlow source or CLI
    syntax rather than a private test hook.
 6. Present the exact command, source excerpt, expected visible behavior, and
    generated artifact or player URL to the user.
 7. Review and commit that slice before beginning the next prerequisite.
 
-### Prerequisite 0: installed-distribution demonstration harness
-
-Create the reusable clean-environment harness first. It builds the wheel and
-source distribution, installs the wheel with declared extras, invokes the
-installed `omegaflow` executable, and stores inspectable demo artifacts under a
-temporary workspace. This is test infrastructure rather than a user feature,
-but it makes every subsequent proof representative of release behavior.
-
-Demonstration: show package paths, executable resolution, version, and one
-successful minimal build from outside the source checkout.
-
-### Prerequisite 1: typed project bootstrap
+### Prerequisite 0: typed project bootstrap
 
 Implement `bootstrap=project`, mutual exclusion with `action`, the `test-video`
 rename, safe existing-file behavior, and the minimal project file tree. Do not
@@ -1103,7 +1098,7 @@ Demonstration: bootstrap an empty directory, show the generated tree, build and
 watch `test-video`, then show that `bootstrap=project action=build` fails before
 writing.
 
-### Prerequisite 2: deterministic recorded-command environment
+### Prerequisite 1: deterministic recorded-command environment
 
 Stop wholesale host-environment inheritance while retaining non-secret
 `environment.variables`, `path_prepend`, OmegaFlow-owned terminal plumbing, and
@@ -1114,19 +1109,21 @@ non-secret variable and `OMEGAFLOW_VERSION` reach the application while an
 arbitrary host variable does not. Show both the recording source and captured
 output.
 
-### Prerequisite 3: private OmegaFlow TTS environment
+### Prerequisite 2: private OmegaFlow TTS environment
 
 Add `.omegaflow/.gitignore`, restricted
-`.omegaflow/omegaflow-secret.env`, and scoped `with_env` access for TTS. Prove
-that the credential is unavailable to recorded commands and is never rendered
-by OmegaFlow. Keep recording-local application secrets out of this slice.
+`.omegaflow/omegaflow-secret.env`, non-mutating TTS access, and explicit
+per-command `with_env` delegation for a trusted nested OmegaFlow build. Prove
+that the credential is otherwise unavailable to recorded commands, disappears
+after the delegated command, and is never retained in rendered output. Keep
+recording-local application secrets out of this slice.
 
 Demonstration: use a stubbed local TTS operation to prove scoped availability,
 then run the environment probe to prove the same name is absent from the
 recorded process. Show permissions, ignore behavior, and secret-safe output
 without displaying a credential value.
 
-### Prerequisite 4: faithful terminal control-sequence playback
+### Prerequisite 3: faithful terminal control-sequence playback
 
 Teach the terminal player to consume ANSI character-set designation sequences
 and related control variants instead of rendering bytes such as `ESC ( B`.
@@ -1135,7 +1132,7 @@ Keep this parser correction separate from authoring realtime input.
 Demonstration: replay a fixed nano cast containing the previously visible bad
 sequence and show clean shortcut/status rendering in the generated player.
 
-### Prerequisite 5: realtime terminal input
+### Prerequisite 4: realtime terminal input
 
 Implement generic persistent-PTY readiness, text and named-key input, control
 keys, timing, process completion, and failure cleanup. Exercise styled `nano`
@@ -1145,7 +1142,7 @@ Demonstration: a recording opens a file in nano, makes and saves a small edit,
 and exits cleanly. Show the source file before and after alongside the generated
 video.
 
-### Prerequisite 6: terminal highlight ranges
+### Prerequisite 5: terminal highlight ranges
 
 Extend narration-synchronized terminal highlighting to support multi-line
 ranges and several disjoint text spans in one effect, with deterministic
@@ -1154,7 +1151,7 @@ matching and explicit repeated-text behavior.
 Demonstration: highlight frontmatter, a beat declaration, and two separate
 action fields at narration anchors in a short source walkthrough.
 
-### Prerequisite 7: semantic browser drag and pointer feedback
+### Prerequisite 6: semantic browser drag and pointer feedback
 
 Add a typed drag action using existing browser targets for `from` and `to`,
 center defaults, and optional component-relative percentage positions. Add a
@@ -1165,7 +1162,7 @@ Demonstration: drag two SVG objects between semantic targets in a small fixture
 and show the generated player at normal and resized layouts. The recording
 source must contain no absolute pixels.
 
-### Prerequisite 8: beat-targeted watch
+### Prerequisite 7: beat-targeted watch
 
 Add a typed watch override and stable URL representation that resolve a named
 beat against the presentation snapshot loaded on refresh. Validate unknown ids
@@ -1176,7 +1173,7 @@ Demonstration: open the same recording directly at two named beats, show the URL
 and CLI form, and prove that a new build does not alter an already playing
 snapshot until refresh.
 
-### Prerequisite 9: shared presentation/realtime timing contract
+### Prerequisite 8: shared presentation/realtime timing contract
 
 Give terminal and browser executable actions the same timing semantics, with an
 optional inherited beat default. A realtime terminal command completes on
@@ -1188,7 +1185,7 @@ Demonstration: place a presentation-timed browser action beside a bounded
 realtime browser animation, seek through both, and show their fixed versus
 retimeable durations in generated metadata and playback.
 
-### Prerequisite 10: realtime browser audio
+### Prerequisite 9: realtime browser audio
 
 Capture page audio with the realtime browser interval, preserve audio/video
 alignment, mix it into the outer presentation exactly once, and define mute,
@@ -1201,13 +1198,14 @@ pause outer narration until the authored completion boundary, seek and replay,
 and verify audibly and through media inspection that only one synchronized
 inner stream exists.
 
-### Prerequisite 11: tutorial materialization and Tiny Canvas
+### Prerequisite 10: tutorial materialization and Tiny Canvas
 
 Implement `bootstrap=tutorial` as the guarded extension of an existing project.
 Package Tiny Canvas, the draft artwork, styled nano configuration, semantic drag
 anchors, starter terminal beat, and checks. Validate missing-project behavior,
-package contents, installed materialization, idempotency, and absence of source-
-checkout dependencies.
+package-resource contents, materialization, and idempotency. Installed-package
+behavior and absence of source-checkout dependencies are release-validation
+concerns rather than prerequisites for authoring the feature.
 
 Demonstration: show failure in an unbootstrapped directory, then materialize the
 tutorial after `bootstrap=project`, run Tiny Canvas, build the starter beat, and
@@ -1221,8 +1219,8 @@ After all prerequisite reviews pass:
 2. Build the one continuous supporting walkthrough from the same workspace.
 3. Keep the written instructions complete without video playback.
 4. Build and validate the learner's three-beat sunset-beach recording, nested
-   narration demonstration, guide, and standalone output through the installed
-   distribution.
+   narration demonstration, guide, and standalone output through the
+   development CLI.
 5. Measure complete narrated runtime and add chapter navigation only if the
    substantive content justifies it.
 
@@ -1257,7 +1255,9 @@ sources, and publishes no secret value.
 
 The implementation is ready for release review only after:
 
-1. Wheel and source distribution build and install cleanly.
+1. A clean-environment harness builds the wheel and source distribution,
+   installs the wheel with declared extras, invokes the installed `omegaflow`
+   executable outside the source checkout, and retains inspectable artifacts.
 2. Both bootstrap operations pass path, safety, ignore, permission,
    idempotency, and installed-resource contracts.
 3. Every documented tutorial command runs through the installed CLI.
@@ -1306,4 +1306,4 @@ the one-feature-at-a-time demonstration gates.
 | D4a: editor and media prerequisites | Approved | Styled scripted nano input, semantic drag, beat-targeted watch, terminal/browser timing parity, and generic realtime browser audio are explicit gates before tutorial authoring |
 | D5: migration policy | Approved | Clean cut with no compatibility routes; remove duplicate pages and tutorial placeholders; retain the suitable homepage demo asset location without promising compatibility |
 | D6: bootstrap and environment contract | Approved | Use mutually exclusive `bootstrap=project|tutorial`; generate `test-video`, scoped OmegaFlow secrets, deterministic command environments, and a guarded packaged Tiny Canvas workspace |
-| D7: prerequisite execution policy | Approved | Implement one prerequisite per vertical slice, test it first, prove it through the installed distribution, show its public behavior and artifacts, review and commit it, then start the next |
+| D7: prerequisite execution policy | Approved | Implement one prerequisite per vertical slice, test it first, demonstrate its public behavior through the development CLI, review and commit it, then start the next; verify the installed distribution during final release acceptance |

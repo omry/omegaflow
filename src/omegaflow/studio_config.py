@@ -199,7 +199,6 @@ def register_resolvers() -> None:
 
 
 class StudioAction(str, Enum):
-    bootstrap = "bootstrap"
     build = "build"
     check = "check"
     clean = "clean"
@@ -209,6 +208,11 @@ class StudioAction(str, Enum):
     output = "output"
     runs = "runs"
     list = "list"
+
+
+class BootstrapMode(str, Enum):
+    project = "project"
+    tutorial = "tutorial"
 
 
 class StudioStep(str, Enum):
@@ -252,12 +256,13 @@ class StudioRuntimeConfig:
 @dataclass
 class StudioConfig:
     project_root: str = "${omegaflow_project_root:}"
-    action: StudioAction = StudioAction.build
+    action: StudioAction | None = None
+    bootstrap: BootstrapMode | None = None
     step: StudioStep | None = None
     output_format: str = "text"
     verbose: bool = False
-    load_env_file: bool = True
-    env_file: str | None = ".env"
+    load_env_file: bool = False
+    env_file: str | None = None
     env_override: bool = False
     surface: str | None = None
     dry_run: Any = False
@@ -335,7 +340,7 @@ class RecordingAudioTranscriptionConfig:
 class RecordingAudioConfig:
     enabled: bool = False
     provider: str = "openai"
-    env: str = "OPENAI_API_KEY"
+    env: str = "OPENAI_OMEGAFLOW_API_KEY"
     model: str = "gpt-4o-mini-tts"
     voice: str = "marin"
     format: str = "mp3"
@@ -523,6 +528,7 @@ class RecordingInvocationConfig:
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
     browser_handoff: bool = False
+    with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
     timing: str = "presentation"
     pre_command_pause: float | None = None
@@ -1089,13 +1095,13 @@ def load_env_file(path: Path, *, override: bool = False) -> dict[str, str]:
 
 
 def load_configured_env_file(config: dict[str, Any]) -> dict[str, str]:
-    enabled = config.get("load_env_file", True)
+    enabled = config.get("load_env_file", False)
     if not isinstance(enabled, bool):
         raise StudioConfigError("load_env_file must be a boolean")
     if not enabled:
         return {}
 
-    env_file = config.get("env_file", ".env")
+    env_file = config.get("env_file")
     if env_file is None:
         return {}
     if not isinstance(env_file, str) or not env_file:

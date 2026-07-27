@@ -1,0 +1,1 @@
+Run recorded commands in an isolated environment with deterministic command lookup, explicit non-secret variables, a private home directory, and the active `OMEGAFLOW_VERSION` instead of inheriting arbitrary host settings.

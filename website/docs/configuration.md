@@ -11,7 +11,7 @@ configuration, which lives in the recording workspace and describes individual
 videos.
 
 The bundled OmegaFlow base config is used by default. `omegaflow
-action=bootstrap` creates a project-local tool config so the recording workspace
+bootstrap=project` creates a project-local tool config so the recording workspace
 is explicit for everyone working in that project.
 
 ## Override Order
@@ -42,7 +42,7 @@ studio:
 ```
 
 OmegaFlow looks for `.omegaflow/config.yaml` in the current project. The file is
-optional, and `omegaflow action=bootstrap` creates it for new projects.
+optional, and `omegaflow bootstrap=project` creates it for new projects.
 
 Use the file for project defaults that should be shared by everyone working in
 the repository. Use CLI overrides for one-off changes:
@@ -71,10 +71,10 @@ output, and env-file paths are resolved from that root.
 | `studio.run_gc.max_age_days` | Retains successful, failed, and incomplete runs modified within this many days unless protected. Defaults to `30`. |
 | `studio.run_gc.max_runs_per_recording` | Bounds retained runs independently for each recording, subject to protected-run exceptions. Defaults to `10`. |
 | `studio.run_gc.preserve_latest_failure` | Protects the newest failed run for each recording. Defaults to `true`. |
-| `load_env_file` | Enables loading a process-level `.env` file before running actions. |
-| `env_file` | Path to the process-level `.env` file, resolved from the project root. |
+| `load_env_file` | Enables the opt-in process-level env-file compatibility path before running actions. Defaults to `false`. |
+| `env_file` | Optional process-level env file resolved from the project root. OmegaFlow TTS uses `.omegaflow/omegaflow-secret.env` instead. |
 | `env_override` | Allows values from `env_file` to replace existing environment variables. |
-| `workspace` | Bootstrap-only destination for `action=bootstrap`; defaults to `studio.recording_dir`. |
+| `workspace` | Bootstrap-only destination for `bootstrap=project`; defaults to `studio.recording_dir`. |
 | `watch_port` | Optional fixed port for the local `action=watch` server. Leave unset to select a free port automatically. |
 | `autoplay` | Controls countdown autoplay for `action=watch`. Set `false` to open the player paused. |
 | `dry_run` | Preview without writing. For bootstrap, use `dry_run=true` to list generated files or `dry_run=diff` to show unified diffs. |

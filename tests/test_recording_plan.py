@@ -86,6 +86,77 @@ def test_terminal_action_id_is_the_shared_capture_contract(
     assert terminal_action_id(action_index, command_index, command) == expected
 
 
+def test_terminal_command_accepts_allowlisted_scoped_environment() -> None:
+    spec = {
+        "id": "scoped-environment",
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": "omegaflow recording=test-video action=build",
+                                "with_env": ["OPENAI_OMEGAFLOW_API_KEY"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    plan = normalize_recording_plan(spec)
+
+    assert list(plan.beats[0].actions[0].config["commands"][0]["with_env"]) == [
+        "OPENAI_OMEGAFLOW_API_KEY"
+    ]
+
+
+def test_terminal_command_rejects_non_allowlisted_scoped_environment() -> None:
+    spec = {
+        "id": "scoped-environment",
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": "true",
+                                "with_env": ["UNRELATED_SECRET"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(RecordingPlanError, match="not an allowlisted"):
+        normalize_recording_plan(spec)
+
+
+def test_terminal_step_does_not_silently_drop_scoped_environment() -> None:
+    spec = {
+        "id": "scoped-environment",
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "run": "true",
+                        "with_env": ["OPENAI_OMEGAFLOW_API_KEY"],
+                    }
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(RecordingPlanError, match="only on entries inside commands"):
+        normalize_recording_plan(spec)
+
+
 def terminal_spec() -> dict:
     return {
         "id": "terminal-demo",

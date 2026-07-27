@@ -20,7 +20,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable
 
-from . import audio, record
+from . import __version__, audio, record
 from .browser_capture import PersistentBrowserRunner
 from .browser_runtime import (
     CHROMIUM_BROWSER_VERSION,
@@ -75,6 +75,11 @@ from .recording_plan import (
     terminal_action_id,
 )
 from .studio_config import RecordingMedium, project_root
+from .service_environment import (
+    ALLOWED_SERVICE_ENVIRONMENT_NAMES,
+    ServiceEnvironmentError,
+    resolve_service_environment,
+)
 from .terminal_capture import PersistentTerminalRunner
 from .tool_progress import format_activity_elapsed
 
@@ -403,16 +408,22 @@ def _capture_environment(
     ):
         raise PresentationBuildError("environment.path_prepend must be a list of strings")
     path_entries = [str(record.relative_path(item)) for item in path_prepend]
-    path_entries.append(str(Path(sys.executable).parent))
     variables = environment.get("variables", {})
     if not isinstance(variables, Mapping):
         raise PresentationBuildError("environment.variables must be a mapping")
+    reserved = sorted(set(variables) & ALLOWED_SERVICE_ENVIRONMENT_NAMES)
+    if reserved:
+        raise PresentationBuildError(
+            f"environment.variables must not contain private OmegaFlow service "
+            f"name {reserved[0]!r}; use with_env on one terminal command"
+        )
     resolved: dict[str, str | None] = {
         str(key): str(value) for key, value in variables.items()
     }
-    resolved["PATH"] = os.pathsep.join(
-        [*path_entries, os.environ.get("PATH", "")]
-    )
+    resolved["PATH"] = record.recorded_command_path(path_entries)
+    if sys.prefix != sys.base_prefix:
+        resolved["VIRTUAL_ENV"] = sys.prefix
+    resolved["OMEGAFLOW_VERSION"] = __version__
     style = spec.get("style", {})
     color = style.get("color", True) if isinstance(style, Mapping) else True
     if color:
@@ -515,7 +526,7 @@ def capture_recording(
     working_directory, environment = _capture_environment(spec)
     terminal_options = _terminal_capture_options(spec)
     run_dir.mkdir(parents=True, exist_ok=True)
-    configured_venv = environment.get("VIRTUAL_ENV", os.environ.get("VIRTUAL_ENV", ""))
+    configured_venv = environment.get("VIRTUAL_ENV", "")
     venv = configured_venv if isinstance(configured_venv, str) else ""
     try:
         record.write_postmortem_entrypoint(
@@ -530,6 +541,14 @@ def capture_recording(
         ) from exc
     title = plan.title or plan.id
     effective_headless = headless and not headed
+    delegated_names = _delegated_environment_names(plan)
+    try:
+        delegated_environment = resolve_service_environment(
+            delegated_names,
+            root=project_root_from_spec(spec),
+        )
+    except ServiceEnvironmentError as exc:
+        raise PresentationBuildError(str(exc)) from exc
     coordinator = CaptureCoordinator(
         terminal_runner_factory=lambda: PersistentTerminalRunner(
             title=title,
@@ -537,6 +556,7 @@ def capture_recording(
             idle_time_limit=idle_time_limit,
             headless=effective_headless,
             color=environment.get("NO_COLOR") is None,
+            delegated_environment=delegated_environment,
             **terminal_options,
         ),
         browser_runner_factory=(
@@ -743,7 +763,8 @@ def _auth_state_sha256(spec: Mapping[str, Any]) -> str | None:
     configured = auth.get("storage_state_path")
     env_name = auth.get("storage_state_env")
     if env_name:
-        configured = os.environ.get(str(env_name))
+        _, resolved_environment = _capture_environment(spec)
+        configured = resolved_environment.get(str(env_name))
     if configured is None:
         return None
     if not isinstance(configured, str) or not configured:
@@ -774,6 +795,7 @@ def artifact_fingerprints(
         capture_environment={
             "capture": capture,
             "environment": environment,
+            "omegaflow_version": __version__,
             "terminal": {
                 "color": resolved_environment.get("NO_COLOR") is None,
                 **_terminal_capture_options(spec),
@@ -793,6 +815,8 @@ def artifact_fingerprints(
 
 
 def capture_is_fresh(spec: Mapping[str, Any], plan: RecordingPlan, run_dir: Path) -> bool:
+    if _delegated_environment_names(plan):
+        return False
     stored = read_fingerprint(run_dir)
     if stored is None or not capture_artifacts_exist(plan, run_dir):
         return False
@@ -1987,4 +2011,52 @@ def _secret_values(spec: Mapping[str, Any]) -> tuple[str, ...]:
                 visit(item)
 
     visit(spec)
-    return tuple(os.environ[name] for name in sorted(names) if os.environ.get(name))
+    values = [os.environ[name] for name in sorted(names) if os.environ.get(name)]
+    scoped_names = _delegated_environment_names_from_spec(spec)
+    if scoped_names:
+        try:
+            scoped = resolve_service_environment(
+                scoped_names,
+                root=project_root_from_spec(spec),
+            )
+        except ServiceEnvironmentError as exc:
+            raise PresentationBuildError(str(exc)) from exc
+        values.extend(scoped.values())
+    return tuple(dict.fromkeys(value for value in values if value))
+
+
+def _delegated_environment_names(plan: RecordingPlan) -> tuple[str, ...]:
+    names: list[str] = []
+    for beat in plan.beats:
+        for action in beat.actions:
+            if not isinstance(action, TerminalActionPlan):
+                continue
+            commands = action.config.get("commands")
+            values = commands if commands else (action.config,)
+            for command in values:
+                for name in command.get("with_env", ()):
+                    if name not in names:
+                        names.append(name)
+    return tuple(names)
+
+
+def _delegated_environment_names_from_spec(
+    spec: Mapping[str, Any],
+) -> tuple[str, ...]:
+    names: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, Mapping):
+            with_env = value.get("with_env")
+            if isinstance(with_env, list):
+                for name in with_env:
+                    if isinstance(name, str) and name not in names:
+                        names.append(name)
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(spec)
+    return tuple(names)

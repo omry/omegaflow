@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -152,6 +153,7 @@ omegaflow_run_user_command() {
   local stdout_target="$2"
   local stderr_target="$3"
   local timing="${4:-presentation}"
+  local encoded_environment="${5:-}"
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
   local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
   local status_result="${status_pipe}.result"
@@ -200,15 +202,65 @@ import sys
 print(base64.b64encode(sys.argv[1].encode()).decode())
 PY
   )
+  if [[ -n "$encoded_environment" ]]; then
+    encoded_command=$("$OMEGAFLOW_PYTHON" - \
+      "$encoded_command" "$encoded_environment" <<'PY'
+import base64
+import json
+import shlex
+import sys
+
+command = base64.b64decode(sys.argv[1]).decode()
+environment = json.loads(base64.b64decode(sys.argv[2]).decode())
+lines = ["__omegaflow_scoped_command() {"]
+for index, (name, value) in enumerate(environment.items()):
+    lines.extend(
+        [
+            f'  local __omegaflow_had_{index}="${{{name}+x}}"',
+            f'  local __omegaflow_old_{index}="${{{name}-}}"',
+            f"  export {name}={shlex.quote(value)}",
+        ]
+    )
+lines.extend([f"  eval {shlex.quote(command)}", "  local __omegaflow_status=$?"])
+for index, name in reversed(list(enumerate(environment))):
+    lines.extend(
+        [
+            f'  if [[ -n "$__omegaflow_had_{index}" ]]; then',
+            f'    export {name}="$__omegaflow_old_{index}"',
+            "  else",
+            f"    unset {name}",
+            "  fi",
+        ]
+    )
+lines.extend(
+    [
+        '  return "$__omegaflow_status"',
+        "}",
+        "__omegaflow_scoped_command",
+        "__omegaflow_scoped_status=$?",
+        "unset -f __omegaflow_scoped_command",
+        '(exit "$__omegaflow_scoped_status")',
+    ]
+)
+wrapped = "\n".join(lines)
+print(base64.b64encode(wrapped.encode()).decode())
+PY
+    )
+  fi
   local decoder='import base64,sys;print(base64.b64decode(sys.argv[1]).decode(),end="")'
   local relay_pid=""
   local pty_ready="${status_pipe}.pty-ready"
   local pty_opened="${status_pipe}.pty-opened"
+  local secret_leak="${status_pipe}.secret-leak"
   if [[ "$timing" == "realtime" ]]; then
-    rm -f "$pty_ready" "$pty_opened"
-    "$OMEGAFLOW_PYTHON" - "$pty_ready" "$pty_opened" "$stdout_target" <<'PY' &
+    rm -f "$pty_ready" "$pty_opened" "$secret_leak"
+    "$OMEGAFLOW_PYTHON" - \
+      "$pty_ready" "$pty_opened" "$stdout_target" \
+      "$encoded_environment" "$secret_leak" <<'PY' &
+import base64
 import errno
 import fcntl
+import json
 import os
 import pty
 import struct
@@ -217,7 +269,17 @@ import termios
 import time
 from pathlib import Path
 
-ready_path, opened_path, log_path = sys.argv[1:]
+ready_path, opened_path, log_path, encoded_environment, leak_path = sys.argv[1:]
+environment = (
+    json.loads(base64.b64decode(encoded_environment).decode())
+    if encoded_environment
+    else {}
+)
+secrets = tuple(
+    value.encode()
+    for value in environment.values()
+    if isinstance(value, str) and value
+)
 master_fd, slave_fd = pty.openpty()
 try:
     try:
@@ -237,7 +299,50 @@ try:
         time.sleep(0.01)
     os.close(slave_fd)
     slave_fd = -1
+    state = {"pending": b"", "leaked": False}
     with open(log_path, "ab", buffering=0) as log:
+        def emit(data):
+            if not data:
+                return
+            log.write(data)
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+
+        def redact(data, *, final=False):
+            state["pending"] += data
+            output = bytearray()
+            while state["pending"]:
+                matches = []
+                for secret in secrets:
+                    index = state["pending"].find(secret)
+                    if index >= 0:
+                        matches.append((index, secret))
+                if matches:
+                    index, secret = min(matches, key=lambda item: item[0])
+                    output.extend(state["pending"][:index])
+                    output.extend(b"[REDACTED]")
+                    state["pending"] = state["pending"][index + len(secret) :]
+                    state["leaked"] = True
+                    continue
+                if final or not secrets:
+                    output.extend(state["pending"])
+                    state["pending"] = b""
+                    break
+                keep = 0
+                for secret in secrets:
+                    maximum = min(len(state["pending"]), len(secret) - 1)
+                    for length in range(maximum, 0, -1):
+                        if state["pending"].endswith(secret[:length]):
+                            keep = max(keep, length)
+                            break
+                if len(state["pending"]) > keep:
+                    output.extend(state["pending"][: len(state["pending"]) - keep])
+                    state["pending"] = state["pending"][
+                        len(state["pending"]) - keep :
+                    ]
+                break
+            return bytes(output)
+
         while True:
             try:
                 chunk = os.read(master_fd, 4096)
@@ -247,9 +352,10 @@ try:
                 raise
             if not chunk:
                 break
-            log.write(chunk)
-            sys.stdout.buffer.write(chunk)
-            sys.stdout.buffer.flush()
+            emit(redact(chunk))
+        emit(redact(b"", final=True))
+    if state["leaked"]:
+        Path(leak_path).write_text("redacted\n", encoding="utf-8")
 finally:
     if slave_fd >= 0:
         os.close(slave_fd)
@@ -288,8 +394,51 @@ PY
   if [[ -f "$status_result" ]]; then
     IFS= read -r status <"$status_result" || status=125
   fi
-  rm -f "$status_pipe" "$status_result" "$pty_ready" "$pty_opened"
+  if [[ -f "$secret_leak" ]]; then
+    printf '%s\n' 'delegated secret appeared in terminal command output' \
+      >>"$stderr_target"
+    status=125
+  fi
+  rm -f \
+    "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" "$secret_leak"
   return "$status"
+}
+
+omegaflow_validate_no_secret_output() {
+  local encoded_environment="$1"
+  local stdout_target="$2"
+  local stderr_target="$3"
+  local stdout_start="$4"
+  local stderr_start="$5"
+  [[ -z "$encoded_environment" ]] && return 0
+  "$OMEGAFLOW_PYTHON" - \
+    "$encoded_environment" "$stdout_target" "$stderr_target" \
+    "$stdout_start" "$stderr_start" <<'PY'
+import base64
+import json
+import sys
+
+encoded, stdout_path, stderr_path, stdout_start, stderr_start = sys.argv[1:]
+environment = json.loads(base64.b64decode(encoded).decode())
+secrets = tuple(
+    value.encode()
+    for value in environment.values()
+    if isinstance(value, str) and value
+)
+paths = ((stdout_path, int(stdout_start)), (stderr_path, int(stderr_start)))
+leaked = False
+for path, offset in paths:
+    with open(path, "rb+") as handle:
+        handle.seek(offset)
+        output = handle.read()
+        if any(secret in output for secret in secrets):
+            leaked = True
+            handle.truncate(offset)
+if leaked:
+    with open(stderr_path, "ab") as handle:
+        handle.write(b"delegated secret appeared in terminal command output\n")
+    raise SystemExit(1)
+PY
 }
 
 omegaflow_emit_range() {
@@ -442,6 +591,7 @@ omegaflow_run_step() {
   local pre_enter_pause="$9"
   local post_enter_pause="${10}"
   local post_command_pause="${11}"
+  local encoded_environment="${12}"
   local stdout_start
   local stderr_start
   local status
@@ -456,13 +606,21 @@ omegaflow_run_step() {
   OMEGAFLOW_PROMPT_VISIBLE=0
   if [[ "$timing" == "realtime" && "$output_mode" == "real" ]]; then
     omegaflow_run_user_command \
-      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" realtime
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
+      realtime "$encoded_environment"
     status=$?
     output_streamed=true
   else
     omegaflow_run_user_command \
-      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR"
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
+      presentation "$encoded_environment"
     status=$?
+  fi
+  if ! omegaflow_validate_no_secret_output \
+    "$encoded_environment" \
+    "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
+    "$stdout_start" "$stderr_start"; then
+    status=125
   fi
   if [[ -z "$post_enter_pause" ]]; then
     post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
@@ -780,6 +938,17 @@ class TerminalControlSession:
         )
         if status != "completed":
             error = completed.get("error", "unknown terminal failure")
+            stderr_path = (
+                self.context.paths.capture / "terminal.stderr.log"
+            )
+            try:
+                stderr_text = stderr_path.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            except OSError:
+                stderr_text = ""
+            if "delegated secret appeared in terminal command output" in stderr_text:
+                error = "delegated secret appeared in terminal command output"
             raise TerminalCaptureError(
                 f"terminal {op} request {seq} failed for {beat_id or '<recording>'}: {error}"
             )
@@ -951,6 +1120,7 @@ class PersistentTerminalRunner:
         post_enter_pause: float = 0.0,
         post_command_pause: float = 0.0,
         timeout_seconds: float = CONTROL_TIMEOUT_SECONDS,
+        delegated_environment: Mapping[str, str] | None = None,
     ) -> None:
         self.record_cast = record_cast
         self.title = title
@@ -968,6 +1138,7 @@ class PersistentTerminalRunner:
         self.post_enter_pause = post_enter_pause
         self.post_command_pause = post_command_pause
         self.timeout_seconds = timeout_seconds
+        self.delegated_environment = dict(delegated_environment or {})
         self.context: CaptureContext | None = None
         self.session: TerminalControlSession | None = None
         self._captured_beat_ids: list[str] = []
@@ -1033,6 +1204,7 @@ class PersistentTerminalRunner:
                 actions,
                 self.context,
                 command_snapshots=command_snapshots,
+                delegated_environment=self.delegated_environment,
             ),
             wait_indefinitely=_beat_has_browser_handoff(actions),
             on_progress=on_progress,
@@ -1142,6 +1314,7 @@ def _beat_script(
     context: CaptureContext | None,
     *,
     command_snapshots: Mapping[str, Mapping[str, str]],
+    delegated_environment: Mapping[str, str],
 ) -> str:
     if context is None:
         raise TerminalCaptureError("terminal capture context is unavailable")
@@ -1163,6 +1336,7 @@ def _beat_script(
                             command,
                             context,
                             snapshot=command_snapshots[action_id],
+                            delegated_environment=delegated_environment,
                         ),
                     )
                 )
@@ -1179,6 +1353,7 @@ def _beat_script(
                         value,
                         context,
                         snapshot=command_snapshots[action_id],
+                        delegated_environment=delegated_environment,
                     ),
                 )
             )
@@ -1230,6 +1405,7 @@ def _validated_step_script(
     context: CaptureContext,
     *,
     snapshot: Mapping[str, str] | None = None,
+    delegated_environment: Mapping[str, str] | None = None,
 ) -> str:
     command = snapshot["command"] if snapshot is not None else _step_command(step, context)
     if step.get("browser_handoff"):
@@ -1273,6 +1449,35 @@ def _validated_step_script(
             "post_command_pause",
         )
     )
+    requested_environment = step.get("with_env", [])
+    if not isinstance(requested_environment, (list, tuple)) or any(
+        not isinstance(name, str) or not name for name in requested_environment
+    ):
+        raise TerminalCaptureError(
+            "terminal step with_env must be a list of non-empty strings"
+        )
+    available_environment = delegated_environment or {}
+    missing = [
+        name for name in requested_environment if name not in available_environment
+    ]
+    if missing:
+        raise TerminalCaptureError(
+            "terminal step could not resolve scoped environment name "
+            + repr(missing[0])
+        )
+    scoped_environment = {
+        name: available_environment[name] for name in requested_environment
+    }
+    encoded_environment = (
+        base64.b64encode(
+            json.dumps(
+                scoped_environment,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).decode("ascii")
+        if scoped_environment
+        else ""
+    )
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
@@ -1284,8 +1489,10 @@ def _validated_step_script(
             "true" if show_prompt_after else "false",
             timing,
             *pauses,
+            encoded_environment,
         )
     )
+
 
 def _optional_pause(step: Mapping[str, Any], field: str) -> str:
     value = step.get(field)

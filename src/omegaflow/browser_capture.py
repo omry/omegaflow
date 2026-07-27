@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import time
 from collections.abc import Mapping
@@ -36,6 +37,15 @@ DESKTOP_LOCALE = "en-US"
 DESKTOP_TIMEZONE = "UTC"
 DESKTOP_COLOR_SCHEME = "light"
 DESKTOP_REDUCED_MOTION = "reduce"
+GRAPHICAL_RUNTIME_ENVIRONMENT = (
+    "DBUS_SESSION_BUS_ADDRESS",
+    "DISPLAY",
+    "PULSE_SERVER",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "XDG_RUNTIME_DIR",
+    "XDG_SESSION_TYPE",
+)
 
 
 class BrowserCaptureError(RuntimeError):
@@ -44,6 +54,21 @@ class BrowserCaptureError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(f"{code}: {message}")
+
+
+def browser_runtime_environment(
+    context: CaptureContext,
+    host_environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Add only host values required to launch a headed graphical runtime."""
+
+    host = os.environ if host_environment is None else host_environment
+    environment = dict(context.environment)
+    for name in GRAPHICAL_RUNTIME_ENVIRONMENT:
+        value = host.get(name)
+        if value:
+            environment[name] = value
+    return environment
 
 
 @dataclass(frozen=True)
@@ -383,7 +408,7 @@ class PersistentBrowserRunner:
                     "--autoplay-policy=no-user-gesture-required",
                     "--mute-audio",
                 ],
-                env=dict(context.environment),
+                env=browser_runtime_environment(context),
             )
             self.browser_context = self.browser.new_context(
                 viewport={

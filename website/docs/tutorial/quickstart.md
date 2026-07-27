@@ -11,9 +11,9 @@ Markdown file with two short terminal sections named **First Video Beat** and
 appear as previewable sections in the generated player.
 
 ```bash
-omegaflow action=bootstrap
-omegaflow recording=quickstart
+omegaflow bootstrap=project
+omegaflow recording=test-video
 ```
 
-The `quickstart` recording is not checked into this repository as source. It is
-created by `action=bootstrap` in the current recording workspace.
+The `test-video` recording is not checked into this repository as source. It is
+created by `bootstrap=project` in the current recording workspace.

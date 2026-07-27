@@ -16,6 +16,7 @@ import omegaflow.browser_visuals as browser_visuals
 from omegaflow.browser_capture import (
     BrowserCaptureError,
     PersistentBrowserRunner,
+    browser_runtime_environment,
     resolve_browser_authentication,
 )
 from omegaflow.browser_visuals import (
@@ -292,6 +293,26 @@ def capture_context(tmp_path: Path, environment: dict[str, str] | None = None):
         workspace=tmp_path,
         environment=environment,
     )
+
+
+def test_browser_runtime_environment_allows_only_graphical_host_values(
+    tmp_path: Path,
+) -> None:
+    context = capture_context(tmp_path, {"EXPLICIT_APPLICATION_VALUE": "visible"})
+
+    environment = browser_runtime_environment(
+        context,
+        {
+            "DISPLAY": ":0",
+            "WAYLAND_DISPLAY": "wayland-0",
+            "HOST_ONLY_VALUE": "must-not-leak",
+        },
+    )
+
+    assert environment["EXPLICIT_APPLICATION_VALUE"] == "visible"
+    assert environment["DISPLAY"] == ":0"
+    assert environment["WAYLAND_DISPLAY"] == "wayland-0"
+    assert "HOST_ONLY_VALUE" not in environment
 
 
 def capture_records(tmp_path: Path) -> list[dict]:

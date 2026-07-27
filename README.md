@@ -48,23 +48,23 @@ include asciinema 3.x.
 Create the initial recording workspace:
 
 ```bash
-omegaflow action=bootstrap
+omegaflow bootstrap=project
 ```
 
-This creates `.omegaflow/config.yaml` and a small recording script at
-`recordings/quickstart/index.md`. Edit that Markdown file to define the prose,
+This creates the project configuration and a small recording script at
+`recordings/test-video/index.md`. Edit that Markdown file to define the prose,
 commands, checks, and optional narration for your video.
 
-Build the generated quickstart recording:
+Build the generated test video:
 
 ```bash
-omegaflow recording=quickstart
+omegaflow recording=test-video
 ```
 
 Watch the generated terminal video and optional narration locally:
 
 ```bash
-omegaflow recording=quickstart action=watch
+omegaflow recording=test-video action=watch
 ```
 
 Continue with the [quickstart guide](https://omegaflow.dev/docs/tutorial/quickstart)

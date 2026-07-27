@@ -12,8 +12,8 @@ import json
 import ntpath
 import os
 import re
-import shutil
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -39,6 +39,7 @@ from . import studio_config as studio_config_module
 from .capture import CaptureActionItem, CaptureFailed, capture_action_items
 from .recording_plan import RecordingPlanError, normalize_recording_plan
 from .studio_config import (
+    BootstrapMode,
     CONFIG_DIR,
     STUDIO_CONFIG_NAME,
     RecordingSourceKind,
@@ -115,6 +116,10 @@ def fail_line(message: str) -> None:
 
 def info_line(message: str) -> None:
     status_line("info", message, color=ANSI_CYAN_BOLD)
+
+
+def warn_line(message: str) -> None:
+    status_line("warn", message, color=ANSI_YELLOW_BOLD)
 
 
 class BuildProgress:
@@ -644,9 +649,24 @@ def enum_value(value: object) -> str | None:
         return None
     if isinstance(value, str):
         return value
-    if isinstance(value, (StudioAction, StudioStep)):
+    if isinstance(value, (BootstrapMode, StudioAction, StudioStep)):
         return value.value
     return None
+
+
+def validate_bootstrap(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = enum_value(value)
+    if normalized is None:
+        raise StudioError("bootstrap must be a string")
+    values = [mode.value for mode in BootstrapMode]
+    if normalized not in values:
+        raise StudioError(
+            f"unknown bootstrap operation: {normalized}\n"
+            f"bootstrap operations: {', '.join(values)}"
+        )
+    return normalized
 
 
 def validate_action(value: object) -> str:
@@ -730,15 +750,25 @@ style:
 audio:
   enabled: false
   provider: openai
-  env: OPENAI_API_KEY
+  env: OPENAI_OMEGAFLOW_API_KEY
   model: gpt-4o-mini-tts
   voice: marin
   format: mp3
 """
 
+BOOTSTRAP_TOOL_GITIGNORE = "/omegaflow-secret.env\n"
+BOOTSTRAP_TOOL_SECRET_ENV = "# OPENAI_OMEGAFLOW_API_KEY=\n"
+BOOTSTRAP_RECORDINGS_GITIGNORE = "**/app.secret.env\n"
+PROJECT_BOOTSTRAP_RECORDING_ID = "test-video"
 
-def bootstrap_project_root(workspace: Path) -> Path:
-    return workspace.parent
+
+@dataclass(frozen=True)
+class BootstrapFile:
+    path: Path
+    text: str
+    overwrite: bool = False
+    mode: int | None = None
+    private: bool = False
 
 
 def bootstrap_config_path_text(path: Path, *, root: Path) -> str:
@@ -748,8 +778,7 @@ def bootstrap_config_path_text(path: Path, *, root: Path) -> str:
         return path.resolve().as_posix()
 
 
-def bootstrap_tool_config_text(workspace: Path) -> str:
-    root = bootstrap_project_root(workspace)
+def bootstrap_tool_config_text(workspace: Path, *, root: Path) -> str:
     recording_dir = bootstrap_config_path_text(workspace, root=root)
     data_dir = bootstrap_config_path_text(workspace / ".omegaflow", root=root)
     return f"""\
@@ -804,8 +833,8 @@ uses plain narration.
 beat:
   id: first-video-beat
   heading: First Video Beat
-  narration: This is the first beat in the generated quickstart video.
-  caption: The first beat in the quickstart video.
+  narration: This is the first beat in the generated test video.
+  caption: The first beat in the test video.
   viewer_hold: 3
   actions:
   - commands:
@@ -819,8 +848,8 @@ The second beat adds another visible section to the player timeline.
 beat:
   id: second-video-beat
   heading: Second Video Beat
-  narration: This is the second beat in the generated quickstart video.
-  caption: The second beat in the quickstart video.
+  narration: This is the second beat in the generated test video.
+  caption: The second beat in the test video.
   viewer_hold: 4
   actions:
   - commands:
@@ -848,13 +877,217 @@ def write_bootstrap_file(
     text: str,
     *,
     force: bool = False,
+    mode: int | None = None,
 ) -> str:
     existed = path.exists()
     if existed and not force:
         return "exists"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    if mode is None:
+        path.write_text(text, encoding="utf-8")
+    else:
+        flags = os.O_WRONLY | os.O_CREAT
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(path, flags, mode)
+        try:
+            os.fchmod(fd, mode)
+            os.ftruncate(fd, 0)
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                fd = -1
+                output.write(text)
+        finally:
+            if fd >= 0:
+                os.close(fd)
     return "updated" if existed else "created"
+
+
+def validate_bootstrap_file_target(path: Path) -> None:
+    if path.is_symlink():
+        raise StudioError(
+            f"bootstrap target is a symbolic link: {display_path(path)}"
+        )
+    if path.exists() and not path.is_file():
+        raise StudioError(
+            f"bootstrap target is not a file: {display_path(path)}"
+        )
+
+
+def bootstrap_gitignore_text(path: Path, required_rule: str) -> tuple[str, bool]:
+    if path.is_symlink():
+        raise StudioError(
+            f"bootstrap ignore target is a symbolic link: {display_path(path)}"
+        )
+    if not path.exists():
+        return required_rule, True
+    if not path.is_file():
+        raise StudioError(
+            f"bootstrap ignore target is not a file: {display_path(path)}"
+        )
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise StudioError(
+            f"could not read bootstrap ignore target: {display_path(path)}"
+        ) from exc
+    if required_rule.strip() in current.splitlines():
+        return current, False
+    separator = "" if not current or current.endswith(("\n", "\r")) else "\n"
+    return current + separator + required_rule, True
+
+
+def find_repository_marker(root: Path, marker_name: str) -> Path | None:
+    current = root.resolve()
+    for candidate in (current, *current.parents):
+        marker = candidate / marker_name
+        if marker_name == ".git":
+            if marker.is_file() or (marker / "HEAD").exists():
+                return marker
+        elif marker.exists():
+            return marker
+    return None
+
+
+def git_tracks_path(root: Path, path: Path) -> bool | None:
+    marker = find_repository_marker(root, ".git")
+    if marker is None:
+        return None
+    git = shutil.which("git")
+    if git is None:
+        raise StudioError("Git executable is unavailable")
+    repository = subprocess.run(
+        [git, "-C", str(root), "rev-parse", "--show-toplevel"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if repository.returncode != 0:
+        raise StudioError(
+            repository.stderr.strip() or "Git repository lookup failed"
+        )
+    repository_root = Path(repository.stdout.strip()).resolve()
+    try:
+        relative_path = path.resolve().relative_to(repository_root)
+    except ValueError:
+        return False
+    tracked = subprocess.run(
+        [
+            git,
+            "-C",
+            str(repository_root),
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            relative_path.as_posix(),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if tracked.returncode == 0:
+        return True
+    if tracked.returncode == 1:
+        return False
+    raise StudioError(tracked.stderr.strip() or "Git tracked-file lookup failed")
+
+
+def sapling_tracks_path(root: Path, path: Path) -> bool | None:
+    marker = find_repository_marker(root, ".sl")
+    if marker is None:
+        return None
+    sapling = shutil.which("sl")
+    if sapling is None:
+        raise StudioError("Sapling executable is unavailable")
+    environment = dict(os.environ)
+    environment["CHGDISABLE"] = "1"
+    repository = subprocess.run(
+        [sapling, "--cwd", str(root), "root"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    if repository.returncode != 0:
+        raise StudioError(
+            repository.stderr.strip() or "Sapling repository lookup failed"
+        )
+    repository_root = Path(repository.stdout.strip()).resolve()
+    try:
+        relative_path = path.resolve().relative_to(repository_root)
+    except ValueError:
+        return False
+    tracked = subprocess.run(
+        [
+            sapling,
+            "--cwd",
+            str(repository_root),
+            "files",
+            relative_path.as_posix(),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    if tracked.returncode == 1:
+        return False
+    if tracked.returncode != 0:
+        raise StudioError(
+            tracked.stderr.strip() or "Sapling tracked-file lookup failed"
+        )
+    return bool(tracked.stdout.strip())
+
+
+def vcs_tracks_path(root: Path, path: Path) -> bool:
+    errors: list[str] = []
+    for name, check in (
+        ("Git", git_tracks_path),
+        ("Sapling", sapling_tracks_path),
+    ):
+        try:
+            if check(root, path):
+                return True
+        except StudioError as exc:
+            errors.append(f"{name}: {exc}")
+    if errors:
+        warn_line(
+            f"could not verify whether {display_path(path)} is tracked or staged: "
+            + "; ".join(errors)
+            + "; continuing without VCS verification"
+        )
+    return False
+
+
+def validate_bootstrap_secret_target(
+    *,
+    root: Path,
+    ignore_path: Path,
+    secret_path: Path,
+) -> None:
+    if secret_path.parent.is_symlink():
+        raise StudioError(
+            f"refusing bootstrap because {display_path(secret_path.parent)} "
+            "is a symbolic link"
+        )
+    if ignore_path.is_symlink():
+        raise StudioError(
+            f"refusing bootstrap because {display_path(ignore_path)} "
+            "is a symbolic link"
+        )
+    if secret_path.is_symlink():
+        raise StudioError(
+            f"refusing bootstrap because {display_path(secret_path)} "
+            "is a symbolic link"
+        )
+    if secret_path.exists() and not secret_path.is_file():
+        raise StudioError(
+            f"bootstrap secret target is not a file: {display_path(secret_path)}"
+        )
+    if vcs_tracks_path(root, secret_path):
+        raise StudioError(
+            f"refusing bootstrap because {display_path(secret_path)} "
+            "is tracked or staged"
+        )
 
 
 def bootstrap_file_diff(path: Path, text: str) -> str:
@@ -897,26 +1130,68 @@ def colorize_unified_diff(diff: str, *, enabled: bool | None = None) -> str:
 
 def run_bootstrap(config: dict[str, Any]) -> int:
     workspace = bootstrap_workspace_path(config)
-    recording_id = recording_id_from_value(config.get("recording")) or "quickstart"
-    if not is_valid_recording_id(recording_id):
-        raise StudioError(
-            "bootstrap recording id must be a lowercase kebab-case path"
-        )
+    root = (
+        studio_config_module.project_root(config)
+        if optional_string(config.get("project_root")) is not None
+        else workspace.parent
+    )
+    recording_id = PROJECT_BOOTSTRAP_RECORDING_ID
     title = recording_id.rsplit("/", 1)[-1].replace("-", " ").title()
     force = bool_config(config, "force")
     dry_run_mode = bootstrap_dry_run_mode(config.get("dry_run", False))
+    tool_dir = root / ".omegaflow"
+    tool_ignore = tool_dir / ".gitignore"
+    tool_secret = tool_dir / "omegaflow-secret.env"
 
+    validate_bootstrap_secret_target(
+        root=root,
+        ignore_path=tool_ignore,
+        secret_path=tool_secret,
+    )
+    tool_ignore_text, update_tool_ignore = bootstrap_gitignore_text(
+        tool_ignore,
+        BOOTSTRAP_TOOL_GITIGNORE,
+    )
+    recordings_ignore = workspace / ".gitignore"
+    recordings_ignore_text, update_recordings_ignore = bootstrap_gitignore_text(
+        recordings_ignore,
+        BOOTSTRAP_RECORDINGS_GITIGNORE,
+    )
     writes = [
-        (
-            bootstrap_project_root(workspace) / ".omegaflow" / "config.yaml",
-            bootstrap_tool_config_text(workspace),
+        BootstrapFile(
+            tool_dir / "config.yaml",
+            bootstrap_tool_config_text(workspace, root=root),
+            overwrite=force,
         ),
-        (workspace / "config.yaml", BOOTSTRAP_WORKSPACE_CONFIG),
-        (
+        BootstrapFile(
+            tool_ignore,
+            tool_ignore_text,
+            overwrite=update_tool_ignore,
+        ),
+        BootstrapFile(
+            tool_secret,
+            BOOTSTRAP_TOOL_SECRET_ENV,
+            mode=0o600,
+            private=True,
+        ),
+        BootstrapFile(
+            workspace / "config.yaml",
+            BOOTSTRAP_WORKSPACE_CONFIG,
+            overwrite=force,
+        ),
+        BootstrapFile(
+            recordings_ignore,
+            recordings_ignore_text,
+            overwrite=update_recordings_ignore,
+        ),
+        BootstrapFile(
             workspace / recording_id / "index.md",
             bootstrap_recording_text(recording_id, title),
+            overwrite=force,
         ),
     ]
+    for item in writes:
+        validate_bootstrap_file_target(item.path)
 
     if dry_run_mode is not None:
         if dry_run_mode == "diff":
@@ -925,8 +1200,15 @@ def run_bootstrap(config: dict[str, Any]) -> int:
             print(f"Recording workspace: {display_path(workspace)}")
             print()
             use_color = color_enabled()
-            for path, text in writes:
-                diff = bootstrap_file_diff(path, text)
+            for item in writes:
+                if item.private:
+                    status = "preserve" if item.path.exists() else "create"
+                    print(
+                        f"{status:>8} {display_path(item.path)} "
+                        "(private content hidden)"
+                    )
+                    continue
+                diff = bootstrap_file_diff(item.path, item.text)
                 if diff:
                     diff = colorize_unified_diff(diff, enabled=use_color)
                     print(diff, end="" if diff.endswith("\n") else "\n")
@@ -939,21 +1221,27 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         print(f"Recording workspace: {display_path(workspace)}")
         print()
         print("Files:")
-        for path, _text in writes:
-            status = "update" if path.exists() else "create"
-            print(f"  {status:>6} {display_path(path)}")
+        for item in writes:
+            if item.private and item.path.exists():
+                status = "preserve"
+            elif item.path.exists():
+                status = "update" if item.overwrite else "exists"
+            else:
+                status = "create"
+            print(f"  {status:>8} {display_path(item.path)}")
         print()
         print("No files were written.")
         return 0
 
     print(f"workspace {display_path(workspace)}")
-    for path, text in writes:
+    for item in writes:
         status = write_bootstrap_file(
-            path,
-            text,
-            force=force,
+            item.path,
+            item.text,
+            force=item.overwrite,
+            mode=item.mode,
         )
-        print(f"{status:>7} {display_path(path)}")
+        print(f"{status:>7} {display_path(item.path)}")
     print()
     print(f"next    omegaflow recording={recording_id} action=build")
     return 0
@@ -3212,17 +3500,27 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         configure_project_root(config)
     except StudioConfigError as exc:
         raise StudioError(str(exc)) from exc
-    action = validate_action(config.get("action", "build"))
+    bootstrap = validate_bootstrap(config.get("bootstrap"))
+    configured_action = config.get("action")
+    if bootstrap is not None and configured_action is not None:
+        raise StudioError("bootstrap and action are mutually exclusive")
+    action = validate_action(configured_action)
     step = validate_step(config.get("step"))
+
+    if bootstrap is not None:
+        if step is not None:
+            raise StudioError("bootstrap and step are mutually exclusive")
+        if config.get("recording") is not None:
+            raise StudioError("bootstrap does not accept recording")
+        if bootstrap == BootstrapMode.project.value:
+            return run_bootstrap(config)
+        raise StudioError("bootstrap=tutorial is not implemented yet")
 
     if step is None and action == "list":
         return print_available_recording_scripts(
             selected_required=False,
             config=config,
         )
-
-    if step is None and action == "bootstrap":
-        return run_bootstrap(config)
 
     if step is None and action == "gc":
         return run_gc_action(config)

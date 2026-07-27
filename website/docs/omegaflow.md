@@ -37,7 +37,7 @@ omegaflow recording=quickstart-demo
 | Preview the build plan | `omegaflow recording=demo dry_run=true` |
 | Troubleshoot runs | `omegaflow action=runs` |
 | See available recordings | `omegaflow action=list` |
-| Create a starter workspace | `omegaflow action=bootstrap` |
+| Create a starter workspace | `omegaflow bootstrap=project` |
 
 `build` is the user-facing operation. It records the scripted terminal
 session, prepares optional narration, adjusts presentation timing, validates

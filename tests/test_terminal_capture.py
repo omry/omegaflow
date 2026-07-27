@@ -213,6 +213,201 @@ def test_persistent_terminal_failure_identifies_named_setup_step(
     assert "exit 1" in str(error)
 
 
+def test_delegated_environment_is_scoped_to_one_command_and_its_children(
+    tmp_path: Path,
+) -> None:
+    secret_name = "OPENAI_OMEGAFLOW_API_KEY"
+    plan = normalize_recording_plan(
+        {
+            "id": "delegated-environment",
+            "beats": [
+                {
+                    "id": "build",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": (
+                                        f'test -n "${secret_name}"; '
+                                        f"/bin/bash -c 'test -n "
+                                        f"\"${secret_name}\"'"
+                                    ),
+                                    "with_env": [secret_name],
+                                    "output": "suppress",
+                                },
+                                {
+                                    "run": (
+                                        "/usr/bin/env | "
+                                        f"/bin/grep -vq '^{secret_name}='"
+                                    ),
+                                    "output": "suppress",
+                                },
+                            ]
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        delegated_environment={secret_name: "delegated-secret"},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert "delegated-secret" not in retained
+
+
+def test_delegated_environment_output_leak_fails_closed_and_is_not_retained(
+    tmp_path: Path,
+) -> None:
+    secret_name = "OPENAI_OMEGAFLOW_API_KEY"
+    plan = normalize_recording_plan(
+        {
+            "id": "delegated-environment-leak",
+            "beats": [
+                {
+                    "id": "build",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": f'printf %s "${secret_name}"',
+                                    "with_env": [secret_name],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        delegated_environment={secret_name: "delegated-secret"},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    with pytest.raises(CaptureFailed, match="delegated secret"):
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert "delegated-secret" not in retained
+
+
+def test_realtime_delegated_environment_output_is_redacted_and_fails_closed(
+    tmp_path: Path,
+) -> None:
+    secret_name = "OPENAI_OMEGAFLOW_API_KEY"
+    plan = normalize_recording_plan(
+        {
+            "id": "realtime-delegated-environment-leak",
+            "beats": [
+                {
+                    "id": "build",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": f'printf %s "${secret_name}"',
+                                    "with_env": [secret_name],
+                                    "timing": "realtime",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        delegated_environment={secret_name: "delegated-secret"},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    with pytest.raises(CaptureFailed, match="delegated secret"):
+        coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert "delegated-secret" not in retained
+    assert "[REDACTED]" in retained
+
+
+def test_capture_recording_resolves_and_scopes_project_service_environment(
+    tmp_path: Path,
+) -> None:
+    secret_name = "OPENAI_OMEGAFLOW_API_KEY"
+    private_dir = tmp_path / ".omegaflow"
+    private_dir.mkdir()
+    secret_file = private_dir / "omegaflow-secret.env"
+    secret_file.write_text(f"{secret_name}=delegated-secret\n", encoding="utf-8")
+    secret_file.chmod(0o600)
+    spec = {
+        "id": "delegated-environment-e2e",
+        "_project_root": str(tmp_path),
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"typing": False},
+        "audio": {"enabled": False},
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "commands": [
+                            {
+                                "run": (
+                                    f'test -n "${secret_name}"; '
+                                    f"/bin/bash -c 'test -n "
+                                    f"\"${secret_name}\"'"
+                                ),
+                                "with_env": [secret_name],
+                                "output": "suppress",
+                            },
+                            {
+                                "run": (
+                                    "/usr/bin/env | "
+                                    f"/bin/grep -vq '^{secret_name}='"
+                                ),
+                                "output": "suppress",
+                            },
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    run_dir = tmp_path / "run"
+
+    presentation_build.capture_recording(spec, plan, run_dir)
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    )
+    assert "delegated-secret" not in retained
+
+
 def test_headed_terminal_session_inherits_interactive_stdio(
     tmp_path: Path, monkeypatch
 ) -> None:

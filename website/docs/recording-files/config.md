@@ -80,7 +80,6 @@ outputs:
 audio:
   enabled: false
   provider: openai
-  env_file: .env
   env: OPENAI_OMEGAFLOW_API_KEY
   model: gpt-4o-mini-tts
   voice: marin
@@ -88,7 +87,10 @@ audio:
 ```
 
 Enabling narration requires FFmpeg tools and OpenAI API access when generating
-new audio.
+new audio. Put the local key in `.omegaflow/omegaflow-secret.env`; CI may
+provide the same name in the parent process environment. `env_file` remains an
+explicit advanced override and is loaded without modifying the process
+environment.
 
 ## Recording Frontmatter
 
@@ -150,12 +152,43 @@ in the collection watch index.
 Publishing surface details are covered in
 [Publishing And Runtime](./publishing-runtime.md).
 
+## Recorded command environment
+
+OmegaFlow constructs a recording environment instead of copying the process
+environment from the machine running the build. This keeps terminal commands,
+setup, cleanup, checks, and browser capture independent from unrelated host
+settings.
+
+Use the typed `environment` fields to provide deliberate application inputs:
+
+```yaml
+environment:
+  working_directory: examples/demo
+  path_prepend:
+  - tools/bin
+  variables:
+    DEMO_MODE: tutorial
+```
+
+- `working_directory` selects the directory used by recorded commands.
+- `path_prepend` adds project-relative command locations ahead of OmegaFlow's
+  deterministic command path.
+- `variables` supplies literal, non-secret application settings.
+
+OmegaFlow also sets `OMEGAFLOW_VERSION` to the version performing the
+recording. Values configured under `environment.variables` are not printed by
+OmegaFlow, but this mapping is **not secret storage**: recorded applications
+can read and display them.
+
 ## Browser header configuration
 
 Browser capture parameters are recording-wide because every browser beat uses
 one persistent page and deterministic viewport:
 
 ```yaml
+environment:
+  variables:
+    DEMO_STORAGE_STATE: .private/demo-storage-state.json
 browser:
   base_url: http://127.0.0.1:3000
   viewport:
@@ -174,10 +207,11 @@ browser:
     readiness_ms: 15000
 ```
 
-`storage_state_env` names an environment variable whose value is a private
-Playwright storage-state path. Use `storage_state_path` instead when the path is
-safe to keep in recording config. The file content remains private and its hash,
-not its secrets, participates in capture freshness.
+`storage_state_env` names an explicitly configured `environment.variables`
+entry whose value is a private Playwright storage-state path. Use
+`storage_state_path` instead when the path is safe to keep directly in browser
+config. The file content remains private and its hash, not its secrets,
+participates in capture freshness.
 
 Presentation framing in the recording header supplies the defaults for every
 browser beat:
@@ -276,7 +310,7 @@ class RecordingAudioTranscriptionConfig:
 class RecordingAudioConfig:
     enabled: bool = False
     provider: str = "openai"
-    env: str = "OPENAI_API_KEY"
+    env: str = "OPENAI_OMEGAFLOW_API_KEY"
     model: str = "gpt-4o-mini-tts"
     voice: str = "marin"
     format: str = "mp3"

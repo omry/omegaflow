@@ -53,6 +53,25 @@ def test_capture_context_creates_private_staged_directories(tmp_path: Path) -> N
         context.environment["MUTATED"] = "no"  # type: ignore[index]
 
 
+def test_capture_context_does_not_inherit_arbitrary_host_environment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("OMEGAFLOW_HOST_ONLY_TEST_VALUE", "must-not-leak")
+    monkeypatch.setenv("HOME", "/host-only/home")
+
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+        environment={"EXPLICIT_APPLICATION_VALUE": "visible"},
+    )
+
+    assert context.environment["EXPLICIT_APPLICATION_VALUE"] == "visible"
+    assert "OMEGAFLOW_HOST_ONLY_TEST_VALUE" not in context.environment
+    assert context.environment["HOME"] == str(context.paths.temporary / "home")
+    assert context.environment["HOME"] != "/host-only/home"
+    assert Path(context.environment["HOME"]).is_dir()
+
+
 def test_capture_context_keeps_explicit_working_directory(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workdir = workspace / "project"

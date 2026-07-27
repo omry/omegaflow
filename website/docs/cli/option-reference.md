@@ -12,7 +12,8 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 
 | Field | Default | Used by | Meaning |
 | --- | --- | --- | --- |
-| `action` | `build` | all | Public operation: `bootstrap`, `build`, `check`, `clean`, `gc`, `watch`, `inspect`, `output`, `runs`, or `list`. |
+| `action` | `null` (defaults to `build`) | recording operations | Public recording operation: `build`, `check`, `clean`, `gc`, `watch`, `inspect`, `output`, `runs`, or `list`. Mutually exclusive with `bootstrap`. |
+| `bootstrap` | `null` | project setup | Typed setup operation: `project` or `tutorial`. Mutually exclusive with `action`; `tutorial` is reserved for the forthcoming tutorial workspace. |
 | `recording` | `null` | most actions | Video or collection id under `studio.recording_dir`. Collections build ordered groups and provide a watch index; other single-video actions require a video id. |
 | `output_format` | `text` | `runs`, `clean`, build preview | Use `json` for machine-readable output from supported operations. |
 | `verbose` | `false` | `build` | Show detailed freshness and artifact information. |
@@ -37,17 +38,17 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `project_root` | auto-discovered | Base directory for relative project, recording, data, output, and env-file paths. May be overridden with an absolute or current-directory-relative path. |
-| `load_env_file` | `true` | Load a process-level env file before actions that execute or inspect recording work. |
-| `env_file` | `.env` | Env file path resolved from the project root; `null` disables it even when loading is enabled. |
+| `load_env_file` | `false` | Load an explicitly configured process-level env file before actions that execute or inspect recording work. |
+| `env_file` | `null` | Optional env file path resolved from the project root. This advanced compatibility path is separate from OmegaFlow's private TTS environment. |
 | `env_override` | `false` | Let env-file values replace variables already present in the process environment. |
 | `rec` | `{}` | Recording config merged after workspace defaults and recording frontmatter. Use CLI keys such as `rec.capture.headless=false`. |
 | `script_params` | `{}` | Values for names declared by the recording's `parameters` mapping. |
 
-## Bootstrap field
+## Bootstrap fields
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `workspace` | `null` | Destination for `action=bootstrap`; when unset, uses `studio.recording_dir`. |
+| `workspace` | `null` | Destination for `bootstrap=project`; when unset, uses `studio.recording_dir`. |
 
 ## `studio.*` project fields
 

@@ -31,6 +31,7 @@ from .studio_config import (
     recording_script_dir_from_config,
     studio_data_dir_from_config,
 )
+from .service_environment import ALLOWED_SERVICE_ENVIRONMENT_NAMES
 from .terminal_style import (
     ANSI_RED_BOLD,
     ANSI_YELLOW_BOLD,
@@ -303,6 +304,26 @@ def action_command_entries(
             raise RecordingError(
                 f"{field}.{index}.commands.{command_index}.browser_handoff must be a boolean"
             )
+        with_env = raw_command.get("with_env", [])
+        if not isinstance(with_env, list) or any(
+            not isinstance(name, str) or not name for name in with_env
+        ):
+            raise RecordingError(
+                f"{field}.{index}.commands.{command_index}.with_env must be "
+                "a list of non-empty strings"
+            )
+        if len(set(with_env)) != len(with_env):
+            raise RecordingError(
+                f"{field}.{index}.commands.{command_index}.with_env must not "
+                "contain duplicates"
+            )
+        unsupported = sorted(set(with_env) - ALLOWED_SERVICE_ENVIRONMENT_NAMES)
+        if unsupported:
+            raise RecordingError(
+                f"{field}.{index}.commands.{command_index}.with_env name "
+                f"{unsupported[0]!r} is not an allowlisted OmegaFlow service "
+                "environment name"
+            )
         show_prompt_after = raw_command.get("show_prompt_after", True)
         if not isinstance(show_prompt_after, bool):
             raise RecordingError(
@@ -339,6 +360,7 @@ def action_command_entries(
                 "display": display,
                 "after": after,
                 "browser_handoff": browser_handoff,
+                "with_env": list(with_env),
                 "show_prompt_after": show_prompt_after,
                 "output": output,
                 "timing": timing,
@@ -353,6 +375,11 @@ def action_command_entries(
 
 def check_asciinema(source: dict[str, Any] | None = None) -> str:
     command = asciinema_command(source)
+    if command == "asciinema":
+        command = shutil.which(
+            command,
+            path=recorded_command_path_from_spec(source or {}),
+        ) or command
     try:
         result = subprocess.run(
             [command, "--version"],
@@ -375,11 +402,34 @@ def check_asciinema(source: dict[str, Any] | None = None) -> str:
     return version
 
 
+def recorded_command_path(path_prepend: list[str] | tuple[str, ...] = ()) -> str:
+    entries = [
+        *path_prepend,
+        str(Path(sys.executable).parent),
+        *os.defpath.split(os.pathsep),
+    ]
+    return os.pathsep.join(dict.fromkeys(entries))
+
+
+def recorded_command_path_from_spec(spec: dict[str, Any]) -> str:
+    environment = as_mapping(spec.get("environment"), field="environment")
+    raw_path_prepend = as_list(
+        environment.get("path_prepend"),
+        field="environment.path_prepend",
+    )
+    path_prepend: list[str] = []
+    for entry in raw_path_prepend:
+        if not isinstance(entry, str) or not entry:
+            raise RecordingError(
+                "environment.path_prepend values must be non-empty strings"
+            )
+        path_prepend.append(str(relative_path(entry)))
+    return recorded_command_path(path_prepend)
+
+
 def check_required_commands(spec: dict[str, Any]) -> None:
     requirements = as_mapping(spec.get("requirements"), field="requirements")
-    search_path = os.pathsep.join(
-        [str(Path(sys.executable).parent), os.environ.get("PATH", "")]
-    )
+    search_path = recorded_command_path_from_spec(spec)
     for command in as_list(requirements.get("commands"), field="requirements.commands"):
         if not isinstance(command, str) or not command:
             raise RecordingError(
@@ -504,6 +554,11 @@ def validate_manifest(spec: dict[str, Any]) -> None:
                 spec=spec,
             )
             if entries is None:
+                if action.get("with_env") is not None:
+                    raise RecordingError(
+                        f"beats.{beat['id']}.actions.{index}.with_env is supported "
+                        "only on entries inside commands"
+                    )
                 step_command_text(
                     action,
                     index,

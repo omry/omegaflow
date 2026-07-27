@@ -34,6 +34,12 @@ from .presentation_schema import (
     NarrationTimestampWordV1,
 )
 from .recording_plan import NarrationTakePlan, RecordingPlan
+from .service_environment import (
+    ALLOWED_SERVICE_ENVIRONMENT_NAMES,
+    ServiceEnvironmentError,
+    read_environment_file,
+    resolve_service_environment,
+)
 
 from .studio_config import (
     CONFIG_DIR,
@@ -41,7 +47,6 @@ from .studio_config import (
     StudioConfigError,
     container_from_hydra_cfg,
     load_configured_env_file,
-    load_env_file,
     load_recording_spec,
     load_recording_spec_from_hydra_cfg,
     project_root,
@@ -131,6 +136,7 @@ class AudioSettings:
     env_override: bool = False
     instructions: str | None = None
     tts_usd_per_1m_characters: float = DEFAULT_OPENAI_TTS_USD_PER_1M_CHARACTERS
+    project_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -333,6 +339,11 @@ def audio_settings(spec: dict[str, Any]) -> AudioSettings:
         instructions=instructions,
         cache_dir=relative_path(cache_dir),
         tts_usd_per_1m_characters=float(tts_usd_per_1m_characters),
+        project_root=(
+            Path(spec["_project_root"]).expanduser().resolve()
+            if isinstance(spec.get("_project_root"), str) and spec["_project_root"]
+            else project_root()
+        ),
     )
 
 
@@ -340,9 +351,12 @@ def load_audio_env_file(settings: AudioSettings) -> dict[str, str]:
     if settings.env_file is None:
         return {}
     try:
-        return load_env_file(settings.env_file, override=settings.env_override)
-    except StudioConfigError as exc:
+        values = read_environment_file(settings.env_file)
+    except ServiceEnvironmentError as exc:
         raise AudioError(str(exc)) from exc
+    if settings.env_override:
+        return values
+    return {name: value for name, value in values.items() if name not in os.environ}
 
 
 def audio_environment(
@@ -350,9 +364,25 @@ def audio_environment(
     environ: dict[str, str] | None,
 ) -> dict[str, str]:
     if environ is not None:
-        return environ
-    load_audio_env_file(settings)
-    return os.environ
+        return dict(environ)
+    resolved = dict(os.environ)
+    resolved.update(load_audio_env_file(settings))
+    if (
+        settings.env_file is None
+        and settings.env in ALLOWED_SERVICE_ENVIRONMENT_NAMES
+        and not resolved.get(settings.env)
+    ):
+        try:
+            resolved.update(
+                resolve_service_environment(
+                    (settings.env,),
+                    root=settings.project_root or project_root(),
+                    environ=resolved,
+                )
+            )
+        except ServiceEnvironmentError as exc:
+            raise AudioError(str(exc)) from exc
+    return resolved
 
 
 def transcription_settings(spec: dict[str, Any]) -> TranscriptionSettings:
