@@ -36,7 +36,11 @@ from .capture import (
     CaptureProgressCallback,
     CaptureResult,
 )
-from .presentation import serialize_presentation_manifest, validate_presentation_manifest
+from .presentation import (
+    serialize_presentation_manifest,
+    validate_presentation_manifest,
+    write_presentation_signatures,
+)
 from .presentation_compiler import (
     ArtifactFingerprints,
     BrowserCaptureLog,
@@ -92,7 +96,7 @@ CAPTURE_POLICY_VERSIONS = {
     "redaction": "capture-mask-v1",
 }
 PRESENTATION_POLICY_VERSIONS = {
-    "compiler": "presentation-v5-materialized-audio-waits",
+    "compiler": "presentation-v6-stable-assets-signature-sidecar",
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
@@ -330,18 +334,14 @@ def _stage_presentation_audio(
                 intervals=intervals,
                 ffmpeg=ffmpeg,
             )
-            playback_content = temporary.read_bytes()
-            playback_sha256 = hashlib.sha256(playback_content).hexdigest()
-            playback_relative = f"audio/{safe_id}-playback-{playback_sha256}.mp3"
+            playback_relative = f"audio/{safe_id}-playback.mp3"
             playback_target = staging / playback_relative
             temporary.replace(playback_target)
         else:
             playback_relative = source_relative
-            playback_sha256 = str(value.get("sha256") or "")
         value.update(
             {
                 "playback_src": playback_relative,
-                "playback_sha256": playback_sha256,
                 "playback_start_ms": playback_start,
                 "playback_end_ms": playback_end,
             }
@@ -961,19 +961,14 @@ def prepare_narration_audio(
     timestamps_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     take_durations: dict[str, int] = {}
     take_audio_paths: dict[str, str] = {}
-    take_audio_sha256: dict[str, str] = {}
     timestamp_paths: dict[str, str] = {}
     timestamp_files: dict[str, Path] = {}
     for take_item, audio_item in zip(take_items, audio_items, strict=True):
         label = headings.get(take_item.take.members[0].beat_id) or take_item.take.id
         message = f"Prepare narration: {label}"
         report(message)
-        content_sha256 = hashlib.sha256(audio_item.output_path.read_bytes()).hexdigest()
         safe_id = audio.narration_take_filename_id(take_item.take.id)
-        take_audio_paths[take_item.take.id] = (
-            f"audio/{safe_id}-{content_sha256}.{settings.format}"
-        )
-        take_audio_sha256[take_item.take.id] = content_sha256
+        take_audio_paths[take_item.take.id] = f"audio/{safe_id}.{settings.format}"
         duration_ms = round(audio.audio_duration_seconds(audio_item.output_path) * 1000)
         raw = json.loads(
             audio.timeline_path_for(audio_item).read_text(encoding="utf-8")
@@ -1001,10 +996,9 @@ def prepare_narration_audio(
         audio.write_narration_take_index(take_item)
         complete(message)
     metadata_path = output_dir / "audio.json"
-    metadata = audio.narration_audio_metadata_v3_payload(
+    metadata = audio.narration_audio_metadata_v1_payload(
         plan,
         take_audio_paths=take_audio_paths,
-        take_audio_sha256=take_audio_sha256,
         take_durations_ms=take_durations,
         timestamp_paths=timestamp_paths,
     )
@@ -1656,18 +1650,21 @@ def compile_presentation_bundle(
                 )
             except BrowserRuntimeError as exc:
                 raise PresentationBuildError(str(exc)) from exc
-        for asset_id, source in sorted(all_sources.items()):
+        media_counts = {"state": 0, "clip": 0}
+        for asset_id, source in all_sources.items():
             assert media_runtime is not None
             source_path = run_dir / source.path
+            media_kind = "clip" if source_path.suffix.lower() == ".mp4" else "state"
+            media_counts[media_kind] += 1
             published_path, media_type = _publish_media_asset(
-                source_path, staging, ffmpeg=media_runtime.ffmpeg
+                source_path,
+                staging,
+                filename=f"browser-{media_kind}-{media_counts[media_kind]:03d}",
+                ffmpeg=media_runtime.ffmpeg,
             )
-            content = published_path.read_bytes()
             manifest_assets[asset_id] = PresentationAssetV1(
                 path=published_path.relative_to(staging).as_posix(),
                 media_type=media_type,
-                sha256=hashlib.sha256(content).hexdigest(),
-                bytes=len(content),
             )
 
         manifest_audio = None
@@ -1758,6 +1755,7 @@ def compile_presentation_bundle(
         (staging / RECORDING_METADATA_FILE).write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        write_presentation_signatures(staging)
         validate_presentation_manifest(serialized, manifest_dir=staging)
         validate_public_staging(
             staging,
@@ -1929,7 +1927,7 @@ def _load_terminal_action_intervals(
 
 
 def _publish_media_asset(
-    source: Path, staging: Path, *, ffmpeg: str
+    source: Path, staging: Path, *, filename: str, ffmpeg: str
 ) -> tuple[Path, str]:
     if not source.is_file():
         raise PresentationBuildError(f"captured media asset is missing: {source}")
@@ -1962,18 +1960,12 @@ def _publish_media_asset(
                 "ffmpeg could not encode a lossless WebP browser state"
                 + (f": {detail}" if detail else "")
             )
-        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
-        target = staging / "media" / f"{digest}.webp"
-        if target.exists():
-            temporary.unlink()
-        else:
-            temporary.replace(target)
+        target = staging / "media" / f"{filename}.webp"
+        temporary.replace(target)
         return target, "image/webp"
     if source.suffix.lower() == ".mp4":
-        content = source.read_bytes()
-        target = staging / "media" / f"{hashlib.sha256(content).hexdigest()}.mp4"
-        if not target.exists():
-            target.write_bytes(content)
+        target = staging / "media" / f"{filename}.mp4"
+        shutil.copy2(source, target)
         return target, "video/mp4"
     raise PresentationBuildError(f"unsupported captured media class: {source.suffix}")
 

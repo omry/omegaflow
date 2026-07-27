@@ -500,6 +500,25 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "terminal",
     ]
     assert result.manifest == run_dir / "presentation/recording.presentation.json"
+    assert manifest["manifest_version"] == 1
+    assert manifest["signatures"] == "signatures.json"
+    signatures = json.loads(
+        (result.bundle_dir / "signatures.json").read_text(encoding="utf-8")
+    )
+    assert signatures["version"] == 1
+    assert set(signatures["files"]) == {
+        path.relative_to(result.bundle_dir).as_posix()
+        for path in result.bundle_dir.rglob("*")
+        if path.is_file() and path.name != "signatures.json"
+    }
+    media_paths = sorted(
+        asset["path"] for asset in manifest["assets"].values()
+    )
+    assert media_paths == [
+        "media/browser-state-001.webp",
+        "media/browser-state-002.webp",
+    ]
+    assert all(set(asset) == {"media_type", "path"} for asset in manifest["assets"].values())
     assert manifest["presentation"]["browser"] == {
         "window": {
             "mode": "framed",
@@ -533,7 +552,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     assert list((destination / "media").glob("*.webp"))
 
 
-def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
+def test_prepare_narration_audio_writes_cross_beat_v1_metadata(
     tmp_path: Path, monkeypatch
 ) -> None:
     spec = {
@@ -606,9 +625,9 @@ def test_prepare_narration_audio_writes_cross_beat_v3_metadata(
 
     assert artifacts is not None
     metadata = json.loads(artifacts.metadata.read_text(encoding="utf-8"))
-    assert metadata["version"] == 3
-    assert metadata["takes"][0]["src"].startswith("audio/joined-")
-    assert metadata["takes"][0]["sha256"] in metadata["takes"][0]["src"]
+    assert metadata["version"] == 1
+    assert metadata["takes"][0]["src"] == "audio/joined.mp3"
+    assert "sha256" not in metadata["takes"][0]
     assert [member["beat_id"] for member in metadata["takes"][0]["members"]] == [
         "terminal",
         "browser",

@@ -22,8 +22,10 @@ from .presentation import (
     validate_relative_presentation_path,
 )
 from .presentation_schema import (
-    NarrationAudioMetadataV3,
+    NarrationAudioMetadataV1,
     NarrationTimestampSidecarV1,
+    PresentationFileSignatureV1,
+    PresentationSignaturesV1,
     PublishedRecordingMetadataV1,
 )
 
@@ -93,7 +95,17 @@ def validate_public_staging(
     if recording_metadata.recording != manifest["recording"]["id"]:
         raise PublicBundleError("published recording metadata does not match the manifest")
 
-    referenced = {manifest_path, metadata_path}
+    signatures_relative = _public_relative_path(
+        manifest.get("signatures"), field="presentation signatures"
+    )
+    signatures_path = root / signatures_relative
+    signatures = _validate_bundle_signatures(
+        parsed_json.get(signatures_path),
+        root=root,
+        signatures_path=signatures_path,
+        files=files,
+    )
+    referenced = {manifest_path, metadata_path, signatures_path}
     expected_dimensions: dict[str, set[tuple[int, int]]] = {}
     expected_media_suffixes: dict[str, set[str]] = {}
     clip_requirements: dict[str, tuple[int, int, int]] = {}
@@ -173,12 +185,12 @@ def validate_public_staging(
             raise PublicBundleError("narration audio metadata is missing")
         typed_audio = _structured(
             audio_metadata,
-            NarrationAudioMetadataV3,
+            NarrationAudioMetadataV1,
             required={"version", "recording", "duration_ms", "takes"},
             field="narration audio metadata",
         )
         if (
-            typed_audio.version != 3
+            typed_audio.version != 1
             or typed_audio.recording != manifest["recording"]["id"]
             or typed_audio.duration_ms < 0
         ):
@@ -196,11 +208,7 @@ def validate_public_staging(
             if (
                 not take.id
                 or take.id in take_ids
-                or SHA256_RE.fullmatch(take.sha256) is None
-                or take.sha256 not in relative_audio
                 or take_audio_path not in files
-                or hashlib.sha256(take_audio_path.read_bytes()).hexdigest()
-                != take.sha256
                 or take.source_start_ms != expected_source_start
                 or take.source_end_ms < take.source_start_ms
                 or take.source_end_ms > typed_audio.duration_ms
@@ -210,7 +218,6 @@ def validate_public_staging(
             referenced.add(take_audio_path)
             playback_values = (
                 take.playback_src,
-                take.playback_sha256,
                 take.playback_start_ms,
                 take.playback_end_ms,
             )
@@ -225,12 +232,7 @@ def validate_public_staging(
                 )
                 playback_path = root / relative_playback
                 if (
-                    not isinstance(take.playback_sha256, str)
-                    or SHA256_RE.fullmatch(take.playback_sha256) is None
-                    or take.playback_sha256 not in relative_playback
-                    or playback_path not in files
-                    or hashlib.sha256(playback_path.read_bytes()).hexdigest()
-                    != take.playback_sha256
+                    playback_path not in files
                     or take.playback_start_ms != expected_playback_start
                     or not isinstance(take.playback_end_ms, int)
                     or take.playback_end_ms <= expected_playback_start
@@ -288,6 +290,12 @@ def validate_public_staging(
                     "narration audio playback does not cover presentation time"
                 )
 
+    signed = {root / relative for relative in signatures}
+    expected_signed = files - {signatures_path}
+    if signed != expected_signed:
+        raise PublicBundleError(
+            "presentation signatures must cover every public file exactly once"
+        )
     unreferenced = files - referenced
     if unreferenced:
         names = ", ".join(sorted(path.relative_to(root).as_posix() for path in unreferenced))
@@ -393,6 +401,7 @@ def _allowlisted_path(relative: str) -> bool:
         ("recording.presentation.json",),
         ("recording.recording.json",),
         ("audio.json",),
+        ("signatures.json",),
     }:
         return True
     if len(path.parts) != 2:
@@ -462,6 +471,45 @@ def _validate_recording_metadata(
     if any(not WARNING_RE.fullmatch(value) for value in metadata.warnings):
         raise PublicBundleError("published recording warning code is invalid")
     return metadata
+
+
+def _validate_bundle_signatures(
+    value: dict[str, Any] | None,
+    *,
+    root: Path,
+    signatures_path: Path,
+    files: set[Path],
+) -> dict[str, PresentationFileSignatureV1]:
+    if value is None:
+        raise PublicBundleError("presentation signatures are missing")
+    typed = _structured(
+        value,
+        PresentationSignaturesV1,
+        required={"version", "files"},
+        field="presentation signatures",
+    )
+    if typed.version != 1:
+        raise PublicBundleError("presentation signatures identity is invalid")
+    result: dict[str, PresentationFileSignatureV1] = {}
+    for relative, signature in typed.files.items():
+        normalized = _public_relative_path(
+            relative, field=f"presentation signature {relative!r}"
+        )
+        path = root / normalized
+        if (
+            path == signatures_path
+            or path not in files
+            or SHA256_RE.fullmatch(signature.sha256) is None
+            or isinstance(signature.bytes, bool)
+            or signature.bytes < 0
+            or path.stat().st_size != signature.bytes
+            or hashlib.sha256(path.read_bytes()).hexdigest() != signature.sha256
+        ):
+            raise PublicBundleError(
+                f"presentation signature does not match {relative!r}"
+            )
+        result[normalized] = signature
+    return result
 
 
 def _public_relative_path(value: object, *, field: str) -> str:

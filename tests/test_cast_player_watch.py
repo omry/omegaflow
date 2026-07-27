@@ -110,6 +110,36 @@ def test_player_preloads_per_take_audio_for_seamless_handoff() -> None:
     assert "element.preload = 'metadata';" not in html
 
 
+def test_player_cache_busts_stable_presentation_assets_from_signature_sidecar() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+manifestBaseUrl = new URL('https://example.test/videos/demo/');
+presentationSignatures = {
+  'audio/take.mp3': {sha256: '${"a".repeat(64)}', bytes: 12},
+};
+const signed = new URL(presentationAssetUrl('audio/take.mp3'));
+let unsignedError = '';
+try {
+  presentationAssetUrl('beats/one.cast');
+} catch (error) {
+  unsignedError = String(error.message || error);
+}
+if (
+  signed.pathname !== '/videos/demo/audio/take.mp3' ||
+  signed.searchParams.get('v') !== 'a'.repeat(64) ||
+  unsignedError !== 'presentation signature is missing for beats/one.cast'
+) {
+  console.error(JSON.stringify({signed: signed.href, unsignedError}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_playback_does_not_start_before_player_initialization_finishes() -> None:
     result = run_player_script(
         r"""
@@ -1247,12 +1277,16 @@ if (
     assert result.returncode == 0, result.stderr
 
 
-def test_player_loads_v3_take_audio_members_and_word_timestamps() -> None:
+def test_player_loads_v1_take_audio_members_and_word_timestamps() -> None:
     result = run_player_script(
         r"""
 vm.runInContext(`
 audioMetaUrl = 'https://example.test/demo/audio.json';
 manifestBaseUrl = new URL('https://example.test/demo/');
+presentationSignatures = {
+  'audio/take-playback.mp3': {sha256: '${"a".repeat(64)}', bytes: 12},
+  'timestamps/take.json': {sha256: '${"b".repeat(64)}', bytes: 12},
+};
 presentationManifest = {
   beats: [{id: 'create', heading: 'Create', guide: {success_hint: 'Created.'}}],
 };
@@ -1262,13 +1296,11 @@ fetch = async (url) => ({
   async json() {
     if (new URL(String(url)).pathname.endsWith('audio.json')) {
         return {
-          version: 3,
+          version: 1,
           takes: [{
             id: 'take', source_start_ms: 1000, source_end_ms: 2200,
-            src: 'audio/take-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp3',
-            sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            playback_src: 'audio/take-playback-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.mp3',
-            playback_sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            src: 'audio/take.mp3',
+            playback_src: 'audio/take-playback.mp3',
             playback_start_ms: 2000, playback_end_ms: 3200,
             timestamps: 'timestamps/take.json',
           members: [{beat_id: 'create', text: 'Create it', text_start: 0, text_end: 9}],
@@ -1288,7 +1320,7 @@ loadAudioMeta().then(() => {
   const segment = narrationSegments[0];
   if (
       narrationSegments.length < 1 || audioTakeDescriptors.length !== 1 ||
-      !audioTakeDescriptors[0].src.includes('playback-') ||
+      !audioTakeDescriptors[0].src.includes('-playback') ||
       audioTakeDescriptors[0].source_start_ms !== 2000 ||
       audioTakeDescriptors[0].source_end_ms !== 3200 ||
       audioControlSegments[0].presentationStart !== 2 ||

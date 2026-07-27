@@ -361,6 +361,10 @@
   function validatePresentationManifest(manifest) {
     requirePresentation(manifest && typeof manifest === 'object', 'expected an object');
     requirePresentation(manifest.manifest_version === 1, 'manifest_version must be 1');
+    requirePresentation(
+      typeof manifest.signatures === 'string' && manifest.signatures,
+      'signatures sidecar is required',
+    );
     requirePresentation(manifest.recording && typeof manifest.recording === 'object', 'recording is required');
     requirePresentation(Number.isInteger(manifest.recording.duration_ms), 'recording duration must be an integer');
     requirePresentation(manifest.recording.duration_ms >= 0, 'recording duration must be non-negative');

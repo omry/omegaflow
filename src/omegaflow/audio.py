@@ -25,8 +25,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from .presentation_schema import (
     NarrationAudioMemberV2,
-    NarrationAudioMetadataV3,
-    NarrationAudioTakeV3,
+    NarrationAudioMetadataV1,
+    NarrationAudioTakeV1,
     NarrationTimestampAnchorV1,
     NarrationTimestampMemberV1,
     NarrationTimestampSidecarV1,
@@ -539,10 +539,31 @@ def narration_take_cache_key(
 
 
 def narration_take_filename_id(take_id: str) -> str:
-    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", take_id).strip("-.")
-    if value:
-        return value
-    return sha256(take_id.encode("utf-8")).hexdigest()[:12]
+    escaped_parts: list[str] = []
+    for index, byte in enumerate(take_id.encode("utf-8")):
+        character = chr(byte)
+        if (
+            byte < 128
+            and (
+                character.isalnum()
+                or character in "_-"
+                or (character == "." and index > 0)
+            )
+        ):
+            escaped_parts.append(character)
+        else:
+            escaped_parts.append(f"~{byte:02x}")
+    escaped = "".join(escaped_parts) or "~"
+    if len(escaped) <= 160:
+        return escaped
+    digest = sha256(take_id.encode("utf-8")).hexdigest()
+    prefix_budget = 160 - len(digest) - 1
+    prefix = ""
+    for part in escaped_parts:
+        if len(prefix) + len(part) > prefix_budget:
+            break
+        prefix += part
+    return f"{prefix}~{digest}"
 
 
 def plan_narration_take_audio(
@@ -816,30 +837,24 @@ def narration_timestamp_sidecar_payload(
     )
 
 
-def narration_audio_metadata_v3_payload(
+def narration_audio_metadata_v1_payload(
     plan: RecordingPlan,
     *,
     take_audio_paths: Mapping[str, str],
-    take_audio_sha256: Mapping[str, str],
     take_durations_ms: Mapping[str, int],
     timestamp_paths: Mapping[str, str],
 ) -> dict[str, Any]:
-    takes: list[NarrationAudioTakeV3] = []
+    takes: list[NarrationAudioTakeV1] = []
     source_offset = 0
     for take in plan.narration_takes:
         try:
             audio_path = take_audio_paths[take.id]
-            audio_sha256 = take_audio_sha256[take.id]
             duration = take_durations_ms[take.id]
             timestamp_path = timestamp_paths[take.id]
         except KeyError as exc:
             raise AudioError(f"missing audio metadata for narration take {take.id!r}") from exc
         if not isinstance(audio_path, str) or not audio_path:
             raise AudioError(f"invalid audio path for narration take {take.id!r}")
-        if not isinstance(audio_sha256, str) or not re.fullmatch(
-            r"[0-9a-f]{64}", audio_sha256
-        ):
-            raise AudioError(f"invalid audio hash for narration take {take.id!r}")
         if isinstance(duration, bool) or not isinstance(duration, int):
             raise AudioError(
                 f"audio duration for narration take {take.id!r} must be an integer"
@@ -849,10 +864,9 @@ def narration_audio_metadata_v3_payload(
         if not isinstance(timestamp_path, str) or not timestamp_path:
             raise AudioError(f"invalid timestamp path for narration take {take.id!r}")
         takes.append(
-            NarrationAudioTakeV3(
+            NarrationAudioTakeV1(
                 id=take.id,
                 src=audio_path,
-                sha256=audio_sha256,
                 source_start_ms=source_offset,
                 source_end_ms=source_offset + duration,
                 timestamps=timestamp_path,
@@ -869,7 +883,7 @@ def narration_audio_metadata_v3_payload(
         )
         source_offset += duration
     return _structured_payload(
-        NarrationAudioMetadataV3(
+        NarrationAudioMetadataV1(
             recording=plan.id,
             duration_ms=source_offset,
             takes=takes,

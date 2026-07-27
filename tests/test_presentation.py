@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from omegaflow.presentation import (
     serialize_presentation_manifest,
     validate_presentation_manifest,
     validate_relative_presentation_path,
+    write_presentation_signatures,
 )
 from omegaflow.presentation_schema import (
     BrowserClickEventV1,
@@ -82,22 +82,20 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
     audio = None
     if with_audio:
         audio_content = b"audio"
-        audio_sha256 = hashlib.sha256(audio_content).hexdigest()
         audio_dir = tmp_path / "audio"
         audio_dir.mkdir()
-        audio_name = f"take-{audio_sha256}.mp3"
+        audio_name = "take.mp3"
         (audio_dir / audio_name).write_bytes(audio_content)
         (tmp_path / "audio.json").write_text(
             json.dumps(
                 {
-                    "version": 3,
+                    "version": 1,
                     "recording": "demo",
                     "duration_ms": 400,
                     "takes": [
                         {
                             "id": "take",
                             "src": f"audio/{audio_name}",
-                            "sha256": audio_sha256,
                             "source_start_ms": 0,
                             "source_end_ms": 400,
                             "timestamps": "timestamps/take.json",
@@ -128,14 +126,10 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
             "initial": PresentationAssetV1(
                 path="media/initial.png",
                 media_type="image/png",
-                sha256=hashlib.sha256(initial).hexdigest(),
-                bytes=len(initial),
             ),
             "final": PresentationAssetV1(
                 path="media/final.png",
                 media_type="image/png",
-                sha256=hashlib.sha256(final).hexdigest(),
-                bytes=len(final),
             ),
         },
         beats=[
@@ -147,7 +141,9 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
             )
         ],
     )
-    return serialize_presentation_manifest(manifest)
+    serialized = serialize_presentation_manifest(manifest)
+    write_presentation_signatures(tmp_path)
+    return serialized
 
 
 def test_browser_payload_serialization_uses_fixed_event_order() -> None:
@@ -207,16 +203,37 @@ def test_manifest_paths_must_be_normalized_and_relative(path: str) -> None:
         validate_relative_presentation_path(path, field="path")
 
 
+def test_signature_sidecar_updates_content_identity_without_renaming_asset(
+    tmp_path: Path,
+) -> None:
+    asset = tmp_path / "audio/take.mp3"
+    asset.parent.mkdir()
+    asset.write_bytes(b"first")
+    sidecar_path = write_presentation_signatures(tmp_path)
+    first = json.loads(sidecar_path.read_text(encoding="utf-8"))
+
+    asset.write_bytes(b"second")
+    write_presentation_signatures(tmp_path)
+    second = json.loads(sidecar_path.read_text(encoding="utf-8"))
+
+    assert set(first["files"]) == {"audio/take.mp3"}
+    assert set(second["files"]) == {"audio/take.mp3"}
+    assert first["files"]["audio/take.mp3"]["sha256"] != (
+        second["files"]["audio/take.mp3"]["sha256"]
+    )
+
+
 def test_manifest_rejects_timing_and_asset_integrity_errors(tmp_path: Path) -> None:
     manifest = write_browser_bundle(tmp_path)
     manifest["recording"]["duration_ms"] = 999
     with pytest.raises(PresentationValidationError, match="final beat end"):
         validate_presentation_manifest(manifest, manifest_dir=tmp_path)
 
-    manifest = write_browser_bundle(tmp_path / "second")
-    manifest["assets"]["initial"]["sha256"] = "0" * 64
+    root = tmp_path / "second"
+    manifest = write_browser_bundle(root)
+    (root / "media/initial.png").write_bytes(b"tampered")
     with pytest.raises(PresentationValidationError, match="does not match"):
-        validate_presentation_manifest(manifest, manifest_dir=tmp_path / "second")
+        validate_presentation_manifest(manifest, manifest_dir=root)
 
 
 def test_manifest_rejects_mismatched_audio_interval_durations(tmp_path: Path) -> None:

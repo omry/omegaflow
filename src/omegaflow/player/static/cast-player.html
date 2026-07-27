@@ -1135,6 +1135,7 @@
       const autoplayCountdown = params.get('autoplay') === 'countdown';
       playerRoot.dataset.autoplayCountdown = String(autoplayCountdown);
       let audioMetaUrl = null;
+      let presentationSignatures = {};
       const introText = params.get('intro') || '';
       const explicitIntroSeconds = params.has('introSeconds');
       let introSeconds = Math.max(0, Number(params.get('introSeconds') || '0'));
@@ -1154,6 +1155,28 @@
 
       function fetchPresentationAsset(reference, base = window.location.href) {
         return fetch(new URL(reference, base).href, {cache: 'no-store'});
+      }
+
+      function presentationAssetUrl(reference, base = manifestBaseUrl) {
+        const value = String(reference || '');
+        const url = new URL(value, base || window.location.href);
+        const signature = presentationSignatures[value];
+        const isRelative = !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+          && !value.startsWith('/');
+        if (
+          isRelative &&
+          (
+            !signature ||
+            typeof signature.sha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(signature.sha256)
+          )
+        ) {
+          throw new Error(`presentation signature is missing for ${value}`);
+        }
+        if (signature && typeof signature.sha256 === 'string') {
+          url.searchParams.set('v', signature.sha256);
+        }
+        return url.href;
       }
 
       const terminal = document.getElementById('terminal');
@@ -1347,7 +1370,7 @@
           return `/${value.slice('website/static/'.length)}`;
         }
         if (manifestBaseUrl) {
-          return new URL(value, manifestBaseUrl).toString();
+          return presentationAssetUrl(value);
         }
         return new URL(value, window.location.href).toString();
       }
@@ -3385,19 +3408,18 @@
           throw new Error(`could not load audio metadata: ${response.status}`);
         }
         const metadata = await response.json();
-        if (metadata.version !== 3 || !Array.isArray(metadata.takes)) {
-          throw new Error('audio metadata must use version 3');
+        if (metadata.version !== 1 || !Array.isArray(metadata.takes)) {
+          throw new Error('audio metadata must use version 1');
         }
         const playbackFieldCounts = metadata.takes.map((take) => [
           take.playback_src,
-          take.playback_sha256,
           take.playback_start_ms,
           take.playback_end_ms,
         ].filter((value) => value != null).length);
-        if (playbackFieldCounts.some((count) => count !== 0 && count !== 4)) {
+        if (playbackFieldCounts.some((count) => count !== 0 && count !== 3)) {
           throw new Error('audio playback metadata is incomplete');
         }
-        const usesMaterializedPlayback = playbackFieldCounts.every((count) => count === 4);
+        const usesMaterializedPlayback = playbackFieldCounts.every((count) => count === 3);
         audioTakeDescriptors = metadata.takes.map((take) => ({
           id: String(take.id || ''),
           source_end_ms: Number(
@@ -3406,10 +3428,9 @@
           source_start_ms: Number(
             usesMaterializedPlayback ? take.playback_start_ms : take.source_start_ms,
           ),
-          src: new URL(
+          src: presentationAssetUrl(
             usesMaterializedPlayback ? take.playback_src : take.src,
-            manifestBaseUrl,
-          ).href,
+          ),
         }));
         audioControlSegments = usesMaterializedPlayback
           ? metadata.takes.map((take) => ({
@@ -3775,7 +3796,9 @@
               browser: () => CastPlayerCore.createBrowserDomRenderer(),
             },
             loadPayload: async (beat) => {
-              const response = await fetchPresentationAsset(beat.payload, manifestBaseUrl);
+              const response = await fetchPresentationAsset(
+                presentationAssetUrl(beat.payload),
+              );
               if (!response.ok) {
                 throw new Error(`could not load ${beat.renderer} payload: ${response.status}`);
               }
@@ -3806,7 +3829,7 @@
               }
             },
             resolveAsset(_assetId, asset) {
-              return new URL(asset.path, manifestBaseUrl).href;
+              return presentationAssetUrl(asset.path);
             },
           });
           presentationShell.setPlaybackRate(playbackRate);
@@ -3850,15 +3873,33 @@
         guidedMode = presentationManifest.presentation?.guided === true;
         const resolvedManifestUrl = response.url || new URL(manifestUrl, document.baseURI).href;
         manifestBaseUrl = new URL('.', resolvedManifestUrl);
+        const signaturesResponse = await fetchPresentationAsset(
+          presentationManifest.signatures,
+          manifestBaseUrl,
+        );
+        if (!signaturesResponse.ok) {
+          throw new Error(
+            `could not load presentation signatures: ${signaturesResponse.status}`,
+          );
+        }
+        const signatures = await signaturesResponse.json();
+        if (
+          signatures.version !== 1 ||
+          !signatures.files ||
+          typeof signatures.files !== 'object' ||
+          Array.isArray(signatures.files)
+        ) {
+          throw new Error('presentation signatures must use version 1');
+        }
+        presentationSignatures = signatures.files;
         if (!params.has('title') && presentationManifest.recording.title) {
           titleText = presentationManifest.recording.title;
           narration.textContent = titleText;
         }
         if (presentationManifest.audio) {
-          audioMetaUrl = new URL(
+          audioMetaUrl = presentationAssetUrl(
             presentationManifest.audio.metadata,
-            manifestBaseUrl,
-          ).href;
+          );
         }
       }
 

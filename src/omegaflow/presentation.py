@@ -34,6 +34,8 @@ from .presentation_schema import (
     PresentationGuideV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationFileSignatureV1,
+    PresentationSignaturesV1,
     PlayerToolbarControl,
     PresentationPlayerToolbarHighlightV1,
     PresentationWindowV1,
@@ -440,11 +442,33 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def write_presentation_signatures(root: Path, *, relative: str = "signatures.json") -> Path:
+    """Write the canonical integrity index for every other file in a bundle."""
+    target = root / validate_relative_presentation_path(
+        relative, field="presentation signatures"
+    )
+    files = {
+        path.relative_to(root).as_posix(): {
+            "sha256": _file_sha256(path),
+            "bytes": path.stat().st_size,
+        }
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path != target
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps({"version": 1, "files": files}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return target
+
+
 def _validate_asset(
     asset_id: str,
     value: object,
     *,
     root: Path | None,
+    signatures: dict[str, PresentationFileSignatureV1] | None,
 ) -> tuple[PresentationAssetV1, str]:
     field = f"manifest assets.{asset_id}"
     _non_empty_string(asset_id, field="manifest asset id")
@@ -453,22 +477,59 @@ def _validate_asset(
     _require_fields(mapping, _allowed_fields(PresentationAssetV1), field=field)
     path = validate_relative_presentation_path(mapping.get("path"), field=f"{field}.path")
     media_type = _non_empty_string(mapping.get("media_type"), field=f"{field}.media_type")
-    digest = _non_empty_string(mapping.get("sha256"), field=f"{field}.sha256")
-    if not SHA256_RE.fullmatch(digest):
-        raise PresentationValidationError(f"{field}.sha256 must be a full lowercase digest")
-    byte_count = _integer(mapping.get("bytes"), field=f"{field}.bytes")
     expected_media_type = ASSET_MEDIA_TYPES.get(PurePosixPath(path).suffix.lower())
     if expected_media_type is None or expected_media_type != media_type:
         raise PresentationValidationError(
             f"{field}.media_type does not match a supported asset extension"
         )
     if root is not None:
-        file_path = _resolved_manifest_file(root, path, field=f"{field}.path")
-        if file_path.stat().st_size != byte_count:
-            raise PresentationValidationError(f"{field}.bytes does not match the file")
-        if _file_sha256(file_path) != digest:
-            raise PresentationValidationError(f"{field}.sha256 does not match the file")
+        _resolved_manifest_file(root, path, field=f"{field}.path")
+        if signatures is None or path not in signatures:
+            raise PresentationValidationError(f"{field}.path is not signed")
     return _typed(mapping, PresentationAssetV1, field=field), path
+
+
+def _load_presentation_signatures(
+    root: Path,
+    relative: object,
+) -> dict[str, PresentationFileSignatureV1]:
+    field = "manifest signatures"
+    signature_path = validate_relative_presentation_path(relative, field=field)
+    signature_file = _resolved_manifest_file(root, signature_path, field=field)
+    mapping = _load_json(signature_file, field=field)
+    _reject_unknown(mapping, PresentationSignaturesV1, field=field)
+    _require_fields(mapping, _allowed_fields(PresentationSignaturesV1), field=field)
+    if mapping.get("version") != 1:
+        raise PresentationValidationError(f"{field}.version must be 1")
+    values = _mapping(mapping.get("files"), field=f"{field}.files")
+    signatures: dict[str, PresentationFileSignatureV1] = {}
+    for relative_path, value in values.items():
+        path_field = f"{field}.files.{relative_path}"
+        path = validate_relative_presentation_path(relative_path, field=path_field)
+        if path == signature_path:
+            raise PresentationValidationError(f"{path_field} cannot sign itself")
+        signature = _mapping(value, field=path_field)
+        _reject_unknown(signature, PresentationFileSignatureV1, field=path_field)
+        _require_fields(
+            signature,
+            _allowed_fields(PresentationFileSignatureV1),
+            field=path_field,
+        )
+        digest = _non_empty_string(signature.get("sha256"), field=f"{path_field}.sha256")
+        if SHA256_RE.fullmatch(digest) is None:
+            raise PresentationValidationError(
+                f"{path_field}.sha256 must be a full lowercase digest"
+            )
+        byte_count = _integer(signature.get("bytes"), field=f"{path_field}.bytes")
+        file_path = _resolved_manifest_file(root, path, field=path_field)
+        if file_path.stat().st_size != byte_count:
+            raise PresentationValidationError(f"{path_field}.bytes does not match")
+        if _file_sha256(file_path) != digest:
+            raise PresentationValidationError(f"{path_field}.sha256 does not match")
+        signatures[path] = _typed(
+            signature, PresentationFileSignatureV1, field=path_field
+        )
+    return signatures
 
 
 def _browser_asset_references(payload: BrowserPayloadV1) -> set[str]:
@@ -541,6 +602,7 @@ def _validate_audio(
     *,
     recording_duration_ms: int,
     root: Path | None,
+    signatures: dict[str, PresentationFileSignatureV1] | None,
 ) -> PresentationAudioV1:
     field = "manifest audio"
     mapping = _mapping(value, field=field)
@@ -559,9 +621,11 @@ def _validate_audio(
         metadata_file = _resolved_manifest_file(
             root, metadata_path, field=f"{field}.metadata"
         )
+        if signatures is None or metadata_path not in signatures:
+            raise PresentationValidationError(f"{field}.metadata is not signed")
         metadata = _load_json(metadata_file, field=f"{field}.metadata")
-        if metadata.get("version") != 3:
-            raise PresentationValidationError(f"{field}.metadata must use version 3")
+        if metadata.get("version") != 1:
+            raise PresentationValidationError(f"{field}.metadata must use version 1")
         source_duration_ms = _integer(
             metadata.get("duration_ms"), field=f"{field}.metadata.duration_ms"
         )
@@ -590,21 +654,13 @@ def _validate_audio(
             take_source = validate_relative_presentation_path(
                 take.get("src"), field=f"{take_field}.src"
             )
-            digest = take.get("sha256")
-            if not isinstance(digest, str) or SHA256_RE.fullmatch(digest) is None:
-                raise PresentationValidationError(f"{take_field}.sha256 is invalid")
             source_file = _resolved_manifest_file(
                 root, take_source, field=f"{take_field}.src"
             )
-            if hashlib.sha256(source_file.read_bytes()).hexdigest() != digest:
-                raise PresentationValidationError(f"{take_field}.sha256 does not match")
-            if digest not in take_source:
-                raise PresentationValidationError(
-                    f"{take_field}.src must contain its content hash"
-                )
+            if signatures is None or take_source not in signatures:
+                raise PresentationValidationError(f"{take_field}.src is not signed")
             playback_values = (
                 take.get("playback_src"),
-                take.get("playback_sha256"),
                 take.get("playback_start_ms"),
                 take.get("playback_end_ms"),
             )
@@ -616,18 +672,14 @@ def _validate_audio(
                 playback_source = validate_relative_presentation_path(
                     playback_values[0], field=f"{take_field}.playback_src"
                 )
-                playback_digest = playback_values[1]
                 playback_start = _integer(
-                    playback_values[2], field=f"{take_field}.playback_start_ms"
+                    playback_values[1], field=f"{take_field}.playback_start_ms"
                 )
                 playback_end = _integer(
-                    playback_values[3], field=f"{take_field}.playback_end_ms"
+                    playback_values[2], field=f"{take_field}.playback_end_ms"
                 )
                 if (
-                    not isinstance(playback_digest, str)
-                    or SHA256_RE.fullmatch(playback_digest) is None
-                    or playback_digest not in playback_source
-                    or playback_start != expected_playback_start
+                    playback_start != expected_playback_start
                     or playback_end <= playback_start
                     or playback_end > recording_duration_ms
                 ):
@@ -637,9 +689,9 @@ def _validate_audio(
                 playback_file = _resolved_manifest_file(
                     root, playback_source, field=f"{take_field}.playback_src"
                 )
-                if hashlib.sha256(playback_file.read_bytes()).hexdigest() != playback_digest:
+                if signatures is None or playback_source not in signatures:
                     raise PresentationValidationError(
-                        f"{take_field}.playback_sha256 does not match"
+                        f"{take_field}.playback_src is not signed"
                     )
                 expected_playback_start = playback_end
                 playback_end_ms = playback_end
@@ -774,6 +826,14 @@ def validate_presentation_manifest(
     )
     if mapping.get("manifest_version") != 1:
         raise PresentationValidationError("manifest_version must be 1")
+    signatures = (
+        None
+        if manifest_dir is None
+        else _load_presentation_signatures(
+            manifest_dir,
+            mapping.get("signatures"),
+        )
+    )
     recording = _mapping(mapping.get("recording"), field="manifest recording")
     _non_empty_string(recording.get("id"), field="manifest recording.id")
     recording_duration_ms = _integer(
@@ -797,7 +857,12 @@ def validate_presentation_manifest(
     assets = _mapping(mapping.get("assets"), field="manifest assets")
     asset_paths: set[str] = set()
     for asset_id, asset in assets.items():
-        _, path = _validate_asset(asset_id, asset, root=manifest_dir)
+        _, path = _validate_asset(
+            asset_id,
+            asset,
+            root=manifest_dir,
+            signatures=signatures,
+        )
         if path in asset_paths:
             raise PresentationValidationError(f"duplicate manifest asset path {path!r}")
         asset_paths.add(path)
@@ -916,6 +981,8 @@ def validate_presentation_manifest(
             payload_file = _resolved_manifest_file(
                 manifest_dir, payload_path, field=f"{field}.payload"
             )
+            if signatures is None or payload_path not in signatures:
+                raise PresentationValidationError(f"{field}.payload is not signed")
             if renderer == "browser":
                 payload_mapping = _load_json(payload_file, field=f"{field}.payload")
                 payload = validate_browser_payload(payload_mapping)
@@ -952,6 +1019,7 @@ def validate_presentation_manifest(
             audio,
             recording_duration_ms=recording_duration_ms,
             root=manifest_dir,
+            signatures=signatures,
         )
     return _typed(mapping, PresentationManifestV1, field="presentation manifest")
 

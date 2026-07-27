@@ -10,8 +10,9 @@ from omegaconf import OmegaConf
 from omegaflow.audio import (
     AudioError,
     AudioSettings,
-    narration_audio_metadata_v3_payload,
+    narration_audio_metadata_v1_payload,
     narration_take_cache_key,
+    narration_take_filename_id,
     narration_take_review_warning,
     narration_timestamp_sidecar_payload,
     plan_narration_take_audio,
@@ -1018,7 +1019,7 @@ def test_take_cache_key_and_non_blocking_reorder_warning(tmp_path: Path) -> None
     }
 
 
-def test_timestamp_sidecar_and_per_take_audio_metadata_v3() -> None:
+def test_timestamp_sidecar_and_per_take_audio_metadata_v1() -> None:
     spec = terminal_spec()
     spec["beats"] = [
         {
@@ -1063,10 +1064,9 @@ def test_timestamp_sidecar_and_per_take_audio_metadata_v3() -> None:
             },
         ],
     )
-    metadata = narration_audio_metadata_v3_payload(
+    metadata = narration_audio_metadata_v1_payload(
         plan,
-        take_audio_paths={"joined": "audio/joined-" + ("a" * 64) + ".mp3"},
-        take_audio_sha256={"joined": "a" * 64},
+        take_audio_paths={"joined": "audio/joined.mp3"},
         take_durations_ms={"joined": 1500},
         timestamp_paths={"joined": "timestamps/joined.json"},
     )
@@ -1075,10 +1075,48 @@ def test_timestamp_sidecar_and_per_take_audio_metadata_v3() -> None:
     assert sidecar["members"][0]["source_start_ms"] == 0
     assert sidecar["members"][1]["source_start_ms"] == 950
     assert sidecar["members"][1]["source_end_ms"] == 1500
-    assert metadata["version"] == 3
+    assert metadata["version"] == 1
     assert metadata["duration_ms"] == 1500
-    assert metadata["takes"][0]["sha256"] == "a" * 64
+    assert metadata["takes"][0]["src"] == "audio/joined.mp3"
     assert metadata["takes"][0]["members"][1]["beat_id"] == "two"
+
+
+def test_narration_take_filename_ids_are_stable_and_collision_free() -> None:
+    take_ids = (
+        "plain",
+        "__beat__:intro",
+        "a:b",
+        "a/b",
+        "a b",
+        "a-b",
+        ".",
+        "..",
+        "日本語",
+    )
+
+    filenames = [narration_take_filename_id(take_id) for take_id in take_ids]
+
+    assert filenames[0] == "plain"
+    assert len(set(filenames)) == len(take_ids)
+    assert filenames == [
+        narration_take_filename_id(take_id) for take_id in take_ids
+    ]
+    assert all(
+        "/" not in filename and filename not in {".", ".."} for filename in filenames
+    )
+
+
+def test_narration_take_filename_ids_are_bounded_for_long_authored_ids() -> None:
+    take_ids = (
+        "a" * 400,
+        ("a" * 399) + "b",
+        "日本語" * 100,
+    )
+
+    filenames = [narration_take_filename_id(take_id) for take_id in take_ids]
+
+    assert len(set(filenames)) == len(take_ids)
+    assert all(len(filename.encode("utf-8")) <= 160 for filename in filenames)
 
 
 @pytest.mark.parametrize(
@@ -1331,12 +1369,11 @@ def test_audio_metadata_rejects_coerced_duration_types(duration: object) -> None
     plan = normalize_recording_plan(terminal_spec())
 
     with pytest.raises(AudioError, match="must be an integer"):
-        narration_audio_metadata_v3_payload(
+        narration_audio_metadata_v1_payload(
             plan,
             take_audio_paths={
-                plan.narration_takes[0].id: "audio/terminal-" + ("a" * 64) + ".mp3"
+                plan.narration_takes[0].id: "audio/terminal.mp3"
             },
-            take_audio_sha256={plan.narration_takes[0].id: "a" * 64},
             take_durations_ms={plan.narration_takes[0].id: duration},
             timestamp_paths={plan.narration_takes[0].id: "timestamps/terminal.json"},
         )

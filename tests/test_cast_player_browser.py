@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import threading
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -83,6 +84,7 @@ def write_browser_player_fixture(root: Path) -> None:
     )
     manifest = {
         "manifest_version": 1,
+        "signatures": "signatures.json",
         "recording": {
             "id": "browser-player",
             "title": "Browser player",
@@ -99,8 +101,6 @@ def write_browser_player_fixture(root: Path) -> None:
             "initial": {
                 "path": image,
                 "media_type": "image/webp",
-                "sha256": "0" * 64,
-                "bytes": 0,
             }
         },
         "beats": [
@@ -119,6 +119,36 @@ def write_browser_player_fixture(root: Path) -> None:
     (root / "recording.presentation.json").write_text(
         json.dumps(manifest), encoding="utf-8"
     )
+    (root / "signatures.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "files": {
+                    "beats/browser.browser.json": {
+                        "sha256": hashlib.sha256(
+                            (root / "beats/browser.browser.json").read_bytes()
+                        ).hexdigest(),
+                        "bytes": (root / "beats/browser.browser.json").stat().st_size,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_browser_player_fixture_has_valid_payload_signature(tmp_path: Path) -> None:
+    write_browser_player_fixture(tmp_path)
+
+    payload = (tmp_path / "beats/browser.browser.json").read_bytes()
+    signature = json.loads(
+        (tmp_path / "signatures.json").read_text(encoding="utf-8")
+    )["files"]["beats/browser.browser.json"]
+
+    assert signature == {
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "bytes": len(payload),
+    }
 
 
 @pytest.mark.parametrize("viewport", [(1280, 800), (390, 844)])
@@ -512,6 +542,24 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
         }
     )
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    signature_paths = (
+        "beats/browser.browser.json",
+        "beats/outgoing.cast",
+        "beats/next.browser.json",
+    )
+    signatures = {
+        relative_path: {
+            "sha256": hashlib.sha256(
+                (tmp_path / relative_path).read_bytes()
+            ).hexdigest(),
+            "bytes": (tmp_path / relative_path).stat().st_size,
+        }
+        for relative_path in signature_paths
+    }
+    (tmp_path / "signatures.json").write_text(
+        json.dumps({"version": 1, "files": signatures}),
+        encoding="utf-8",
+    )
 
     with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -1270,13 +1318,40 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
                 / "omegaflow-videos/quickstart-demo/presentation/audio.json"
             ).read_text(encoding="utf-8")
         )
+        signatures = json.loads(
+            (
+                static_root
+                / "omegaflow-videos/quickstart-demo/presentation/signatures.json"
+            ).read_text(encoding="utf-8")
+        )["files"]
         requested_paths = {urlparse(url).path for url in presentation_requests}
         assert any(path.endswith("/recording.presentation.json") for path in requested_paths)
+        assert any(path.endswith("/signatures.json") for path in requested_paths)
         assert any(path.endswith("/audio.json") for path in requested_paths)
+        presentation_prefix = (
+            "/omegaflow-videos/quickstart-demo/presentation/"
+        )
+        signed_requests = {
+            parsed.path.split(presentation_prefix, 1)[1]: parse_qs(parsed.query).get("v")
+            for parsed in map(urlparse, presentation_requests)
+            if presentation_prefix in parsed.path
+            and parsed.path.split(presentation_prefix, 1)[1].startswith(
+                ("beats/", "media/", "timestamps/", "audio/")
+            )
+        }
+        assert any(path.startswith("beats/") for path in signed_requests)
+        assert any(path.startswith("media/") for path in signed_requests)
+        assert any(path.startswith("timestamps/") for path in signed_requests)
+        for path, query_signature in signed_requests.items():
+            assert query_signature == [signatures[path]["sha256"]]
         for take in audio_metadata["takes"]:
-            assert take["sha256"] in take["src"]
             playback_src = take.get("playback_src", take["src"])
-            assert any(path.endswith("/" + playback_src) for path in requested_paths)
+            expected_signature = signatures[playback_src]["sha256"]
+            assert any(
+                urlparse(url).path.endswith("/" + playback_src)
+                and parse_qs(urlparse(url).query).get("v") == [expected_signature]
+                for url in presentation_requests
+            )
         assert failed_requests == []
         assert bad_responses == []
         browser.close()

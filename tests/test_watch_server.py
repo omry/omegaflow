@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tempfile
@@ -8,6 +9,7 @@ from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import pytest
@@ -162,6 +164,7 @@ def test_friendly_watch_route_loads_the_player_in_a_browser(
     )
     manifest = {
         "manifest_version": 1,
+        "signatures": "signatures.json",
         "recording": {
             "id": "hello",
             "title": "Friendly hello",
@@ -186,6 +189,21 @@ def test_friendly_watch_route_loads_the_player_in_a_browser(
     }
     (presentation / "recording.presentation.json").write_text(
         json.dumps(manifest),
+        encoding="utf-8",
+    )
+    terminal_payload = (beats / "terminal.cast").read_bytes()
+    (presentation / "signatures.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "files": {
+                    "beats/terminal.cast": {
+                        "sha256": hashlib.sha256(terminal_payload).hexdigest(),
+                        "bytes": len(terminal_payload),
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -220,7 +238,10 @@ def test_friendly_watch_route_loads_the_player_in_a_browser(
             url.endswith("/recording.presentation.json")
             for url in snapshot_requests
         )
-        assert any(url.endswith("/beats/terminal.cast") for url in snapshot_requests)
+        assert any(
+            urlparse(url).path.endswith("/beats/terminal.cast")
+            for url in snapshot_requests
+        )
         browser.close()
 
 

@@ -239,8 +239,6 @@ class PresentationAudioV1:
 class PresentationAssetV1:
     path: str = ""
     media_type: str = ""
-    sha256: str = ""
-    bytes: int = 0
 
 
 @dataclass
@@ -283,6 +281,7 @@ class PresentationManifestV1:
     renderers: dict[str, PresentationRendererV1] = field(default_factory=dict)
     presentation: PresentationHeaderV1 = field(default_factory=PresentationHeaderV1)
     audio: PresentationAudioV1 | None = None
+    signatures: str = "signatures.json"
     assets: dict[str, PresentationAssetV1] = field(default_factory=dict)
     beats: list[PresentationBeatV1] = field(default_factory=list)
 
@@ -346,14 +345,12 @@ class NarrationTimestampSidecarV1:
 
 
 @dataclass
-class NarrationAudioTakeV3:
+class NarrationAudioTakeV1:
     id: str = ""
     src: str = ""
-    sha256: str = ""
     source_start_ms: int = 0
     source_end_ms: int = 0
     playback_src: str | None = None
-    playback_sha256: str | None = None
     playback_start_ms: int | None = None
     playback_end_ms: int | None = None
     timestamps: str = ""
@@ -361,11 +358,23 @@ class NarrationAudioTakeV3:
 
 
 @dataclass
-class NarrationAudioMetadataV3:
-    version: int = 3
+class NarrationAudioMetadataV1:
+    version: int = 1
     recording: str = ""
     duration_ms: int = 0
-    takes: list[NarrationAudioTakeV3] = field(default_factory=list)
+    takes: list[NarrationAudioTakeV1] = field(default_factory=list)
+
+
+@dataclass
+class PresentationFileSignatureV1:
+    sha256: str = ""
+    bytes: int = 0
+
+
+@dataclass
+class PresentationSignaturesV1:
+    version: int = 1
+    files: dict[str, PresentationFileSignatureV1] = field(default_factory=dict)
 
 
 @dataclass

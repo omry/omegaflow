@@ -23,14 +23,19 @@ Every build publishes an atomic bundle under `<asset_dir>/presentation/`:
 presentation/
   recording.presentation.json
   recording.recording.json
+  signatures.json          # hashes and byte sizes for every other file
   beats/*.cast
   beats/*.browser.json
-  media/*.webp
-  media/*.mp4              # only when captured motion is required
-  audio/*-<sha256>.*       # one content-addressed file per narration take
+  media/browser-state-*.webp
+  media/browser-clip-*.mp4 # only when captured motion is required
+  audio/<take-id>.*        # one stable file per narration take
   audio.json
   timestamps/*.json
 ```
+
+Presentation filenames stay stable across rebuilds. `signatures.json` is the
+canonical integrity index and supplies cache keys for the player, so changed
+media is refreshed without putting content hashes in filenames.
 
 The Docusaurus embed points at the manifest for terminal, browser, and mixed
 recordings alike:

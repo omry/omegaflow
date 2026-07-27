@@ -510,23 +510,23 @@ the old audio.
 
 ### Published audio metadata
 
-Audio generation publishes one content-addressed file per take. `audio.json`
-uses version 3 for manifest recordings and identifies every take file by path
-and SHA-256 digest:
+Audio generation publishes one stable file per take. `audio.json` uses version
+1 and identifies each take by its stable relative path. The presentation-wide
+`signatures.json` sidecar owns the SHA-256 digest and byte size for every
+published file:
 
 ```json
 {
-  "version": 3,
+  "version": 1,
   "recording": "create-project",
   "duration_ms": 7800,
   "takes": [
     {
       "id": "__beat__:start-server",
-      "src": "audio/__beat__-start-server-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp3",
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "src": "audio/__beat__~3astart-server.mp3",
       "source_start_ms": 0,
       "source_end_ms": 2600,
-      "timestamps": "timestamps/start-server.json",
+      "timestamps": "timestamps/__beat__~3astart-server.json",
       "members": [
         {
           "beat_id": "start-server",
@@ -810,8 +810,10 @@ directory.
 ## Visual assets
 
 Stable states are captured as lossless PNG, masked, normalized, and encoded as
-lossless WebP for publication. The published filename is the SHA-256 of the
-encoded bytes. Equal states therefore deduplicate across actions and beats.
+lossless WebP for publication. Capture assets remain content-addressed so equal
+states deduplicate across actions and beats. The public presentation assigns
+stable role-and-order filenames such as `browser-state-001.webp`; its signature
+sidecar carries the encoded content identity without renaming the file.
 
 Dynamic content is represented by the manifest's generic `clip` asset kind.
 Playwright's private VP8/WebM context video is retained as the capture source.
@@ -852,7 +854,7 @@ policies. It emits:
 - one beat-local terminal cast or browser payload per visual beat
 - one global presentation manifest
 - public audio and timestamp metadata
-- content-addressed WebP and clip assets
+- stable WebP and clip asset paths plus a presentation-wide signature sidecar
 - a private compilation report containing decisions and warnings
 
 ### Constraint model
@@ -1195,7 +1197,9 @@ The Phase 0 policy measured 3-second and 2 MB encoded clip limits. Phase 1 keeps
 the 3-second limit for automatically selected clips, allows explicitly captured
 clips to follow their action completion timeout, and keeps the 2 MB limit for
 all encoded clips. It proposes a provisional 64 MiB decoded-asset budget.
-Content-addressed assets may remain in the browser HTTP cache.
+Stable asset URLs include their sidecar signature as a cache-key query
+parameter. Unchanged assets may remain in the browser HTTP cache while changed
+content receives a new effective URL.
 
 The memory-budget candidate passes real-device playback validation at the
 Phase 1 release gate only when the
@@ -1358,10 +1362,14 @@ A successful run uses this internal layout:
     fragments/
   presentation/
     recording.presentation.json
+    recording.recording.json
+    signatures.json
     beats/
     media/
+      browser-state-*.webp
+      browser-clip-*.mp4
     audio/
-      <take-id>-<sha256>.<format>
+      <escaped-take-id>.<format>
     audio.json
     timestamps/
   audio/
@@ -1381,6 +1389,7 @@ Only these generated classes may be published:
 ```text
 recording.presentation.json
 recording.recording.json
+signatures.json
 audio/*.<supported-audio-extension>
 audio.json
 timestamps/*.json
@@ -1393,11 +1402,10 @@ media/*.<selected-clip-extension>
 Diagnostics are absent unless explicitly enabled and remain private even then.
 
 Publishing builds a sibling temporary asset directory, validates it, then
-replaces the destination on the same filesystem. If replacement cannot be
-atomic on the platform, content-addressed assets are copied first and the
-manifest is replaced last; a reader therefore observes either the previous or
-new complete reference graph. A failed publish preserves the previous public
-bundle.
+atomically replaces the destination on the same filesystem. A reader therefore
+observes either the previous or new complete reference graph. If replacement
+fails, publishing restores or preserves the previous public bundle rather than
+falling back to a partial copy.
 
 ## Build, check, watch, and clean
 

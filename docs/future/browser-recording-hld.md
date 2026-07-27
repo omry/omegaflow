@@ -523,22 +523,24 @@ The presentation compiler produces media-relative events such as:
 - play a dynamic fragment
 - mark an action or beat complete
 
-A provisional generated bundle is:
+The generated bundle is:
 
 ```text
 <asset-dir>/
-  recording.browser.presentation.json
+  recording.presentation.json
   recording.recording.json
-  states/
-    0001.webp
-    0002.webp
-  clips/
-    0001.webm
+  signatures.json
+  beats/
+    <beat-id>.cast
+    <beat-id>.browser.json
+  media/
+    browser-state-001.webp
+    browser-clip-001.mp4
   audio/
-    <take-id>-<sha256>.mp3
+    <escaped-take-id>.mp3
   audio.json
   timestamps/
-    <take-id>.json
+    <escaped-take-id>.json
 ```
 
 Optional diagnostics remain outside published assets:
@@ -553,8 +555,8 @@ Optional diagnostics remain outside published assets:
 ```
 
 The presentation manifest must be self-contained relative to its asset
-directory, versioned, content-addressable or fingerprinted, and safe to serve
-as static files. It must not require network access to the captured
+directory, versioned, fingerprinted through the signature sidecar, and safe to
+serve as static files. It must not require network access to the captured
 application.
 
 The generated manifest header declares one shared format version and the

@@ -14,6 +14,7 @@ from omegaflow.presentation import (
     PresentationValidationError,
     serialize_presentation_manifest,
     validate_presentation_manifest,
+    write_presentation_signatures,
 )
 from omegaflow.presentation_schema import (
     PresentationBeatV1,
@@ -74,15 +75,15 @@ def write_terminal_bundle(root: Path, *, output: str = "ok") -> Path:
     (root / "recording.recording.json").write_text(
         json.dumps(recording_metadata()), encoding="utf-8"
     )
+    write_presentation_signatures(root)
     return root
 
 
 def add_narration_bundle(root: Path) -> Path:
     audio_content = b"public audio fixture"
-    audio_sha256 = hashlib.sha256(audio_content).hexdigest()
     audio_dir = root / "audio"
     audio_dir.mkdir()
-    audio_name = f"take-{audio_sha256}.mp3"
+    audio_name = "take.mp3"
     (audio_dir / audio_name).write_bytes(audio_content)
     (root / "timestamps").mkdir()
     (root / "timestamps/take.json").write_text(
@@ -118,14 +119,13 @@ def add_narration_bundle(root: Path) -> Path:
     (root / "audio.json").write_text(
         json.dumps(
             {
-                "version": 3,
+                "version": 1,
                 "recording": "demo",
                 "duration_ms": 1000,
                 "takes": [
                     {
                         "id": "take",
                         "src": f"audio/{audio_name}",
-                        "sha256": audio_sha256,
                         "source_start_ms": 0,
                         "source_end_ms": 1000,
                         "timestamps": "timestamps/take.json",
@@ -157,6 +157,7 @@ def add_narration_bundle(root: Path) -> Path:
         ],
     }
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_presentation_signatures(root)
     return root
 
 
@@ -168,7 +169,7 @@ def test_public_staging_accepts_only_the_closed_reachable_bundle(tmp_path: Path)
     assert manifest["recording"]["id"] == "demo"
 
 
-def test_public_staging_validates_v3_narration_metadata_and_sidecar(
+def test_public_staging_validates_v1_narration_metadata_and_sidecar(
     tmp_path: Path,
 ) -> None:
     root = add_narration_bundle(write_terminal_bundle(tmp_path / "valid"))
@@ -179,12 +180,13 @@ def test_public_staging_validates_v3_narration_metadata_and_sidecar(
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
     sidecar["members"][0]["source_end_ms"] = 900
     sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+    write_presentation_signatures(root)
     with pytest.raises(PublicBundleError, match="cover take"):
         validate_public_staging(root)
 
 
 @pytest.mark.parametrize("layer", ["presentation", "publish"])
-@pytest.mark.parametrize("mutation", ["bytes", "hash", "hashless-path"])
+@pytest.mark.parametrize("mutation", ["bytes", "hash", "unsigned-path"])
 def test_narration_audio_integrity_tampering_is_rejected_by_each_validation_layer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -200,9 +202,12 @@ def test_narration_audio_integrity_tampering_is_rejected_by_each_validation_laye
     if mutation == "bytes":
         audio_path.write_bytes(b"tampered audio")
     elif mutation == "hash":
-        take["sha256"] = "0" * 64
+        signatures_path = root / "signatures.json"
+        signatures = json.loads(signatures_path.read_text(encoding="utf-8"))
+        signatures["files"][take["src"]]["sha256"] = "0" * 64
+        signatures_path.write_text(json.dumps(signatures), encoding="utf-8")
     else:
-        renamed = root / "audio/take.mp3"
+        renamed = root / "audio/renamed.mp3"
         audio_path.rename(renamed)
         take["src"] = renamed.relative_to(root).as_posix()
 
@@ -212,7 +217,7 @@ def test_narration_audio_integrity_tampering_is_rejected_by_each_validation_laye
         manifest = json.loads(
             (root / "recording.presentation.json").read_text(encoding="utf-8")
         )
-        with pytest.raises(PresentationValidationError, match="sha256|content hash"):
+        with pytest.raises(PresentationValidationError, match="signature|sha256|does not exist"):
             validate_presentation_manifest(manifest, manifest_dir=root)
     else:
         monkeypatch.setattr(
@@ -220,7 +225,7 @@ def test_narration_audio_integrity_tampering_is_rejected_by_each_validation_laye
             "validate_presentation_manifest",
             lambda *_args, **_kwargs: None,
         )
-        with pytest.raises(PublicBundleError, match="boundaries"):
+        with pytest.raises(PublicBundleError, match="signature"):
             validate_public_staging(root)
 
 
@@ -274,6 +279,7 @@ def test_public_staging_rejects_hash_and_schema_tampering(tmp_path: Path) -> Non
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["capture_fingerprint"] = "not-a-hash"
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    write_presentation_signatures(root)
     with pytest.raises(PublicBundleError, match="hash"):
         validate_public_staging(root)
 
@@ -282,6 +288,7 @@ def test_public_staging_rejects_hash_and_schema_tampering(tmp_path: Path) -> Non
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["private_spec"] = {"password": "bad"}
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    write_presentation_signatures(root)
     with pytest.raises(PublicBundleError, match="fields"):
         validate_public_staging(root)
 
@@ -290,11 +297,12 @@ def test_public_staging_rejects_hash_and_schema_tampering(tmp_path: Path) -> Non
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["dependencies"][0]["path"] = "../private.yaml"
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    write_presentation_signatures(root)
     with pytest.raises(PublicBundleError, match="normalized relative path"):
         validate_public_staging(root)
 
 
-def test_public_staging_rejects_manifest_asset_hash_mismatch(tmp_path: Path) -> None:
+def test_public_staging_rejects_sidecar_asset_hash_mismatch(tmp_path: Path) -> None:
     root = tmp_path / "browser"
     (root / "beats").mkdir(parents=True)
     (root / "media").mkdir()
@@ -316,6 +324,7 @@ def test_public_staging_rejects_manifest_asset_hash_mismatch(tmp_path: Path) -> 
     )
     manifest = {
         "manifest_version": 1,
+        "signatures": "signatures.json",
         "recording": {"id": "demo", "title": None, "duration_ms": 1000},
         "renderers": {"browser": {"payload_version": 1}},
         "presentation": {
@@ -328,8 +337,6 @@ def test_public_staging_rejects_manifest_asset_hash_mismatch(tmp_path: Path) -> 
             "state": {
                 "path": "media/state.webp",
                 "media_type": "image/webp",
-                "sha256": hashlib.sha256(b"different").hexdigest(),
-                "bytes": len(content),
             }
         },
         "beats": [
@@ -351,6 +358,12 @@ def test_public_staging_rejects_manifest_asset_hash_mismatch(tmp_path: Path) -> 
     (root / "recording.recording.json").write_text(
         json.dumps(recording_metadata()), encoding="utf-8"
     )
+    signatures_path = write_presentation_signatures(root)
+    signatures = json.loads(signatures_path.read_text(encoding="utf-8"))
+    signatures["files"]["media/state.webp"]["sha256"] = hashlib.sha256(
+        b"different"
+    ).hexdigest()
+    signatures_path.write_text(json.dumps(signatures), encoding="utf-8")
 
     with pytest.raises(PublicBundleError, match="sha256"):
         validate_public_staging(root)
@@ -434,15 +447,13 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
         ("state", state, "image/webp"),
         ("clip", clip, "video/mp4"),
     ):
-        content = path.read_bytes()
         assets[asset_id] = {
             "path": path.relative_to(root).as_posix(),
             "media_type": media_type,
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "bytes": len(content),
         }
     manifest = {
         "manifest_version": 1,
+        "signatures": "signatures.json",
         "recording": {"id": "demo", "title": None, "duration_ms": 400},
         "renderers": {"browser": {"payload_version": 1}},
         "presentation": {
@@ -471,6 +482,7 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
     (root / "recording.recording.json").write_text(
         json.dumps(recording_metadata()), encoding="utf-8"
     )
+    write_presentation_signatures(root)
 
     validate_public_staging(root, ffprobe=ffprobe)
 

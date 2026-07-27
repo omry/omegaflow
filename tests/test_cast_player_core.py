@@ -39,6 +39,7 @@ def test_shared_shell_maps_global_time_and_retains_current_and_next() -> None:
         r"""
 const manifest = {
   manifest_version: 1,
+  signatures: 'signatures.json',
   recording: {id: 'demo', duration_ms: 2000},
   renderers: {terminal: {payload_version: 1}},
   assets: {},
@@ -97,6 +98,7 @@ def test_exact_half_open_boundary_selects_the_following_beat_at_local_zero() -> 
         r"""
 const manifest = {
   manifest_version: 1,
+  signatures: 'signatures.json',
   recording: {id: 'boundary', duration_ms: 2000},
   renderers: {terminal: {payload_version: 1}},
   assets: {},
@@ -859,7 +861,7 @@ if (
     assert result.returncode == 0, result.stderr
 
 
-def test_presentation_audio_deck_switches_content_addressed_takes() -> None:
+def test_presentation_audio_deck_switches_between_take_files() -> None:
     result = run_core_script(
         r"""
 function fakeAudio() {
@@ -1005,6 +1007,7 @@ def test_shell_fails_closed_when_current_and_next_exceed_decoded_budget() -> Non
         r"""
 const manifest = {
   manifest_version: 1,
+  signatures: 'signatures.json',
   recording: {id: 'memory', duration_ms: 2000},
   renderers: {browser: {payload_version: 1}},
   assets: {},
@@ -1049,6 +1052,7 @@ def test_shell_disposes_renderer_that_finishes_loading_after_shell_disposal() ->
         r"""
 const manifest = {
   manifest_version: 1,
+  signatures: 'signatures.json',
   recording: {id: 'dispose', duration_ms: 1000},
   renderers: {browser: {payload_version: 1}},
   assets: {},
@@ -1103,6 +1107,7 @@ def test_shared_shell_rejects_non_contiguous_manifest() -> None:
 try {
   core.validatePresentationManifest({
     manifest_version: 1,
+    signatures: 'signatures.json',
     recording: {duration_ms: 10},
     renderers: {terminal: {payload_version: 1}},
     beats: [{id: 'one', renderer: 'terminal', offset_ms: 1, duration_ms: 10, payload: 'one.cast'}],
