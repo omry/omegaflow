@@ -6,6 +6,28 @@
   const browserDecodedAssetBudgetBytes = 64 * 1024 * 1024;
   const browserMediaDiagnosticEventLimit = 200;
   const browserMediaDiagnosticSampleLimit = 600;
+  const presentationPaneLimit = 64;
+  const presentationItemLimit = 100000;
+  const visualizationTextLimit = 100000;
+  const visualizationTokenLimit = 10000;
+  const visualizationTokenKinds = new Set([
+    'key',
+    'string',
+    'number',
+    'boolean',
+    'comment',
+    'keyword',
+    'operator',
+    'punctuation',
+  ]);
+  const visualizationPayloadKeys = [
+    'beat_id',
+    'duration_ms',
+    'language',
+    'payload_version',
+    'text',
+    'tokens',
+  ];
 
   function createCastAudioTimeline(segments = [], options = {}) {
     const audioBoundaryEpsilonSeconds = Number.isFinite(options.audioBoundaryEpsilonSeconds)
@@ -369,10 +391,30 @@
     requirePresentation(Number.isInteger(manifest.recording.duration_ms), 'recording duration must be an integer');
     requirePresentation(manifest.recording.duration_ms >= 0, 'recording duration must be non-negative');
     requirePresentation(Array.isArray(manifest.beats) && manifest.beats.length > 0, 'beats are required');
+    requirePresentation(Array.isArray(manifest.panes) && manifest.panes.length > 0, 'panes are required');
+    requirePresentation(
+      manifest.panes.length <= presentationPaneLimit,
+      `panes exceeds ${presentationPaneLimit} entries`,
+    );
     requirePresentation(manifest.renderers && typeof manifest.renderers === 'object', 'renderers are required');
 
+    const paneById = new Map();
+    for (const pane of manifest.panes) {
+      requirePresentation(pane && typeof pane === 'object', 'pane must be an object');
+      requirePresentation(
+        typeof pane.id === 'string' && /^[A-Za-z][A-Za-z0-9_-]*$/.test(pane.id),
+        'pane id is invalid',
+      );
+      requirePresentation(!paneById.has(pane.id), `duplicate pane ${pane.id}`);
+      requirePresentation(
+        ['visualization', 'terminal', 'browser'].includes(pane.renderer),
+        `unsupported renderer ${pane.renderer}`,
+      );
+      paneById.set(pane.id, pane);
+    }
     let expectedOffset = 0;
     const usedRenderers = new Set();
+    const usedPanes = new Set();
     const toolbarControls = new Set([
       'previous',
       'play',
@@ -382,14 +424,135 @@
       'speed',
       'mute',
     ]);
+    const paneBeatIdsByPane = new Map(
+      manifest.panes.map((pane) => [pane.id, new Set()]),
+    );
+    let structureCount = manifest.beats.length;
+    requirePresentation(
+      structureCount <= presentationItemLimit,
+      `aggregate structure exceeds ${presentationItemLimit} entries`,
+    );
     for (const beat of manifest.beats) {
       requirePresentation(beat && typeof beat === 'object', 'beat must be an object');
       requirePresentation(typeof beat.id === 'string' && beat.id, 'beat id is required');
-      requirePresentation(['terminal', 'browser'].includes(beat.renderer), `unsupported renderer ${beat.renderer}`);
       requirePresentation(Number.isInteger(beat.offset_ms), `beat ${beat.id} offset must be an integer`);
       requirePresentation(Number.isInteger(beat.duration_ms) && beat.duration_ms >= 0, `beat ${beat.id} duration is invalid`);
       requirePresentation(beat.offset_ms === expectedOffset, `beat ${beat.id} is not contiguous`);
-      requirePresentation(typeof beat.payload === 'string' && beat.payload, `beat ${beat.id} payload is required`);
+      requirePresentation(
+        beat.layout && Array.isArray(beat.layout.areas) && beat.layout.areas.length > 0,
+        `beat ${beat.id} layout is required`,
+      );
+      let columns = null;
+      const layoutPanes = new Set();
+      for (const row of beat.layout.areas) {
+        requirePresentation(Array.isArray(row) && row.length > 0, `beat ${beat.id} layout row is invalid`);
+        if (columns == null) {
+          columns = row.length;
+        }
+        requirePresentation(row.length === columns, `beat ${beat.id} layout is not rectangular`);
+        structureCount += row.length;
+        requirePresentation(
+          structureCount <= presentationItemLimit,
+          `aggregate structure exceeds ${presentationItemLimit} entries`,
+        );
+        for (const paneId of row) {
+          requirePresentation(paneById.has(paneId), `beat ${beat.id} layout references unknown pane ${paneId}`);
+          layoutPanes.add(paneId);
+        }
+      }
+      for (const paneId of layoutPanes) {
+        const positions = [];
+        for (let rowIndex = 0; rowIndex < beat.layout.areas.length; rowIndex += 1) {
+          for (let columnIndex = 0; columnIndex < beat.layout.areas[rowIndex].length; columnIndex += 1) {
+            if (beat.layout.areas[rowIndex][columnIndex] === paneId) {
+              positions.push([rowIndex, columnIndex]);
+            }
+          }
+        }
+        const rows = positions.map(([rowIndex]) => rowIndex);
+        const columns = positions.map(([, columnIndex]) => columnIndex);
+        for (let rowIndex = Math.min(...rows); rowIndex <= Math.max(...rows); rowIndex += 1) {
+          for (let columnIndex = Math.min(...columns); columnIndex <= Math.max(...columns); columnIndex += 1) {
+            requirePresentation(
+              beat.layout.areas[rowIndex][columnIndex] === paneId,
+              `beat ${beat.id} layout area ${paneId} must form a contiguous rectangle`,
+            );
+          }
+        }
+      }
+      requirePresentation(
+        Array.isArray(beat.pane_tracks) && beat.pane_tracks.length > 0,
+        `beat ${beat.id} pane tracks are required`,
+      );
+      structureCount += beat.pane_tracks.length;
+      requirePresentation(
+        structureCount <= presentationItemLimit,
+        `aggregate structure exceeds ${presentationItemLimit} entries`,
+      );
+      const trackPanes = new Set();
+      for (const track of beat.pane_tracks) {
+        requirePresentation(
+          track && paneById.has(track.pane_id),
+          `beat ${beat.id} pane track is invalid`,
+        );
+        requirePresentation(!trackPanes.has(track.pane_id), `beat ${beat.id} has a duplicate pane track`);
+        requirePresentation(['first', 'hidden'].includes(track.initial), `pane ${track.pane_id} initial state is invalid`);
+        requirePresentation(Array.isArray(track.beats) && track.beats.length > 0, `pane ${track.pane_id} beats are required`);
+        structureCount += track.beats.length;
+        requirePresentation(
+          structureCount <= presentationItemLimit,
+          `aggregate structure exceeds ${presentationItemLimit} entries`,
+        );
+        trackPanes.add(track.pane_id);
+        usedPanes.add(track.pane_id);
+        let precedingEnd = 0;
+        const paneBeatIds = paneBeatIdsByPane.get(track.pane_id);
+        for (const paneBeat of track.beats) {
+          requirePresentation(
+            paneBeat && typeof paneBeat.id === 'string' && paneBeat.id,
+            `pane ${track.pane_id} beat id is required`,
+          );
+          requirePresentation(!paneBeatIds.has(paneBeat.id), `pane ${track.pane_id} has a duplicate beat`);
+          paneBeatIds.add(paneBeat.id);
+          requirePresentation(
+            Number.isInteger(paneBeat.offset_ms) && paneBeat.offset_ms >= precedingEnd,
+            `pane beat ${paneBeat.id} overlaps its predecessor`,
+          );
+          requirePresentation(
+            Number.isInteger(paneBeat.duration_ms) && paneBeat.duration_ms >= 0,
+            `pane beat ${paneBeat.id} duration is invalid`,
+          );
+          requirePresentation(
+            paneBeat.offset_ms + paneBeat.duration_ms <= beat.duration_ms,
+            `pane beat ${paneBeat.id} exceeds its outer beat`,
+          );
+          requirePresentation(
+            typeof paneBeat.payload === 'string' && paneBeat.payload,
+            `pane beat ${paneBeat.id} payload is required`,
+          );
+          const transition = paneBeat.transition;
+          requirePresentation(
+            transition && ['cut', 'fade'].includes(transition.kind),
+            `pane beat ${paneBeat.id} transition is invalid`,
+          );
+          requirePresentation(
+            Number.isInteger(transition.duration_ms) &&
+              transition.duration_ms >= 0 &&
+              transition.duration_ms <= paneBeat.duration_ms,
+            `pane beat ${paneBeat.id} transition duration is invalid`,
+          );
+          requirePresentation(
+            transition.kind !== 'cut' || transition.duration_ms === 0,
+            `pane beat ${paneBeat.id} cut transition must be instantaneous`,
+          );
+          precedingEnd = paneBeat.offset_ms + paneBeat.duration_ms;
+        }
+      }
+      requirePresentation(
+        layoutPanes.size === trackPanes.size &&
+          [...layoutPanes].every((paneId) => trackPanes.has(paneId)),
+        `beat ${beat.id} layout and pane tracks disagree`,
+      );
       if (beat.player != null) {
         requirePresentation(
           beat.player && typeof beat.player === 'object',
@@ -412,24 +575,16 @@
           `beat ${beat.id} player highlight timing is invalid`,
         );
       }
-      if (beat.browser != null) {
-        requirePresentation(
-          beat.renderer === 'browser' && typeof beat.browser === 'object',
-          `beat ${beat.id} browser presentation is invalid`,
-        );
-        requirePresentation(
-          beat.browser.window && ['none', 'framed'].includes(beat.browser.window.mode),
-          `beat ${beat.id} browser window mode is invalid`,
-        );
-        requirePresentation(
-          beat.browser.chrome && ['hidden', 'minimal', 'full'].includes(beat.browser.chrome.mode),
-          `beat ${beat.id} browser chrome mode is invalid`,
-        );
-      }
       expectedOffset += beat.duration_ms;
-      usedRenderers.add(beat.renderer);
     }
     requirePresentation(expectedOffset === manifest.recording.duration_ms, 'final beat end does not match duration');
+    requirePresentation(
+      usedPanes.size === paneById.size && [...paneById.keys()].every((paneId) => usedPanes.has(paneId)),
+      'all panes must be used',
+    );
+    for (const pane of paneById.values()) {
+      usedRenderers.add(pane.renderer);
+    }
     const declaredRenderers = Object.keys(manifest.renderers).sort();
     requirePresentation(
       JSON.stringify(declaredRenderers) === JSON.stringify([...usedRenderers].sort()),
@@ -459,6 +614,7 @@
     const rendererFactories = options.rendererFactories || {};
     const loadPayload = options.loadPayload;
     requirePresentation(typeof loadPayload === 'function', 'loadPayload is required');
+    const paneById = new Map(manifest.panes.map((pane) => [pane.id, pane]));
     const loaded = new Map();
     const loading = new Map();
     let playbackRate = 1;
@@ -484,34 +640,68 @@
       return total;
     }
 
-    async function rendererAt(index) {
+    function entryAt(outerIndex, trackIndex, paneBeatIndex) {
+      const outerBeat = manifest.beats[outerIndex];
+      const track = outerBeat.pane_tracks[trackIndex];
+      const pane = paneById.get(track.pane_id);
+      const beat = track.beats[paneBeatIndex];
+      return {
+        beat,
+        key: `${outerIndex}:${trackIndex}:${paneBeatIndex}`,
+        outerBeat,
+        outerIndex,
+        pane,
+        paneBeatIndex,
+        track,
+        trackIndex,
+      };
+    }
+
+    async function rendererAt(entry) {
       if (disposed) {
         throw new Error('presentation shell is disposed');
       }
-      if (loaded.has(index)) {
-        return loaded.get(index);
+      if (loaded.has(entry.key)) {
+        return loaded.get(entry.key);
       }
-      if (!loading.has(index)) {
+      if (!loading.has(entry.key)) {
         const promise = (async () => {
-          const beat = manifest.beats[index];
-          const factory = rendererFactories[beat.renderer];
-          requirePresentation(typeof factory === 'function', `renderer ${beat.renderer} is unavailable`);
+          const factory = rendererFactories[entry.pane.renderer];
+          requirePresentation(
+            typeof factory === 'function',
+            `renderer ${entry.pane.renderer} is unavailable`,
+          );
           const renderer = factory();
-          requirePresentation(renderer && typeof renderer.load === 'function', `${beat.renderer} renderer has no load method`);
-          requirePresentation(typeof renderer.renderAt === 'function', `${beat.renderer} renderer has no renderAt method`);
+          requirePresentation(
+            renderer && typeof renderer.load === 'function',
+            `${entry.pane.renderer} renderer has no load method`,
+          );
+          requirePresentation(
+            typeof renderer.renderAt === 'function',
+            `${entry.pane.renderer} renderer has no renderAt method`,
+          );
           let rendererContainer = null;
           try {
-            const payload = await loadPayload(beat);
+            const payload = await loadPayload(entry.beat, entry);
             rendererContainer = typeof options.createRendererContainer === 'function'
-              ? options.createRendererContainer({beat, index})
+              ? options.createRendererContainer(entry)
               : options.container || null;
+            const rendererBeat = {
+              ...entry.beat,
+              transition_in: entry.paneBeatIndex === 0
+                ? entry.outerBeat.transition_in
+                : null,
+            };
             await renderer.load({
               assets: manifest.assets || {},
-              beat,
+              beat: rendererBeat,
               container: rendererContainer,
+              outerBeat: entry.outerBeat,
+              pane: entry.pane,
               payload,
               presentation: manifest.presentation || {},
               resolveAsset: options.resolveAsset,
+              track: entry.track,
             });
             if (disposed) {
               throw new Error('presentation shell is disposed');
@@ -523,88 +713,209 @@
             if (typeof renderer.setPlaying === 'function') {
               renderer.setPlaying(playing);
             }
-            loaded.set(index, renderer);
+            renderer.__presentationEntry = entry;
+            loaded.set(entry.key, renderer);
             if (decodedResidencyBytes() > decodedAssetBudget) {
               throw new Error('invalid presentation manifest: browser decoded-asset memory budget exceeded');
             }
             return renderer;
           } catch (error) {
-            if (loaded.get(index) === renderer) {
-              loaded.delete(index);
+            if (loaded.get(entry.key) === renderer) {
+              loaded.delete(entry.key);
             }
             if (typeof renderer.dispose === 'function') {
               renderer.dispose();
             }
             if (typeof options.removeRendererContainer === 'function') {
-              options.removeRendererContainer({beat, container: rendererContainer, index});
+              options.removeRendererContainer({...entry, container: rendererContainer});
             }
             throw error;
           }
         })();
-        loading.set(index, promise);
+        loading.set(entry.key, promise);
         promise.then(
-          () => loading.delete(index),
-          () => loading.delete(index),
+          () => loading.delete(entry.key),
+          () => loading.delete(entry.key),
         );
       }
-      return loading.get(index);
+      return loading.get(entry.key);
     }
 
-    async function retain(indices) {
-      for (const [index, renderer] of loaded.entries()) {
-        if (!indices.has(index)) {
+    async function retain(keys) {
+      for (const [key, renderer] of loaded.entries()) {
+        if (!keys.has(key)) {
+          const entry = renderer.__presentationEntry;
           if (typeof renderer.dispose === 'function') {
             renderer.dispose();
           }
           if (typeof options.removeRendererContainer === 'function') {
             options.removeRendererContainer({
-              beat: manifest.beats[index],
+              ...entry,
               container: renderer.__presentationContainer,
-              index,
             });
           }
-          loaded.delete(index);
+          loaded.delete(key);
         }
       }
     }
 
-    async function preloadAfter(index) {
-      const nextIndex = index + 1;
-      if (nextIndex >= manifest.beats.length) {
-        return;
+    async function preloadEntries(entries) {
+      for (const entry of entries) {
+        const renderer = await rendererAt(entry);
+        if (typeof renderer.preload === 'function') {
+          await renderer.preload();
+        }
       }
-      const renderer = await rendererAt(nextIndex);
-      if (typeof renderer.preload === 'function') {
-        await renderer.preload();
+    }
+
+    function finalLocalMs(paneBeat) {
+      return paneBeat.duration_ms - paneBeat.transition.duration_ms;
+    }
+
+    function paneLayersAt(track, localMs) {
+      const beats = track.beats;
+      const first = beats[0];
+      if (localMs < first.offset_ms) {
+        return track.initial === 'hidden'
+          ? []
+          : [{paneBeatIndex: 0, localMs: 0, opacity: 1}];
       }
+      for (let paneBeatIndex = 0; paneBeatIndex < beats.length; paneBeatIndex += 1) {
+        const beat = beats[paneBeatIndex];
+        const previous = paneBeatIndex > 0 ? beats[paneBeatIndex - 1] : null;
+        const start = beat.offset_ms;
+        const end = start + beat.duration_ms;
+        if (localMs < start) {
+          return previous == null
+            ? []
+            : [{
+              paneBeatIndex: paneBeatIndex - 1,
+              localMs: finalLocalMs(previous),
+              opacity: 1,
+            }];
+        }
+        if (localMs < end || paneBeatIndex === beats.length - 1) {
+          const transitionDuration = beat.transition.duration_ms;
+          const transitionEnd = start + transitionDuration;
+          if (transitionDuration > 0 && localMs < transitionEnd) {
+            if (previous == null && track.initial === 'first') {
+              return [{paneBeatIndex, localMs: 0, opacity: 1}];
+            }
+            const progress = Math.max(0, Math.min(
+              1,
+              (localMs - start) / transitionDuration,
+            ));
+            const layers = [];
+            if (previous != null) {
+              layers.push({
+                paneBeatIndex: paneBeatIndex - 1,
+                localMs: finalLocalMs(previous),
+                opacity: 1,
+              });
+            }
+            layers.push({paneBeatIndex, localMs: 0, opacity: progress});
+            return layers;
+          }
+          return [{
+            paneBeatIndex,
+            localMs: Math.max(0, Math.min(
+              localMs - transitionEnd,
+              finalLocalMs(beat),
+            )),
+            opacity: 1,
+          }];
+        }
+      }
+      const lastIndex = beats.length - 1;
+      return [{
+        paneBeatIndex: lastIndex,
+        localMs: finalLocalMs(beats[lastIndex]),
+        opacity: 1,
+      }];
+    }
+
+    function playbackWindowEntries(outerIndex, localMs, {firstOnly = false} = {}) {
+      if (outerIndex < 0 || outerIndex >= manifest.beats.length) {
+        return [];
+      }
+      const outerBeat = manifest.beats[outerIndex];
+      const entries = [];
+      for (let trackIndex = 0; trackIndex < outerBeat.pane_tracks.length; trackIndex += 1) {
+        const track = outerBeat.pane_tracks[trackIndex];
+        if (firstOnly) {
+          entries.push(entryAt(outerIndex, trackIndex, 0));
+          continue;
+        }
+        const activeIndexes = paneLayersAt(track, localMs)
+          .map((layer) => layer.paneBeatIndex);
+        const indexes = new Set(activeIndexes);
+        const latestIndex = activeIndexes.length > 0
+          ? Math.max(...activeIndexes)
+          : -1;
+        const nextIndex = latestIndex + 1;
+        if (nextIndex < track.beats.length) {
+          indexes.add(nextIndex);
+        }
+        if (indexes.size === 0) {
+          indexes.add(0);
+        }
+        for (const paneBeatIndex of indexes) {
+          entries.push(entryAt(outerIndex, trackIndex, paneBeatIndex));
+        }
+      }
+      return entries;
     }
 
     async function renderAt(globalMs) {
       const generation = ++renderGeneration;
       const index = beatIndexForPresentation(manifest, globalMs);
       const beat = manifest.beats[index];
-      const renderer = await rendererAt(index);
+      const localMs = Math.max(0, Math.min(globalMs - beat.offset_ms, beat.duration_ms));
+      const panes = [];
+      for (let trackIndex = 0; trackIndex < beat.pane_tracks.length; trackIndex += 1) {
+        const track = beat.pane_tracks[trackIndex];
+        const pane = paneById.get(track.pane_id);
+        const layerPlans = paneLayersAt(track, localMs);
+        const layers = [];
+        for (const layerPlan of layerPlans) {
+          const entry = entryAt(index, trackIndex, layerPlan.paneBeatIndex);
+          const renderer = await rendererAt(entry);
+          layers.push({
+            beat: entry.beat,
+            container: renderer.__presentationContainer,
+            localMs: layerPlan.localMs,
+            opacity: layerPlan.opacity,
+            renderer,
+          });
+        }
+        if (layers.length > 0) {
+          panes.push({layers, pane, track});
+        }
+      }
       if (generation !== renderGeneration || disposed) {
-        return {beat, index, localMs: null, renderer, stale: true};
+        return {beat, index, localMs: null, panes, stale: true};
       }
       currentIndex = index;
-      const localMs = Math.max(0, Math.min(globalMs - beat.offset_ms, beat.duration_ms));
-      if (typeof options.activateRenderer === 'function') {
-        options.activateRenderer({
-          beat,
-          container: renderer.__presentationContainer,
-          index,
-          renderer,
-        });
+      for (const pane of panes) {
+        for (const layer of pane.layers) {
+          layer.renderer.renderAt(layer.localMs);
+        }
       }
-      renderer.renderAt(localMs);
-      const retained = new Set([index]);
+      if (typeof options.activateComposition === 'function') {
+        options.activateComposition({beat, index, layout: beat.layout, localMs, panes});
+      }
+      const currentEntries = playbackWindowEntries(index, localMs);
+      const nextEntries = playbackWindowEntries(index + 1, 0, {firstOnly: true});
+      const retained = new Set(currentEntries.map((entry) => entry.key));
       if (index + 1 < manifest.beats.length) {
-        retained.add(index + 1);
+        for (const entry of nextEntries) {
+          retained.add(entry.key);
+        }
       }
-      await preloadAfter(index);
+      await preloadEntries(currentEntries);
+      await preloadEntries(nextEntries);
       await retain(retained);
-      return {beat, index, localMs, renderer};
+      return {beat, index, localMs, panes};
     }
 
     function setPlaybackRate(rate) {
@@ -639,7 +950,9 @@
           renderer.dispose();
         }
         if (typeof options.removeRendererContainer === 'function') {
+          const entry = renderer.__presentationEntry;
           options.removeRendererContainer({
+            ...entry,
             container: renderer.__presentationContainer,
           });
         }
@@ -652,9 +965,9 @@
     return {
       dispose,
       manifest,
-      preload: () => rendererAt(0).then((renderer) => (
-        typeof renderer.preload === 'function' ? renderer.preload() : undefined
-      )),
+      preload: () => preloadEntries(
+        playbackWindowEntries(0, 0, {firstOnly: true}),
+      ),
       renderAt,
       setPlaybackRate,
       setPlaying,
@@ -678,6 +991,9 @@
     if (!header || ![2, 3].includes(header.version)) {
       throw new Error('cast version is unsupported');
     }
+    if (lines.length - 1 > presentationItemLimit) {
+      throw new Error(`cast events exceeds ${presentationItemLimit} entries`);
+    }
     let elapsedMs = 0;
     const events = lines.slice(1).map((line) => {
       const event = JSON.parse(line);
@@ -692,6 +1008,156 @@
       return {atMs: elapsedMs, data: event[2], type: event[1]};
     });
     return {events, header};
+  }
+
+  function visualizationSegments(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('visualization payload is invalid');
+    }
+    if (
+      Object.keys(payload).sort().join(',') !== visualizationPayloadKeys.join(',') ||
+      payload.payload_version !== 1 ||
+      typeof payload.beat_id !== 'string' ||
+      !/^[A-Za-z][A-Za-z0-9_-]*$/.test(payload.beat_id) ||
+      !Number.isInteger(payload.duration_ms) ||
+      payload.duration_ms < 0 ||
+      typeof payload.language !== 'string' ||
+      !/^[A-Za-z][A-Za-z0-9_+.-]{0,31}$/.test(payload.language) ||
+      typeof payload.text !== 'string' ||
+      payload.text.length === 0 ||
+      Array.from(payload.text).length > visualizationTextLimit ||
+      !Array.isArray(payload.tokens) ||
+      payload.tokens.length > visualizationTokenLimit
+    ) {
+      throw new Error('visualization payload is invalid');
+    }
+    const characters = Array.from(payload.text);
+    const segments = [];
+    let cursor = 0;
+    for (const token of payload.tokens) {
+      if (
+        !token ||
+        typeof token !== 'object' ||
+        Object.keys(token).sort().join(',') !== 'end,kind,start' ||
+        !Number.isInteger(token.start) ||
+        !Number.isInteger(token.end) ||
+        token.start < cursor ||
+        token.end <= token.start ||
+        token.end > characters.length ||
+        !visualizationTokenKinds.has(token.kind)
+      ) {
+        throw new Error('visualization token range is invalid');
+      }
+      if (token.start > cursor) {
+        segments.push({
+          kind: null,
+          text: characters.slice(cursor, token.start).join(''),
+        });
+      }
+      segments.push({
+        kind: token.kind,
+        text: characters.slice(token.start, token.end).join(''),
+      });
+      cursor = token.end;
+    }
+    if (cursor < characters.length) {
+      segments.push({kind: null, text: characters.slice(cursor).join('')});
+    }
+    return segments;
+  }
+
+  function createVisualizationRendererAdapter(options = {}) {
+    let context = null;
+    let payload = null;
+    let segments = null;
+    let playbackRate = 1;
+    let disposed = false;
+
+    return {
+      async load(nextContext) {
+        if (disposed) {
+          throw new Error('visualization renderer is disposed');
+        }
+        context = nextContext;
+        payload = typeof nextContext.payload === 'string'
+          ? JSON.parse(nextContext.payload)
+          : nextContext.payload;
+        segments = visualizationSegments(payload);
+        if (typeof options.load === 'function') {
+          await options.load({...context, payload, segments});
+        }
+      },
+      renderAt(localMs) {
+        if (!segments || disposed) {
+          throw new Error('visualization renderer is not loaded');
+        }
+        if (typeof options.render === 'function') {
+          options.render({
+            ...context,
+            localMs: Math.max(0, Math.min(Number(localMs) || 0, payload.duration_ms)),
+            payload,
+            playbackRate,
+            segments,
+          });
+        }
+        return segments;
+      },
+      setPlaybackRate(rate) {
+        playbackRate = rate;
+      },
+      async preload() {},
+      dispose() {
+        if (disposed) {
+          return;
+        }
+        if (typeof options.dispose === 'function') {
+          options.dispose(context);
+        }
+        context = null;
+        payload = null;
+        segments = null;
+        disposed = true;
+      },
+      state() {
+        return {disposed, playbackRate};
+      },
+    };
+  }
+
+  function createVisualizationDomRenderer(options = {}) {
+    const documentObject = options.document || global.document;
+    if (!documentObject || typeof documentObject.createElement !== 'function') {
+      throw new Error('visualization DOM renderer requires a document');
+    }
+    let root = null;
+    return createVisualizationRendererAdapter({
+      load({container, payload, segments}) {
+        if (!container) {
+          throw new Error('visualization renderer requires a container');
+        }
+        root = documentObject.createElement('pre');
+        root.className = 'visualization-content';
+        root.dataset.language = payload.language;
+        for (const segment of segments) {
+          if (segment.kind == null) {
+            root.append(documentObject.createTextNode(segment.text));
+            continue;
+          }
+          const token = documentObject.createElement('span');
+          token.className = `visualization-token visualization-token-${segment.kind}`;
+          token.dataset.tokenKind = segment.kind;
+          token.textContent = segment.text;
+          root.append(token);
+        }
+        container.append(root);
+      },
+      dispose() {
+        if (root) {
+          root.remove();
+        }
+        root = null;
+      },
+    });
   }
 
   function createTerminalRendererAdapter(options = {}) {
@@ -837,6 +1303,9 @@
   function browserSceneAt(payload, localMs) {
     if (!payload || payload.payload_version !== 1 || !Array.isArray(payload.events)) {
       throw new Error('browser payload is invalid');
+    }
+    if (payload.events.length > presentationItemLimit) {
+      throw new Error(`browser events exceeds ${presentationItemLimit} entries`);
     }
     const clampedMs = Math.max(0, Math.min(Number(localMs) || 0, payload.duration_ms));
     let pointerVisible = Boolean(payload.initial_pointer.visible);
@@ -1623,6 +2092,8 @@
     browserWindowLayout,
     createBrowserRendererAdapter,
     createBrowserDomRenderer,
+    createVisualizationDomRenderer,
+    createVisualizationRendererAdapter,
     createPresentationAudioDeck,
     createPresentationAudioController,
     createPresentationAudioTimeline,
@@ -1633,6 +2104,7 @@
     defaultAudioBoundaryEpsilonSeconds,
     defaultAudioDriftToleranceMs,
     validatePresentationManifest,
+    visualizationSegments,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

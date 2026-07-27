@@ -109,39 +109,65 @@ def validate_public_staging(
     expected_dimensions: dict[str, set[tuple[int, int]]] = {}
     expected_media_suffixes: dict[str, set[str]] = {}
     clip_requirements: dict[str, tuple[int, int, int]] = {}
+    pane_renderers = {
+        pane["id"]: pane["renderer"] for pane in manifest["panes"]
+    }
     for beat in manifest["beats"]:
-        payload_path = root / beat["payload"]
-        referenced.add(payload_path)
-        if beat["renderer"] != "browser":
-            continue
-        payload = parsed_json.get(payload_path)
-        if payload is None:
-            raise PublicBundleError(f"browser payload is not JSON: {beat['payload']}")
-        viewport = payload["viewport"]
-        width = round(viewport["width"] * viewport["device_scale_factor"])
-        height = round(viewport["height"] * viewport["device_scale_factor"])
-        asset_ids = {payload["initial_state"]}
-        expected_media_suffixes.setdefault(payload["initial_state"], set()).add(".webp")
-        for event in payload["events"]:
-            kind = event["kind"]
-            if kind == "state":
-                asset_ids.add(event["asset"])
-                expected_media_suffixes.setdefault(event["asset"], set()).add(".webp")
-            elif kind == "clip":
-                asset_ids.add(event["asset"])
-                expected_media_suffixes.setdefault(event["asset"], set()).add(".mp4")
-            elif kind == "scroll":
-                asset_ids.update((event["start_asset"], event["end_asset"]))
-                expected_media_suffixes.setdefault(event["start_asset"], set()).add(".webp")
-                expected_media_suffixes.setdefault(event["end_asset"], set()).add(".webp")
-            if kind == "clip":
-                clip_requirements[event["asset"]] = (
-                    width,
-                    height,
-                    event["trim_end_ms"],
+        for track in beat["pane_tracks"]:
+            renderer = pane_renderers[track["pane_id"]]
+            for pane_beat in track["beats"]:
+                payload_path = root / pane_beat["payload"]
+                referenced.add(payload_path)
+                if renderer != "browser":
+                    continue
+                payload = parsed_json.get(payload_path)
+                if payload is None:
+                    raise PublicBundleError(
+                        f"browser payload is not JSON: {pane_beat['payload']}"
+                    )
+                viewport = payload["viewport"]
+                width = round(
+                    viewport["width"] * viewport["device_scale_factor"]
                 )
-        for asset_id in asset_ids:
-            expected_dimensions.setdefault(asset_id, set()).add((width, height))
+                height = round(
+                    viewport["height"] * viewport["device_scale_factor"]
+                )
+                asset_ids = {payload["initial_state"]}
+                expected_media_suffixes.setdefault(
+                    payload["initial_state"], set()
+                ).add(".webp")
+                for event in payload["events"]:
+                    kind = event["kind"]
+                    if kind == "state":
+                        asset_ids.add(event["asset"])
+                        expected_media_suffixes.setdefault(
+                            event["asset"], set()
+                        ).add(".webp")
+                    elif kind == "clip":
+                        asset_ids.add(event["asset"])
+                        expected_media_suffixes.setdefault(
+                            event["asset"], set()
+                        ).add(".mp4")
+                    elif kind == "scroll":
+                        asset_ids.update(
+                            (event["start_asset"], event["end_asset"])
+                        )
+                        expected_media_suffixes.setdefault(
+                            event["start_asset"], set()
+                        ).add(".webp")
+                        expected_media_suffixes.setdefault(
+                            event["end_asset"], set()
+                        ).add(".webp")
+                    if kind == "clip":
+                        clip_requirements[event["asset"]] = (
+                            width,
+                            height,
+                            event["trim_end_ms"],
+                        )
+                for asset_id in asset_ids:
+                    expected_dimensions.setdefault(asset_id, set()).add(
+                        (width, height)
+                    )
 
     for asset_id, asset in manifest["assets"].items():
         asset_path = root / asset["path"]

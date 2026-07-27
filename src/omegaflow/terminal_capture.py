@@ -18,7 +18,7 @@ from typing import Any, Callable
 from .capture import BeatCapture, CaptureContext
 from .record import RecordingError, asciinema_command, command_output_config
 from .recording_plan import (
-    BeatPlan,
+    OuterBeatPlan,
     FrozenMapping,
     TerminalActionPlan,
     TerminalCheckPlan,
@@ -1327,7 +1327,7 @@ class PersistentTerminalRunner:
 
     def capture_beat(
         self,
-        beat: BeatPlan,
+        beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
     ) -> BeatCapture:

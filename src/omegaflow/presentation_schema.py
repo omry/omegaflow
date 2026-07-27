@@ -17,6 +17,27 @@ class PlayerToolbarControl(str, Enum):
     mute = "mute"
 
 
+class PresentationPaneInitial(str, Enum):
+    first = "first"
+    hidden = "hidden"
+
+
+class PresentationPaneTransitionKind(str, Enum):
+    cut = "cut"
+    fade = "fade"
+
+
+class VisualizationTokenKind(str, Enum):
+    key = "key"
+    string = "string"
+    number = "number"
+    boolean = "boolean"
+    comment = "comment"
+    keyword = "keyword"
+    operator = "operator"
+    punctuation = "punctuation"
+
+
 @dataclass
 class BrowserViewportV1:
     width: int = 0
@@ -186,6 +207,23 @@ class BrowserPayloadV1:
 
 
 @dataclass
+class VisualizationTokenV1:
+    start: int = 0
+    end: int = 0
+    kind: VisualizationTokenKind = VisualizationTokenKind.keyword
+
+
+@dataclass
+class VisualizationPayloadV1:
+    payload_version: int = 1
+    beat_id: str = ""
+    duration_ms: int = 0
+    language: str = "text"
+    text: str = ""
+    tokens: list[VisualizationTokenV1] = field(default_factory=list)
+
+
+@dataclass
 class PresentationRecordingV1:
     id: str = ""
     title: str | None = None
@@ -261,16 +299,51 @@ class PresentationBeatPlayerV1:
 
 
 @dataclass
-class PresentationBeatV1:
+class PresentationPaneV1:
     id: str = ""
-    heading: str = ""
     renderer: str = ""
+
+
+@dataclass
+class PresentationPaneLayoutV1:
+    areas: list[list[str]] = field(default_factory=list)
+
+
+@dataclass
+class PresentationPaneTransitionV1:
+    kind: PresentationPaneTransitionKind = PresentationPaneTransitionKind.cut
+    duration_ms: int = 0
+
+
+@dataclass
+class PresentationPaneBeatV1:
+    id: str = ""
     offset_ms: int = 0
     duration_ms: int = 0
     payload: str = ""
+    transition: PresentationPaneTransitionV1 = field(
+        default_factory=PresentationPaneTransitionV1
+    )
+    browser: PresentationBrowserHeaderV1 | None = None
+
+
+@dataclass
+class PresentationPaneTrackV1:
+    pane_id: str = ""
+    initial: PresentationPaneInitial = PresentationPaneInitial.first
+    beats: list[PresentationPaneBeatV1] = field(default_factory=list)
+
+
+@dataclass
+class PresentationBeatV1:
+    id: str = ""
+    heading: str = ""
+    offset_ms: int = 0
+    duration_ms: int = 0
+    layout: PresentationPaneLayoutV1 = field(default_factory=PresentationPaneLayoutV1)
+    pane_tracks: list[PresentationPaneTrackV1] = field(default_factory=list)
     guide: PresentationGuideV1 | None = None
     player: PresentationBeatPlayerV1 | None = None
-    browser: PresentationBrowserHeaderV1 | None = None
     transition_in: str | None = None
 
 
@@ -283,6 +356,7 @@ class PresentationManifestV1:
     audio: PresentationAudioV1 | None = None
     signatures: str = "signatures.json"
     assets: dict[str, PresentationAssetV1] = field(default_factory=dict)
+    panes: list[PresentationPaneV1] = field(default_factory=list)
     beats: list[PresentationBeatV1] = field(default_factory=list)
 
 

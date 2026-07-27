@@ -21,7 +21,7 @@ from .presentation import (
 )
 from .presentation_schema import PresentationAudioIntervalV1
 from .recording_plan import (
-    BeatPlan,
+    OuterBeatPlan,
     BrowserActionPlan,
     FrozenMapping,
     NarrationTakePlan,
@@ -751,7 +751,7 @@ def _add_take_audio_constraints(
 
 def _add_beat_action_constraints(
     graph: ConstraintGraph,
-    beat: BeatPlan,
+    beat: OuterBeatPlan,
     *,
     beat_start_node: str,
     anchor_nodes: Mapping[tuple[str, str], str],
@@ -1662,7 +1662,7 @@ def natural_text_duration_ms(text: str) -> int:
 
 def compile_browser_beat(
     recording_id: str,
-    beat: BeatPlan,
+    beat: OuterBeatPlan,
     *,
     action_captures: Iterable[Mapping[str, Any]],
     viewport: Mapping[str, Any],

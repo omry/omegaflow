@@ -64,6 +64,11 @@ from .presentation_schema import (
     PresentationChromeV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPaneBeatV1,
+    PresentationPaneLayoutV1,
+    PresentationPaneTrackV1,
+    PresentationPaneTransitionV1,
+    PresentationPaneV1,
     PresentationPlayerToolbarHighlightV1,
     PresentationRecordingV1,
     PresentationRendererV1,
@@ -72,7 +77,7 @@ from .presentation_schema import (
 )
 from .publish import publish_public_bundle, validate_public_staging
 from .recording_plan import (
-    BeatPlan,
+    OuterBeatPlan,
     BrowserActionPlan,
     FrozenMapping,
     RecordingPlan,
@@ -97,7 +102,7 @@ CAPTURE_POLICY_VERSIONS = {
     "redaction": "capture-mask-v1",
 }
 PRESENTATION_POLICY_VERSIONS = {
-    "compiler": "presentation-v6-stable-assets-signature-sidecar",
+    "compiler": "presentation-v7-multi-pane-bundle",
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
@@ -1515,6 +1520,7 @@ def compile_presentation_bundle(
         (staging / "beats").mkdir()
         (staging / "media").mkdir()
         manifest_beats: list[PresentationBeatV1] = []
+        manifest_panes: list[PresentationPaneV1] = []
         manifest_assets: dict[str, PresentationAssetV1] = {}
         all_sources: dict[str, Any] = {}
         timing_by_id = {item.id: item for item in timing.beats}
@@ -1637,14 +1643,34 @@ def compile_presentation_bundle(
                 PresentationBeatV1(
                     id=beat.id,
                     heading=beat.heading,
-                    renderer=beat.medium.value,
                     offset_ms=beat_timing.offset_ms,
                     duration_ms=beat_timing.duration_ms,
-                    payload=payload,
+                    layout=PresentationPaneLayoutV1(
+                        areas=[[f"main-{beat.id}"]]
+                    ),
+                    pane_tracks=[
+                        PresentationPaneTrackV1(
+                            pane_id=f"main-{beat.id}",
+                            beats=[
+                                PresentationPaneBeatV1(
+                                    id=beat.id,
+                                    duration_ms=beat_timing.duration_ms,
+                                    payload=payload,
+                                    transition=PresentationPaneTransitionV1(),
+                                    browser=beat_browser,
+                                )
+                            ],
+                        )
+                    ],
                     guide=guide,
                     player=player,
-                    browser=beat_browser,
                     transition_in=transition,
+                )
+            )
+            manifest_panes.append(
+                PresentationPaneV1(
+                    id=f"main-{beat.id}",
+                    renderer=beat.medium.value,
                 )
             )
         media_runtime: BrowserMediaRuntime | None = None
@@ -1708,6 +1734,7 @@ def compile_presentation_bundle(
             presentation=header,
             audio=manifest_audio,
             assets=manifest_assets,
+            panes=manifest_panes,
             beats=manifest_beats,
         )
         serialized = serialize_presentation_manifest(manifest)
@@ -1863,7 +1890,7 @@ def _bundle_ffprobe(root: Path) -> str | None:
         raise PresentationBuildError(str(exc)) from exc
 
 
-def _terminal_action_ids(beat: BeatPlan) -> tuple[str, ...]:
+def _terminal_action_ids(beat: OuterBeatPlan) -> tuple[str, ...]:
     result: list[str] = []
     for action_index, action in enumerate(beat.actions):
         if not isinstance(action, TerminalActionPlan):

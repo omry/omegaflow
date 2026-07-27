@@ -1,0 +1,84 @@
+{
+  "assets": {},
+  "beats": [
+    {
+      "duration_ms": 4000,
+      "guide": null,
+      "heading": "Visualization renderer fixture",
+      "id": "explain-highlight",
+      "layout": {
+        "areas": [
+          [
+            "definition",
+            "status"
+          ]
+        ]
+      },
+      "offset_ms": 0,
+      "pane_tracks": [
+        {
+          "beats": [
+            {
+              "duration_ms": 4000,
+              "id": "definition",
+              "offset_ms": 0,
+              "payload": "beats/definition.visualization.json",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "definition"
+        },
+        {
+          "beats": [
+            {
+              "duration_ms": 4000,
+              "id": "status",
+              "offset_ms": 0,
+              "payload": "beats/status.cast",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "status"
+        }
+      ],
+      "player": null,
+      "transition_in": "cut"
+    }
+  ],
+  "manifest_version": 1,
+  "panes": [
+    {
+      "id": "definition",
+      "renderer": "visualization"
+    },
+    {
+      "id": "status",
+      "renderer": "terminal"
+    }
+  ],
+  "presentation": {
+    "guided": false
+  },
+  "recording": {
+    "duration_ms": 4000,
+    "id": "visualization-player",
+    "title": "Visualization and terminal"
+  },
+  "renderers": {
+    "terminal": {
+      "payload_version": 1
+    },
+    "visualization": {
+      "payload_version": 1
+    }
+  },
+  "signatures": "signatures.json"
+}

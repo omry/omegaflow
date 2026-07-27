@@ -229,6 +229,22 @@ class RecordingMedium(str, Enum):
     browser = "browser"
 
 
+class PaneKind(str, Enum):
+    visualization = "visualization"
+    terminal = "terminal"
+    browser = "browser"
+
+
+class PaneTransitionKind(str, Enum):
+    cut = "cut"
+    fade = "fade"
+
+
+class OuterBeatTransitionKind(str, Enum):
+    cut = "cut"
+    fade = "fade"
+
+
 class TerminalHighlightColor(str, Enum):
     cue = "cue"
     brand = "brand"
@@ -775,6 +791,47 @@ class BeatPlayerConfig:
 
 
 @dataclass
+class PaneConfig:
+    id: str = ""
+    kind: PaneKind = PaneKind.visualization
+
+
+@dataclass
+class PaneTransitionConfig:
+    kind: PaneTransitionKind = PaneTransitionKind.cut
+    duration_ms: int = 0
+
+
+@dataclass
+class PaneLayoutConfig:
+    areas: list[list[str]] = field(default_factory=list)
+
+
+@dataclass
+class PaneBeatConfig:
+    id: str = ""
+    after: str | None = None
+    transition: PaneTransitionConfig = field(default_factory=PaneTransitionConfig)
+    pointer: BrowserPointerPresentationConfig | None = None
+    window: BrowserWindowModeConfig | None = None
+    chrome: BrowserChromePresentationConfig | None = None
+    actions: list[RecordingActionConfig] = field(default_factory=list)
+    checks: list[RecordingCheckConfig] = field(default_factory=list)
+    effects: list[TerminalEffectConfig] = field(default_factory=list)
+
+
+@dataclass
+class OuterBeatPaneTrackConfig:
+    pane_id: str = ""
+    beats: list[PaneBeatConfig] = field(default_factory=list)
+
+
+@dataclass
+class RecordingNarrationConfig:
+    id: str = "voiceover"
+
+
+@dataclass
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
@@ -818,6 +875,9 @@ class RecordingDefaults:
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
         default_factory=RecordingFailureSummaryConfig
+    )
+    narration: RecordingNarrationConfig = field(
+        default_factory=RecordingNarrationConfig
     )
     setup: list[RecordingStepConfig] = field(default_factory=list)
     cleanup: list[RecordingStepConfig] = field(default_factory=list)
@@ -931,6 +991,12 @@ USER_RECORDING_YAML_SCHEMAS = (
     TerminalEffectConfig,
     PlayerToolbarHighlightConfig,
     BeatPlayerConfig,
+    PaneConfig,
+    PaneTransitionConfig,
+    PaneLayoutConfig,
+    PaneBeatConfig,
+    OuterBeatPaneTrackConfig,
+    RecordingNarrationConfig,
     RecordingBeatConfig,
     RecordingDefaults,
     RecordingSourceSpec,
@@ -1852,11 +1918,19 @@ def recording_from_script(
     from .recording_plan import validate_recording_modalities
 
     validate_recording_modalities(spec)
-    spec["narration"] = narration_from_script(
+    narration_config = spec.get("narration", {})
+    narration_id = (
+        narration_config.get("id", "voiceover")
+        if isinstance(narration_config, dict)
+        else "voiceover"
+    )
+    narration = narration_from_script(
         recording_id=recording_id,
         script_path=script_path,
         blocks=blocks,
     )
+    narration["id"] = narration_id
+    spec["narration"] = narration
     spec = apply_recording_overrides(
         spec,
         overrides,

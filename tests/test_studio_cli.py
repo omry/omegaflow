@@ -26,6 +26,7 @@ from omegaflow.capture import (
     CaptureFailureDetail,
 )
 from omegaflow.record import collect_run_jobs
+from omegaflow.recording_plan import normalize_recording_plan
 from omegaflow.studio_config import (
     CONFIG_DIR,
     RECORDING_SCRIPT_DIR,
@@ -3013,7 +3014,7 @@ beat:
         studio_directive_blocks(script)
 
 
-@pytest.mark.parametrize("generated_field", ["script", "narration", "studio"])
+@pytest.mark.parametrize("generated_field", ["script", "studio"])
 def test_recording_frontmatter_rejects_non_user_fields(
     tmp_path: Path,
     monkeypatch,
@@ -3046,6 +3047,45 @@ beat:
 
     with pytest.raises(StudioConfigError, match=generated_field):
         recording_from_script("hello")
+
+
+def test_recording_frontmatter_accepts_a_typed_narration_stream_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+narration:
+  id: guide
+---
+
+```yaml studio-directive
+scene: Hello Video
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+  actions:
+  - run: printf hello
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    spec = recording_from_script("hello")
+    plan = normalize_recording_plan(spec)
+
+    assert spec["narration"]["id"] == "guide"
+    assert plan.narration_stream.id == "guide"
 
 
 def test_studio_directive_schema_does_not_inject_defaults() -> None:

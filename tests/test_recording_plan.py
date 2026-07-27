@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from typing import Any, get_args, get_type_hints
@@ -7,6 +8,7 @@ from typing import Any, get_args, get_type_hints
 import pytest
 from omegaconf import OmegaConf
 
+import omegaflow.recording_plan as recording_plan_module
 from omegaflow.audio import (
     AudioError,
     AudioSettings,
@@ -20,18 +22,44 @@ from omegaflow.audio import (
 from omegaflow.presentation_schema import BrowserPayloadV1, PresentationManifestV1
 from omegaflow.recording_plan import (
     BrowserActionPlan,
+    EventEndpoint,
+    EventRef,
+    JoinPlan,
     NarrationTakeAnchorPlan,
     NarrationTakeMemberPlan,
     NarrationTakePlan,
     NarrationTakeWaitPlan,
+    NarrationSegmentPlan,
+    NarrationStreamPlan,
+    OuterBeatPlan,
+    OuterBeatTransitionPlan,
+    OuterPaneTrackPlan,
+    PaneBeatPlan,
+    PaneKind,
+    PaneLayoutPlan,
+    PanePlan,
+    PanePresentationPlan,
+    PaneTransitionPlan,
     RecordingPlanError,
+    StreamKind,
+    StreamPosition,
+    StreamRef,
     TerminalTextHighlightPlan,
     TerminalTextHighlightTargetPlan,
     normalize_recording_plan,
     terminal_action_id,
     validate_recording_modalities,
 )
-from omegaflow.studio_config import RecordingSpec, USER_RECORDING_YAML_SCHEMAS
+from omegaflow.studio_config import (
+    OuterBeatPaneTrackConfig,
+    PaneBeatConfig,
+    PaneConfig,
+    PaneLayoutConfig,
+    PaneTransitionConfig,
+    RecordingNarrationConfig,
+    RecordingSpec,
+    USER_RECORDING_YAML_SCHEMAS,
+)
 
 
 def browser_spec() -> dict:
@@ -86,6 +114,15 @@ def test_terminal_action_id_is_the_shared_capture_contract(
     expected: str,
 ) -> None:
     assert terminal_action_id(action_index, command_index, command) == expected
+
+
+def test_normalization_bounds_authored_plan_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(recording_plan_module, "PRESENTATION_ITEM_LIMIT", 1)
+
+    with pytest.raises(RecordingPlanError, match="aggregate structure exceeds 1"):
+        normalize_recording_plan(browser_spec())
 
 
 def test_terminal_command_accepts_allowlisted_scoped_environment() -> None:
@@ -284,6 +321,18 @@ def browser_handoff_spec() -> dict:
 
 def test_omegaconf_schema_authority_supports_versioned_artifacts() -> None:
     for schema in (RecordingSpec, BrowserPayloadV1, PresentationManifestV1):
+        assert OmegaConf.structured(schema) is not None
+
+
+def test_multi_pane_authoring_foundation_is_omegaconf_typed() -> None:
+    for schema in (
+        PaneConfig,
+        PaneBeatConfig,
+        PaneLayoutConfig,
+        PaneTransitionConfig,
+        OuterBeatPaneTrackConfig,
+        RecordingNarrationConfig,
+    ):
         assert OmegaConf.structured(schema) is not None
 
 
@@ -1111,6 +1160,159 @@ def test_recording_plan_is_deeply_immutable() -> None:
         plan.id = "changed"  # type: ignore[misc]
     with pytest.raises(TypeError):
         plan.beats[0].actions[0].config["id"] = "changed"  # type: ignore[index]
+
+
+def test_single_pane_shorthand_normalizes_to_implicit_main_track() -> None:
+    plan = normalize_recording_plan(terminal_spec())
+
+    beat = plan.beats[0]
+    assert isinstance(beat, OuterBeatPlan)
+    assert beat.layout == PaneLayoutPlan(areas=(("main",),))
+    assert len(beat.pane_tracks) == 1
+    track = beat.pane_tracks[0]
+    assert track.pane_id == "main"
+    assert len(track.beats) == 1
+    pane_beat = track.beats[0]
+    assert isinstance(pane_beat, PaneBeatPlan)
+    assert pane_beat.id == beat.id
+    assert track.kind is PaneKind.terminal
+    assert pane_beat.actions == beat.actions
+    assert pane_beat.checks == beat.checks
+    assert not hasattr(pane_beat, "narration_text")
+    assert not hasattr(pane_beat, "viewer_hold_ms")
+
+
+def test_implicit_main_track_is_local_to_each_mixed_medium_outer_beat() -> None:
+    spec = terminal_spec()
+    spec["browser"] = {"base_url": "https://example.test"}
+    spec["presentation"] = {"browser": {"chrome": {"mode": "hidden"}}}
+    spec["beats"].append(
+        {
+            "id": "browser",
+            "medium": "browser",
+            "actions": [
+                {
+                    "id": "open",
+                    "open_page": {"url": "/demo"},
+                }
+            ],
+        }
+    )
+
+    plan = normalize_recording_plan(spec)
+
+    assert [beat.pane_tracks[0].pane_id for beat in plan.beats] == ["main", "main"]
+    assert [beat.pane_tracks[0].kind for beat in plan.beats] == [
+        PaneKind.terminal,
+        PaneKind.browser,
+    ]
+
+
+def test_event_and_join_plan_identity_is_typed_and_immutable() -> None:
+    narration = StreamRef(kind=StreamKind.narration, id="voiceover")
+    terminal = StreamRef(kind=StreamKind.pane, id="terminal")
+    event = EventRef(
+        stream=terminal,
+        pane_beat_id="build",
+        action_id="start_server",
+        endpoint=EventEndpoint.ended,
+    )
+    join = JoinPlan(
+        waiting_stream=narration,
+        waiting_position=StreamPosition(action_id="explain"),
+        event=event,
+        gap_ms=200,
+    )
+
+    assert event.qualified_id == "terminal.build.start_server.ended"
+    with pytest.raises(FrozenInstanceError):
+        join.gap_ms = 0  # type: ignore[misc]
+    with pytest.raises(ValueError, match="another stream"):
+        JoinPlan(
+            waiting_stream=terminal,
+            waiting_position=StreamPosition(
+                pane_beat_id="verify",
+                action_id="check_server",
+            ),
+            event=event,
+        )
+
+
+@pytest.mark.parametrize(
+    ("factory", "message"),
+    [
+        (
+            lambda: PanePlan(id="not valid", kind=PaneKind.terminal),
+            "pane id",
+        ),
+        (
+            lambda: PaneTransitionPlan(duration_ms=-1),
+            "pane transition duration",
+        ),
+        (
+            lambda: OuterBeatTransitionPlan(duration_ms=-1),
+            "outer beat transition duration",
+        ),
+        (
+            lambda: NarrationStreamPlan(id="not valid", segments=()),
+            "narration stream id",
+        ),
+        (
+            lambda: NarrationSegmentPlan(
+                id="segment",
+                beat_id="beat",
+                text_start=4,
+                text_end=3,
+            ),
+            "narration segment range",
+        ),
+    ],
+)
+def test_multi_pane_plan_models_reject_invalid_invariants(
+    factory: Callable[[], object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        factory()
+
+
+def test_pane_track_requires_unique_valid_pane_beats() -> None:
+    pane_beat = PaneBeatPlan(
+        id="show",
+        start_join=None,
+        actions=(),
+        checks=(),
+        terminal_highlights=(),
+        presentation=PanePresentationPlan(),
+        transition=PaneTransitionPlan(),
+    )
+
+    with pytest.raises(ValueError, match="pane track must contain"):
+        OuterPaneTrackPlan(pane_id="terminal", kind=PaneKind.terminal, beats=())
+    with pytest.raises(ValueError, match="duplicate pane beat id"):
+        OuterPaneTrackPlan(
+            pane_id="terminal",
+            kind=PaneKind.terminal,
+            beats=(pane_beat, pane_beat),
+        )
+
+
+def test_logical_narration_stream_uses_the_authored_id() -> None:
+    spec = terminal_spec()
+    spec["narration"] = {"id": "guide"}
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.narration_stream.id == "guide"
+    assert [segment.id for segment in plan.narration_stream.segments] == ["run"]
+
+
+def test_logical_narration_stream_rejects_an_invalid_id() -> None:
+    spec = terminal_spec()
+    spec["narration"] = {"id": "not qualified"}
+
+    with pytest.raises(RecordingPlanError, match="narration stream id"):
+        normalize_recording_plan(spec)
 
 
 def test_plans_implicit_and_explicit_contiguous_takes() -> None:

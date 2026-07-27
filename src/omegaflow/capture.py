@@ -20,7 +20,7 @@ from typing import Any, Callable, Protocol, runtime_checkable
 
 from .browser_handoff import BROWSER_HANDOFF_ROOT_ENV, BrowserHandoffBroker
 from .recording_plan import (
-    BeatPlan,
+    OuterBeatPlan,
     BrowserActionPlan,
     RecordingPlan,
     TerminalActionPlan,
@@ -179,7 +179,7 @@ class CaptureRunner(Protocol):
 
     def capture_beat(
         self,
-        beat: BeatPlan,
+        beat: OuterBeatPlan,
         *,
         on_progress: RunnerProgressCallback | None = None,
     ) -> BeatCapture: ...
@@ -382,7 +382,7 @@ class CaptureCoordinator:
         started_action_keys: set[tuple[str, str]] = set()
         completed_action_keys: set[tuple[str, str]] = set()
 
-        def runner_progress(beat: BeatPlan) -> RunnerProgressCallback | None:
+        def runner_progress(beat: OuterBeatPlan) -> RunnerProgressCallback | None:
             if on_progress is None:
                 return None
 
@@ -439,7 +439,7 @@ class CaptureCoordinator:
             started.add(medium)
             return runner
 
-        def capture_beat(runner: CaptureRunner, beat: BeatPlan) -> BeatCapture:
+        def capture_beat(runner: CaptureRunner, beat: OuterBeatPlan) -> BeatCapture:
             progress_callback = runner_progress(beat)
             if progress_callback is None:
                 return runner.capture_beat(beat)
@@ -562,7 +562,7 @@ class CaptureCoordinator:
         return CaptureResult(context=context, beats=tuple(captures))
 
 
-def _validate_beat_capture(capture: BeatCapture, beat: BeatPlan) -> None:
+def _validate_beat_capture(capture: BeatCapture, beat: OuterBeatPlan) -> None:
     if capture.beat_id != beat.id:
         raise RuntimeError(
             f"{beat.medium.value} runner returned beat {capture.beat_id!r} "
@@ -570,7 +570,7 @@ def _validate_beat_capture(capture: BeatCapture, beat: BeatPlan) -> None:
         )
 
 
-def _terminal_browser_handoff_id(beat: BeatPlan) -> str | None:
+def _terminal_browser_handoff_id(beat: OuterBeatPlan) -> str | None:
     if beat.medium is not RecordingMedium.terminal:
         return None
     for action in beat.actions:

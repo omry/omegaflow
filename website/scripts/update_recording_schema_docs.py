@@ -37,6 +37,7 @@ SCHEMA_GROUPS = {
         "RecordingFailureAnimationConfig",
         "RecordingFailureSummaryConfig",
         "RecordingRequirementsConfig",
+        "RecordingNarrationConfig",
         "RecordingDefaults",
         "RecordingSourceSpec",
         "RecordingCollectionSourceSpec",

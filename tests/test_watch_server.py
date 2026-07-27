@@ -180,14 +180,29 @@ def test_friendly_watch_route_loads_the_player_in_a_browser(
         "renderers": {"terminal": {"payload_version": 1}},
         "presentation": {"guided": False},
         "assets": {},
+        "panes": [{"id": "main", "renderer": "terminal"}],
         "beats": [
             {
                 "id": "hello",
                 "heading": "Hello",
-                "renderer": "terminal",
                 "offset_ms": 0,
                 "duration_ms": 1000,
-                "payload": "beats/terminal.cast",
+                "layout": {"areas": [["main"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "main",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "hello",
+                                "offset_ms": 0,
+                                "duration_ms": 1000,
+                                "payload": "beats/terminal.cast",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
                 "guide": None,
                 "player": None,
                 "transition_in": "cut",

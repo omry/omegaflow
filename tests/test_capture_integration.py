@@ -9,7 +9,7 @@ import urllib.request
 from pathlib import Path
 
 from omegaflow.capture import BeatCapture, CaptureContext, CaptureCoordinator
-from omegaflow.recording_plan import BeatPlan, normalize_recording_plan
+from omegaflow.recording_plan import OuterBeatPlan, normalize_recording_plan
 from omegaflow.terminal_capture import PersistentTerminalRunner
 
 
@@ -28,7 +28,7 @@ class LocalServiceBrowserRunner:
     def start(self, context: CaptureContext) -> None:
         self.context = context
 
-    def capture_beat(self, beat: BeatPlan) -> BeatCapture:
+    def capture_beat(self, beat: OuterBeatPlan) -> BeatCapture:
         assert self.context is not None
         body: str | None = None
         for _ in range(50):

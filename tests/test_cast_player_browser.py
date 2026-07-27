@@ -106,14 +106,29 @@ def write_browser_player_fixture(root: Path) -> None:
                 "media_type": "image/webp",
             }
         },
+        "panes": [{"id": "main", "renderer": "browser"}],
         "beats": [
             {
                 "id": "browser",
                 "heading": "Browser step",
-                "renderer": "browser",
                 "offset_ms": 0,
                 "duration_ms": 1200,
-                "payload": "beats/browser.browser.json",
+                "layout": {"areas": [["main"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "main",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "browser",
+                                "offset_ms": 0,
+                                "duration_ms": 1200,
+                                "payload": "beats/browser.browser.json",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
                 "guide": {"success_hint": "The browser step is complete."},
                 "transition_in": "window-open",
             }
@@ -159,14 +174,29 @@ def write_terminal_player_fixture(root: Path) -> None:
         "renderers": {"terminal": {"payload_version": 1}},
         "presentation": {"browser": None, "guided": False},
         "assets": {},
+        "panes": [{"id": "main", "renderer": "terminal"}],
         "beats": [
             {
                 "id": "nano",
                 "heading": "Edit artwork",
-                "renderer": "terminal",
                 "offset_ms": 0,
                 "duration_ms": 1100,
-                "payload": "beats/nano.cast",
+                "layout": {"areas": [["main"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "main",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "nano",
+                                "offset_ms": 0,
+                                "duration_ms": 1100,
+                                "payload": "beats/nano.cast",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
                 "guide": None,
                 "transition_in": None,
             }
@@ -190,6 +220,159 @@ def write_terminal_player_fixture(root: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def write_visualization_player_fixture(root: Path) -> None:
+    shutil.copy2(
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html",
+        root / "cast-player.html",
+    )
+    shutil.copy2(
+        REPO_ROOT / "src/omegaflow/player/static/cast-player-core.js",
+        root / "cast-player-core.js",
+    )
+    (root / "beats").mkdir()
+    text = 'title: "<script>alert(1)</script>"\nstatus: ready\n'
+    payload = {
+        "payload_version": 1,
+        "beat_id": "definition",
+        "duration_ms": 1000,
+        "language": "yaml",
+        "text": text,
+        "tokens": [
+            {"start": 0, "end": 5, "kind": "key"},
+            {"start": 7, "end": 34, "kind": "string"},
+            {"start": 35, "end": 41, "kind": "key"},
+            {"start": 43, "end": 48, "kind": "keyword"},
+        ],
+    }
+    payload_path = root / "beats/definition.visualization.json"
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    manifest = {
+        "manifest_version": 1,
+        "signatures": "signatures.json",
+        "recording": {
+            "id": "visualization-player",
+            "title": "Visualization player",
+            "duration_ms": 1000,
+        },
+        "renderers": {"visualization": {"payload_version": 1}},
+        "presentation": {"guided": False},
+        "assets": {},
+        "panes": [{"id": "definition", "renderer": "visualization"}],
+        "beats": [
+            {
+                "id": "explain",
+                "heading": "Explain a beat",
+                "offset_ms": 0,
+                "duration_ms": 1000,
+                "layout": {"areas": [["definition"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "definition",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "definition",
+                                "offset_ms": 0,
+                                "duration_ms": 1000,
+                                "payload": "beats/definition.visualization.json",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
+                "guide": None,
+                "player": None,
+                "transition_in": "cut",
+            }
+        ],
+    }
+    (root / "recording.presentation.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    (root / "signatures.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "files": {
+                    "beats/definition.visualization.json": {
+                        "sha256": hashlib.sha256(payload_path.read_bytes()).hexdigest(),
+                        "bytes": payload_path.stat().st_size,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_visualization_player_renders_escaped_syntax_tokens(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_visualization_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        host = page.locator(".visualization-renderer-host:not([hidden])")
+        host.wait_for(state="visible")
+
+        assert host.text_content() == (
+            'title: "<script>alert(1)</script>"\nstatus: ready\n'
+        )
+        assert host.locator("script").count() == 0
+        assert host.locator("[data-token-kind='key']").all_inner_texts() == [
+            "title",
+            "status",
+        ]
+        assert host.locator("[data-token-kind='string']").inner_text() == (
+            '"<script>alert(1)</script>"'
+        )
+        assert host.locator("[data-language='yaml']").count() == 1
+        browser.close()
+
+
+def test_checked_in_visualization_fixture_composes_with_terminal() -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    manifest = (
+        "/tests/fixtures/visualization-player/recording.presentation.json"
+    )
+
+    with player_site(REPO_ROOT) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1100, "height": 650})
+        page.goto(
+            f"{base_url}/src/omegaflow/player/static/cast-player.html"
+            f"?manifest={manifest}"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#play").click()
+        page.locator("#playback-cover").wait_for(state="hidden")
+        visualization = page.locator(
+            ".visualization-renderer-host:not([hidden])"
+        )
+        terminal = page.locator(".terminal-renderer-host:not([hidden])")
+
+        assert 'regex: "Renderer: .*"' in visualization.inner_text()
+        assert "Renderer: ready" in terminal.inner_text()
+        visualization_box = visualization.bounding_box()
+        terminal_box = terminal.bounding_box()
+        assert visualization_box is not None and terminal_box is not None
+        assert (
+            visualization_box["x"] + visualization_box["width"]
+            <= terminal_box["x"] + 1
+        )
+        assert page.locator("#play").get_attribute("aria-label") == "Pause"
+        visualization.click()
+        assert page.locator("#play").get_attribute("aria-label") == "Play"
+        browser.close()
 
 
 def test_browser_player_fixture_has_valid_payload_signature(tmp_path: Path) -> None:
@@ -226,11 +409,13 @@ def test_generated_player_replays_nano_without_control_sequence_artifacts(
             "element.value = '500'; "
             "element.dispatchEvent(new Event('input', {bubbles: true})); }"
         )
+        terminal_host = page.locator(".terminal-renderer-host:not([hidden])")
         page.wait_for_function(
-            "document.querySelector('#terminal').textContent.includes('GNU nano 7.2')"
+            "document.querySelector('.terminal-renderer-host:not([hidden])')"
+            ".textContent.includes('GNU nano 7.2')"
         )
 
-        terminal_text = page.locator("#terminal").text_content()
+        terminal_text = terminal_host.text_content()
         assert terminal_text is not None
         assert "Help" in terminal_text
         assert "Write Out" in terminal_text
@@ -243,7 +428,10 @@ def test_generated_player_replays_nano_without_control_sequence_artifacts(
             "element => { element.value = '1090'; "
             "element.dispatchEvent(new Event('input', {bubbles: true})); }"
         )
-        page.wait_for_function("document.querySelector('#terminal').textContent === ''")
+        page.wait_for_function(
+            "document.querySelector('.terminal-renderer-host:not([hidden])')"
+            ".textContent === ''"
+        )
         browser.close()
 
 
@@ -274,7 +462,9 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
             "https://public.example/demo"
         )
         viewport_box = page.locator(".browser-viewport").bounding_box()
-        stage_box = page.locator("#browser-stage").bounding_box()
+        stage_box = page.locator(
+            ".browser-renderer-host:not([hidden])"
+        ).bounding_box()
         assert viewport_box is not None and stage_box is not None
         assert viewport_box["width"] <= stage_box["width"] + 1
         assert viewport_box["height"] <= stage_box["height"] + 1
@@ -298,6 +488,179 @@ def test_standalone_browser_player_on_desktop_and_emulated_mobile(
         assert page.locator(".browser-chrome-url").text_content() == (
             "https://public.example/finished"
         )
+        browser.close()
+
+
+def test_player_composes_terminal_and_browser_fixture_panes_side_by_side(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    terminal_path = tmp_path / "beats/terminal.cast"
+    terminal_path.write_text(
+        '{"version":3,"term":{"cols":80,"rows":24}}\n'
+        '[0.0,"o","terminal pane"]\n',
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["renderers"]["terminal"] = {"payload_version": 1}
+    manifest["panes"][0]["id"] = "auto"
+    manifest["beats"][0]["pane_tracks"][0]["pane_id"] = "auto"
+    manifest["panes"].insert(0, {"id": "terminal", "renderer": "terminal"})
+    manifest["beats"][0]["layout"] = {"areas": [["terminal", "auto"]]}
+    manifest["beats"][0]["pane_tracks"].insert(
+        0,
+        {
+            "pane_id": "terminal",
+            "initial": "first",
+            "beats": [
+                {
+                    "id": "terminal",
+                    "offset_ms": 0,
+                    "duration_ms": 1200,
+                    "payload": "beats/terminal.cast",
+                    "transition": {"kind": "cut", "duration_ms": 0},
+                }
+            ],
+        },
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    signatures_path = tmp_path / "signatures.json"
+    signatures = json.loads(signatures_path.read_text(encoding="utf-8"))
+    signatures["files"]["beats/terminal.cast"] = {
+        "sha256": hashlib.sha256(terminal_path.read_bytes()).hexdigest(),
+        "bytes": terminal_path.stat().st_size,
+    }
+    signatures_path.write_text(json.dumps(signatures), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        terminal_host = page.locator(
+            ".terminal-renderer-host:not([hidden])"
+        )
+        assert "terminal pane" in terminal_host.inner_text()
+        terminal_box = terminal_host.bounding_box()
+        browser_box = page.locator(
+            ".browser-renderer-host:not([hidden])"
+        ).bounding_box()
+        assert terminal_box is not None and browser_box is not None
+        assert terminal_box["x"] + terminal_box["width"] <= browser_box["x"] + 1
+        assert abs(terminal_box["width"] - browser_box["width"]) <= 2
+        assert page.locator(".stage").evaluate(
+            "element => element.style.gridTemplateAreas"
+        ) == '"pane-1 pane-2"'
+        assert terminal_host.evaluate("element => element.style.gridArea") == "pane-1"
+        assert page.locator(
+            ".browser-renderer-host:not([hidden])"
+        ).evaluate("element => element.style.gridArea") == "pane-2"
+        browser.close()
+
+
+def test_player_composes_sequential_terminal_pane_beats_during_fade(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    first_path = tmp_path / "beats/first.cast"
+    second_path = tmp_path / "beats/second.cast"
+    first_path.write_text(
+        '{"version":3,"term":{"cols":80,"rows":24}}\n'
+        '[0.0,"o","first terminal pane"]\n',
+        encoding="utf-8",
+    )
+    second_path.write_text(
+        '{"version":3,"term":{"cols":80,"rows":24}}\n'
+        '[0.0,"o","second terminal pane"]\n',
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["recording"]["duration_ms"] = 1200
+    manifest["renderers"] = {"terminal": {"payload_version": 1}}
+    manifest["panes"] = [{"id": "terminal", "renderer": "terminal"}]
+    manifest["beats"] = [
+        {
+            "id": "terminal-sequence",
+            "heading": "Terminal sequence",
+            "offset_ms": 0,
+            "duration_ms": 1200,
+            "layout": {"areas": [["terminal"]]},
+            "pane_tracks": [
+                {
+                    "pane_id": "terminal",
+                    "initial": "first",
+                    "beats": [
+                        {
+                            "id": "first",
+                            "offset_ms": 0,
+                            "duration_ms": 700,
+                            "payload": "beats/first.cast",
+                            "transition": {"kind": "cut", "duration_ms": 0},
+                        },
+                        {
+                            "id": "second",
+                            "offset_ms": 700,
+                            "duration_ms": 500,
+                            "payload": "beats/second.cast",
+                            "transition": {"kind": "fade", "duration_ms": 200},
+                        },
+                    ],
+                }
+            ],
+            "transition_in": "cut",
+        }
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    signatures_path = tmp_path / "signatures.json"
+    signatures = json.loads(signatures_path.read_text(encoding="utf-8"))
+    signatures["files"] = {
+        f"beats/{path.name}": {
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "bytes": path.stat().st_size,
+        }
+        for path in (first_path, second_path)
+    }
+    signatures_path.write_text(json.dumps(signatures), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        progress = page.locator("#progress")
+        progress.dispatch_event("pointerdown")
+        progress.evaluate(
+            "element => { element.value = String(800 / 1200 * 1000); "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); "
+            "element.dispatchEvent(new Event('change', {bubbles: true})); }"
+        )
+        page.wait_for_timeout(200)
+        terminal_states = page.locator(".terminal-renderer-host").evaluate_all(
+            "hosts => hosts.map(host => ({"
+            "hidden: host.hidden, opacity: host.style.opacity, "
+            "text: host.textContent}))"
+        )
+        assert len([state for state in terminal_states if not state["hidden"]]) == 2, (
+            terminal_states,
+            page.locator("#terminal").text_content(),
+        )
+        hosts = page.locator(".terminal-renderer-host:not([hidden])")
+        assert hosts.nth(0).inner_text().strip() == "first terminal pane"
+        assert hosts.nth(1).inner_text().strip() == "second terminal pane"
+        assert float(hosts.nth(0).evaluate("element => element.style.opacity")) == 1
+        assert 0.49 <= float(
+            hosts.nth(1).evaluate("element => element.style.opacity")
+        ) <= 0.51
         browser.close()
 
 
@@ -549,10 +912,24 @@ def test_guided_scrubber_click_only_snaps_after_crossing_checkpoint(
         {
             "id": "second",
             "heading": "Second step",
-            "renderer": "browser",
             "offset_ms": 1200,
             "duration_ms": 1200,
-            "payload": "beats/second.browser.json",
+            "layout": {"areas": [["main"]]},
+            "pane_tracks": [
+                {
+                    "pane_id": "main",
+                    "initial": "first",
+                    "beats": [
+                        {
+                            "id": "second",
+                            "offset_ms": 0,
+                            "duration_ms": 1200,
+                            "payload": "beats/second.browser.json",
+                            "transition": {"kind": "cut", "duration_ms": 0},
+                        }
+                    ],
+                }
+            ],
             "guide": {"success_hint": "Second step complete."},
             "transition_in": "cut",
         }
@@ -599,6 +976,10 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
     manifest["recording"]["duration_ms"] = 2400
     manifest["presentation"]["guided"] = True
     manifest["renderers"]["terminal"] = {"payload_version": 1}
+    manifest["panes"] = [
+        {"id": "terminal", "renderer": "terminal"},
+        {"id": "browser", "renderer": "browser"},
+    ]
 
     (tmp_path / "beats/outgoing.cast").write_text(
         '{"version":3,"term":{"cols":80,"rows":24}}\n'
@@ -608,10 +989,24 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
     manifest["beats"][0] = {
         "id": "outgoing",
         "heading": "Outgoing terminal step",
-        "renderer": "terminal",
         "offset_ms": 0,
         "duration_ms": 1200,
-        "payload": "beats/outgoing.cast",
+        "layout": {"areas": [["terminal"]]},
+        "pane_tracks": [
+            {
+                "pane_id": "terminal",
+                "initial": "first",
+                "beats": [
+                    {
+                        "id": "outgoing",
+                        "offset_ms": 0,
+                        "duration_ms": 1200,
+                        "payload": "beats/outgoing.cast",
+                        "transition": {"kind": "cut", "duration_ms": 0},
+                    }
+                ],
+            }
+        ],
         "guide": {"commands": ["continue"]},
         "transition_in": None,
     }
@@ -629,10 +1024,24 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
         {
             "id": "next",
             "heading": "Next step",
-            "renderer": "browser",
             "offset_ms": 1200,
             "duration_ms": 1200,
-            "payload": "beats/next.browser.json",
+            "layout": {"areas": [["browser"]]},
+            "pane_tracks": [
+                {
+                    "pane_id": "browser",
+                    "initial": "first",
+                    "beats": [
+                        {
+                            "id": "next",
+                            "offset_ms": 0,
+                            "duration_ms": 1200,
+                            "payload": "beats/next.browser.json",
+                            "transition": {"kind": "cut", "duration_ms": 0},
+                        }
+                    ],
+                }
+            ],
             "guide": None,
             "transition_in": "cut",
         }
@@ -674,8 +1083,9 @@ def test_guided_checkpoint_holds_outgoing_beat_before_transition(
         )
         page.locator("#guide:not([hidden])").wait_for(timeout=3000)
 
-        assert page.locator("#terminal").is_visible()
-        assert page.locator("#terminal").text_content().rstrip() == (
+        terminal_host = page.locator(".terminal-renderer-host:not([hidden])")
+        assert terminal_host.is_visible()
+        assert terminal_host.text_content().rstrip() == (
             "outgoing terminal beat"
         )
         assert page.locator("#browser-stage").is_hidden()
@@ -743,16 +1153,16 @@ def test_player_toolbar_highlight_clears_on_control_click_or_next_beat(
     )
     second_payload["beat_id"] = "next"
     second_payload_path.write_text(json.dumps(second_payload), encoding="utf-8")
-    manifest["beats"].append(
-        {
-            **manifest["beats"][0],
-            "id": "next",
-            "heading": "Next step",
-            "offset_ms": 1200,
-            "payload": "beats/next.browser.json",
-            "player": None,
-        }
+    next_beat = json.loads(json.dumps(manifest["beats"][0]))
+    next_beat.update(
+        id="next",
+        heading="Next step",
+        offset_ms=1200,
+        player=None,
     )
+    next_pane_beat = next_beat["pane_tracks"][0]["beats"][0]
+    next_pane_beat.update(id="next", payload="beats/next.browser.json")
+    manifest["beats"].append(next_beat)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
@@ -877,10 +1287,24 @@ def test_hovering_each_scrubber_section_shows_its_heading(tmp_path: Path) -> Non
         {
             "id": "controls",
             "heading": "Control Playback",
-            "renderer": "browser",
             "offset_ms": 1200,
             "duration_ms": 1200,
-            "payload": "beats/controls.browser.json",
+            "layout": {"areas": [["main"]]},
+            "pane_tracks": [
+                {
+                    "pane_id": "main",
+                    "initial": "first",
+                    "beats": [
+                        {
+                            "id": "controls",
+                            "offset_ms": 0,
+                            "duration_ms": 1200,
+                            "payload": "beats/controls.browser.json",
+                            "transition": {"kind": "cut", "duration_ms": 0},
+                        }
+                    ],
+                }
+            ],
             "guide": None,
             "transition_in": "cut",
         }
@@ -1029,7 +1453,7 @@ def test_browser_beat_can_hide_recording_window_and_chrome(tmp_path: Path) -> No
         "window": {"mode": "none", "theme": "kde-breeze", "title": None},
         "chrome": {"mode": "hidden"},
     }
-    manifest["beats"][0]["browser"] = hidden_browser
+    manifest["beats"][0]["pane_tracks"][0]["beats"][0]["browser"] = hidden_browser
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
@@ -1201,7 +1625,9 @@ def test_homepage_quickstart_checkpoint_holds_terminal_before_browser() -> None:
             "omegaflow recording=test-video action=watch"
         )
         assert page.locator("#guide-continue").text_content() == "Continue"
-        assert page.locator("#terminal").is_visible()
+        assert page.locator(
+            ".terminal-renderer-host:not([hidden])"
+        ).is_visible()
         assert page.locator("#browser-stage").is_hidden()
 
         page.locator("#guide-continue").click()
@@ -1329,14 +1755,28 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
         assert page.locator("#guided").evaluate(
             "element => getComputedStyle(element).outlineStyle"
         ) == "solid"
-        browser_beat = next(
-            beat for beat in manifest_data["beats"] if beat["renderer"] == "browser"
+        pane_renderers = {
+            pane["id"]: pane["renderer"] for pane in manifest_data["panes"]
+        }
+        browser_outer_beat = next(
+            beat
+            for beat in manifest_data["beats"]
+            if any(
+                pane_renderers[track["pane_id"]] == "browser"
+                for track in beat["pane_tracks"]
+            )
         )
+        browser_track = next(
+            track
+            for track in browser_outer_beat["pane_tracks"]
+            if pane_renderers[track["pane_id"]] == "browser"
+        )
+        browser_beat = browser_track["beats"][0]
         browser_payload = json.loads(
             (static_root / "omegaflow-videos/quickstart-demo/presentation"
              / browser_beat["payload"]).read_text(encoding="utf-8")
         )
-        assert browser_beat["player"] is None
+        assert browser_outer_beat["player"] is None
         assert browser_payload["initial_pointer"] == {
             "x": 576.0,
             "y": 180.0,
@@ -1374,7 +1814,10 @@ def test_homepage_quickstart_bundle_loads_paused_browser_preview_at_end() -> Non
             and event["action_id"] == "preview_playback_section"
         )
         preview_seek_ms = (
-            browser_beat["offset_ms"] + second_preview["at_ms"] + 100
+            browser_outer_beat["offset_ms"]
+            + browser_beat["offset_ms"]
+            + second_preview["at_ms"]
+            + 100
         )
         progress_value = round(
             preview_seek_ms / manifest_data["recording"]["duration_ms"] * 1000

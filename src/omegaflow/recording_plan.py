@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass, fields, is_dataclass, replace
+from dataclasses import asdict, dataclass, field, fields, is_dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeVar
@@ -24,6 +24,9 @@ from .studio_config import (
     BrowserTargetConfig,
     BrowserUrlMatcherConfig,
     BrowserWindowModeConfig,
+    OuterBeatTransitionKind,
+    PaneKind,
+    PaneTransitionKind,
     PlayerToolbarControl,
     PlayerToolbarHighlightConfig,
     RecordingActionConfig,
@@ -46,6 +49,20 @@ class RecordingPlanError(StudioConfigError):
     """Raised when a recording cannot be normalized into a typed plan."""
 
 
+PRESENTATION_PANE_LIMIT = 64
+PRESENTATION_ITEM_LIMIT = 100_000
+
+
+class StreamKind(str, Enum):
+    narration = "narration"
+    pane = "pane"
+
+
+class EventEndpoint(str, Enum):
+    started = "started"
+    ended = "ended"
+
+
 T = TypeVar("T")
 
 ACTION_KINDS = (
@@ -59,6 +76,13 @@ ACTION_KINDS = (
     "scroll",
     "wait_for",
 )
+
+
+def _validate_plan_id(value: str, *, field_name: str) -> None:
+    if not ACTION_ID_RE.fullmatch(value):
+        raise ValueError(f"invalid {field_name} {value!r}")
+
+
 TARGET_FAMILIES = ("role", "label", "placeholder", "text", "test_id", "css", "xpath")
 CONDITION_KINDS = ("visible", "hidden", "url", "response")
 CHECK_KINDS = ("url", "visible", "hidden", "text", "value", "count", "response")
@@ -1389,24 +1413,236 @@ class BrowserCheckPlan:
 
 
 @dataclass(frozen=True)
-class BeatPlan:
+class StreamRef:
+    kind: StreamKind
     id: str
-    medium: RecordingMedium
+
+    def __post_init__(self) -> None:
+        if not ACTION_ID_RE.fullmatch(self.id):
+            raise ValueError(f"invalid stream id {self.id!r}")
+
+
+@dataclass(frozen=True)
+class StreamPosition:
+    action_id: str
+    pane_beat_id: str | None = None
+    endpoint: EventEndpoint = EventEndpoint.started
+
+    def __post_init__(self) -> None:
+        if not ACTION_ID_RE.fullmatch(self.action_id):
+            raise ValueError(f"invalid stream position action id {self.action_id!r}")
+        if self.pane_beat_id is not None and not ACTION_ID_RE.fullmatch(
+            self.pane_beat_id
+        ):
+            raise ValueError(
+                f"invalid stream position pane beat id {self.pane_beat_id!r}"
+            )
+
+
+@dataclass(frozen=True)
+class EventRef:
+    stream: StreamRef
+    action_id: str
+    endpoint: EventEndpoint
+    pane_beat_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not ACTION_ID_RE.fullmatch(self.action_id):
+            raise ValueError(f"invalid event action id {self.action_id!r}")
+        if self.stream.kind is StreamKind.narration:
+            if self.pane_beat_id is not None:
+                raise ValueError("narration event cannot have a pane beat id")
+        elif self.pane_beat_id is None or not ACTION_ID_RE.fullmatch(
+            self.pane_beat_id
+        ):
+            raise ValueError("pane event requires a valid pane beat id")
+
+    @property
+    def qualified_id(self) -> str:
+        components = [self.stream.id]
+        if self.pane_beat_id is not None:
+            components.append(self.pane_beat_id)
+        components.extend((self.action_id, self.endpoint.value))
+        return ".".join(components)
+
+
+@dataclass(frozen=True)
+class JoinPlan:
+    waiting_stream: StreamRef
+    waiting_position: StreamPosition
+    event: EventRef
+    gap_ms: int = 0
+
+    def __post_init__(self) -> None:
+        if self.gap_ms < 0:
+            raise ValueError("join gap must be non-negative")
+        if self.waiting_stream == self.event.stream:
+            raise ValueError("join must reference another stream")
+        if (
+            self.waiting_stream.kind is StreamKind.narration
+            and self.waiting_position.pane_beat_id is not None
+        ):
+            raise ValueError("narration position cannot have a pane beat id")
+        if (
+            self.waiting_stream.kind is StreamKind.pane
+            and self.waiting_position.pane_beat_id is None
+        ):
+            raise ValueError("pane position requires a pane beat id")
+
+
+@dataclass(frozen=True)
+class NarrationSegmentPlan:
+    id: str
+    beat_id: str
+    text_start: int
+    text_end: int
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.id, field_name="narration segment id")
+        _validate_plan_id(self.beat_id, field_name="narration segment beat id")
+        if self.text_start < 0 or self.text_end < self.text_start:
+            raise ValueError("invalid narration segment range")
+
+
+@dataclass(frozen=True)
+class NarrationStreamPlan:
+    id: str
+    segments: tuple[NarrationSegmentPlan, ...]
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.id, field_name="narration stream id")
+        segment_ids = [segment.id for segment in self.segments]
+        if len(segment_ids) != len(set(segment_ids)):
+            raise ValueError("duplicate narration segment id")
+
+
+@dataclass(frozen=True)
+class PanePlan:
+    id: str
+    kind: PaneKind
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.id, field_name="pane id")
+
+
+@dataclass(frozen=True)
+class PaneLayoutPlan:
+    areas: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class PaneTransitionPlan:
+    kind: PaneTransitionKind = PaneTransitionKind.cut
+    duration_ms: int = 0
+
+    def __post_init__(self) -> None:
+        if self.duration_ms < 0:
+            raise ValueError("pane transition duration must be non-negative")
+
+
+@dataclass(frozen=True)
+class OuterBeatTransitionPlan:
+    kind: OuterBeatTransitionKind = OuterBeatTransitionKind.cut
+    duration_ms: int = 0
+
+    def __post_init__(self) -> None:
+        if self.duration_ms < 0:
+            raise ValueError("outer beat transition duration must be non-negative")
+
+
+@dataclass(frozen=True)
+class PanePresentationPlan:
+    browser_pointer_visible: bool | None = None
+    browser_window: FrozenMapping | None = None
+    browser_chrome: FrozenMapping | None = None
+
+
+@dataclass(frozen=True)
+class PaneBeatPlan:
+    id: str
+    start_join: JoinPlan | None
+    actions: tuple[TerminalActionPlan | BrowserActionPlan, ...]
+    checks: tuple[TerminalCheckPlan | BrowserCheckPlan, ...]
+    terminal_highlights: tuple[TerminalTextHighlightPlan, ...]
+    presentation: PanePresentationPlan
+    transition: PaneTransitionPlan
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.id, field_name="pane beat id")
+
+
+@dataclass(frozen=True)
+class OuterPaneTrackPlan:
+    pane_id: str
+    kind: PaneKind
+    beats: tuple[PaneBeatPlan, ...]
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.pane_id, field_name="pane id")
+        if not self.beats:
+            raise ValueError("pane track must contain at least one pane beat")
+        beat_ids = [beat.id for beat in self.beats]
+        if len(beat_ids) != len(set(beat_ids)):
+            raise ValueError(f"duplicate pane beat id in pane {self.pane_id!r}")
+
+
+@dataclass(frozen=True)
+class OuterBeatPlan:
+    id: str
     heading: str
     caption: str
     narration_text: str
     explicit_narration_take: str | None
     viewer_hold_ms: int
-    browser_pointer_visible: bool | None
-    browser_window: FrozenMapping | None
-    browser_chrome: FrozenMapping | None
     player_highlight: PlayerToolbarHighlightPlan | None
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
     waits: tuple[NarrationWaitPlan, ...]
-    terminal_highlights: tuple[TerminalTextHighlightPlan, ...]
-    actions: tuple[TerminalActionPlan | BrowserActionPlan, ...]
-    checks: tuple[TerminalCheckPlan | BrowserCheckPlan, ...]
+    pane_tracks: tuple[OuterPaneTrackPlan, ...]
+    layout: PaneLayoutPlan
+    transition: OuterBeatTransitionPlan = field(
+        default_factory=OuterBeatTransitionPlan
+    )
+
+    @property
+    def pane_track(self) -> OuterPaneTrackPlan:
+        if len(self.pane_tracks) != 1 or len(self.pane_tracks[0].beats) != 1:
+            raise RecordingPlanError(
+                f"outer beat {self.id!r} is not a single-pane shorthand beat"
+            )
+        return self.pane_tracks[0]
+
+    @property
+    def pane_beat(self) -> PaneBeatPlan:
+        return self.pane_track.beats[0]
+
+    @property
+    def medium(self) -> RecordingMedium:
+        return RecordingMedium(self.pane_track.kind.value)
+
+    @property
+    def browser_pointer_visible(self) -> bool | None:
+        return self.pane_beat.presentation.browser_pointer_visible
+
+    @property
+    def browser_window(self) -> FrozenMapping | None:
+        return self.pane_beat.presentation.browser_window
+
+    @property
+    def browser_chrome(self) -> FrozenMapping | None:
+        return self.pane_beat.presentation.browser_chrome
+
+    @property
+    def terminal_highlights(self) -> tuple[TerminalTextHighlightPlan, ...]:
+        return self.pane_beat.terminal_highlights
+
+    @property
+    def actions(self) -> tuple[TerminalActionPlan | BrowserActionPlan, ...]:
+        return self.pane_beat.actions
+
+    @property
+    def checks(self) -> tuple[TerminalCheckPlan | BrowserCheckPlan, ...]:
+        return self.pane_beat.checks
 
 
 @dataclass(frozen=True)
@@ -1416,8 +1652,10 @@ class RecordingPlan:
     browser: FrozenMapping | None
     presentation: FrozenMapping
     setup: tuple[TerminalCheckPlan, ...]
-    beats: tuple[BeatPlan, ...]
+    panes: tuple[PanePlan, ...]
+    beats: tuple[OuterBeatPlan, ...]
     cleanup: tuple[TerminalCheckPlan, ...]
+    narration_stream: NarrationStreamPlan
     narration_takes: tuple[NarrationTakePlan, ...]
 
 
@@ -1558,7 +1796,7 @@ def _terminal_reference_ids(
 
 
 def plan_narration_takes(
-    beats: tuple[BeatPlan, ...],
+    beats: tuple[OuterBeatPlan, ...],
 ) -> tuple[NarrationTakePlan, ...]:
     resolved_ids: list[str | None] = []
     for beat in beats:
@@ -1585,7 +1823,7 @@ def plan_narration_takes(
         active = take_id
 
     ordered_ids: list[str] = []
-    grouped: dict[str, list[BeatPlan]] = {}
+    grouped: dict[str, list[OuterBeatPlan]] = {}
     for beat, take_id in zip(beats, resolved_ids, strict=True):
         if take_id is None:
             continue
@@ -1644,6 +1882,42 @@ def plan_narration_takes(
     return tuple(takes)
 
 
+def plan_narration_stream(
+    beats: tuple[OuterBeatPlan, ...],
+    *,
+    narration_id: str = "voiceover",
+) -> NarrationStreamPlan:
+    """Return the logical narration stream independently of physical TTS takes."""
+
+    if not isinstance(narration_id, str) or not ACTION_ID_RE.fullmatch(
+        narration_id
+    ):
+        raise RecordingPlanError(f"narration stream id {narration_id!r} is invalid")
+    segments: list[NarrationSegmentPlan] = []
+    seen_ids: set[str] = set()
+    for beat in beats:
+        for index, anchor in enumerate(beat.anchors):
+            if anchor.id in seen_ids:
+                raise RecordingPlanError(
+                    f"duplicate narration segment id {anchor.id!r}"
+                )
+            seen_ids.add(anchor.id)
+            text_end = (
+                beat.anchors[index + 1].text_offset
+                if index + 1 < len(beat.anchors)
+                else len(beat.narration_text)
+            )
+            segments.append(
+                NarrationSegmentPlan(
+                    id=anchor.id,
+                    beat_id=beat.id,
+                    text_start=anchor.text_offset,
+                    text_end=text_end,
+                )
+            )
+    return NarrationStreamPlan(id=narration_id, segments=tuple(segments))
+
+
 def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
     """Validate cross-references and return a deeply immutable execution plan."""
 
@@ -1659,10 +1933,16 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
     if not isinstance(raw_beats, list):
         raise RecordingPlanError("beats must be a list")
     narration_by_beat = _narration_by_beat(spec)
+    narration_mapping = spec.get("narration", {})
+    narration_id = (
+        narration_mapping.get("id", "voiceover")
+        if isinstance(narration_mapping, dict)
+        else "voiceover"
+    )
     seen_beat_ids: set[str] = set()
     seen_browser_action_ids: set[str] = set()
     first_browser_action_seen = False
-    beat_plans: list[BeatPlan] = []
+    beat_plans: list[OuterBeatPlan] = []
     browser_mapping = spec.get("browser")
     browser_config = (
         validate_browser_config(browser_mapping) if browser_mapping is not None else None
@@ -1870,15 +2150,13 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             caption = ""
         if not isinstance(caption, str):
             raise RecordingPlanError(f"beat {beat_id!r} caption must be a string")
-        beat_plans.append(
-            BeatPlan(
-                id=beat_id,
-                medium=medium,
-                heading=heading,
-                caption=caption,
-                narration_text=narration_text,
-                explicit_narration_take=explicit_take,
-                viewer_hold_ms=viewer_hold_ms,
+        pane_beat = PaneBeatPlan(
+            id=beat_id,
+            start_join=None,
+            actions=actions,
+            checks=checks,
+            terminal_highlights=terminal_highlights,
+            presentation=PanePresentationPlan(
                 browser_pointer_visible=(
                     None if pointer_config is None else pointer_config.visible
                 ),
@@ -1888,13 +2166,29 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 browser_chrome=(
                     None if chrome_config is None else freeze_value(chrome_config)
                 ),
+            ),
+            transition=PaneTransitionPlan(),
+        )
+        beat_plans.append(
+            OuterBeatPlan(
+                id=beat_id,
+                heading=heading,
+                caption=caption,
+                narration_text=narration_text,
+                explicit_narration_take=explicit_take,
+                viewer_hold_ms=viewer_hold_ms,
                 player_highlight=player_highlight,
                 guide=guide,
                 anchors=anchors,
                 waits=waits,
-                terminal_highlights=terminal_highlights,
-                actions=actions,
-                checks=checks,
+                pane_tracks=(
+                    OuterPaneTrackPlan(
+                        pane_id="main",
+                        kind=PaneKind(medium.value),
+                        beats=(pane_beat,),
+                    ),
+                ),
+                layout=PaneLayoutPlan(areas=(("main",),)),
             )
         )
 
@@ -1907,19 +2201,62 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
 
     frozen_beats = tuple(beat_plans)
     _validate_browser_handoffs(frozen_beats)
-    return RecordingPlan(
+    plan = RecordingPlan(
         id=recording_id,
         title=title,
         browser=freeze_value(browser_config) if browser_config is not None else None,
         presentation=freeze_value(presentation),
         setup=lifecycle_steps["setup"],
+        panes=(),
         beats=frozen_beats,
         cleanup=lifecycle_steps["cleanup"],
+        narration_stream=plan_narration_stream(
+            frozen_beats,
+            narration_id=narration_id,
+        ),
         narration_takes=plan_narration_takes(frozen_beats),
     )
+    _validate_recording_plan_limits(plan)
+    return plan
 
 
-def _validate_browser_handoffs(beats: tuple[BeatPlan, ...]) -> None:
+def _validate_recording_plan_limits(plan: RecordingPlan) -> None:
+    pane_count = len(plan.panes) or 1
+    if pane_count > PRESENTATION_PANE_LIMIT:
+        raise RecordingPlanError(
+            f"recording panes exceeds {PRESENTATION_PANE_LIMIT} entries"
+        )
+
+    item_count = (
+        len(plan.setup)
+        + len(plan.cleanup)
+        + len(plan.beats)
+        + len(plan.narration_stream.segments)
+    )
+    for beat in plan.beats:
+        item_count += sum(len(row) for row in beat.layout.areas)
+        item_count += len(beat.anchors) + len(beat.waits) + len(beat.pane_tracks)
+        for track in beat.pane_tracks:
+            item_count += len(track.beats)
+            for pane_beat in track.beats:
+                item_count += (
+                    len(pane_beat.actions)
+                    + len(pane_beat.checks)
+                )
+                for action in pane_beat.actions:
+                    if not isinstance(action, TerminalActionPlan):
+                        continue
+                    commands = action.config.get("commands") or ()
+                    item_count += len(commands)
+                    for command in commands:
+                        item_count += len(command.get("input") or ())
+    if item_count > PRESENTATION_ITEM_LIMIT:
+        raise RecordingPlanError(
+            f"recording aggregate structure exceeds {PRESENTATION_ITEM_LIMIT} entries"
+        )
+
+
+def _validate_browser_handoffs(beats: tuple[OuterBeatPlan, ...]) -> None:
     for beat_index, beat in enumerate(beats):
         if beat.medium is not RecordingMedium.terminal:
             continue

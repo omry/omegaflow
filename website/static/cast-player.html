@@ -244,6 +244,83 @@
         height: 100%;
       }
 
+      .stage[data-pane-layout="true"] {
+        display: grid;
+      }
+
+      .stage[data-pane-layout="true"] .terminal {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .stage[data-pane-layout="true"] .terminal-renderer-host {
+        overflow: hidden;
+      }
+
+      .stage[data-pane-layout="true"] .visualization-renderer-host {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        padding: clamp(1rem, 3vw, 2.5rem);
+        background:
+          linear-gradient(135deg, rgba(139, 124, 255, 0.08), transparent 45%),
+          #111620;
+      }
+
+      .visualization-content {
+        margin: 0;
+        color: var(--fg);
+        font: 600 clamp(0.9rem, 1.6vw, 1.25rem) / 1.65
+          "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        overflow-wrap: normal;
+        tab-size: 2;
+        white-space: pre-wrap;
+      }
+
+      .visualization-token-key {
+        color: var(--cyan);
+      }
+
+      .visualization-token-string {
+        color: var(--yellow);
+      }
+
+      .visualization-token-number,
+      .visualization-token-boolean {
+        color: var(--purple);
+      }
+
+      .visualization-token-comment {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      .visualization-token-keyword {
+        color: var(--brand);
+      }
+
+      .visualization-token-operator,
+      .visualization-token-punctuation {
+        color: var(--pink);
+      }
+
+      .stage[data-pane-layout="true"] .browser-stage {
+        display: contents;
+      }
+
+      .stage[data-pane-layout="true"] .browser-stage[hidden] {
+        display: none;
+      }
+
+      .stage[data-pane-layout="true"] .browser-renderer-host {
+        position: relative;
+        inset: auto;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
       .player[data-playback-started="false"] .narration {
         visibility: hidden;
       }
@@ -1193,6 +1270,7 @@
 
       const terminal = document.getElementById('terminal');
       const browserStage = document.getElementById('browser-stage');
+      const stage = terminal.parentElement;
       const playbackCover = document.getElementById('playback-cover');
       const narration = document.getElementById('narration');
       const playButton = document.getElementById('play');
@@ -1241,6 +1319,7 @@
       let progressTimer = null;
       let activeClass = '';
       let activeStyle = '';
+      let activeTerminalElement = terminal;
       let terminalLines = [[]];
       const activeTerminalHighlights = new Map();
       let cursorRow = 0;
@@ -1532,7 +1611,11 @@
         }
       }
 
-      function resetTerminalBuffer({preserveHighlights = false} = {}) {
+      function resetTerminalBuffer({
+        preserveHighlights = false,
+        container = terminal,
+      } = {}) {
+        activeTerminalElement = container;
         terminalLines = [[]];
         if (!preserveHighlights) {
           activeTerminalHighlights.clear();
@@ -1890,11 +1973,14 @@
       }
 
       function renderTerminalBuffer() {
+        if (!activeTerminalElement) {
+          throw new Error('active terminal renderer container is unavailable');
+        }
         const highlightColumns = terminalHighlightColumns();
-        terminal.innerHTML = terminalLines
+        activeTerminalElement.innerHTML = terminalLines
           .map((line, lineIndex) => renderTerminalLine(line, lineIndex, highlightColumns))
           .join('\n');
-        terminal.scrollTop = terminal.scrollHeight;
+        activeTerminalElement.scrollTop = activeTerminalElement.scrollHeight;
       }
 
       function applyTerminalHighlightMarker(value) {
@@ -4016,12 +4102,12 @@
         }
       }
 
-      function togglePlaybackFromTerminal() {
+      function togglePlaybackFromSelectableStageContent() {
         const selection = window.getSelection();
         if (
           selection &&
           !selection.isCollapsed &&
-          terminal.contains(selection.anchorNode)
+          stage.contains(selection.anchorNode)
         ) {
           return;
         }
@@ -4045,54 +4131,146 @@
       async function loadCast() {
         if (presentationManifest) {
           events = [];
+          const paneAreaNames = new Map(
+            presentationManifest.panes.map(
+              (pane, index) => [pane.id, `pane-${index + 1}`],
+            ),
+          );
           presentationShell = CastPlayerCore.createPresentationShell({
             manifest: presentationManifest,
             rendererFactories: {
+              visualization: () => CastPlayerCore.createVisualizationDomRenderer(),
               terminal: () => CastPlayerCore.createTerminalRendererAdapter({
-                reset() {
-                  resetTerminalBuffer();
-                  terminal.innerHTML = '';
+                reset({container}) {
+                  if (!container) {
+                    throw new Error('terminal renderer reset has no container');
+                  }
+                  resetTerminalBuffer({container});
+                  container.innerHTML = '';
                 },
-                applyEvent({event}) {
+                applyEvent({container, event}) {
+                  if (!container) {
+                    throw new Error('terminal renderer event has no container');
+                  }
+                  activeTerminalElement = container;
                   if (event.type === 'o') {
                     appendChunk(String(event.data || ''));
                   } else if (event.type === 'm') {
                     applyTerminalHighlightMarker(event.data);
                   }
                 },
+                clear({container}) {
+                  if (container) {
+                    container.innerHTML = '';
+                  }
+                },
               }),
               browser: () => CastPlayerCore.createBrowserDomRenderer(),
             },
-            loadPayload: async (beat) => {
+            loadPayload: async (beat, {pane}) => {
               const response = await fetchPresentationAsset(
                 presentationAssetUrl(beat.payload),
               );
               if (!response.ok) {
-                throw new Error(`could not load ${beat.renderer} payload: ${response.status}`);
+                throw new Error(`could not load ${pane.renderer} payload: ${response.status}`);
               }
-              return beat.renderer === 'browser' ? response.json() : response.text();
+              return pane.renderer === 'terminal' ? response.text() : response.json();
             },
-            createRendererContainer({beat, index}) {
-              if (beat.renderer === 'terminal') {
-                return terminal;
+            createRendererContainer({pane, outerIndex, paneBeatIndex, trackIndex}) {
+              if (pane.renderer === 'visualization') {
+                const host = document.createElement('div');
+                host.className = 'visualization-renderer-host';
+                host.dataset.outerBeatIndex = String(outerIndex);
+                host.dataset.paneBeatIndex = String(paneBeatIndex);
+                host.dataset.trackIndex = String(trackIndex);
+                host.hidden = true;
+                host.addEventListener('click', togglePlaybackFromSelectableStageContent);
+                stage.append(host);
+                return host;
+              }
+              if (pane.renderer === 'terminal') {
+                const host = document.createElement('div');
+                host.className = 'terminal terminal-renderer-host';
+                host.dataset.outerBeatIndex = String(outerIndex);
+                host.dataset.paneBeatIndex = String(paneBeatIndex);
+                host.dataset.trackIndex = String(trackIndex);
+                host.hidden = true;
+                host.addEventListener('click', togglePlaybackFromSelectableStageContent);
+                stage.append(host);
+                return host;
               }
               const host = document.createElement('div');
               host.className = 'browser-renderer-host';
-              host.dataset.beatIndex = String(index);
+              host.dataset.outerBeatIndex = String(outerIndex);
+              host.dataset.paneBeatIndex = String(paneBeatIndex);
+              host.dataset.trackIndex = String(trackIndex);
               host.hidden = true;
               browserStage.append(host);
               return host;
             },
-            activateRenderer({beat, container}) {
-              const browserActive = beat.renderer === 'browser';
-              terminal.hidden = browserActive;
-              browserStage.hidden = !browserActive;
+            activateComposition({layout, panes}) {
+              const visibleLayers = panes.flatMap((paneState) => (
+                paneState.layers.map((layer) => ({...layer, pane: paneState.pane}))
+              ));
+              const terminalLayers = visibleLayers.filter(
+                (layer) => layer.pane.renderer === 'terminal',
+              );
+              const visualizationLayers = visibleLayers.filter(
+                (layer) => layer.pane.renderer === 'visualization',
+              );
+              const browserLayers = visibleLayers.filter(
+                (layer) => layer.pane.renderer === 'browser',
+              );
+              stage.dataset.paneLayout = 'true';
+              stage.style.gridTemplateAreas = layout.areas
+                .map((row) => `"${row.map((paneId) => paneAreaNames.get(paneId)).join(' ')}"`)
+                .join(' ');
+              stage.style.gridTemplateColumns = `repeat(${layout.areas[0].length}, minmax(0, 1fr))`;
+              stage.style.gridTemplateRows = `repeat(${layout.areas.length}, minmax(0, 1fr))`;
+              terminal.hidden = true;
+              stage.querySelectorAll('.visualization-renderer-host').forEach((host) => {
+                const layerIndex = visualizationLayers.findIndex(
+                  (layer) => layer.container === host,
+                );
+                host.hidden = layerIndex < 0;
+                if (layerIndex >= 0) {
+                  host.style.gridArea = paneAreaNames.get(
+                    visualizationLayers[layerIndex].pane.id,
+                  );
+                  host.style.opacity = String(visualizationLayers[layerIndex].opacity);
+                  host.style.zIndex = String(layerIndex + 1);
+                }
+              });
+              stage.querySelectorAll('.terminal-renderer-host').forEach((host) => {
+                const layerIndex = terminalLayers.findIndex(
+                  (layer) => layer.container === host,
+                );
+                host.hidden = layerIndex < 0;
+                if (layerIndex >= 0) {
+                  host.style.gridArea = paneAreaNames.get(
+                    terminalLayers[layerIndex].pane.id,
+                  );
+                  host.style.opacity = String(terminalLayers[layerIndex].opacity);
+                  host.style.zIndex = String(layerIndex + 1);
+                }
+              });
+              browserStage.hidden = browserLayers.length === 0;
               browserStage.querySelectorAll('.browser-renderer-host').forEach((host) => {
-                host.hidden = host !== container;
+                const layerIndex = browserLayers.findIndex(
+                  (layer) => layer.container === host,
+                );
+                host.hidden = layerIndex < 0;
+                if (layerIndex >= 0) {
+                  host.style.gridArea = paneAreaNames.get(
+                    browserLayers[layerIndex].pane.id,
+                  );
+                  host.style.opacity = String(browserLayers[layerIndex].opacity);
+                  host.style.zIndex = String(layerIndex + 1);
+                }
               });
             },
             removeRendererContainer({container}) {
-              if (container && container !== terminal) {
+              if (container) {
                 container.remove();
               }
             },
@@ -4236,7 +4414,7 @@
       rateButton.addEventListener('click', () => cyclePlaybackRate(1));
       playerRoot.addEventListener('click', dismissClickedPlayerToolbarHighlight, true);
       playerRoot.addEventListener('contextmenu', handlePlayerContextMenu);
-      terminal.addEventListener('click', togglePlaybackFromTerminal);
+      terminal.addEventListener('click', togglePlaybackFromSelectableStageContent);
       browserStage.addEventListener('click', togglePlayPause);
       progressWrap.addEventListener('pointermove', showSectionTooltip);
       progressWrap.addEventListener('pointerleave', hideSectionTooltip);

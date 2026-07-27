@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 
+import omegaflow.presentation as presentation_module
 from omegaflow.presentation import (
     PresentationValidationError,
     serialize_browser_payload,
     serialize_presentation_manifest,
+    serialize_visualization_payload,
     validate_presentation_manifest,
     validate_relative_presentation_path,
     write_presentation_signatures,
@@ -27,9 +29,19 @@ from omegaflow.presentation_schema import (
     PresentationBrowserHeaderV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPaneBeatV1,
+    PresentationPaneLayoutV1,
+    PresentationPaneTrackV1,
+    PresentationPaneTransitionV1,
+    PresentationPaneV1,
     PresentationRecordingV1,
     PresentationRendererV1,
+    VisualizationPayloadV1,
+    VisualizationTokenKind,
+    VisualizationTokenV1,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def browser_payload() -> BrowserPayloadV1:
@@ -132,18 +144,435 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
                 media_type="image/png",
             ),
         },
+        panes=[PresentationPaneV1(id="browser", renderer="browser")],
         beats=[
             PresentationBeatV1(
-                id="browser",
-                renderer="browser",
+                id="outer",
                 duration_ms=1000,
-                payload="beats/browser.json",
+                layout=PresentationPaneLayoutV1(areas=[["browser"]]),
+                pane_tracks=[
+                    PresentationPaneTrackV1(
+                        pane_id="browser",
+                        beats=[
+                            PresentationPaneBeatV1(
+                                id="browser",
+                                duration_ms=1000,
+                                payload="beats/browser.json",
+                                transition=PresentationPaneTransitionV1(),
+                            )
+                        ],
+                    )
+                ],
             )
         ],
     )
     serialized = serialize_presentation_manifest(manifest)
     write_presentation_signatures(tmp_path)
     return serialized
+
+
+def multi_pane_manifest() -> dict:
+    return {
+        "manifest_version": 1,
+        "recording": {
+            "id": "fixture",
+            "title": "Multi-pane fixture",
+            "duration_ms": 2000,
+        },
+        "renderers": {
+            "terminal": {"payload_version": 1},
+            "browser": {"payload_version": 1},
+        },
+        "presentation": {
+            "guided": False,
+            "browser": {
+                "window": {"mode": "none", "theme": "kde-breeze", "title": None},
+                "chrome": {"mode": "hidden"},
+            },
+        },
+        "signatures": "signatures.json",
+        "assets": {},
+        "panes": [
+            {"id": "source", "renderer": "terminal"},
+            {"id": "preview", "renderer": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "explain",
+                "heading": "Explain",
+                "offset_ms": 0,
+                "duration_ms": 2000,
+                "layout": {"areas": [["source", "preview"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "source",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "definition",
+                                "offset_ms": 0,
+                                "duration_ms": 1000,
+                                "payload": "beats/definition.cast",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            },
+                            {
+                                "id": "result",
+                                "offset_ms": 1200,
+                                "duration_ms": 800,
+                                "payload": "beats/result.cast",
+                                "transition": {"kind": "fade", "duration_ms": 200},
+                            },
+                        ],
+                    },
+                    {
+                        "pane_id": "preview",
+                        "initial": "hidden",
+                        "beats": [
+                            {
+                                "id": "preview",
+                                "offset_ms": 500,
+                                "duration_ms": 1500,
+                                "payload": "beats/preview.browser.json",
+                                "transition": {"kind": "fade", "duration_ms": 100},
+                                "browser": {
+                                    "window": {
+                                        "mode": "none",
+                                        "theme": "kde-breeze",
+                                        "title": None,
+                                    },
+                                    "chrome": {"mode": "hidden"},
+                                },
+                            }
+                        ],
+                    },
+                ],
+                "guide": None,
+                "player": None,
+                "transition_in": "cut",
+            }
+        ],
+    }
+
+
+def write_visualization_bundle(tmp_path: Path) -> dict:
+    beats_dir = tmp_path / "beats"
+    beats_dir.mkdir()
+    text = 'title: "<script>alert(1)</script>"\nstatus: ready\n'
+    payload = {
+        "payload_version": 1,
+        "beat_id": "definition",
+        "duration_ms": 1000,
+        "language": "yaml",
+        "text": text,
+        "tokens": [
+            {"start": 0, "end": 5, "kind": "key"},
+            {"start": 7, "end": 34, "kind": "string"},
+            {"start": 35, "end": 41, "kind": "key"},
+            {"start": 43, "end": 48, "kind": "keyword"},
+        ],
+    }
+    (beats_dir / "definition.visualization.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    manifest = {
+        "manifest_version": 1,
+        "recording": {
+            "id": "visualization",
+            "title": "Visualization fixture",
+            "duration_ms": 1000,
+        },
+        "renderers": {"visualization": {"payload_version": 1}},
+        "presentation": {"guided": False},
+        "signatures": "signatures.json",
+        "assets": {},
+        "panes": [{"id": "definition", "renderer": "visualization"}],
+        "beats": [
+            {
+                "id": "explain",
+                "heading": "Explain a beat",
+                "offset_ms": 0,
+                "duration_ms": 1000,
+                "layout": {"areas": [["definition"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "definition",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "definition",
+                                "offset_ms": 0,
+                                "duration_ms": 1000,
+                                "payload": "beats/definition.visualization.json",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
+                "guide": None,
+                "player": None,
+                "transition_in": "cut",
+            }
+        ],
+    }
+    write_presentation_signatures(tmp_path)
+    return manifest
+
+
+def test_visualization_payload_serializes_typed_tokens() -> None:
+    payload = VisualizationPayloadV1(
+        beat_id="definition",
+        duration_ms=1000,
+        language="yaml",
+        text="status: ready\n",
+        tokens=[
+            VisualizationTokenV1(
+                start=0,
+                end=6,
+                kind=VisualizationTokenKind.key,
+            )
+        ],
+    )
+
+    assert serialize_visualization_payload(payload) == {
+        "payload_version": 1,
+        "beat_id": "definition",
+        "duration_ms": 1000,
+        "language": "yaml",
+        "text": "status: ready\n",
+        "tokens": [{"start": 0, "end": 6, "kind": "key"}],
+    }
+
+
+def test_manifest_validates_visualization_payload_and_token_ranges(
+    tmp_path: Path,
+) -> None:
+    manifest = write_visualization_bundle(tmp_path)
+
+    parsed = validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+    assert parsed.panes[0].renderer == "visualization"
+
+
+def test_checked_in_visualization_player_fixture_is_valid() -> None:
+    root = REPO_ROOT / "tests/fixtures/visualization-player"
+    manifest = json.loads(
+        (root / "recording.presentation.json").read_text(encoding="utf-8")
+    )
+
+    parsed = validate_presentation_manifest(manifest, manifest_dir=root)
+
+    assert [pane.renderer for pane in parsed.panes] == [
+        "visualization",
+        "terminal",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("overlap", "range must be ordered"),
+        ("outside", "range must be ordered"),
+        ("kind", "kind is unsupported"),
+        ("unknown", "unknown fields"),
+    ],
+)
+def test_manifest_rejects_invalid_visualization_tokens(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    manifest = write_visualization_bundle(tmp_path)
+    payload_path = tmp_path / "beats/definition.visualization.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    if mutation == "overlap":
+        payload["tokens"][1]["start"] = 3
+    elif mutation == "outside":
+        payload["tokens"][0]["end"] = len(payload["text"]) + 1
+    elif mutation == "kind":
+        payload["tokens"][0]["kind"] = "html"
+    else:
+        payload["tokens"][0]["class_name"] = "unsafe"
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    write_presentation_signatures(tmp_path)
+
+    with pytest.raises(PresentationValidationError, match=message):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
+def test_manifest_accepts_multi_pane_outer_beats_and_sequential_pane_beats() -> None:
+    parsed = validate_presentation_manifest(multi_pane_manifest())
+
+    assert [pane.id for pane in parsed.panes] == ["source", "preview"]
+    assert parsed.beats[0].layout.areas == [["source", "preview"]]
+    assert [beat.id for beat in parsed.beats[0].pane_tracks[0].beats] == [
+        "definition",
+        "result",
+    ]
+
+
+def test_manifest_rejects_duplicate_pane_beat_ids_across_outer_beats() -> None:
+    manifest = multi_pane_manifest()
+    first = manifest["beats"][0]
+    first["duration_ms"] = 1000
+    first["pane_tracks"][0]["beats"] = [first["pane_tracks"][0]["beats"][0]]
+    first["pane_tracks"][1]["beats"][0].update(
+        offset_ms=0,
+        duration_ms=1000,
+        transition={"kind": "cut", "duration_ms": 0},
+    )
+    second = json.loads(json.dumps(first))
+    second.update(id="repeat", offset_ms=1000)
+    manifest["beats"] = [first, second]
+
+    with pytest.raises(
+        PresentationValidationError,
+        match=r"duplicate pane beat id 'definition' in pane 'source'",
+    ):
+        validate_presentation_manifest(manifest)
+
+
+def test_manifest_bounds_panes_and_aggregate_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = multi_pane_manifest()
+    monkeypatch.setattr(presentation_module, "PRESENTATION_PANE_LIMIT", 1)
+    with pytest.raises(PresentationValidationError, match="panes exceeds 1"):
+        validate_presentation_manifest(manifest)
+
+    monkeypatch.setattr(presentation_module, "PRESENTATION_PANE_LIMIT", 2)
+    monkeypatch.setattr(presentation_module, "PRESENTATION_ITEM_LIMIT", 1)
+    with pytest.raises(
+        PresentationValidationError,
+        match="aggregate structure exceeds 1",
+    ):
+        validate_presentation_manifest(manifest)
+
+
+def test_browser_payload_bounds_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = serialize_browser_payload(browser_payload(), action_ids=["open"])
+    monkeypatch.setattr(presentation_module, "PRESENTATION_ITEM_LIMIT", 2)
+
+    with pytest.raises(PresentationValidationError, match="events exceeds 2"):
+        presentation_module.validate_browser_payload(payload)
+
+
+def test_terminal_cast_bounds_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cast = tmp_path / "beat.cast"
+    cast.write_text(
+        '{"version":2,"width":80,"height":24}\n'
+        '[0.0,"o","A"]\n'
+        '[0.1,"o","B"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(presentation_module, "PRESENTATION_ITEM_LIMIT", 1)
+
+    with pytest.raises(PresentationValidationError, match="events exceeds 1"):
+        presentation_module._validate_terminal_cast(
+            cast,
+            duration_ms=100,
+            field="terminal payload",
+        )
+
+
+@pytest.mark.parametrize("pane_count", [3, 4])
+def test_manifest_accepts_three_and_four_pane_layouts(pane_count: int) -> None:
+    manifest = multi_pane_manifest()
+    beat = manifest["beats"][0]
+    for index in range(2, pane_count):
+        pane_id = f"support-{index}"
+        manifest["panes"].append({"id": pane_id, "renderer": "terminal"})
+        beat["layout"]["areas"][0].append(pane_id)
+        beat["pane_tracks"].append(
+            {
+                "pane_id": pane_id,
+                "initial": "first",
+                "beats": [
+                    {
+                        "id": pane_id,
+                        "offset_ms": 0,
+                        "duration_ms": 2000,
+                        "payload": f"beats/{pane_id}.cast",
+                        "transition": {"kind": "cut", "duration_ms": 0},
+                    }
+                ],
+            }
+        )
+
+    parsed = validate_presentation_manifest(manifest)
+
+    assert len(parsed.panes) == pane_count
+    assert len(parsed.beats[0].pane_tracks) == pane_count
+
+
+def test_manifest_rejects_the_replaced_flat_beat_shape() -> None:
+    manifest = multi_pane_manifest()
+    beat = manifest["beats"][0]
+    beat["renderer"] = "terminal"
+    beat["payload"] = "beats/source.cast"
+    beat.pop("layout")
+    beat.pop("pane_tracks")
+
+    with pytest.raises(
+        PresentationValidationError,
+        match=r"unknown fields: payload, renderer",
+    ):
+        validate_presentation_manifest(manifest)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda manifest: manifest["beats"][0]["layout"]["areas"][0].append(
+                "missing"
+            ),
+            "unknown pane",
+        ),
+        (
+            lambda manifest: manifest["beats"][0]["pane_tracks"].pop(),
+            "layout and pane tracks",
+        ),
+        (
+            lambda manifest: manifest["beats"][0]["pane_tracks"][0]["beats"][
+                1
+            ].update(offset_ms=900),
+            "overlaps",
+        ),
+        (
+            lambda manifest: manifest["beats"][0]["pane_tracks"][0]["beats"][
+                1
+            ]["transition"].update(duration_ms=900),
+            "transition duration",
+        ),
+        (
+            lambda manifest: manifest["beats"][0]["pane_tracks"][0]["beats"][
+                0
+            ]["transition"].update(duration_ms=1),
+            "cut transition",
+        ),
+        (
+            lambda manifest: manifest["beats"][0]["layout"].update(
+                areas=[
+                    ["source", "preview"],
+                    ["preview", "source"],
+                ]
+            ),
+            "contiguous rectangle",
+        ),
+    ],
+)
+def test_manifest_rejects_invalid_multi_pane_structure(
+    mutate,
+    message: str,
+) -> None:
+    manifest = multi_pane_manifest()
+    mutate(manifest)
+
+    with pytest.raises(PresentationValidationError, match=message):
+        validate_presentation_manifest(manifest)
 
 
 def test_browser_payload_serialization_uses_fixed_event_order() -> None:

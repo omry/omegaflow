@@ -34,11 +34,21 @@ from .presentation_schema import (
     PresentationGuideV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPaneBeatV1,
+    PresentationPaneInitial,
+    PresentationPaneLayoutV1,
+    PresentationPaneTrackV1,
+    PresentationPaneTransitionKind,
+    PresentationPaneTransitionV1,
+    PresentationPaneV1,
     PresentationFileSignatureV1,
     PresentationSignaturesV1,
     PlayerToolbarControl,
     PresentationPlayerToolbarHighlightV1,
     PresentationWindowV1,
+    VisualizationPayloadV1,
+    VisualizationTokenKind,
+    VisualizationTokenV1,
 )
 
 
@@ -63,6 +73,12 @@ EVENT_KIND_PRIORITY = (
 )
 EVENT_KIND_INDEX = {kind: index for index, kind in enumerate(EVENT_KIND_PRIORITY)}
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+PRESENTATION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
+PRESENTATION_PANE_LIMIT = 64
+PRESENTATION_ITEM_LIMIT = 100_000
+VISUALIZATION_LANGUAGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+.-]{0,31}\Z")
+VISUALIZATION_TEXT_LIMIT = 100_000
+VISUALIZATION_TOKEN_LIMIT = 10_000
 ASSET_MEDIA_TYPES = {
     ".jpeg": "image/jpeg",
     ".jpg": "image/jpeg",
@@ -139,6 +155,13 @@ def _non_empty_string(value: object, *, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise PresentationValidationError(f"{field} must be a non-empty string")
     return value
+
+
+def _presentation_id(value: object, *, field: str) -> str:
+    result = _non_empty_string(value, field=field)
+    if PRESENTATION_ID_RE.fullmatch(result) is None:
+        raise PresentationValidationError(f"{field} must be identifier-like")
+    return result
 
 
 def _structured_payload(value: object, *, field: str) -> dict[str, Any]:
@@ -383,6 +406,10 @@ def validate_browser_payload(
     raw_events = mapping.get("events")
     if not isinstance(raw_events, list):
         raise PresentationValidationError("browser events must be a list")
+    if len(raw_events) > PRESENTATION_ITEM_LIMIT:
+        raise PresentationValidationError(
+            f"browser events exceeds {PRESENTATION_ITEM_LIMIT} entries"
+        )
     for index, event in enumerate(raw_events):
         validate_browser_event(event, index=index, duration_ms=duration_ms)
     if action_ids is not None:
@@ -403,6 +430,60 @@ def serialize_browser_payload(
         raise PresentationValidationError("browser events must serialize as mappings")
     result["events"] = sort_browser_events(events, action_ids=action_ids)
     validate_browser_payload(result, action_ids=action_ids)
+    return result
+
+
+def validate_visualization_payload(value: object) -> VisualizationPayloadV1:
+    field = "visualization payload"
+    mapping = _mapping(value, field=field)
+    _reject_unknown(mapping, VisualizationPayloadV1, field=field)
+    _require_fields(mapping, _allowed_fields(VisualizationPayloadV1), field=field)
+    if mapping.get("payload_version") != 1:
+        raise PresentationValidationError(f"{field} payload_version must be 1")
+    _presentation_id(mapping.get("beat_id"), field=f"{field} beat_id")
+    _integer(mapping.get("duration_ms"), field=f"{field} duration_ms")
+    language = _non_empty_string(mapping.get("language"), field=f"{field} language")
+    if VISUALIZATION_LANGUAGE_RE.fullmatch(language) is None:
+        raise PresentationValidationError(f"{field} language is invalid")
+    text = _non_empty_string(mapping.get("text"), field=f"{field} text")
+    if len(text) > VISUALIZATION_TEXT_LIMIT:
+        raise PresentationValidationError(
+            f"{field} text exceeds {VISUALIZATION_TEXT_LIMIT} characters"
+        )
+    tokens = mapping.get("tokens")
+    if not isinstance(tokens, list):
+        raise PresentationValidationError(f"{field} tokens must be a list")
+    if len(tokens) > VISUALIZATION_TOKEN_LIMIT:
+        raise PresentationValidationError(
+            f"{field} tokens exceed {VISUALIZATION_TOKEN_LIMIT} entries"
+        )
+    previous_end = 0
+    for index, value in enumerate(tokens):
+        token_field = f"{field} tokens.{index}"
+        token = _mapping(value, field=token_field)
+        _reject_unknown(token, VisualizationTokenV1, field=token_field)
+        _require_fields(token, _allowed_fields(VisualizationTokenV1), field=token_field)
+        start = _integer(token.get("start"), field=f"{token_field}.start")
+        end = _integer(token.get("end"), field=f"{token_field}.end")
+        if start < previous_end or end <= start or end > len(text):
+            raise PresentationValidationError(
+                f"{token_field} range must be ordered, non-overlapping, and within text"
+            )
+        try:
+            VisualizationTokenKind(token.get("kind"))
+        except (TypeError, ValueError) as exc:
+            raise PresentationValidationError(
+                f"{token_field}.kind is unsupported"
+            ) from exc
+        previous_end = end
+    return _typed(mapping, VisualizationPayloadV1, field=field)
+
+
+def serialize_visualization_payload(
+    payload: VisualizationPayloadV1,
+) -> dict[str, Any]:
+    result = _structured_payload(payload, field="visualization payload")
+    validate_visualization_payload(result)
     return result
 
 
@@ -568,6 +649,10 @@ def _validate_terminal_cast(path: Path, *, duration_ms: int, field: str) -> None
         raise PresentationValidationError(f"could not read {field}: {exc}") from exc
     if not isinstance(header, dict) or header.get("version") not in {2, 3}:
         raise PresentationValidationError(f"{field} must be an asciinema v2 or v3 cast")
+    if len(lines) - 1 > PRESENTATION_ITEM_LIMIT:
+        raise PresentationValidationError(
+            f"{field} events exceeds {PRESENTATION_ITEM_LIMIT} entries"
+        )
     elapsed = 0.0
     last_absolute = 0.0
     for index, line in enumerate(lines[1:], start=2):
@@ -844,16 +929,45 @@ def validate_presentation_manifest(
         raise PresentationValidationError("manifest recording.title must be a string")
     renderers = _mapping(mapping.get("renderers"), field="manifest renderers")
     for name, renderer in renderers.items():
-        if name not in {"terminal", "browser"}:
+        if name not in {"visualization", "terminal", "browser"}:
             raise PresentationValidationError(f"unsupported renderer {name!r}")
         renderer_mapping = _mapping(renderer, field=f"manifest renderers.{name}")
         if renderer_mapping != {"payload_version": 1}:
             raise PresentationValidationError(
                 f"manifest renderer {name!r} must use payload_version 1"
             )
+    panes = mapping.get("panes")
+    if not isinstance(panes, list) or not panes:
+        raise PresentationValidationError("manifest panes must be a non-empty list")
+    if len(panes) > PRESENTATION_PANE_LIMIT:
+        raise PresentationValidationError(
+            f"manifest panes exceeds {PRESENTATION_PANE_LIMIT} entries"
+        )
+    pane_renderers: dict[str, str] = {}
+    for index, value in enumerate(panes):
+        field = f"manifest panes.{index}"
+        pane = _mapping(value, field=field)
+        _reject_unknown(pane, PresentationPaneV1, field=field)
+        _require_fields(pane, {"id", "renderer"}, field=field)
+        pane_id = _presentation_id(pane.get("id"), field=f"{field}.id")
+        if pane_id in pane_renderers:
+            raise PresentationValidationError(f"duplicate manifest pane id {pane_id!r}")
+        renderer = pane.get("renderer")
+        if renderer not in {"visualization", "terminal", "browser"}:
+            raise PresentationValidationError(f"{field}.renderer is unsupported")
+        if renderer not in renderers:
+            raise PresentationValidationError(
+                f"{field}.renderer {renderer!r} is not declared"
+            )
+        pane_renderers[pane_id] = renderer
     beats = mapping.get("beats")
     if not isinstance(beats, list) or not beats:
         raise PresentationValidationError("manifest beats must be a non-empty list")
+    structure_count = len(beats)
+    if structure_count > PRESENTATION_ITEM_LIMIT:
+        raise PresentationValidationError(
+            f"manifest aggregate structure exceeds {PRESENTATION_ITEM_LIMIT} entries"
+        )
     assets = _mapping(mapping.get("assets"), field="manifest assets")
     asset_paths: set[str] = set()
     for asset_id, asset in assets.items():
@@ -869,27 +983,33 @@ def validate_presentation_manifest(
 
     expected_offset = 0
     beat_ids: set[str] = set()
-    used_renderers: set[str] = set()
+    used_panes: set[str] = set()
     payload_paths: set[str] = set()
+    pane_beat_ids_by_pane: dict[str, set[str]] = {
+        pane_id: set() for pane_id in pane_renderers
+    }
     for index, value in enumerate(beats):
         field = f"manifest beats.{index}"
         beat = _mapping(value, field=field)
         _reject_unknown(beat, PresentationBeatV1, field=field)
         _require_fields(
             beat,
-            {"id", "heading", "renderer", "offset_ms", "duration_ms", "payload"},
+            {
+                "id",
+                "heading",
+                "offset_ms",
+                "duration_ms",
+                "layout",
+                "pane_tracks",
+            },
             field=field,
         )
-        beat_id = _non_empty_string(beat.get("id"), field=f"{field}.id")
+        beat_id = _presentation_id(beat.get("id"), field=f"{field}.id")
         if beat_id in beat_ids:
             raise PresentationValidationError(f"duplicate manifest beat id {beat_id!r}")
         beat_ids.add(beat_id)
         if not isinstance(beat.get("heading"), str):
             raise PresentationValidationError(f"{field}.heading must be a string")
-        renderer = beat.get("renderer")
-        if renderer not in {"terminal", "browser"}:
-            raise PresentationValidationError(f"{field}.renderer is unsupported")
-        used_renderers.add(renderer)
         offset_ms = _integer(beat.get("offset_ms"), field=f"{field}.offset_ms")
         duration_ms = _integer(beat.get("duration_ms"), field=f"{field}.duration_ms")
         if offset_ms != expected_offset:
@@ -897,14 +1017,284 @@ def validate_presentation_manifest(
                 f"{field}.offset_ms must equal the preceding beat end {expected_offset}"
             )
         expected_offset = offset_ms + duration_ms
-        payload_path = validate_relative_presentation_path(
-            beat.get("payload"), field=f"{field}.payload"
-        )
-        if payload_path in payload_paths:
+
+        layout = _mapping(beat.get("layout"), field=f"{field}.layout")
+        _reject_unknown(layout, PresentationPaneLayoutV1, field=f"{field}.layout")
+        _require_fields(layout, {"areas"}, field=f"{field}.layout")
+        areas = layout.get("areas")
+        if not isinstance(areas, list) or not areas:
             raise PresentationValidationError(
-                f"duplicate manifest beat payload path {payload_path!r}"
+                f"{field}.layout.areas must be a non-empty list"
             )
-        payload_paths.add(payload_path)
+        layout_panes: set[str] = set()
+        column_count: int | None = None
+        for row_index, row in enumerate(areas):
+            row_field = f"{field}.layout.areas.{row_index}"
+            if not isinstance(row, list) or not row:
+                raise PresentationValidationError(
+                    f"{row_field} must be a non-empty list"
+                )
+            if column_count is None:
+                column_count = len(row)
+            elif len(row) != column_count:
+                raise PresentationValidationError(
+                    f"{field}.layout.areas must be rectangular"
+                )
+            structure_count += len(row)
+            if structure_count > PRESENTATION_ITEM_LIMIT:
+                raise PresentationValidationError(
+                    "manifest aggregate structure exceeds "
+                    f"{PRESENTATION_ITEM_LIMIT} entries"
+                )
+            for column_index, pane_value in enumerate(row):
+                pane_id = _presentation_id(
+                    pane_value,
+                    field=f"{row_field}.{column_index}",
+                )
+                if pane_id not in pane_renderers:
+                    raise PresentationValidationError(
+                        f"{row_field}.{column_index} references unknown pane "
+                        f"{pane_id!r}"
+                    )
+                layout_panes.add(pane_id)
+        for pane_id in layout_panes:
+            positions = [
+                (row_index, column_index)
+                for row_index, row in enumerate(areas)
+                for column_index, value in enumerate(row)
+                if value == pane_id
+            ]
+            row_indexes = [position[0] for position in positions]
+            column_indexes = [position[1] for position in positions]
+            for row_index in range(min(row_indexes), max(row_indexes) + 1):
+                for column_index in range(
+                    min(column_indexes), max(column_indexes) + 1
+                ):
+                    if areas[row_index][column_index] != pane_id:
+                        raise PresentationValidationError(
+                            f"{field}.layout area {pane_id!r} must form a "
+                            "contiguous rectangle"
+                        )
+
+        pane_tracks = beat.get("pane_tracks")
+        if not isinstance(pane_tracks, list) or not pane_tracks:
+            raise PresentationValidationError(
+                f"{field}.pane_tracks must be a non-empty list"
+            )
+        structure_count += len(pane_tracks)
+        if structure_count > PRESENTATION_ITEM_LIMIT:
+            raise PresentationValidationError(
+                f"manifest aggregate structure exceeds {PRESENTATION_ITEM_LIMIT} entries"
+            )
+        track_panes: set[str] = set()
+        beat_has_browser = False
+        for track_index, track_value in enumerate(pane_tracks):
+            track_field = f"{field}.pane_tracks.{track_index}"
+            track = _mapping(track_value, field=track_field)
+            _reject_unknown(track, PresentationPaneTrackV1, field=track_field)
+            _require_fields(
+                track,
+                {"pane_id", "initial", "beats"},
+                field=track_field,
+            )
+            pane_id = _presentation_id(
+                track.get("pane_id"), field=f"{track_field}.pane_id"
+            )
+            if pane_id not in pane_renderers:
+                raise PresentationValidationError(
+                    f"{track_field}.pane_id references unknown pane {pane_id!r}"
+                )
+            if pane_id in track_panes:
+                raise PresentationValidationError(
+                    f"{field} has duplicate pane track {pane_id!r}"
+                )
+            track_panes.add(pane_id)
+            used_panes.add(pane_id)
+            renderer = pane_renderers[pane_id]
+            beat_has_browser = beat_has_browser or renderer == "browser"
+            try:
+                PresentationPaneInitial(track.get("initial"))
+            except (TypeError, ValueError) as exc:
+                raise PresentationValidationError(
+                    f"{track_field}.initial is invalid"
+                ) from exc
+
+            pane_beats = track.get("beats")
+            if not isinstance(pane_beats, list) or not pane_beats:
+                raise PresentationValidationError(
+                    f"{track_field}.beats must be a non-empty list"
+                )
+            structure_count += len(pane_beats)
+            if structure_count > PRESENTATION_ITEM_LIMIT:
+                raise PresentationValidationError(
+                    "manifest aggregate structure exceeds "
+                    f"{PRESENTATION_ITEM_LIMIT} entries"
+                )
+            pane_beat_ids = pane_beat_ids_by_pane[pane_id]
+            preceding_end = 0
+            for pane_beat_index, pane_beat_value in enumerate(pane_beats):
+                pane_beat_field = f"{track_field}.beats.{pane_beat_index}"
+                pane_beat = _mapping(pane_beat_value, field=pane_beat_field)
+                _reject_unknown(
+                    pane_beat, PresentationPaneBeatV1, field=pane_beat_field
+                )
+                _require_fields(
+                    pane_beat,
+                    {
+                        "id",
+                        "offset_ms",
+                        "duration_ms",
+                        "payload",
+                        "transition",
+                    },
+                    field=pane_beat_field,
+                )
+                pane_beat_id = _presentation_id(
+                    pane_beat.get("id"), field=f"{pane_beat_field}.id"
+                )
+                if pane_beat_id in pane_beat_ids:
+                    raise PresentationValidationError(
+                        f"duplicate pane beat id {pane_beat_id!r} in pane {pane_id!r}"
+                    )
+                pane_beat_ids.add(pane_beat_id)
+                pane_offset_ms = _integer(
+                    pane_beat.get("offset_ms"),
+                    field=f"{pane_beat_field}.offset_ms",
+                )
+                pane_duration_ms = _integer(
+                    pane_beat.get("duration_ms"),
+                    field=f"{pane_beat_field}.duration_ms",
+                )
+                if pane_offset_ms < preceding_end:
+                    raise PresentationValidationError(
+                        f"{pane_beat_field} overlaps the preceding pane beat "
+                        f"ending at {preceding_end}ms"
+                    )
+                pane_end = pane_offset_ms + pane_duration_ms
+                if pane_end > duration_ms:
+                    raise PresentationValidationError(
+                        f"{pane_beat_field} ends after outer beat {beat_id!r}"
+                    )
+                preceding_end = pane_end
+
+                transition = _mapping(
+                    pane_beat.get("transition"),
+                    field=f"{pane_beat_field}.transition",
+                )
+                _reject_unknown(
+                    transition,
+                    PresentationPaneTransitionV1,
+                    field=f"{pane_beat_field}.transition",
+                )
+                _require_fields(
+                    transition,
+                    {"kind", "duration_ms"},
+                    field=f"{pane_beat_field}.transition",
+                )
+                try:
+                    transition_kind = PresentationPaneTransitionKind(
+                        transition.get("kind")
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise PresentationValidationError(
+                        f"{pane_beat_field}.transition.kind is invalid"
+                    ) from exc
+                transition_duration_ms = _integer(
+                    transition.get("duration_ms"),
+                    field=f"{pane_beat_field}.transition.duration_ms",
+                )
+                if (
+                    transition_kind is PresentationPaneTransitionKind.cut
+                    and transition_duration_ms != 0
+                ):
+                    raise PresentationValidationError(
+                        f"{pane_beat_field} cut transition duration must be 0"
+                    )
+                if transition_duration_ms > pane_duration_ms:
+                    raise PresentationValidationError(
+                        f"{pane_beat_field} transition duration exceeds pane beat "
+                        "duration"
+                    )
+
+                payload_path = validate_relative_presentation_path(
+                    pane_beat.get("payload"),
+                    field=f"{pane_beat_field}.payload",
+                )
+                if payload_path in payload_paths:
+                    raise PresentationValidationError(
+                        f"duplicate manifest pane beat payload path {payload_path!r}"
+                    )
+                payload_paths.add(payload_path)
+
+                browser = pane_beat.get("browser")
+                if browser is not None:
+                    if renderer != "browser":
+                        raise PresentationValidationError(
+                            f"{pane_beat_field}.browser is invalid for terminal panes"
+                        )
+                    _validate_browser_presentation_header(
+                        browser,
+                        field=f"{pane_beat_field}.browser",
+                    )
+                if manifest_dir is not None:
+                    payload_file = _resolved_manifest_file(
+                        manifest_dir,
+                        payload_path,
+                        field=f"{pane_beat_field}.payload",
+                    )
+                    if signatures is None or payload_path not in signatures:
+                        raise PresentationValidationError(
+                            f"{pane_beat_field}.payload is not signed"
+                        )
+                    payload_duration_ms = (
+                        pane_duration_ms - transition_duration_ms
+                    )
+                    if renderer == "browser":
+                        payload_mapping = _load_json(
+                            payload_file, field=f"{pane_beat_field}.payload"
+                        )
+                        payload = validate_browser_payload(payload_mapping)
+                        if (
+                            payload.beat_id != pane_beat_id
+                            or payload.duration_ms != payload_duration_ms
+                        ):
+                            raise PresentationValidationError(
+                                f"{pane_beat_field}.payload identity or duration "
+                                "does not match the manifest"
+                            )
+                        missing_assets = _browser_asset_references(payload) - set(
+                            assets
+                        )
+                        if missing_assets:
+                            missing = ", ".join(sorted(missing_assets))
+                            raise PresentationValidationError(
+                                f"{pane_beat_field}.payload references unknown "
+                                f"assets: {missing}"
+                            )
+                    elif renderer == "visualization":
+                        payload_mapping = _load_json(
+                            payload_file, field=f"{pane_beat_field}.payload"
+                        )
+                        payload = validate_visualization_payload(payload_mapping)
+                        if (
+                            payload.beat_id != pane_beat_id
+                            or payload.duration_ms != payload_duration_ms
+                        ):
+                            raise PresentationValidationError(
+                                f"{pane_beat_field}.payload identity or duration "
+                                "does not match the manifest"
+                            )
+                    else:
+                        _validate_terminal_cast(
+                            payload_file,
+                            duration_ms=payload_duration_ms,
+                            field=f"{pane_beat_field}.payload",
+                        )
+        if layout_panes != track_panes:
+            raise PresentationValidationError(
+                f"{field} layout and pane tracks must reference the same panes"
+            )
+
         guide = beat.get("guide")
         if guide is not None:
             guide_mapping = _mapping(guide, field=f"{field}.guide")
@@ -923,7 +1313,7 @@ def validate_presentation_manifest(
             if summary is not None:
                 _non_empty_string(summary, field=f"{field}.guide.summary")
             hint = guide_mapping.get("success_hint")
-            if renderer == "browser":
+            if beat_has_browser:
                 _non_empty_string(hint, field=f"{field}.guide.success_hint")
             elif hint is not None and not isinstance(hint, str):
                 raise PresentationValidationError(
@@ -964,54 +1354,25 @@ def validate_presentation_manifest(
                 raise PresentationValidationError(
                     f"{field}.player.highlight timing is invalid"
                 )
-        browser = beat.get("browser")
-        if browser is not None:
-            if renderer != "browser":
-                raise PresentationValidationError(
-                    f"{field}.browser is invalid for terminal beats"
-                )
-            _validate_browser_presentation_header(
-                browser,
-                field=f"{field}.browser",
-            )
         transition = beat.get("transition_in")
         if transition not in {None, "cut", "fade", "window-open"}:
             raise PresentationValidationError(f"{field}.transition_in is invalid")
-        if manifest_dir is not None:
-            payload_file = _resolved_manifest_file(
-                manifest_dir, payload_path, field=f"{field}.payload"
-            )
-            if signatures is None or payload_path not in signatures:
-                raise PresentationValidationError(f"{field}.payload is not signed")
-            if renderer == "browser":
-                payload_mapping = _load_json(payload_file, field=f"{field}.payload")
-                payload = validate_browser_payload(payload_mapping)
-                if payload.beat_id != beat_id or payload.duration_ms != duration_ms:
-                    raise PresentationValidationError(
-                        f"{field}.payload identity or duration does not match the manifest"
-                    )
-                missing_assets = _browser_asset_references(payload) - set(assets)
-                if missing_assets:
-                    missing = ", ".join(sorted(missing_assets))
-                    raise PresentationValidationError(
-                        f"{field}.payload references unknown assets: {missing}"
-                    )
-            else:
-                _validate_terminal_cast(
-                    payload_file, duration_ms=duration_ms, field=f"{field}.payload"
-                )
     if expected_offset != recording_duration_ms:
         raise PresentationValidationError(
             "manifest final beat end does not match recording duration"
         )
-    if set(renderers) != used_renderers:
+    if set(pane_renderers) != used_panes:
         raise PresentationValidationError(
-            "manifest renderer header must exactly match renderers used by beats"
+            "manifest panes must all be used by outer beats"
+        )
+    if set(renderers) != set(pane_renderers.values()):
+        raise PresentationValidationError(
+            "manifest renderer header must exactly match renderers used by panes"
         )
     presentation = _validate_presentation_header(mapping.get("presentation"))
-    if "browser" in used_renderers and presentation.browser is None:
+    if "browser" in pane_renderers.values() and presentation.browser is None:
         raise PresentationValidationError(
-            "manifest presentation.browser is required for browser beats"
+            "manifest presentation.browser is required for browser panes"
         )
     audio = mapping.get("audio")
     if audio is not None:

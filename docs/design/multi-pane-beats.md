@@ -532,9 +532,45 @@ The bundle represents:
 The player creates and retains one renderer instance per active pane. Every
 renderer receives the same outer-beat-local presentation timestamp.
 
-A visualization payload contains canonical escaped text, syntax token ranges,
-and timed callouts. The browser does not parse YAML or infer configuration
-paths.
+The complete visualization design can grow to contain canonical escaped text,
+syntax token ranges, and timed callouts. The browser does not parse YAML or
+infer configuration paths.
+
+Slice 3 defines the static portion of that payload. A version-1 visualization
+payload contains its pane-beat identity and duration, a language label, plain
+text, and ordered non-overlapping token ranges. Token offsets count Unicode
+code points rather than UTF-16 code units. Token kinds are a closed set:
+`key`, `string`, `number`, `boolean`, `comment`, `keyword`, `operator`, and
+`punctuation`.
+
+The player creates text nodes and token spans from this payload. It never
+interprets visualization text as HTML. Payload text and token counts are
+bounded, token ranges must remain within the text, and no public authoring
+syntax is exposed until the slice-4 build path can execute it.
+
+The version-1 bundle uses one representation rather than retaining the former
+flat beat representation:
+
+- `panes` declares recording-global pane IDs and their renderer kinds;
+- each outer beat carries a layout grid whose area names reference those pane
+  IDs;
+- each outer beat contains one ordered pane track for every pane in its
+  layout;
+- each pane track contains one or more pane beats with outer-beat-local
+  offsets, durations, payloads, and entry transitions.
+
+A pane beat's `duration_ms` includes its entry transition. The transition
+occupies the start of the pane-beat interval; renderer-local time starts at
+zero when the transition ends. A `cut` transition has zero duration. Pane
+beats in one track may not overlap. A gap holds the preceding pane beat's final
+frame, and the final frame remains held through the end of the outer beat.
+Before the first pane beat, the track either shows that beat's initial frame or
+stays hidden according to its explicit initial-state policy.
+
+Existing single-pane recordings compile into this representation too. Their
+implicit `main` tracks receive generated bundle-local pane identities so mixed
+terminal and browser outer beats do not pretend to be one persistent pane.
+There is no legacy flat-manifest compatibility path.
 
 ## Capture coordination
 

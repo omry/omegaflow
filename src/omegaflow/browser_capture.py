@@ -22,7 +22,7 @@ from .browser_runtime import (
 from .browser_visuals import BrowserVisualCapture, BrowserVisualError
 from .capture import BeatCapture, CaptureContext
 from .recording_plan import (
-    BeatPlan,
+    OuterBeatPlan,
     BrowserActionPlan,
     BrowserCheckPlan,
     FrozenMapping,
@@ -526,7 +526,7 @@ class PersistentBrowserRunner:
 
     def capture_beat(
         self,
-        beat: BeatPlan,
+        beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
     ) -> BeatCapture:
@@ -538,7 +538,7 @@ class PersistentBrowserRunner:
 
     def _capture_browser_beat(
         self,
-        beat: BeatPlan,
+        beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
     ) -> BeatCapture:

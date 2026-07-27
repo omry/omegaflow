@@ -446,6 +446,11 @@ class RecordingRequirementsConfig:
 
 
 @dataclass
+class RecordingNarrationConfig:
+    id: str = "voiceover"
+
+
+@dataclass
 class RecordingDefaults:
     parameters: dict[
         str,
@@ -469,6 +474,9 @@ class RecordingDefaults:
     publish: RecordingPublishConfig = field(default_factory=RecordingPublishConfig)
     failure_summary: RecordingFailureSummaryConfig = field(
         default_factory=RecordingFailureSummaryConfig
+    )
+    narration: RecordingNarrationConfig = field(
+        default_factory=RecordingNarrationConfig
     )
     setup: list[RecordingStepConfig] = field(default_factory=list)
     cleanup: list[RecordingStepConfig] = field(default_factory=list)

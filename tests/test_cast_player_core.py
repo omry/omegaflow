@@ -17,6 +17,71 @@ def test_published_core_matches_packaged_core() -> None:
     assert published.read_bytes() == packaged.read_bytes()
 
 
+def test_visualization_segments_preserve_literal_text_and_unicode_ranges() -> None:
+    result = run_core_script(
+        r"""
+const text = 'title: "<script>🏝️</script>"\nstatus: ready\n';
+const start = Array.from(text).indexOf('"');
+const end = Array.from(text).indexOf('\n');
+const payload = {
+  payload_version: 1,
+  beat_id: 'definition',
+  duration_ms: 1000,
+  language: 'yaml',
+  text,
+  tokens: [
+    {start: 0, end: 5, kind: 'key'},
+    {start, end, kind: 'string'},
+  ],
+};
+const segments = core.visualizationSegments(payload);
+const reconstructed = segments.map((segment) => segment.text).join('');
+if (reconstructed !== text) {
+  console.error(JSON.stringify({reconstructed, text, segments}));
+  process.exit(1);
+}
+if (
+  segments[0].text !== 'title' ||
+  segments[0].kind !== 'key' ||
+  !segments.some((segment) => segment.text.includes('🏝️') && segment.kind === 'string')
+) {
+  console.error(JSON.stringify(segments));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_visualization_segments_reject_unknown_payload_fields() -> None:
+    result = run_core_script(
+        r"""
+const payload = {
+  payload_version: 1,
+  beat_id: 'definition',
+  duration_ms: 1000,
+  language: 'yaml',
+  text: 'status: ready\n',
+  tokens: [],
+  unsafe_html: '<script>alert(1)</script>',
+};
+try {
+  core.visualizationSegments(payload);
+  console.error('expected unknown visualization payload field to be rejected');
+  process.exit(1);
+} catch (error) {
+  if (!String(error.message).includes('visualization payload is invalid')) {
+    console.error(error);
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def run_core_script(script: str) -> subprocess.CompletedProcess[str]:
     node = shutil.which("node")
     if node is None:
@@ -43,9 +108,22 @@ const manifest = {
   recording: {id: 'demo', duration_ms: 2000},
   renderers: {terminal: {payload_version: 1}},
   assets: {},
+  panes: [{id: 'main', renderer: 'terminal'}],
   beats: [
-    {id: 'one', renderer: 'terminal', offset_ms: 0, duration_ms: 1000, payload: 'one.cast'},
-    {id: 'two', renderer: 'terminal', offset_ms: 1000, duration_ms: 1000, payload: 'two.cast'},
+    {
+      id: 'one', offset_ms: 0, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'one', offset_ms: 0, duration_ms: 1000, payload: 'one.cast', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
+    {
+      id: 'two', offset_ms: 1000, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'two', offset_ms: 0, duration_ms: 1000, payload: 'two.cast', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
   ],
 };
 const calls = [];
@@ -102,9 +180,22 @@ const manifest = {
   recording: {id: 'boundary', duration_ms: 2000},
   renderers: {terminal: {payload_version: 1}},
   assets: {},
+  panes: [{id: 'main', renderer: 'terminal'}],
   beats: [
-    {id: 'one', renderer: 'terminal', offset_ms: 0, duration_ms: 1000, payload: 'one.cast'},
-    {id: 'two', renderer: 'terminal', offset_ms: 1000, duration_ms: 1000, payload: 'two.cast'},
+    {
+      id: 'one', offset_ms: 0, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'one', offset_ms: 0, duration_ms: 1000, payload: 'one.cast', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
+    {
+      id: 'two', offset_ms: 1000, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'two', offset_ms: 0, duration_ms: 1000, payload: 'two.cast', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
   ],
 };
 const calls = [];
@@ -130,6 +221,203 @@ function factory() {
   if (JSON.stringify(calls) !== JSON.stringify(expected)) {
     console.error(JSON.stringify({expected, calls}));
     process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_multi_pane_shell_seeks_holds_and_composes_pane_transitions() -> None:
+    result = run_core_script(
+        r"""
+const manifest = {
+  manifest_version: 1,
+  signatures: 'signatures.json',
+  recording: {id: 'multi', duration_ms: 2000},
+  renderers: {
+    terminal: {payload_version: 1},
+    browser: {payload_version: 1},
+  },
+  presentation: {
+    guided: false,
+    browser: {
+      window: {mode: 'none', theme: 'kde-breeze', title: null},
+      chrome: {mode: 'hidden'},
+    },
+  },
+  assets: {},
+  panes: [
+    {id: 'source', renderer: 'terminal'},
+    {id: 'preview', renderer: 'browser'},
+  ],
+  beats: [{
+    id: 'explain',
+    heading: 'Explain',
+    offset_ms: 0,
+    duration_ms: 2000,
+    layout: {areas: [['source', 'preview']]},
+    pane_tracks: [
+      {
+        pane_id: 'source',
+        initial: 'first',
+        beats: [
+          {
+            id: 'definition',
+            offset_ms: 0,
+            duration_ms: 1000,
+            payload: 'definition.cast',
+            transition: {kind: 'cut', duration_ms: 0},
+          },
+          {
+            id: 'result',
+            offset_ms: 1200,
+            duration_ms: 800,
+            payload: 'result.cast',
+            transition: {kind: 'fade', duration_ms: 200},
+          },
+        ],
+      },
+      {
+        pane_id: 'preview',
+        initial: 'hidden',
+        beats: [{
+          id: 'preview',
+          offset_ms: 500,
+          duration_ms: 1500,
+          payload: 'preview.browser.json',
+          transition: {kind: 'fade', duration_ms: 100},
+        }],
+      },
+    ],
+    transition_in: 'cut',
+  }],
+};
+const calls = [];
+const compositions = [];
+function factory(rendererName) {
+  let id = '';
+  return {
+    async load(context) {
+      id = context.beat.id;
+      calls.push(`load:${rendererName}:${context.pane.id}:${id}`);
+    },
+    renderAt(localMs) { calls.push(`render:${id}:${localMs}`); },
+    setPlaybackRate(rate) { calls.push(`rate:${id || 'new'}:${rate}`); },
+    setPlaying(playing) { calls.push(`playing:${id || 'new'}:${playing}`); },
+    async preload() { calls.push(`preload:${id}`); },
+    dispose() { calls.push(`dispose:${id}`); },
+  };
+}
+function snapshot({beat, localMs, panes}) {
+  compositions.push({
+    beat: beat.id,
+    localMs,
+    panes: panes.map((pane) => ({
+      id: pane.pane.id,
+      layers: pane.layers.map((layer) => ({
+        beat: layer.beat.id,
+        localMs: layer.localMs,
+        opacity: layer.opacity,
+      })),
+    })),
+  });
+}
+(async () => {
+  const shell = core.createPresentationShell({
+    manifest,
+    rendererFactories: {
+      terminal: () => factory('terminal'),
+      browser: () => factory('browser'),
+    },
+    loadPayload: async (beat) => beat.payload,
+    activateComposition: snapshot,
+  });
+  await shell.renderAt(100);
+  await shell.renderAt(1100);
+  await shell.renderAt(1250);
+  await shell.renderAt(1500);
+  await shell.renderAt(700);
+  shell.setPlaying(true);
+  shell.setPlaybackRate(1.5);
+  const expected = [
+    {
+      beat: 'explain',
+      localMs: 100,
+      panes: [{id: 'source', layers: [{beat: 'definition', localMs: 100, opacity: 1}]}],
+    },
+    {
+      beat: 'explain',
+      localMs: 1100,
+      panes: [
+        {id: 'source', layers: [{beat: 'definition', localMs: 1000, opacity: 1}]},
+        {id: 'preview', layers: [{beat: 'preview', localMs: 500, opacity: 1}]},
+      ],
+    },
+    {
+      beat: 'explain',
+      localMs: 1250,
+      panes: [
+        {
+          id: 'source',
+          layers: [
+            {beat: 'definition', localMs: 1000, opacity: 1},
+            {beat: 'result', localMs: 0, opacity: 0.25},
+          ],
+        },
+        {id: 'preview', layers: [{beat: 'preview', localMs: 650, opacity: 1}]},
+      ],
+    },
+    {
+      beat: 'explain',
+      localMs: 1500,
+      panes: [
+        {id: 'source', layers: [{beat: 'result', localMs: 100, opacity: 1}]},
+        {id: 'preview', layers: [{beat: 'preview', localMs: 900, opacity: 1}]},
+      ],
+    },
+    {
+      beat: 'explain',
+      localMs: 700,
+      panes: [
+        {id: 'source', layers: [{beat: 'definition', localMs: 700, opacity: 1}]},
+        {id: 'preview', layers: [{beat: 'preview', localMs: 100, opacity: 1}]},
+      ],
+    },
+  ];
+  if (JSON.stringify(compositions) !== JSON.stringify(expected)) {
+    console.error(JSON.stringify({expected, compositions}, null, 2));
+    process.exit(1);
+  }
+  const required = [
+    'load:terminal:source:definition',
+    'load:terminal:source:result',
+    'load:browser:preview:preview',
+    'render:definition:1000',
+    'render:result:0',
+    'playing:definition:true',
+    'playing:result:true',
+    'playing:preview:true',
+    'rate:definition:1.5',
+    'rate:result:1.5',
+    'rate:preview:1.5',
+  ];
+  for (const item of required) {
+    if (!calls.includes(item)) {
+      console.error(JSON.stringify({calls, missing: item}));
+      process.exit(1);
+    }
+  }
+  shell.dispose();
+  for (const id of ['definition', 'result', 'preview']) {
+    if (!calls.includes(`dispose:${id}`)) {
+      console.error(JSON.stringify({calls, missing: `dispose:${id}`}));
+      process.exit(1);
+    }
   }
 })().catch((error) => {
   console.error(error.stack);
@@ -1011,9 +1299,22 @@ const manifest = {
   recording: {id: 'memory', duration_ms: 2000},
   renderers: {browser: {payload_version: 1}},
   assets: {},
+  panes: [{id: 'main', renderer: 'browser'}],
   beats: [
-    {id: 'one', renderer: 'browser', offset_ms: 0, duration_ms: 1000, payload: 'one.json'},
-    {id: 'two', renderer: 'browser', offset_ms: 1000, duration_ms: 1000, payload: 'two.json'},
+    {
+      id: 'one', offset_ms: 0, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'one', offset_ms: 0, duration_ms: 1000, payload: 'one.json', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
+    {
+      id: 'two', offset_ms: 1000, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'two', offset_ms: 0, duration_ms: 1000, payload: 'two.json', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
   ],
 };
 function factory() {
@@ -1047,6 +1348,80 @@ function factory() {
     assert result.returncode == 0, result.stderr
 
 
+def test_shell_preloads_only_the_active_and_next_sequential_pane_beats() -> None:
+    result = run_core_script(
+        r"""
+const paneBeats = Array.from({length: 5}, (_, index) => ({
+  id: `step-${index}`,
+  offset_ms: index * 1000,
+  duration_ms: 1000,
+  payload: `step-${index}.json`,
+  transition: {kind: 'cut', duration_ms: 0},
+}));
+const manifest = {
+  manifest_version: 1,
+  signatures: 'signatures.json',
+  recording: {id: 'sequential-memory', duration_ms: 5000},
+  renderers: {browser: {payload_version: 1}},
+  presentation: {
+    guided: false,
+    browser: {
+      window: {mode: 'none', theme: 'kde-breeze', title: null},
+      chrome: {mode: 'hidden'},
+    },
+  },
+  assets: {},
+  panes: [{id: 'main', renderer: 'browser'}],
+  beats: [{
+    id: 'sequence',
+    heading: 'Sequence',
+    offset_ms: 0,
+    duration_ms: 5000,
+    layout: {areas: [['main']]},
+    pane_tracks: [{
+      pane_id: 'main',
+      initial: 'first',
+      beats: paneBeats,
+    }],
+  }],
+};
+const loaded = [];
+function factory() {
+  let id = '';
+  return {
+    async load(context) {
+      id = context.beat.id;
+      loaded.push(id);
+    },
+    renderAt() {},
+    async preload() {},
+    dispose() {},
+    state() { return {decodedAssetBytes: 40 * 1024 * 1024}; },
+  };
+}
+(async () => {
+  const shell = core.createPresentationShell({
+    manifest,
+    rendererFactories: {browser: factory},
+    loadPayload: async () => ({}),
+    decodedAssetBudgetBytes: 100 * 1024 * 1024,
+  });
+  await shell.renderAt(100);
+  if (JSON.stringify(loaded) !== '["step-0","step-1"]') {
+    console.error(JSON.stringify({loaded}));
+    process.exit(1);
+  }
+  shell.dispose();
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_shell_disposes_renderer_that_finishes_loading_after_shell_disposal() -> None:
     result = run_core_script(
         r"""
@@ -1056,8 +1431,15 @@ const manifest = {
   recording: {id: 'dispose', duration_ms: 1000},
   renderers: {browser: {payload_version: 1}},
   assets: {},
+  panes: [{id: 'main', renderer: 'browser'}],
   beats: [
-    {id: 'one', renderer: 'browser', offset_ms: 0, duration_ms: 1000, payload: 'one.json'},
+    {
+      id: 'one', offset_ms: 0, duration_ms: 1000,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'one', offset_ms: 0, duration_ms: 1000, payload: 'one.json', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    },
   ],
 };
 let release;
@@ -1110,11 +1492,136 @@ try {
     signatures: 'signatures.json',
     recording: {duration_ms: 10},
     renderers: {terminal: {payload_version: 1}},
-    beats: [{id: 'one', renderer: 'terminal', offset_ms: 1, duration_ms: 10, payload: 'one.cast'}],
+    panes: [{id: 'main', renderer: 'terminal'}],
+    beats: [{
+      id: 'one', offset_ms: 1, duration_ms: 10,
+      layout: {areas: [['main']]},
+      pane_tracks: [{pane_id: 'main', initial: 'first', beats: [
+        {id: 'one', offset_ms: 0, duration_ms: 10, payload: 'one.cast', transition: {kind: 'cut', duration_ms: 0}},
+      ]}],
+    }],
   });
   process.exit(1);
 } catch (error) {
   if (!String(error).includes('not contiguous')) {
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_shared_shell_rejects_duplicate_pane_beat_ids_across_outer_beats() -> None:
+    result = run_core_script(
+        r"""
+const paneTrack = {
+  pane_id: 'main',
+  initial: 'first',
+  beats: [{
+    id: 'repeat',
+    offset_ms: 0,
+    duration_ms: 10,
+    payload: 'one.cast',
+    transition: {kind: 'cut', duration_ms: 0},
+  }],
+};
+try {
+  core.validatePresentationManifest({
+    manifest_version: 1,
+    signatures: 'signatures.json',
+    recording: {duration_ms: 20},
+    renderers: {terminal: {payload_version: 1}},
+    panes: [{id: 'main', renderer: 'terminal'}],
+    beats: [
+      {
+        id: 'one', offset_ms: 0, duration_ms: 10,
+        layout: {areas: [['main']]},
+        pane_tracks: [paneTrack],
+      },
+      {
+        id: 'two', offset_ms: 10, duration_ms: 10,
+        layout: {areas: [['main']]},
+        pane_tracks: [paneTrack],
+      },
+    ],
+  });
+  process.exit(1);
+} catch (error) {
+  if (!String(error).includes('pane main has a duplicate beat')) {
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_shared_shell_bounds_panes_and_aggregate_structure() -> None:
+    result = run_core_script(
+        r"""
+const panes = Array.from({length: 65}, (_, index) => ({
+  id: `pane-${index}`,
+  renderer: 'terminal',
+}));
+try {
+  core.validatePresentationManifest({
+    manifest_version: 1,
+    signatures: 'signatures.json',
+    recording: {duration_ms: 10},
+    renderers: {terminal: {payload_version: 1}},
+    panes,
+    beats: [{
+      id: 'one', offset_ms: 0, duration_ms: 10,
+      layout: {areas: [['pane-0']]},
+      pane_tracks: [{
+        pane_id: 'pane-0',
+        initial: 'first',
+        beats: [{
+          id: 'one', offset_ms: 0, duration_ms: 10,
+          payload: 'one.cast',
+          transition: {kind: 'cut', duration_ms: 0},
+        }],
+      }],
+    }],
+  });
+  process.exit(1);
+} catch (error) {
+  if (!String(error).includes('panes exceeds 64')) {
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+
+const repeated = Array.from({length: 100001}, () => 'main');
+try {
+  core.validatePresentationManifest({
+    manifest_version: 1,
+    signatures: 'signatures.json',
+    recording: {duration_ms: 10},
+    renderers: {terminal: {payload_version: 1}},
+    panes: [{id: 'main', renderer: 'terminal'}],
+    beats: [{
+      id: 'one', offset_ms: 0, duration_ms: 10,
+      layout: {areas: [repeated]},
+      pane_tracks: [{
+        pane_id: 'main',
+        initial: 'first',
+        beats: [{
+          id: 'one', offset_ms: 0, duration_ms: 10,
+          payload: 'one.cast',
+          transition: {kind: 'cut', duration_ms: 0},
+        }],
+      }],
+    }],
+  });
+  process.exit(1);
+} catch (error) {
+  if (!String(error).includes('aggregate structure exceeds 100000')) {
     console.error(error.stack);
     process.exit(1);
   }
@@ -1135,6 +1642,59 @@ try {
   process.exit(1);
 } catch (error) {
   if (!String(error).includes('not ordered')) {
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_decoder_bounds_events() -> None:
+    result = run_core_script(
+        r"""
+const events = Array.from(
+  {length: 100001},
+  (_, index) => `[${index / 1000},"o","x"]`,
+);
+try {
+  core.decodeAsciinemaCast(
+    ['{"version":2,"width":80,"height":24}', ...events].join('\n'),
+  );
+  process.exit(1);
+} catch (error) {
+  if (!String(error).includes('cast events exceeds 100000')) {
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_browser_scene_bounds_events() -> None:
+    result = run_core_script(
+        r"""
+try {
+  core.browserSceneAt({
+    payload_version: 1,
+    duration_ms: 10,
+    viewport: {width: 10, height: 10},
+    initial_pointer: {x: 0, y: 0, visible: false},
+    initial_state: 'initial',
+    events: Array.from({length: 100001}, () => ({
+      kind: 'complete',
+      at_ms: 0,
+      end_ms: 0,
+    })),
+  }, 0);
+  process.exit(1);
+} catch (error) {
+  if (!String(error).includes('browser events exceeds 100000')) {
     console.error(error.stack);
     process.exit(1);
   }

@@ -30,6 +30,11 @@ from omegaflow.presentation_schema import (
     PresentationBeatV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPaneBeatV1,
+    PresentationPaneLayoutV1,
+    PresentationPaneTrackV1,
+    PresentationPaneTransitionV1,
+    PresentationPaneV1,
     PresentationRecordingV1,
     PresentationRendererV1,
 )
@@ -382,13 +387,31 @@ def test_guided_shared_take_keeps_a_short_audio_lead_after_checkpoint() -> None:
             metadata="audio.json",
             intervals=list(timing.audio_intervals),
         ),
+        panes=[
+            PresentationPaneV1(id=f"main-{beat.id}", renderer="terminal")
+            for beat in plan.beats
+        ],
         beats=[
             PresentationBeatV1(
                 id=beat.id,
-                renderer="terminal",
                 offset_ms=timing.beat(beat.id).offset_ms,
                 duration_ms=timing.beat(beat.id).duration_ms,
-                payload=f"beats/{beat.id}.cast",
+                layout=PresentationPaneLayoutV1(
+                    areas=[[f"main-{beat.id}"]]
+                ),
+                pane_tracks=[
+                    PresentationPaneTrackV1(
+                        pane_id=f"main-{beat.id}",
+                        beats=[
+                            PresentationPaneBeatV1(
+                                id=beat.id,
+                                duration_ms=timing.beat(beat.id).duration_ms,
+                                payload=f"beats/{beat.id}.cast",
+                                transition=PresentationPaneTransitionV1(),
+                            )
+                        ],
+                    )
+                ],
             )
             for beat in plan.beats
         ],

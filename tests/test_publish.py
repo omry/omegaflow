@@ -20,6 +20,11 @@ from omegaflow.presentation_schema import (
     PresentationBeatV1,
     PresentationHeaderV1,
     PresentationManifestV1,
+    PresentationPaneBeatV1,
+    PresentationPaneLayoutV1,
+    PresentationPaneTrackV1,
+    PresentationPaneTransitionV1,
+    PresentationPaneV1,
     PresentationRecordingV1,
     PresentationRendererV1,
 )
@@ -59,12 +64,25 @@ def write_terminal_bundle(root: Path, *, output: str = "ok") -> Path:
         recording=PresentationRecordingV1(id="demo", duration_ms=1000),
         renderers={"terminal": PresentationRendererV1()},
         presentation=PresentationHeaderV1(),
+        panes=[PresentationPaneV1(id="main", renderer="terminal")],
         beats=[
             PresentationBeatV1(
                 id="one",
-                renderer="terminal",
                 duration_ms=1000,
-                payload="beats/one.cast",
+                layout=PresentationPaneLayoutV1(areas=[["main"]]),
+                pane_tracks=[
+                    PresentationPaneTrackV1(
+                        pane_id="main",
+                        beats=[
+                            PresentationPaneBeatV1(
+                                id="one",
+                                duration_ms=1000,
+                                payload="beats/one.cast",
+                                transition=PresentationPaneTransitionV1(),
+                            )
+                        ],
+                    )
+                ],
             )
         ],
     )
@@ -339,14 +357,29 @@ def test_public_staging_rejects_sidecar_asset_hash_mismatch(tmp_path: Path) -> N
                 "media_type": "image/webp",
             }
         },
+        "panes": [{"id": "main", "renderer": "browser"}],
         "beats": [
             {
-                "id": "browser",
+                "id": "outer",
                 "heading": "",
-                "renderer": "browser",
                 "offset_ms": 0,
                 "duration_ms": 1000,
-                "payload": "beats/browser.browser.json",
+                "layout": {"areas": [["main"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "main",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "browser",
+                                "offset_ms": 0,
+                                "duration_ms": 1000,
+                                "payload": "beats/browser.browser.json",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
                 "guide": None,
                 "transition_in": None,
             }
@@ -463,14 +496,29 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
             }
         },
         "assets": assets,
+        "panes": [{"id": "main", "renderer": "browser"}],
         "beats": [
             {
-                "id": "browser",
+                "id": "outer",
                 "heading": "",
-                "renderer": "browser",
                 "offset_ms": 0,
                 "duration_ms": 400,
-                "payload": "beats/browser.browser.json",
+                "layout": {"areas": [["main"]]},
+                "pane_tracks": [
+                    {
+                        "pane_id": "main",
+                        "initial": "first",
+                        "beats": [
+                            {
+                                "id": "browser",
+                                "offset_ms": 0,
+                                "duration_ms": 400,
+                                "payload": "beats/browser.browser.json",
+                                "transition": {"kind": "cut", "duration_ms": 0},
+                            }
+                        ],
+                    }
+                ],
                 "guide": None,
                 "transition_in": None,
             }

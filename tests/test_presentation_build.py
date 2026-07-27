@@ -494,7 +494,13 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     result = compile_presentation_bundle(spec, plan, run_dir)
 
     manifest = validate_run_bundle(spec, run_dir)
-    assert [beat["renderer"] for beat in manifest["beats"]] == [
+    pane_renderers = {
+        pane["id"]: pane["renderer"] for pane in manifest["panes"]
+    }
+    assert [
+        pane_renderers[beat["pane_tracks"][0]["pane_id"]]
+        for beat in manifest["beats"]
+    ] == [
         "terminal",
         "browser",
         "terminal",
@@ -527,7 +533,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         },
         "chrome": {"mode": "full"},
     }
-    assert manifest["beats"][1]["browser"] == {
+    assert manifest["beats"][1]["pane_tracks"][0]["beats"][0]["browser"] == {
         "window": {
             "mode": "none",
             "theme": "kde-breeze",
