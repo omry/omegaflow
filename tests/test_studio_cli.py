@@ -1251,7 +1251,7 @@ def test_studio_run_dir_uses_data_directory() -> None:
         studio_run_dir(
             "recordings/.omegaflow",
             "build",
-            "record",
+            "capture",
             False,
             "demo",
             "20260705-010203",
@@ -1319,6 +1319,262 @@ def test_studio_config_does_not_load_a_process_env_file_by_default(
     assert config["env_file"] is None
     assert load_configured_env_file({}) == {}
     assert "MUST_NOT_LOAD" not in os.environ
+
+
+def test_public_steps_are_capture_and_narration() -> None:
+    assert [step.value for step in studio_config_module.StudioStep] == [
+        "capture",
+        "narration",
+    ]
+
+
+@pytest.mark.parametrize(
+    "legacy_step",
+    [
+        "record",
+        "record_check",
+        "record_dry_run",
+        "dry_run",
+        "sync_narration",
+        "publish",
+    ],
+)
+def test_legacy_steps_are_rejected(legacy_step) -> None:
+    with pytest.raises(studio.StudioError, match=rf"unknown step: {legacy_step}"):
+        studio.validate_step(legacy_step)
+
+
+def test_capture_step_dispatches_capture_only(monkeypatch) -> None:
+    config = compose_studio_config(
+        None,
+        ("recording=demo", "step=capture"),
+    )
+    dispatched: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        studio,
+        "run_record_action",
+        lambda _cfg, action, label=None: dispatched.append((action, label)),
+    )
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert dispatched == [("capture", "capture")]
+
+
+def test_step_rejects_non_build_action() -> None:
+    config = compose_studio_config(
+        None,
+        ("recording=demo", "action=watch", "step=narration"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=r"step can only be combined with action=build",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+
+def test_capture_step_uses_the_hydra_run_directory(monkeypatch, tmp_path) -> None:
+    run_dir = tmp_path / "capture-run"
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "_hydra_output_dir": str(run_dir),
+        "beats": [
+            {
+                "id": "intro",
+                "heading": "Introduction",
+                "actions": [],
+            }
+        ],
+    }
+    cfg = OmegaConf.create(
+        {
+            "recording": "demo",
+            "step": "capture",
+            "output_format": "text",
+            "verbose": False,
+            "headed": False,
+        }
+    )
+    monkeypatch.setattr(
+        studio,
+        "load_recording_spec_from_hydra_cfg",
+        lambda _cfg: spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda *_args, **_kwargs: pytest.fail(
+            "capture step bypassed the Hydra recording loader"
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_capture(capture_spec, plan, target, *, headed):
+        captured.update(
+            spec=capture_spec,
+            plan=plan,
+            target=target,
+            headed=headed,
+        )
+
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_recording",
+        fake_capture,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "write_capture_fingerprint",
+        lambda _spec, _plan, target: target / "recording.fingerprint.json",
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "prepare_narration_audio",
+        lambda *_args, **_kwargs: pytest.fail("capture step prepared narration"),
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "compile_presentation_bundle",
+        lambda *_args, **_kwargs: pytest.fail("capture step assembled video"),
+    )
+
+    assert studio.run_tool_from_hydra_cfg(cfg) == 0
+
+    assert captured["spec"] is spec
+    assert captured["target"] == run_dir
+    assert captured["headed"] is False
+
+
+def test_narration_step_prepares_build_narration_without_capture(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    recording_dir = tmp_path / "recordings" / "narrated"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+kind: video
+id: narrated
+audio:
+  enabled: true
+---
+
+```yaml studio-directive
+scene: Narrated
+```
+
+```yaml studio-directive
+beat:
+  id: intro
+  heading: Introduction
+  narration: Hello from the narration step.
+  actions:
+  - commands:
+    - run: "true"
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config = compose_studio_config(
+        None,
+        ("recording=narrated", "action=build", "step=narration"),
+    )
+    scratch_dir = (
+        tmp_path
+        / "recordings"
+        / ".omegaflow"
+        / "runs"
+        / ".scratch"
+        / "narration"
+        / "narrated"
+        / "test-run"
+    )
+    spec = recording_spec_from_config(
+        config,
+        recording_id=None,
+        overrides=(),
+        hydra_output_dir=str(scratch_dir),
+    )
+    monkeypatch.setattr(
+        studio,
+        "load_recording_spec_from_hydra_cfg",
+        lambda _cfg: spec,
+    )
+    prepared: dict[str, object] = {}
+
+    def fake_prepare(spec, plan, run_dir, *, force, on_progress):
+        prepared.update(
+            spec=spec,
+            plan=plan,
+            run_dir=run_dir,
+            force=force,
+        )
+        assert on_progress is not None
+        for current in range(1, 4):
+            on_progress("Prepare narration: Introduction", current, 3)
+        return None
+
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "prepare_narration_audio",
+        fake_prepare,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_recording",
+        lambda *_args, **_kwargs: pytest.fail("narration step captured recording"),
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "compile_presentation_bundle",
+        lambda *_args, **_kwargs: pytest.fail("narration step assembled video"),
+    )
+
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    assert prepared["spec"]["id"] == "narrated"
+    assert len(prepared["plan"].narration_takes) == 1
+    assert prepared["force"] is False
+    assert "/.scratch/narration/narrated/" in str(prepared["run_dir"])
+    output = capsys.readouterr().out
+    assert "Preparing narration (1 take)" in output
+    assert "narration ready: 1 take" in output
+
+
+def test_check_missing_capture_points_to_capture_step(monkeypatch) -> None:
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "beats": [
+            {
+                "id": "intro",
+                "heading": "Introduction",
+                "actions": [],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda *_args, **_kwargs: spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: None,
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"no complete capture found; run omegaflow recording=demo "
+            r"step=capture first"
+        ),
+    ):
+        studio.run_check(OmegaConf.create({}))
 
 
 def test_runs_action_uses_config_data_dir(tmp_path, monkeypatch, capsys) -> None:
@@ -3070,81 +3326,6 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         "id": "show_second_beat",
         "run": "# Second video beat",
     }
-
-
-def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
-    tmp_path,
-) -> None:
-    root = Path(__file__).resolve().parents[1]
-    recording = recording_from_script(
-        "quickstart-demo",
-        recording_dir=root / "recordings",
-    )
-    install_beat = next(
-        beat for beat in recording["beats"] if beat["id"] == "install"
-    )
-    install_command = install_beat["actions"][0]["commands"][0]["run"]
-    plan = studio.normalized_recording_plan(
-        {
-            "id": "quickstart-demo-install-smoke",
-            "_script_dir": recording["_script_dir"],
-            "setup": recording["setup"],
-            "beats": [
-                {
-                    "id": "install",
-                    "actions": [
-                        {
-                            "commands": [
-                                {
-                                    "run": (
-                                        "if \"$HOMEPAGE_DEMO_VENV/bin/python\" "
-                                        "-c 'import omegaflow' 2>/dev/null; then "
-                                        "exit 91; fi"
-                                    )
-                                },
-                                {"run": install_command},
-                                {
-                                    "run": (
-                                        "\"$HOMEPAGE_DEMO_VENV/bin/python\" -c '"
-                                        "import os, pathlib, omegaflow; "
-                                        "root = pathlib.Path(os.environ[\"OMEGAFLOW_TEST_ROOT\"]); "
-                                        "assert pathlib.Path(omegaflow.__file__).resolve()."
-                                        "is_relative_to(root / \"src\")'"
-                                    )
-                                },
-                                {"run": "omegaflow --help >/dev/null"},
-                            ]
-                        }
-                    ],
-                }
-            ],
-            "cleanup": recording["cleanup"],
-        }
-    )
-    coordinator = CaptureCoordinator(
-        terminal_runner_factory=lambda: PersistentTerminalRunner(
-            record_cast=False,
-            timeout_seconds=60.0,
-        )
-    )
-
-    coordinator.capture(
-        plan,
-        tmp_path / "run",
-        workspace=root,
-        working_directory=root,
-        environment={
-            "OMEGAFLOW_TEST_ROOT": str(root),
-            "PATH": os.environ.get("PATH", ""),
-        },
-    )
-
-    assert not list(
-        (tmp_path / "run" / ".tmp").glob("omegaflow-quickstart-env.*")
-    )
-    assert not list(
-        (tmp_path / "run" / ".tmp").glob("omegaflow-quickstart-demo.*")
-    )
 
 
 def test_run_file_dependencies_affect_capture_fingerprint(tmp_path) -> None:

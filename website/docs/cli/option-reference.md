@@ -63,21 +63,22 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `studio.run_gc.max_runs_per_recording` | `10` | Retain at most this many runs per recording, subject to protected-run exceptions. |
 | `studio.run_gc.preserve_latest_failure` | `true` | Protect the newest failed run for each recording so its diagnostics remain available. |
 
-## Internal build-stage fields
+## Advanced build-stage fields
 
-Hydra's generated help also displays the fields below because the public
-`build` action passes one composed config through its internal stages. They are
-not independent public operations and are not normal project configuration.
+`step` is a typed, public interface for running selected build stages. The
+remaining fields below are internal plumbing shared by OmegaFlow's tools and
+are not normal project configuration.
 
-| Field | Default | Internal use |
+| Field | Default | Meaning |
 | --- | --- | --- |
-| `step` | `null` | Selects a private build stage when OmegaFlow invokes its own modules. Do not set it in normal CLI use. |
+| `step` | `null` | Runs one build stage directly. Supported values are `capture` and `narration`. |
 | `output` | `null` | Overrides a stage's generated output path. It is unrelated to `action=output`. |
 | `timeline` | `null` | Supplies the captured timing timeline to the presentation-processing stage. |
 | `audio_metadata` | `null` | Supplies narration timing metadata to the presentation-processing stage. |
 
-These fields remain visible so all stages share one typed configuration. Their
-presence in `--help` is not a stability promise for direct use.
+The internal fields remain visible because all tools share one typed
+configuration. Their presence in `--help` is not a stability promise for direct
+use.
 
 ## Related schemas
 

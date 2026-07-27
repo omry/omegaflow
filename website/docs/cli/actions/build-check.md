@@ -55,6 +55,21 @@ omegaflow recording=demo dry_run=true output_format=json
 
 This is a build mode, not a separate action.
 
+## Run one build stage
+
+Use `step` when authoring or diagnosing a recording and you need one expensive
+part of the build without its downstream work:
+
+```bash
+omegaflow recording=demo step=capture
+omegaflow recording=demo step=narration
+```
+
+`step=capture` runs the scripted terminal and browser workflow without preparing
+narration, assembling a video, or publishing it. `step=narration` generates or
+reuses narration takes without capture, assembly, or publishing. A normal build
+remains the preferred command when you want a finished video.
+
 ## Select a publish surface
 
 When a recording defines multiple publish surfaces, `surface` limits this build

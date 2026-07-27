@@ -178,8 +178,7 @@ def studio_run_dir(*args: object) -> str:
     timestamp_text = normalize_studio_token(timestamp)
     dry_run_enabled = str(dry_run).lower() == "true"
     is_recording_run = has_recording_id and not dry_run_enabled and (
-        step_text == "record"
-        or (not step_text and action_text in {"build", "record"})
+        step_text == "capture" or (not step_text and action_text == "build")
     )
     data_dir = project_data_dir_from_value(data_dir_value, root_value)
     if is_recording_run:
@@ -216,12 +215,8 @@ class BootstrapMode(str, Enum):
 
 
 class StudioStep(str, Enum):
-    record = "record"
-    record_check = "record_check"
-    record_dry_run = "record_dry_run"
-    dry_run = "dry_run"
-    sync_narration = "sync_narration"
-    publish = "publish"
+    capture = "capture"
+    narration = "narration"
 
 
 class RecordingSourceKind(str, Enum):

@@ -281,8 +281,6 @@ PRESENTATION_BUILD_STEPS = [
 PUBLIC_ACTIONS = [action.value for action in StudioAction]
 
 RECORD_ACTIONS = {
-    "record": "record",
-    "record_check": "check",
     "list": "list",
     "runs": "runs",
     "inspect": "inspect",
@@ -366,23 +364,10 @@ def run_step(
 
 
 def run_record_action(cfg: DictConfig, action: str, label: str | None = None) -> None:
-    spec: dict[str, Any] | None = None
     config = container_from_hydra_cfg(cfg)
     verbose = bool_config(config, "verbose")
-    if action == "check":
-        spec = recording_spec_from_config(config, recording_id=None, overrides=())
-        normalized_recording_plan(spec)
-        try:
-            record.validate_manifest(spec)
-            record.check_required_commands(spec)
-            asciinema_version = record.check_asciinema(spec)
-        except record.RecordingError as exc:
-            raise StudioError(str(exc)) from exc
-        if text_output_enabled(cfg):
-            pass_line(f"recording source is valid: {spec['id']} ({asciinema_version})")
-        return
-    if action == "record":
-        spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    if action == "capture":
+        spec = load_recording_spec_from_hydra_cfg(cfg)
         plan = normalized_recording_plan(spec)
         run_dir = current_recording_run_dir(spec)
         if text_output_enabled(cfg):
@@ -572,10 +557,6 @@ def lifecycle_run_file_display(
     return str(Path(error.run_file).absolute())
 
 
-def run_audio_action(cfg: DictConfig, action: str, label: str | None = None) -> None:
-    run_step(label or f"audio {action}", audio.run_tool_from_hydra_cfg, cfg, action)
-
-
 def narration_billing_message(
     artifacts: presentation_build.PresentationAudioArtifacts | None,
     *,
@@ -693,8 +674,7 @@ def validate_step(value: object) -> str | None:
     step_values = [step.value for step in StudioStep]
     if normalized not in step_values:
         raise StudioError(
-            "unknown internal step: "
-            f"{normalized}\ninternal steps: {', '.join(step_values)}"
+            f"unknown step: {normalized}\nsteps: {', '.join(step_values)}"
         )
     return normalized
 
@@ -3460,7 +3440,8 @@ def run_check(cfg: DictConfig) -> int:
         plan, run_dir
     ):
         raise StudioError(
-            "no complete capture found; run omegaflow action=record first"
+            "no complete capture found; run "
+            f"omegaflow recording={spec['id']} step=capture first"
         )
     if not presentation_build.capture_is_fresh(spec, plan, run_dir):
         raise StudioError("capture fingerprint is stale")
@@ -3475,23 +3456,60 @@ def run_check(cfg: DictConfig) -> int:
     return 0
 
 
+def run_narration_step(cfg: DictConfig, config: dict[str, Any]) -> int:
+    spec = load_recording_spec_from_hydra_cfg(cfg)
+    plan = normalized_recording_plan(spec)
+    raw_audio = spec.get("audio")
+    if not isinstance(raw_audio, Mapping) or raw_audio.get("enabled") is not True:
+        raise StudioError("narration is disabled in the recording config")
+    take_count = len(plan.narration_takes)
+    if take_count == 0:
+        raise StudioError("recording has no narration takes")
+    noun = "take" if take_count == 1 else "takes"
+    progress = BuildProgress(
+        total=3 * take_count,
+        interactive=False if bool_config(config, "verbose") else None,
+        active=text_output_enabled(cfg),
+    )
+    narration_current = 0
+
+    def on_progress(message: str, current: int, _total: int) -> None:
+        nonlocal narration_current
+        if current > narration_current:
+            progress.advance(message, units=current - narration_current)
+            narration_current = current
+        else:
+            progress.update(message)
+
+    artifacts: presentation_build.PresentationAudioArtifacts | None = None
+    try:
+        progress.begin(f"Preparing narration ({take_count} {noun})")
+        artifacts = presentation_build.prepare_narration_audio(
+            spec,
+            plan,
+            current_recording_run_dir(spec),
+            force=bool_config(config, "force"),
+            on_progress=on_progress,
+        )
+    except presentation_build.PresentationBuildError as exc:
+        raise StudioError(str(exc)) from exc
+    finally:
+        progress.finish()
+    billing_message = narration_billing_message(artifacts)
+    if billing_message is not None and text_output_enabled(cfg):
+        info_line(billing_message)
+    if text_output_enabled(cfg):
+        pass_line(f"narration ready: {take_count} {noun}")
+    return 0
+
+
 def run_internal_step(cfg: DictConfig, config: dict[str, Any], step: str) -> int:
-    if step in {"record_dry_run", "dry_run"} or (
-        step == "record" and bool_config(config, "dry_run")
-    ):
-        return run_build_dry_run(cfg, config)
-    if step == "record_check":
-        return run_check(cfg)
-    if step == "publish":
-        run_publish_surface(cfg)
+    if step == "capture":
+        run_record_action(cfg, "capture", "capture")
         return 0
-    if step in RECORD_ACTIONS:
-        run_record_action(cfg, RECORD_ACTIONS[step], step.replace("_", " "))
-        return 0
-    if step == "sync_narration":
-        run_audio_action(cfg, "sync_narration", "sync narration")
-        return 0
-    raise StudioError(f"unknown internal step: {step}")
+    if step == "narration":
+        return run_narration_step(cfg, config)
+    raise StudioError(f"unknown step: {step}")
 
 
 def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
@@ -3506,6 +3524,8 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         raise StudioError("bootstrap and action are mutually exclusive")
     action = validate_action(configured_action)
     step = validate_step(config.get("step"))
+    if step is not None and configured_action is not None and action != "build":
+        raise StudioError("step can only be combined with action=build")
 
     if bootstrap is not None:
         if step is not None:

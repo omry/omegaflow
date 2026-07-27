@@ -715,7 +715,7 @@ def normalize_cast_header(cast_path: Path, spec: dict[str, Any]) -> None:
         raise RecordingError(f"asciinema header must be a mapping: {cast_path}")
 
     header["command"] = (
-        f"omegaflow recording={require_string(spec, 'id')} " "step=record"
+        f"omegaflow recording={require_string(spec, 'id')} " "step=capture"
     )
     header.pop("env", None)
 

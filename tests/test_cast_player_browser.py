@@ -1053,8 +1053,8 @@ def test_homepage_quickstart_checkpoint_holds_terminal_before_browser() -> None:
             "Checkpoint: Build the Video"
         )
         assert page.locator("#guide-command").text_content() == (
-            "omegaflow recording=quickstart action=build\n"
-            "omegaflow recording=quickstart action=watch"
+            "omegaflow recording=test-video action=build\n"
+            "omegaflow recording=test-video action=watch"
         )
         assert page.locator("#guide-continue").text_content() == "Continue"
         assert page.locator("#terminal").is_visible()
