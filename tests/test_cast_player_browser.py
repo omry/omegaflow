@@ -15,6 +15,17 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def pane_title(text: str | None = None) -> dict[str, object]:
+    return {
+        "visible": True,
+        "text": text,
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+    }
+
+
 class QuietStaticHandler(SimpleHTTPRequestHandler):
     def log_message(self, _format: str, *args: object) -> None:
         return
@@ -106,7 +117,7 @@ def write_browser_player_fixture(root: Path) -> None:
                 "media_type": "image/webp",
             }
         },
-        "panes": [{"id": "main", "renderer": "browser"}],
+        "panes": [{"id": "main", "title": pane_title(), "renderer": "browser"}],
         "beats": [
             {
                 "id": "browser",
@@ -174,7 +185,7 @@ def write_terminal_player_fixture(root: Path) -> None:
         "renderers": {"terminal": {"payload_version": 1}},
         "presentation": {"browser": None, "guided": False},
         "assets": {},
-        "panes": [{"id": "main", "renderer": "terminal"}],
+        "panes": [{"id": "main", "title": pane_title(), "renderer": "terminal"}],
         "beats": [
             {
                 "id": "nano",
@@ -239,6 +250,15 @@ def write_visualization_player_fixture(root: Path) -> None:
         "duration_ms": 1000,
         "language": "yaml",
         "text": text,
+        "highlights": [
+            {
+                "start": 43,
+                "end": 48,
+                "color": "brand",
+                "start_ms": 0,
+                "end_ms": 900,
+            },
+        ],
         "tokens": [
             {"start": 0, "end": 5, "kind": "key"},
             {"start": 7, "end": 34, "kind": "string"},
@@ -257,9 +277,25 @@ def write_visualization_player_fixture(root: Path) -> None:
             "duration_ms": 1000,
         },
         "renderers": {"visualization": {"payload_version": 1}},
-        "presentation": {"guided": False},
+        "presentation": {
+            "guided": False,
+            "pane_chrome": {"style": "framed"},
+        },
         "assets": {},
-        "panes": [{"id": "definition", "renderer": "visualization"}],
+        "panes": [
+            {
+                "id": "definition",
+                "title": {
+                    "visible": True,
+                    "text": "Beat definition",
+                    "alignment_x": "right",
+                    "alignment_y": "top",
+                    "position_x": "0.25rem",
+                    "position_y": "0.25rem",
+                },
+                "renderer": "visualization",
+            }
+        ],
         "beats": [
             {
                 "id": "explain",
@@ -336,6 +372,103 @@ def test_visualization_player_renders_escaped_syntax_tokens(
             '"<script>alert(1)</script>"'
         )
         assert host.locator("[data-language='yaml']").count() == 1
+        highlighted = host.locator("[data-highlight-color='brand']")
+        assert highlighted.inner_text() == "ready"
+        assert "visualization-text-highlight-brand" in (
+            highlighted.get_attribute("class") or ""
+        )
+        browser.close()
+
+
+def test_pane_chrome_can_be_disabled(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_visualization_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["presentation"]["pane_chrome"]["style"] = "none"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        host = page.locator(".visualization-renderer-host:not([hidden])")
+        host.wait_for(state="visible")
+
+        assert page.locator(".stage").get_attribute("data-pane-chrome") == "none"
+        assert host.evaluate(
+            "element => getComputedStyle(element).borderTopWidth"
+        ) == "0px"
+        browser.close()
+
+
+def test_pane_title_position_is_relative_to_selected_frame_edges(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_visualization_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    title = manifest["panes"][0]["title"]
+    title.update(
+        {
+            "alignment_x": "right",
+            "position_x": "0.8rem",
+            "alignment_y": "bottom",
+            "position_y": "0.7rem",
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        host = page.locator(".visualization-renderer-host:not([hidden])")
+        host.wait_for(state="visible")
+
+        assert host.get_attribute("data-title-alignment-x") == "right"
+        assert host.get_attribute("data-title-alignment-y") == "bottom"
+        assert host.evaluate(
+            "element => getComputedStyle(element, '::before').right"
+        ) == "12.8px"
+        assert host.evaluate(
+            "element => getComputedStyle(element, '::before').bottom"
+        ) == "11.2px"
+        browser.close()
+
+
+def test_pane_title_can_be_hidden(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_visualization_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["panes"][0]["title"]["visible"] = False
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        host = page.locator(".visualization-renderer-host:not([hidden])")
+        host.wait_for(state="visible")
+
+        assert host.get_attribute("data-pane-title-visible") == "false"
+        assert host.evaluate(
+            "element => getComputedStyle(element, '::before').display"
+        ) == "none"
         browser.close()
 
 
@@ -369,6 +502,24 @@ def test_checked_in_visualization_fixture_composes_with_terminal() -> None:
             visualization_box["x"] + visualization_box["width"]
             <= terminal_box["x"] + 1
         )
+        assert visualization.get_attribute("data-pane-label") == "Beat definition"
+        assert terminal.get_attribute("data-pane-label") == "Status"
+        assert visualization.evaluate(
+            "element => getComputedStyle(element).borderTopWidth"
+        ) == "1px"
+        assert terminal.evaluate(
+            "element => getComputedStyle(element).borderTopWidth"
+        ) == "1px"
+        assert visualization.evaluate(
+            "element => getComputedStyle(element).borderRadius"
+        ) != "0px"
+        assert terminal.evaluate(
+            "element => getComputedStyle(element).borderRadius"
+        ) != "0px"
+        assert visualization.evaluate(
+            "element => getComputedStyle(element, '::before').right"
+        ) == "4px"
+        assert page.locator(".stage").get_attribute("data-pane-chrome") == "framed"
         assert page.locator("#play").get_attribute("aria-label") == "Pause"
         visualization.click()
         assert page.locator("#play").get_attribute("aria-label") == "Play"

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from hydra import compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore
@@ -235,6 +235,21 @@ class PaneKind(str, Enum):
     browser = "browser"
 
 
+class PaneChromeStyle(str, Enum):
+    none = "none"
+    framed = "framed"
+
+
+class PaneTitleAlignmentX(str, Enum):
+    left = "left"
+    right = "right"
+
+
+class PaneTitleAlignmentY(str, Enum):
+    top = "top"
+    bottom = "bottom"
+
+
 class PaneTransitionKind(str, Enum):
     cut = "cut"
     fade = "fade"
@@ -302,6 +317,7 @@ class RecordingCaptureConfig:
     window_size: str = "100x28"
     headless: bool = True
     idle_time_limit: float | None = None
+    timeout: float = 30.0
 
 
 @dataclass
@@ -481,8 +497,26 @@ class BrowserPresentationConfig:
 
 
 @dataclass
+class PaneTitleConfig:
+    visible: bool = True
+    text: str | None = None
+    alignment_x: PaneTitleAlignmentX = PaneTitleAlignmentX.right
+    alignment_y: PaneTitleAlignmentY = PaneTitleAlignmentY.top
+    position_x: str = "0.25rem"
+    position_y: str = "0.25rem"
+
+
+@dataclass
+class RecordingPaneChromeConfig:
+    style: PaneChromeStyle = PaneChromeStyle.framed
+
+
+@dataclass
 class RecordingPresentationConfig:
     guided: bool = False
+    pane_chrome: RecordingPaneChromeConfig = field(
+        default_factory=RecordingPaneChromeConfig
+    )
     browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
 
 
@@ -757,25 +791,26 @@ class RecordingGuideConfig:
 
 
 @dataclass
-class TerminalTextHighlightTargetConfig:
+class TextHighlightTargetConfig:
     text: str | None = None
     regex: str | None = None
     occurrence: int = 1
 
 
 @dataclass
-class TerminalTextHighlightConfig:
-    targets: list[TerminalTextHighlightTargetConfig] = field(default_factory=list)
+class TextHighlightConfig:
+    pane: str | None = None
+    targets: list[TextHighlightTargetConfig] = field(default_factory=list)
     color: TerminalHighlightColor = TerminalHighlightColor.cue
     start: str = ""
     end: str = ""
 
 
 @dataclass
-class TerminalEffectConfig:
-    """Typed envelope for presentation effects on terminal beats."""
+class BeatEffectConfig:
+    """Typed envelope for presentation effects owned by a container beat."""
 
-    highlight: TerminalTextHighlightConfig | None = None
+    highlight: TextHighlightConfig | None = None
 
 
 @dataclass
@@ -794,6 +829,7 @@ class BeatPlayerConfig:
 class PaneConfig:
     id: str = ""
     kind: PaneKind = PaneKind.visualization
+    title: Literal["hidden"] | str | PaneTitleConfig | None = None
 
 
 @dataclass
@@ -808,6 +844,18 @@ class PaneLayoutConfig:
 
 
 @dataclass
+class VisualizationShowConfig:
+    language: str = "text"
+    text: str = ""
+
+
+@dataclass
+class PaneActionConfig(RecordingActionConfig):
+    timing: str = "presentation"
+    show: VisualizationShowConfig | None = None
+
+
+@dataclass
 class PaneBeatConfig:
     id: str = ""
     after: str | None = None
@@ -815,9 +863,8 @@ class PaneBeatConfig:
     pointer: BrowserPointerPresentationConfig | None = None
     window: BrowserWindowModeConfig | None = None
     chrome: BrowserChromePresentationConfig | None = None
-    actions: list[RecordingActionConfig] = field(default_factory=list)
+    actions: list[PaneActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
-    effects: list[TerminalEffectConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -847,8 +894,10 @@ class RecordingBeatConfig:
     player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
-    effects: list[TerminalEffectConfig] = field(default_factory=list)
+    effects: list[BeatEffectConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
+    layout: PaneLayoutConfig | None = None
+    panes: dict[str, list[PaneBeatConfig]] = field(default_factory=dict)
 
 
 @dataclass
@@ -905,11 +954,12 @@ class RecordingSpec(RecordingSourceSpec):
     """Resolved internal spec, including fields generated from the script body."""
 
     script: str | None = None
+    panes: list[PaneConfig] = field(default_factory=list)
     narration: dict[str, Any] = field(default_factory=dict)
 
 
 RECORDING_IDENTITY_FIELDS = {"kind", "id", "title", "description"}
-RECORDING_GENERATED_FIELDS = {"script"}
+RECORDING_GENERATED_FIELDS = {"panes", "script"}
 
 
 @dataclass
@@ -925,6 +975,7 @@ class StudioDirectiveBeat(RecordingBeatConfig):
 @dataclass
 class StudioDirectiveBlock:
     scene: str | dict[str, str] | None = None
+    panes: list[PaneConfig] = field(default_factory=list)
     beat: StudioDirectiveBeat | None = None
     beats: list[StudioDirectiveBeat] = field(default_factory=list)
 
@@ -986,14 +1037,16 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingActionConfig,
     RecordingCheckConfig,
     RecordingGuideConfig,
-    TerminalTextHighlightTargetConfig,
-    TerminalTextHighlightConfig,
-    TerminalEffectConfig,
+    TextHighlightTargetConfig,
+    TextHighlightConfig,
+    BeatEffectConfig,
     PlayerToolbarHighlightConfig,
     BeatPlayerConfig,
     PaneConfig,
     PaneTransitionConfig,
     PaneLayoutConfig,
+    VisualizationShowConfig,
+    PaneActionConfig,
     PaneBeatConfig,
     OuterBeatPaneTrackConfig,
     RecordingNarrationConfig,
@@ -1530,7 +1583,7 @@ def validate_recording_audio_timing_requirements(spec: dict[str, Any]) -> None:
                         isinstance(effect, dict)
                         and effect.get("highlight") is not None
                     ):
-                        reasons.append(f"terminal text highlight in beat {beat_id!r}")
+                        reasons.append(f"text highlight in beat {beat_id!r}")
             actions = beat.get("actions")
             if not isinstance(actions, list):
                 continue
@@ -1643,6 +1696,46 @@ def beat_values_from_directive(block: dict[str, Any]) -> list[dict[str, Any]]:
     return values
 
 
+def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    declaration: list[dict[str, Any]] | None = None
+    beat_declaration_seen = False
+    for block in blocks:
+        for key, value in block.items():
+            if key == "panes":
+                if declaration is not None:
+                    raise StudioConfigError("duplicate studio-directive panes")
+                if beat_declaration_seen:
+                    raise StudioConfigError(
+                        "studio-directive panes must appear before any beat or beats "
+                        "declaration"
+                    )
+                if not isinstance(value, list) or not value:
+                    raise StudioConfigError(
+                        "studio-directive panes must be a non-empty list"
+                    )
+                declaration = value
+                continue
+            if key not in {"beat", "beats"}:
+                continue
+            beat_declaration_seen = True
+            beat_values = (
+                [value]
+                if key == "beat" and value is not None
+                else value if key == "beats" and isinstance(value, list) else []
+            )
+            if not beat_values or declaration is not None:
+                continue
+            for beat in beat_values:
+                if not isinstance(beat, dict) or "panes" not in beat:
+                    continue
+                beat_id = beat.get("id") or "<unknown>"
+                raise StudioConfigError(
+                    f"explicit multi-pane beat {beat_id} requires a preceding "
+                    "panes declaration"
+                )
+    return declaration or []
+
+
 def narration_from_script(
     *, recording_id: str, script_path: Path, blocks: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -1657,7 +1750,7 @@ def narration_from_script(
         for value in beat_values_from_directive(block):
             beat_id = value["id"]
             heading = value["heading"]
-            narration = value["narration"]
+            narration = value.get("narration", "")
             if not beat_id.strip():
                 raise StudioConfigError(
                     "studio-directive beat.id must be a non-empty string"
@@ -1914,6 +2007,14 @@ def recording_from_script(
     )
     spec["script"] = display_path(script_path)
     spec["_script_dir"] = str(script_path.parent.resolve())
+    panes = panes_from_script(blocks)
+    if panes and spec.get("beats"):
+        raise StudioConfigError(
+            "studio-directive panes cannot be combined with frontmatter or "
+            "recording-default beats; move those beats into studio-directive "
+            "blocks after the panes declaration"
+        )
+    spec["panes"] = panes
     merge_script_recording_beats(spec, blocks)
     from .recording_plan import validate_recording_modalities
 

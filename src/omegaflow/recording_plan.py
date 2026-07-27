@@ -25,7 +25,13 @@ from .studio_config import (
     BrowserUrlMatcherConfig,
     BrowserWindowModeConfig,
     OuterBeatTransitionKind,
+    PaneActionConfig,
+    PaneBeatConfig,
+    PaneConfig,
     PaneKind,
+    PaneLayoutConfig,
+    PaneTitleConfig,
+    PaneTransitionConfig,
     PaneTransitionKind,
     PlayerToolbarControl,
     PlayerToolbarHighlightConfig,
@@ -37,7 +43,7 @@ from .studio_config import (
     RecordingRequirementsConfig,
     RecordingStepConfig,
     StudioConfigError,
-    TerminalEffectConfig,
+    BeatEffectConfig,
     narration_text_and_anchors,
 )
 from .service_environment import (
@@ -89,6 +95,9 @@ CHECK_KINDS = ("url", "visible", "hidden", "text", "value", "count", "response")
 URL_MATCH_KINDS = ("equals", "contains", "matches")
 ACTION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 ANCHOR_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_-]*@\Z")
+CSS_LENGTH_RE = re.compile(
+    r"(?:0|(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%))\Z"
+)
 TERMINAL_INPUT_OPERATIONS = ("wait_for", "text", "key", "control", "pause")
 TERMINAL_INPUT_KEYS = frozenset(
     {
@@ -1056,84 +1065,46 @@ def validate_beat_browser_presentation(
     return window, chrome
 
 
-def _terminal_text_highlights(
+def _text_highlights(
     beat: dict[str, Any],
     *,
     index: int,
-    medium: RecordingMedium,
     anchors: tuple[NarrationAnchorPlan, ...],
-) -> tuple[TerminalTextHighlightPlan, ...]:
+    pane_kinds: Mapping[str, PaneKind],
+    default_pane_id: str | None,
+) -> tuple[TextHighlightEffectPlan, ...]:
     raw_effects = beat.get("effects", [])
     if not isinstance(raw_effects, list):
         raise RecordingPlanError(f"beats.{index}.effects must be a list")
-    if raw_effects and medium is not RecordingMedium.terminal:
-        raise RecordingPlanError(
-            f"beats.{index}.effects are invalid for browser beats"
-        )
 
     anchor_offsets = {anchor.id: anchor.text_offset for anchor in anchors}
-    highlights: list[TerminalTextHighlightPlan] = []
+    highlights: list[TextHighlightEffectPlan] = []
     for effect_index, raw_effect in enumerate(raw_effects):
         field = f"beats.{index}.effects.{effect_index}"
         effect_mapping = _mapping(raw_effect, field=field)
         _one_present(effect_mapping, ("highlight",), field=field)
-        effect = _typed(effect_mapping, TerminalEffectConfig, field=field)
+        effect = _typed(effect_mapping, BeatEffectConfig, field=field)
         if effect.highlight is None:  # pragma: no cover - guarded by _one_present
             raise RecordingPlanError(f"{field} must contain exactly one of: highlight")
         highlight = effect.highlight
         highlight_field = f"{field}.highlight"
-        if not highlight.targets:
-            raise RecordingPlanError(f"{highlight_field}.targets must be non-empty")
-        targets: list[TerminalTextHighlightTargetPlan] = []
-        for target_index, target in enumerate(highlight.targets):
-            target_field = f"{highlight_field}.targets.{target_index}"
-            matchers = [
-                (kind, pattern)
-                for kind, pattern in (("text", target.text), ("regex", target.regex))
-                if pattern
-            ]
-            if len(matchers) != 1:
-                raise RecordingPlanError(
-                    f"{target_field} must contain exactly one of: text, regex"
-                )
-            kind, pattern = matchers[0]
-            if kind == "regex":
-                if len(pattern) > 256:
-                    raise RecordingPlanError(
-                        f"{target_field}.regex must be at most 256 characters"
-                    )
-                escapes = re.findall(r"\\([A-Za-z])", pattern)
-                if (
-                    re.search(r"(?:[*+?]|\})\+", pattern)
-                    or any(escape not in "dDsSwWbBnrtfvxu" for escape in escapes)
-                    or re.search(r"\\[1-9]", pattern)
-                    or re.search(r"\(\?(?:[=!]|<[=!]|>|P=|\(|#)", pattern)
-                ):
-                    raise RecordingPlanError(
-                        f"{target_field}.regex uses unsupported syntax"
-                    )
-                try:
-                    compiled = re.compile(pattern)
-                except re.error as exc:
-                    raise RecordingPlanError(
-                        f"{target_field}.regex is invalid: {exc}"
-                    ) from exc
-                for probe in ("", "a", " ", "\n", "ab"):
-                    match = compiled.search(probe)
-                    if match is not None and match.start() == match.end():
-                        raise RecordingPlanError(
-                            f"{target_field}.regex must not match empty text"
-                        )
-            targets.append(
-                TerminalTextHighlightTargetPlan(
-                    kind=kind,
-                    pattern=pattern,
-                    occurrence=_positive_int(
-                        target.occurrence,
-                        field=f"{target_field}.occurrence",
-                    ),
-                )
+        pane_id = highlight.pane if highlight.pane is not None else default_pane_id
+        if pane_id is None:
+            raise RecordingPlanError(
+                f"{highlight_field}.pane is required for a multi-pane beat"
             )
+        if pane_id not in pane_kinds:
+            raise RecordingPlanError(
+                f"{highlight_field}.pane references unknown pane {pane_id!r}"
+            )
+        if pane_kinds[pane_id] not in {PaneKind.terminal, PaneKind.visualization}:
+            raise RecordingPlanError(
+                f"{highlight_field}.pane {pane_id!r} does not expose a text surface"
+            )
+        targets = _text_highlight_targets(
+            highlight.targets,
+            field=highlight_field,
+        )
         for boundary, reference in (("start", highlight.start), ("end", highlight.end)):
             if not ANCHOR_RE.fullmatch(reference):
                 raise RecordingPlanError(
@@ -1151,7 +1122,8 @@ def _terminal_text_highlights(
                 f"end anchor {highlight.end}"
             )
         highlights.append(
-            TerminalTextHighlightPlan(
+            TextHighlightEffectPlan(
+                pane_id=pane_id,
                 targets=tuple(targets),
                 color=highlight.color.value,
                 start_anchor=start_id,
@@ -1159,6 +1131,69 @@ def _terminal_text_highlights(
             )
         )
     return tuple(highlights)
+
+
+def _text_highlight_targets(
+    values: list[object],
+    *,
+    field: str,
+) -> tuple[TextHighlightTargetPlan, ...]:
+    if not values:
+        raise RecordingPlanError(f"{field}.targets must be non-empty")
+    targets: list[TextHighlightTargetPlan] = []
+    for target_index, target in enumerate(values):
+        target_field = f"{field}.targets.{target_index}"
+        matchers = [
+            (kind, pattern)
+            for kind, pattern in (
+                ("text", getattr(target, "text", None)),
+                ("regex", getattr(target, "regex", None)),
+            )
+            if pattern
+        ]
+        if len(matchers) != 1:
+            raise RecordingPlanError(
+                f"{target_field} must contain exactly one of: text, regex"
+            )
+        kind, pattern = matchers[0]
+        if kind == "regex":
+            if len(pattern) > 256:
+                raise RecordingPlanError(
+                    f"{target_field}.regex must be at most 256 characters"
+                )
+            escapes = re.findall(r"\\([A-Za-z])", pattern)
+            if (
+                re.search(r"(?:[*+?]|\})\+", pattern)
+                or any(escape not in "dDsSwWbBnrtfvxu" for escape in escapes)
+                or re.search(r"\\[1-9]", pattern)
+                or re.search(r"\(\?(?:[=!]|<[=!]|>|P=|\(|#)", pattern)
+            ):
+                raise RecordingPlanError(
+                    f"{target_field}.regex uses unsupported syntax"
+                )
+            try:
+                compiled = re.compile(pattern)
+            except re.error as exc:
+                raise RecordingPlanError(
+                    f"{target_field}.regex is invalid: {exc}"
+                ) from exc
+            for probe in ("", "a", " ", "\n", "ab"):
+                match = compiled.search(probe)
+                if match is not None and match.start() == match.end():
+                    raise RecordingPlanError(
+                        f"{target_field}.regex must not match empty text"
+                    )
+        targets.append(
+            TextHighlightTargetPlan(
+                kind=kind,
+                pattern=pattern,
+                occurrence=_positive_int(
+                    getattr(target, "occurrence", None),
+                    field=f"{target_field}.occurrence",
+                ),
+            )
+        )
+    return tuple(targets)
 
 
 def _player_toolbar_highlight(
@@ -1384,15 +1419,16 @@ class TerminalCheckPlan:
 
 
 @dataclass(frozen=True)
-class TerminalTextHighlightTargetPlan:
+class TextHighlightTargetPlan:
     kind: str
     pattern: str
     occurrence: int
 
 
 @dataclass(frozen=True)
-class TerminalTextHighlightPlan:
-    targets: tuple[TerminalTextHighlightTargetPlan, ...]
+class TextHighlightEffectPlan:
+    pane_id: str
+    targets: tuple[TextHighlightTargetPlan, ...]
     color: str
     start_anchor: str
     end_anchor: str
@@ -1413,6 +1449,22 @@ class BrowserCheckPlan:
 
 
 @dataclass(frozen=True)
+class VisualizationActionPlan:
+    id: str
+    language: str
+    text: str
+
+    def __post_init__(self) -> None:
+        _validate_plan_id(self.id, field_name="visualization action id")
+        if not self.language or len(self.language) > 64:
+            raise ValueError("visualization language must be 1 to 64 characters")
+        if not self.text or len(self.text) > 100_000:
+            raise ValueError(
+                "visualization text must be 1 to 100000 characters"
+            )
+
+
+@dataclass(frozen=True)
 class StreamRef:
     kind: StreamKind
     id: str
@@ -1424,12 +1476,12 @@ class StreamRef:
 
 @dataclass(frozen=True)
 class StreamPosition:
-    action_id: str
+    action_id: str | None = None
     pane_beat_id: str | None = None
     endpoint: EventEndpoint = EventEndpoint.started
 
     def __post_init__(self) -> None:
-        if not ACTION_ID_RE.fullmatch(self.action_id):
+        if self.action_id is not None and not ACTION_ID_RE.fullmatch(self.action_id):
             raise ValueError(f"invalid stream position action id {self.action_id!r}")
         if self.pane_beat_id is not None and not ACTION_ID_RE.fullmatch(
             self.pane_beat_id
@@ -1517,9 +1569,27 @@ class NarrationStreamPlan:
 
 
 @dataclass(frozen=True)
+class PaneTitlePlan:
+    visible: bool = True
+    text: str | None = None
+    alignment_x: str = "right"
+    alignment_y: str = "top"
+    position_x: str = "0.25rem"
+    position_y: str = "0.25rem"
+
+    def __post_init__(self) -> None:
+        if self.text is not None and not self.text.strip():
+            raise ValueError("pane title must be non-empty")
+        for name in ("position_x", "position_y"):
+            if not CSS_LENGTH_RE.fullmatch(getattr(self, name)):
+                raise ValueError(f"pane title {name} must be a non-negative CSS length")
+
+
+@dataclass(frozen=True)
 class PanePlan:
     id: str
     kind: PaneKind
+    title: PaneTitlePlan = field(default_factory=PaneTitlePlan)
 
     def __post_init__(self) -> None:
         _validate_plan_id(self.id, field_name="pane id")
@@ -1558,14 +1628,52 @@ class PanePresentationPlan:
 
 
 @dataclass(frozen=True)
+class TerminalPaneRecordingPlan:
+    actions: tuple[TerminalActionPlan, ...]
+    checks: tuple[TerminalCheckPlan, ...]
+
+
+@dataclass(frozen=True)
+class BrowserPaneRecordingPlan:
+    actions: tuple[BrowserActionPlan, ...]
+    checks: tuple[BrowserCheckPlan, ...]
+
+
+@dataclass(frozen=True)
+class VisualizationPaneRecordingPlan:
+    action: VisualizationActionPlan
+
+
+PaneRecordingPlan = (
+    TerminalPaneRecordingPlan
+    | BrowserPaneRecordingPlan
+    | VisualizationPaneRecordingPlan
+)
+
+
+@dataclass(frozen=True)
 class PaneBeatPlan:
     id: str
     start_join: JoinPlan | None
-    actions: tuple[TerminalActionPlan | BrowserActionPlan, ...]
-    checks: tuple[TerminalCheckPlan | BrowserCheckPlan, ...]
-    terminal_highlights: tuple[TerminalTextHighlightPlan, ...]
+    recording: PaneRecordingPlan
     presentation: PanePresentationPlan
     transition: PaneTransitionPlan
+
+    @property
+    def actions(
+        self,
+    ) -> tuple[
+        TerminalActionPlan | BrowserActionPlan | VisualizationActionPlan, ...
+    ]:
+        if isinstance(self.recording, VisualizationPaneRecordingPlan):
+            return (self.recording.action,)
+        return self.recording.actions
+
+    @property
+    def checks(self) -> tuple[TerminalCheckPlan | BrowserCheckPlan, ...]:
+        if isinstance(self.recording, VisualizationPaneRecordingPlan):
+            return ()
+        return self.recording.checks
 
     def __post_init__(self) -> None:
         _validate_plan_id(self.id, field_name="pane beat id")
@@ -1598,6 +1706,7 @@ class OuterBeatPlan:
     guide: FrozenMapping | None
     anchors: tuple[NarrationAnchorPlan, ...]
     waits: tuple[NarrationWaitPlan, ...]
+    effects: tuple[TextHighlightEffectPlan, ...]
     pane_tracks: tuple[OuterPaneTrackPlan, ...]
     layout: PaneLayoutPlan
     transition: OuterBeatTransitionPlan = field(
@@ -1633,11 +1742,11 @@ class OuterBeatPlan:
         return self.pane_beat.presentation.browser_chrome
 
     @property
-    def terminal_highlights(self) -> tuple[TerminalTextHighlightPlan, ...]:
-        return self.pane_beat.terminal_highlights
-
-    @property
-    def actions(self) -> tuple[TerminalActionPlan | BrowserActionPlan, ...]:
+    def actions(
+        self,
+    ) -> tuple[
+        TerminalActionPlan | BrowserActionPlan | VisualizationActionPlan, ...
+    ]:
         return self.pane_beat.actions
 
     @property
@@ -1657,6 +1766,77 @@ class RecordingPlan:
     cleanup: tuple[TerminalCheckPlan, ...]
     narration_stream: NarrationStreamPlan
     narration_takes: tuple[NarrationTakePlan, ...]
+
+
+@dataclass(frozen=True)
+class CapturedPaneBeatPlan:
+    outer_beat_id: str
+    pane_id: str
+    capture_id: str
+    kind: PaneKind
+    beat: PaneBeatPlan
+
+
+def captured_pane_beats(plan: RecordingPlan) -> tuple[CapturedPaneBeatPlan, ...]:
+    """Return captured pane beats in outer-beat and track source order."""
+
+    result: list[CapturedPaneBeatPlan] = []
+    seen_capture_ids: set[str] = set()
+    explicit = bool(plan.panes)
+    for outer in plan.beats:
+        for track in outer.pane_tracks:
+            if track.kind is PaneKind.visualization:
+                continue
+            for pane_beat in track.beats:
+                capture_id = (
+                    f"{outer.id}--{track.pane_id}--{pane_beat.id}"
+                    if explicit
+                    else outer.id
+                )
+                if capture_id in seen_capture_ids:
+                    raise RecordingPlanError(
+                        f"generated capture id {capture_id!r} is not unique"
+                    )
+                seen_capture_ids.add(capture_id)
+                result.append(
+                    CapturedPaneBeatPlan(
+                        outer_beat_id=outer.id,
+                        pane_id=track.pane_id,
+                        capture_id=capture_id,
+                        kind=track.kind,
+                        beat=pane_beat,
+                    )
+                )
+    return tuple(result)
+
+
+def capture_runner_beat(
+    plan: RecordingPlan,
+    capture: CapturedPaneBeatPlan,
+) -> OuterBeatPlan:
+    """Project one captured pane beat onto the existing runner contract."""
+
+    outer = next(beat for beat in plan.beats if beat.id == capture.outer_beat_id)
+    return replace(
+        outer,
+        id=capture.capture_id,
+        narration_text="",
+        explicit_narration_take=None,
+        viewer_hold_ms=0,
+        player_highlight=None,
+        guide=None,
+        anchors=(),
+        waits=(),
+        effects=(),
+        pane_tracks=(
+            OuterPaneTrackPlan(
+                pane_id=capture.pane_id,
+                kind=capture.kind,
+                beats=(capture.beat,),
+            ),
+        ),
+        layout=PaneLayoutPlan(areas=((capture.pane_id,),)),
+    )
 
 
 def _browser_action_kind(action: BrowserActionConfig) -> str:
@@ -1918,6 +2098,467 @@ def plan_narration_stream(
     return NarrationStreamPlan(id=narration_id, segments=tuple(segments))
 
 
+def _declared_panes(
+    spec: dict[str, Any],
+) -> tuple[tuple[PanePlan, ...], dict[str, PaneKind]]:
+    raw_panes = spec.get("panes", [])
+    if not isinstance(raw_panes, list):
+        raise RecordingPlanError("panes must be a list")
+    plans: list[PanePlan] = []
+    kinds: dict[str, PaneKind] = {}
+    for index, raw_pane in enumerate(raw_panes):
+        field = f"panes.{index}"
+        pane = _typed(_mapping(raw_pane, field=field), PaneConfig, field=field)
+        if pane.title is None:
+            title = PaneTitleConfig()
+        elif pane.title == "hidden":
+            title = PaneTitleConfig(visible=False)
+        elif isinstance(pane.title, str):
+            title = PaneTitleConfig(text=pane.title)
+        else:
+            title = pane.title
+        try:
+            plan = PanePlan(
+                id=pane.id,
+                kind=pane.kind,
+                title=PaneTitlePlan(
+                    visible=title.visible,
+                    text=title.text,
+                    alignment_x=title.alignment_x.value,
+                    alignment_y=title.alignment_y.value,
+                    position_x=title.position_x,
+                    position_y=title.position_y,
+                ),
+            )
+        except ValueError as exc:
+            raise RecordingPlanError(f"{field}: {exc}") from exc
+        if plan.id in kinds:
+            raise RecordingPlanError(f"duplicate pane id {plan.id!r}")
+        plans.append(plan)
+        kinds[plan.id] = plan.kind
+    return tuple(plans), kinds
+
+
+def _pane_transition(
+    value: object,
+    *,
+    field: str,
+) -> PaneTransitionPlan:
+    mapping = {} if value is None else _mapping(value, field=field)
+    transition = _typed(mapping, PaneTransitionConfig, field=field)
+    if transition.kind is PaneTransitionKind.cut and transition.duration_ms:
+        raise RecordingPlanError(
+            f"{field}.duration_ms must be zero for a cut transition"
+        )
+    if transition.kind is PaneTransitionKind.fade and transition.duration_ms <= 0:
+        raise RecordingPlanError(
+            f"{field}.duration_ms must be positive for a fade transition"
+        )
+    return PaneTransitionPlan(
+        kind=transition.kind,
+        duration_ms=transition.duration_ms,
+    )
+
+
+def _visualization_pane_beat(
+    raw: dict[str, Any],
+    *,
+    field: str,
+) -> PaneBeatPlan:
+    pane_beat = _typed(raw, PaneBeatConfig, field=field)
+    if not ACTION_ID_RE.fullmatch(pane_beat.id):
+        raise RecordingPlanError(f"{field}.id is invalid")
+    if pane_beat.checks:
+        raise RecordingPlanError(
+            f"{field} visualization beats cannot contain checks"
+        )
+    if (
+        pane_beat.pointer is not None
+        or pane_beat.window is not None
+        or pane_beat.chrome is not None
+    ):
+        raise RecordingPlanError(
+            f"{field} visualization beats cannot contain browser presentation fields"
+        )
+    if len(pane_beat.actions) != 1:
+        raise RecordingPlanError(
+            f"{field}.actions must contain exactly one visualization show action"
+        )
+    action = pane_beat.actions[0]
+    action_field = f"{field}.actions.0"
+    raw_action = _mapping(raw.get("actions", [None])[0], field=action_field)
+    present = [
+        name
+        for name in (*ACTION_KINDS, *TERMINAL_ACTION_ONLY_FIELDS, "show")
+        if name in raw_action and not _is_injected_default(raw_action[name])
+    ]
+    if present != ["show"]:
+        raise RecordingPlanError(
+            f"{action_field} must contain exactly one visualization show action"
+        )
+    if not ACTION_ID_RE.fullmatch(action.id):
+        raise RecordingPlanError(f"{action_field}.id is invalid")
+    if action.show is None:  # pragma: no cover - guarded above
+        raise RecordingPlanError(f"{action_field}.show is required")
+    try:
+        action_plan = VisualizationActionPlan(
+            id=action.id,
+            language=action.show.language,
+            text=action.show.text,
+        )
+    except ValueError as exc:
+        raise RecordingPlanError(f"{action_field}: {exc}") from exc
+    return PaneBeatPlan(
+        id=pane_beat.id,
+        start_join=None,
+        recording=VisualizationPaneRecordingPlan(action=action_plan),
+        presentation=PanePresentationPlan(),
+        transition=_pane_transition(
+            raw.get("transition"),
+            field=f"{field}.transition",
+        ),
+    )
+
+
+def _terminal_pane_beat(
+    raw: dict[str, Any],
+    *,
+    field: str,
+    beat_index: int,
+    source_dir: Path | None,
+) -> PaneBeatPlan:
+    pane_beat = _typed(raw, PaneBeatConfig, field=field)
+    if not ACTION_ID_RE.fullmatch(pane_beat.id):
+        raise RecordingPlanError(f"{field}.id is invalid")
+    if (
+        pane_beat.pointer is not None
+        or pane_beat.window is not None
+        or pane_beat.chrome is not None
+    ):
+        raise RecordingPlanError(
+            f"{field} terminal beats cannot contain browser presentation fields"
+        )
+    transformed_actions: list[dict[str, Any]] = []
+    raw_actions = raw.get("actions", [])
+    if not isinstance(raw_actions, list):
+        raise RecordingPlanError(f"{field}.actions must be a list")
+    for action_index, raw_action in enumerate(raw_actions):
+        action_field = f"{field}.actions.{action_index}"
+        action = dict(_mapping(raw_action, field=action_field))
+        action_id = action.pop("id", None)
+        if not isinstance(action_id, str) or not ACTION_ID_RE.fullmatch(action_id):
+            raise RecordingPlanError(f"{action_field}.id is invalid")
+        if action.get("commands") is not None:
+            raise RecordingPlanError(
+                f"{action_field}.commands is not supported in explicit pane beats; "
+                "use one identified action per command"
+            )
+        if action.get("after") is not None:
+            raise RecordingPlanError(
+                f"{action_field}.after is not available until synchronized joins "
+                "are enabled"
+            )
+        action["id"] = action_id
+        transformed_actions.append({"commands": [action]})
+    normalized = normalize_beat_actions(
+        {
+            "medium": RecordingMedium.terminal.value,
+            "actions": transformed_actions,
+            "checks": raw.get("checks", []),
+        },
+        index=beat_index,
+    )
+    actions = tuple(
+        TerminalActionPlan(
+            config=freeze_value(
+                _resolve_terminal_run_files(action, source_dir=source_dir)
+            )
+        )
+        for action in normalized.terminal_actions
+    )
+    checks = tuple(
+        TerminalCheckPlan(
+            config=freeze_value(
+                _resolve_terminal_run_files(check, source_dir=source_dir)
+            )
+        )
+        for check in normalized.terminal_checks
+    )
+    return PaneBeatPlan(
+        id=pane_beat.id,
+        start_join=None,
+        recording=TerminalPaneRecordingPlan(actions=actions, checks=checks),
+        presentation=PanePresentationPlan(),
+        transition=_pane_transition(
+            raw.get("transition"),
+            field=f"{field}.transition",
+        ),
+    )
+
+
+def _narration_start_join(
+    value: object,
+    *,
+    field: str,
+    narration_id: str,
+    pane_id: str,
+    pane_beat_id: str,
+) -> JoinPlan | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise RecordingPlanError(f"{field} must be a fully qualified event")
+    parts = value.split(".")
+    if (
+        len(parts) != 3
+        or parts[0] != narration_id
+        or not ACTION_ID_RE.fullmatch(parts[1])
+    ):
+        raise RecordingPlanError(
+            f"{field} currently requires a narration event such as "
+            f"{narration_id}.segment.started"
+        )
+    try:
+        endpoint = EventEndpoint(parts[2])
+        return JoinPlan(
+            waiting_stream=StreamRef(StreamKind.pane, pane_id),
+            waiting_position=StreamPosition(
+                pane_beat_id=pane_beat_id,
+                action_id=None,
+            ),
+            event=EventRef(
+                stream=StreamRef(StreamKind.narration, narration_id),
+                action_id=parts[1],
+                endpoint=endpoint,
+            ),
+        )
+    except ValueError as exc:
+        raise RecordingPlanError(f"{field}: {exc}") from exc
+
+
+def _explicit_outer_beat(
+    beat: dict[str, Any],
+    *,
+    index: int,
+    pane_kinds: Mapping[str, PaneKind],
+    narration_id: str,
+    narration_entry: dict[str, Any] | None,
+    audio_enabled: bool,
+    source_dir: Path | None,
+) -> OuterBeatPlan:
+    forbidden = [
+        name
+        for name in (
+            "medium",
+            "actions",
+            "checks",
+            "pointer",
+            "window",
+            "chrome",
+        )
+        if name in beat and not _is_injected_default(beat[name])
+    ]
+    if forbidden:
+        raise RecordingPlanError(
+            f"beats.{index} cannot mix explicit panes with single-pane fields: "
+            f"{', '.join(forbidden)}"
+        )
+    raw_tracks = _mapping(beat.get("panes"), field=f"beats.{index}.panes")
+    if not raw_tracks:
+        raise RecordingPlanError(f"beats.{index}.panes must be non-empty")
+    unknown_tracks = sorted(set(raw_tracks) - set(pane_kinds))
+    if unknown_tracks:
+        raise RecordingPlanError(
+            f"beats.{index}.panes references unknown pane(s): "
+            f"{', '.join(unknown_tracks)}"
+        )
+    captured = [
+        pane_id
+        for pane_id in raw_tracks
+        if pane_kinds[pane_id] in {PaneKind.terminal, PaneKind.browser}
+    ]
+    if len(captured) > 1:
+        raise RecordingPlanError(
+            f"beats.{index} supports at most one captured pane; found "
+            f"{', '.join(captured)}"
+        )
+    if captured and pane_kinds[captured[0]] is PaneKind.browser:
+        raise RecordingPlanError(
+            f"beats.{index} explicit browser capture is not available until "
+            "concurrent captured-pane scheduling is enabled"
+        )
+
+    layout_mapping = _mapping(beat.get("layout"), field=f"beats.{index}.layout")
+    layout = _typed(
+        layout_mapping,
+        PaneLayoutConfig,
+        field=f"beats.{index}.layout",
+    )
+    if not layout.areas or not layout.areas[0]:
+        raise RecordingPlanError(f"beats.{index}.layout.areas must be non-empty")
+    width = len(layout.areas[0])
+    if any(not row or len(row) != width for row in layout.areas):
+        raise RecordingPlanError(
+            f"beats.{index}.layout.areas must be a non-empty rectangular grid"
+        )
+    layout_ids = {pane_id for row in layout.areas for pane_id in row}
+    if layout_ids != set(raw_tracks):
+        raise RecordingPlanError(
+            f"beats.{index}.layout and panes must reference the same pane ids"
+        )
+
+    narration_text, anchors, waits = _beat_narration(beat, narration_entry)
+    if waits:
+        raise RecordingPlanError(
+            f"beats.{index} narration waits are not available in explicit "
+            "multi-pane beats until synchronized joins are enabled"
+        )
+    anchor_ids = {anchor.id for anchor in anchors}
+    tracks: list[OuterPaneTrackPlan] = []
+    track_order = list(dict.fromkeys(pane_id for row in layout.areas for pane_id in row))
+    for pane_id in track_order:
+        raw_pane_beats = raw_tracks[pane_id]
+        track_field = f"beats.{index}.panes.{pane_id}"
+        if not isinstance(raw_pane_beats, list) or not raw_pane_beats:
+            raise RecordingPlanError(f"{track_field} must be a non-empty list")
+        kind = pane_kinds[pane_id]
+        pane_beats: list[PaneBeatPlan] = []
+        for pane_beat_index, raw_pane_beat_value in enumerate(raw_pane_beats):
+            pane_beat_field = f"{track_field}.{pane_beat_index}"
+            raw_pane_beat = _mapping(
+                raw_pane_beat_value,
+                field=pane_beat_field,
+            )
+            if kind is PaneKind.visualization:
+                pane_beat = _visualization_pane_beat(
+                    raw_pane_beat,
+                    field=pane_beat_field,
+                )
+            elif kind is PaneKind.terminal:
+                pane_beat = _terminal_pane_beat(
+                    raw_pane_beat,
+                    field=pane_beat_field,
+                    beat_index=index,
+                    source_dir=source_dir,
+                )
+            else:  # pragma: no cover - explicit browser is rejected above
+                raise RecordingPlanError(f"{track_field} pane kind is unsupported")
+            if (
+                pane_beat_index == 0
+                and pane_beat.transition != PaneTransitionPlan()
+            ):
+                raise RecordingPlanError(
+                    f"{pane_beat_field}.transition is only valid between pane beats"
+                )
+            start_join = _narration_start_join(
+                raw_pane_beat.get("after"),
+                field=f"{pane_beat_field}.after",
+                narration_id=narration_id,
+                pane_id=pane_id,
+                pane_beat_id=pane_beat.id,
+            )
+            if pane_beat_index == 0 and start_join is not None:
+                raise RecordingPlanError(
+                    f"{pane_beat_field}.after is not supported on the first pane beat"
+                )
+            if pane_beat_index > 0 and start_join is None:
+                raise RecordingPlanError(
+                    f"{pane_beat_field}.after is required for a subsequent pane beat"
+                )
+            pane_beats.append(replace(pane_beat, start_join=start_join))
+        tracks.append(
+            OuterPaneTrackPlan(
+                pane_id=pane_id,
+                kind=kind,
+                beats=tuple(pane_beats),
+            )
+        )
+
+    effects = _text_highlights(
+        beat,
+        index=index,
+        anchors=anchors,
+        pane_kinds={
+            pane_id: pane_kinds[pane_id]
+            for pane_id in raw_tracks
+        },
+        default_pane_id=None,
+    )
+    if effects and not audio_enabled:
+        raise RecordingPlanError(
+            f"beats.{index} text highlight effects require audio.enabled=true"
+        )
+    if (
+        any(
+            pane_beat.start_join is not None
+            for track in tracks
+            for pane_beat in track.beats
+        )
+        and not audio_enabled
+    ):
+        raise RecordingPlanError(
+            f"beats.{index} narration joins require audio.enabled=true"
+        )
+    player_highlight = _player_toolbar_highlight(
+        beat,
+        index=index,
+        anchors=anchors,
+    )
+    if player_highlight is not None and not audio_enabled:
+        raise RecordingPlanError(
+            f"beats.{index}.player.highlight requires audio.enabled=true"
+        )
+    viewer_hold = beat.get("viewer_hold")
+    if viewer_hold is None and narration_entry is not None:
+        viewer_hold = narration_entry.get("viewer_hold")
+    if viewer_hold is None:
+        viewer_hold_ms = 0
+    elif isinstance(viewer_hold, bool) or not isinstance(viewer_hold, (int, float)):
+        raise RecordingPlanError(f"beat {beat['id']!r} viewer_hold must be a number")
+    elif viewer_hold < 0:
+        raise RecordingPlanError(
+            f"beat {beat['id']!r} viewer_hold must be non-negative"
+        )
+    else:
+        viewer_hold_ms = round(float(viewer_hold) * 1000)
+    explicit_take = beat.get("narration_take")
+    if explicit_take is not None and (
+        not isinstance(explicit_take, str) or not ACTION_ID_RE.fullmatch(explicit_take)
+    ):
+        raise RecordingPlanError(f"beat {beat['id']!r} narration_take is invalid")
+    heading = beat.get("heading")
+    if not heading and narration_entry is not None:
+        heading = narration_entry.get("heading", "")
+    if heading is None:
+        heading = ""
+    if not isinstance(heading, str):
+        raise RecordingPlanError(f"beat {beat['id']!r} heading must be a string")
+    caption = beat.get("caption", "")
+    if caption is None:
+        caption = ""
+    if not isinstance(caption, str):
+        raise RecordingPlanError(f"beat {beat['id']!r} caption must be a string")
+    guide_value = beat.get("guide")
+    guide = freeze_value(guide_value) if isinstance(guide_value, dict) else None
+    return OuterBeatPlan(
+        id=beat["id"],
+        heading=heading,
+        caption=caption,
+        narration_text=narration_text,
+        explicit_narration_take=explicit_take,
+        viewer_hold_ms=viewer_hold_ms,
+        player_highlight=player_highlight,
+        guide=guide,
+        anchors=anchors,
+        waits=(),
+        effects=effects,
+        pane_tracks=tuple(tracks),
+        layout=PaneLayoutPlan(
+            areas=tuple(tuple(row) for row in layout.areas)
+        ),
+    )
+
+
 def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
     """Validate cross-references and return a deeply immutable execution plan."""
 
@@ -1929,6 +2570,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
     if title is not None and not isinstance(title, str):
         raise RecordingPlanError("recording.title must be a string")
 
+    pane_plans, pane_kinds = _declared_panes(spec)
     raw_beats = spec.get("beats", [])
     if not isinstance(raw_beats, list):
         raise RecordingPlanError("beats must be a list")
@@ -1982,6 +2624,28 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         if beat_id in seen_beat_ids:
             raise RecordingPlanError(f"duplicate beat id {beat_id!r}")
         seen_beat_ids.add(beat_id)
+        if pane_plans:
+            if not beat.get("panes"):
+                raise RecordingPlanError(
+                    f"beats.{index} must define explicit panes because the recording "
+                    "declares pane streams"
+                )
+            beat_plans.append(
+                _explicit_outer_beat(
+                    beat,
+                    index=index,
+                    pane_kinds=pane_kinds,
+                    narration_id=narration_id,
+                    narration_entry=narration_by_beat.get(beat_id),
+                    audio_enabled=audio_enabled,
+                    source_dir=source_dir,
+                )
+            )
+            continue
+        if beat.get("panes") or beat.get("layout"):
+            raise RecordingPlanError(
+                f"beats.{index} explicit panes require top-level pane declarations"
+            )
         try:
             medium = RecordingMedium(beat.get("medium", RecordingMedium.terminal.value))
         except (TypeError, ValueError) as exc:
@@ -2008,18 +2672,19 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         narration_entry = narration_by_beat.get(beat_id)
         narration_text, anchors, waits = _beat_narration(beat, narration_entry)
         anchor_ids = {anchor.id for anchor in anchors}
-        terminal_highlights = _terminal_text_highlights(
+        text_highlights = _text_highlights(
             beat,
             index=index,
-            medium=medium,
             anchors=anchors,
+            pane_kinds={"main": PaneKind(medium.value)},
+            default_pane_id="main",
         )
         player_highlight = _player_toolbar_highlight(
             beat,
             index=index,
             anchors=anchors,
         )
-        if terminal_highlights and not audio_enabled:
+        if text_highlights and not audio_enabled:
             raise RecordingPlanError(
                 f"beats.{index}.effects.highlight requires audio.enabled=true"
             )
@@ -2150,12 +2815,36 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             caption = ""
         if not isinstance(caption, str):
             raise RecordingPlanError(f"beat {beat_id!r} caption must be a string")
+        if medium is RecordingMedium.browser:
+            recording: PaneRecordingPlan = BrowserPaneRecordingPlan(
+                actions=tuple(
+                    action
+                    for action in actions
+                    if isinstance(action, BrowserActionPlan)
+                ),
+                checks=tuple(
+                    check
+                    for check in checks
+                    if isinstance(check, BrowserCheckPlan)
+                ),
+            )
+        else:
+            recording = TerminalPaneRecordingPlan(
+                actions=tuple(
+                    action
+                    for action in actions
+                    if isinstance(action, TerminalActionPlan)
+                ),
+                checks=tuple(
+                    check
+                    for check in checks
+                    if isinstance(check, TerminalCheckPlan)
+                ),
+            )
         pane_beat = PaneBeatPlan(
             id=beat_id,
             start_join=None,
-            actions=actions,
-            checks=checks,
-            terminal_highlights=terminal_highlights,
+            recording=recording,
             presentation=PanePresentationPlan(
                 browser_pointer_visible=(
                     None if pointer_config is None else pointer_config.visible
@@ -2181,6 +2870,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                 guide=guide,
                 anchors=anchors,
                 waits=waits,
+                effects=text_highlights,
                 pane_tracks=(
                     OuterPaneTrackPlan(
                         pane_id="main",
@@ -2200,6 +2890,59 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         )
 
     frozen_beats = tuple(beat_plans)
+    narration_stream = plan_narration_stream(
+        frozen_beats,
+        narration_id=narration_id,
+    )
+    narration_event_ids = {
+        f"{narration_stream.id}.{segment.id}.{endpoint.value}"
+        for segment in narration_stream.segments
+        for endpoint in EventEndpoint
+    }
+    for beat in frozen_beats:
+        for track in beat.pane_tracks:
+            for pane_beat in track.beats:
+                if (
+                    pane_beat.start_join is not None
+                    and pane_beat.start_join.event.qualified_id
+                    not in narration_event_ids
+                ):
+                    raise RecordingPlanError(
+                        "unknown narration event "
+                        f"{pane_beat.start_join.event.qualified_id!r}"
+                    )
+    if pane_plans:
+        used_pane_ids = {
+            track.pane_id
+            for beat in frozen_beats
+            for track in beat.pane_tracks
+        }
+        unused_pane_ids = sorted(set(pane_kinds) - used_pane_ids)
+        if unused_pane_ids:
+            raise RecordingPlanError(
+                "declared panes are not used: " + ", ".join(unused_pane_ids)
+            )
+        pane_beat_ids = {pane_id: set() for pane_id in pane_kinds}
+        for beat in frozen_beats:
+            for track in beat.pane_tracks:
+                for pane_beat in track.beats:
+                    if pane_beat.id in pane_beat_ids[track.pane_id]:
+                        raise RecordingPlanError(
+                            f"duplicate pane beat id {pane_beat.id!r} in pane "
+                            f"{track.pane_id!r} across recording"
+                        )
+                    pane_beat_ids[track.pane_id].add(pane_beat.id)
+        captured_pane_ids = {
+            track.pane_id
+            for beat in frozen_beats
+            for track in beat.pane_tracks
+            if track.kind is not PaneKind.visualization
+        }
+        if len(captured_pane_ids) > 1:
+            raise RecordingPlanError(
+                "explicit multi-pane authoring supports at most one captured pane "
+                f"per recording; found {', '.join(sorted(captured_pane_ids))}"
+            )
     _validate_browser_handoffs(frozen_beats)
     plan = RecordingPlan(
         id=recording_id,
@@ -2207,13 +2950,10 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         browser=freeze_value(browser_config) if browser_config is not None else None,
         presentation=freeze_value(presentation),
         setup=lifecycle_steps["setup"],
-        panes=(),
+        panes=pane_plans,
         beats=frozen_beats,
         cleanup=lifecycle_steps["cleanup"],
-        narration_stream=plan_narration_stream(
-            frozen_beats,
-            narration_id=narration_id,
-        ),
+        narration_stream=narration_stream,
         narration_takes=plan_narration_takes(frozen_beats),
     )
     _validate_recording_plan_limits(plan)
@@ -2258,7 +2998,9 @@ def _validate_recording_plan_limits(plan: RecordingPlan) -> None:
 
 def _validate_browser_handoffs(beats: tuple[OuterBeatPlan, ...]) -> None:
     for beat_index, beat in enumerate(beats):
-        if beat.medium is not RecordingMedium.terminal:
+        if len(beat.pane_tracks) != 1 or len(beat.pane_tracks[0].beats) != 1:
+            continue
+        if beat.pane_tracks[0].kind is not PaneKind.terminal:
             continue
         handoffs: list[tuple[int, int, Mapping[str, Any]]] = []
         for action_index, action in enumerate(beat.actions):
@@ -2308,7 +3050,12 @@ def _validate_browser_handoffs(beats: tuple[OuterBeatPlan, ...]) -> None:
                 f"browser_handoff {command_id!r} has no following browser beat"
             )
         consumer = beats[beat_index + 1]
-        if consumer.medium is not RecordingMedium.browser or not consumer.actions:
+        if (
+            len(consumer.pane_tracks) != 1
+            or len(consumer.pane_tracks[0].beats) != 1
+            or consumer.pane_tracks[0].kind is not PaneKind.browser
+            or not consumer.actions
+        ):
             raise RecordingPlanError(
                 f"following beat does not consume browser_handoff {command_id!r}"
             )
@@ -2324,7 +3071,9 @@ def _validate_browser_handoffs(beats: tuple[OuterBeatPlan, ...]) -> None:
             )
 
     for beat_index, beat in enumerate(beats):
-        if beat.medium is not RecordingMedium.browser or not beat.actions:
+        if len(beat.pane_tracks) != 1 or len(beat.pane_tracks[0].beats) != 1:
+            continue
+        if beat.pane_tracks[0].kind is not PaneKind.browser or not beat.actions:
             continue
         first = beat.actions[0]
         if not isinstance(first, BrowserActionPlan) or first.kind != "open_page":
@@ -2332,13 +3081,19 @@ def _validate_browser_handoffs(beats: tuple[OuterBeatPlan, ...]) -> None:
         handoff_id = first.config["open_page"].get("handoff")
         if handoff_id is None:
             continue
-        if beat_index == 0 or beats[beat_index - 1].medium is not RecordingMedium.terminal:
+        producer = beats[beat_index - 1] if beat_index > 0 else None
+        if (
+            producer is None
+            or len(producer.pane_tracks) != 1
+            or len(producer.pane_tracks[0].beats) != 1
+            or producer.pane_tracks[0].kind is not PaneKind.terminal
+        ):
             raise RecordingPlanError(
                 f"open_page handoff {handoff_id!r} has no preceding terminal command"
             )
         producer_ids = {
             command.get("id")
-            for action in beats[beat_index - 1].actions
+            for action in producer.actions
             if isinstance(action, TerminalActionPlan)
             for command in (action.config.get("commands") or ())
             if command.get("browser_handoff")

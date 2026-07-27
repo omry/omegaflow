@@ -214,12 +214,22 @@ class VisualizationTokenV1:
 
 
 @dataclass
+class VisualizationHighlightV1:
+    start: int = 0
+    end: int = 0
+    color: str = "cue"
+    start_ms: int = 0
+    end_ms: int = 0
+
+
+@dataclass
 class VisualizationPayloadV1:
     payload_version: int = 1
     beat_id: str = ""
     duration_ms: int = 0
     language: str = "text"
     text: str = ""
+    highlights: list[VisualizationHighlightV1] = field(default_factory=list)
     tokens: list[VisualizationTokenV1] = field(default_factory=list)
 
 
@@ -254,8 +264,26 @@ class PresentationBrowserHeaderV1:
 
 
 @dataclass
+class PresentationPaneTitleV1:
+    visible: bool = True
+    text: str | None = None
+    alignment_x: str = "right"
+    alignment_y: str = "top"
+    position_x: str = "0.25rem"
+    position_y: str = "0.25rem"
+
+
+@dataclass
+class PresentationPaneChromeV1:
+    style: str = "framed"
+
+
+@dataclass
 class PresentationHeaderV1:
     guided: bool = False
+    pane_chrome: PresentationPaneChromeV1 = field(
+        default_factory=PresentationPaneChromeV1
+    )
     browser: PresentationBrowserHeaderV1 | None = None
 
 
@@ -301,6 +329,7 @@ class PresentationBeatPlayerV1:
 @dataclass
 class PresentationPaneV1:
     id: str = ""
+    title: PresentationPaneTitleV1 = field(default_factory=PresentationPaneTitleV1)
     renderer: str = ""
 
 

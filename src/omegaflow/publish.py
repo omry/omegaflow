@@ -436,7 +436,11 @@ def _allowlisted_path(relative: str) -> bool:
     if directory == "timestamps":
         return name.endswith(".json")
     if directory == "beats":
-        return name.endswith(".cast") or name.endswith(".browser.json")
+        return (
+            name.endswith(".cast")
+            or name.endswith(".browser.json")
+            or name.endswith(".visualization.json")
+        )
     if directory == "media":
         return name.endswith(".webp") or name.endswith(".mp4")
     if directory == "audio":

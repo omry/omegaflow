@@ -238,6 +238,72 @@ def test_coordinator_dispatches_beats_in_source_order_with_shared_context(
     assert not result.context.paths.temporary.exists()
 
 
+def test_coordinator_captures_only_the_terminal_stream_in_visualization_layout(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "visualization-terminal",
+            "panes": [
+                {"id": "definition", "kind": "visualization"},
+                {"id": "terminal", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "compose",
+                    "layout": {"areas": [["definition"], ["terminal"]]},
+                    "panes": {
+                        "definition": [
+                            {
+                                "id": "source",
+                                "actions": [
+                                    {
+                                        "id": "show-source",
+                                        "show": {
+                                            "language": "yaml",
+                                            "text": "status: ready\n",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                        "terminal": [
+                            {
+                                "id": "status",
+                                "actions": [
+                                    {
+                                        "id": "run-status",
+                                        "run": "printf ready",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    calls: list[str] = []
+    terminal = FakeRunner("terminal", calls)
+
+    result = CaptureCoordinator(
+        terminal_runner_factory=lambda: terminal,
+    ).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert calls == [
+        "terminal:start",
+        "terminal:beat:compose--terminal--status",
+        "terminal:close",
+    ]
+    assert [beat.beat_id for beat in result.beats] == [
+        "compose--terminal--status"
+    ]
+
+
 def test_capture_action_items_flatten_terminal_commands_and_browser_actions() -> None:
     plan = normalize_recording_plan(
         {

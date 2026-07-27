@@ -38,6 +38,7 @@ from .capture import (
 )
 from .presentation import (
     serialize_presentation_manifest,
+    serialize_visualization_payload,
     validate_presentation_manifest,
     write_presentation_signatures,
 )
@@ -65,8 +66,10 @@ from .presentation_schema import (
     PresentationHeaderV1,
     PresentationManifestV1,
     PresentationPaneBeatV1,
+    PresentationPaneChromeV1,
     PresentationPaneLayoutV1,
     PresentationPaneTrackV1,
+    PresentationPaneTitleV1,
     PresentationPaneTransitionV1,
     PresentationPaneV1,
     PresentationPlayerToolbarHighlightV1,
@@ -74,17 +77,24 @@ from .presentation_schema import (
     PresentationRendererV1,
     PresentationWindowV1,
     PlayerToolbarControl,
+    VisualizationHighlightV1,
+    VisualizationPayloadV1,
+    VisualizationTokenV1,
 )
 from .publish import publish_public_bundle, validate_public_staging
 from .recording_plan import (
     OuterBeatPlan,
     BrowserActionPlan,
+    CapturedPaneBeatPlan,
     FrozenMapping,
     RecordingPlan,
     TerminalActionPlan,
+    TextHighlightEffectPlan,
+    VisualizationActionPlan,
+    captured_pane_beats,
     terminal_action_id,
 )
-from .studio_config import RecordingMedium, project_root
+from .studio_config import PaneKind, RecordingMedium, project_root
 from .service_environment import (
     ALLOWED_SERVICE_ENVIRONMENT_NAMES,
     ServiceEnvironmentError,
@@ -92,6 +102,7 @@ from .service_environment import (
 )
 from .terminal_capture import PersistentTerminalRunner
 from .tool_progress import format_activity_elapsed
+from .visualization import VisualizationError, syntax_tokens
 
 
 CAPTURE_POLICY_VERSIONS = {
@@ -516,6 +527,7 @@ def capture_recording(
         raise PresentationBuildError("capture must be a mapping")
     window_size = capture_config.get("window_size", "100x28")
     idle_time_limit = capture_config.get("idle_time_limit")
+    timeout = capture_config.get("timeout", 30.0)
     headless = capture_config.get("headless", True)
     if not isinstance(window_size, str) or not window_size:
         raise PresentationBuildError("capture.window_size must be a non-empty string")
@@ -529,6 +541,12 @@ def capture_recording(
         or idle_time_limit <= 0
     ):
         raise PresentationBuildError("capture.idle_time_limit must be positive")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or timeout <= 0
+    ):
+        raise PresentationBuildError("capture.timeout must be positive")
     working_directory, environment = _capture_environment(spec)
     terminal_options = _terminal_capture_options(spec)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -560,6 +578,7 @@ def capture_recording(
             title=title,
             window_size=window_size,
             idle_time_limit=idle_time_limit,
+            timeout_seconds=float(timeout),
             headless=effective_headless,
             color=environment.get("NO_COLOR") is None,
             delegated_environment=delegated_environment,
@@ -694,7 +713,9 @@ def _preserve_capture_diagnostics(
 def capture_artifacts_exist(plan: RecordingPlan, run_dir: Path) -> bool:
     paths = run_paths(run_dir)
     terminal_ids = [
-        beat.id for beat in plan.beats if beat.medium is RecordingMedium.terminal
+        captured.capture_id
+        for captured in captured_pane_beats(plan)
+        if captured.kind is PaneKind.terminal
     ]
     if any(
         not (paths["terminal_beats"] / f"{beat_id}.cast").is_file()
@@ -702,7 +723,10 @@ def capture_artifacts_exist(plan: RecordingPlan, run_dir: Path) -> bool:
         for beat_id in terminal_ids
     ):
         return False
-    if any(beat.medium is RecordingMedium.browser for beat in plan.beats):
+    if any(
+        captured.kind is PaneKind.browser
+        for captured in captured_pane_beats(plan)
+    ):
         try:
             load_browser_capture_log(paths["browser_capture"])
         except Exception:
@@ -1373,6 +1397,308 @@ def _browser_presentation_header(
     )
 
 
+def _presentation_guide(beat: OuterBeatPlan):
+    if beat.guide is None:
+        return None
+    guide_config = thaw(beat.guide)
+    commands = guide_config.get("commands", [])
+    summary = guide_config.get("summary")
+    hint = guide_config.get("success_hint")
+    if not (
+        commands
+        or (isinstance(summary, str) and summary)
+        or (isinstance(hint, str) and hint)
+    ):
+        return None
+    from .presentation_schema import PresentationGuideV1
+
+    return PresentationGuideV1(
+        commands=list(commands),
+        summary=summary,
+        success_hint=hint,
+    )
+
+
+def _presentation_player(
+    beat: OuterBeatPlan,
+    *,
+    timing: CompiledRecordingTiming,
+    beat_timing,
+) -> PresentationBeatPlayerV1 | None:
+    if beat.player_highlight is None:
+        return None
+    return PresentationBeatPlayerV1(
+        highlight=PresentationPlayerToolbarHighlightV1(
+            control=PlayerToolbarControl(beat.player_highlight.control),
+            start_ms=(
+                timing.anchor_times_ms[
+                    (beat.id, beat.player_highlight.start_anchor)
+                ]
+                - beat_timing.offset_ms
+            ),
+            end_ms=(
+                beat_timing.duration_ms
+                if beat.player_highlight.end_anchor is None
+                else timing.anchor_times_ms[
+                    (beat.id, beat.player_highlight.end_anchor)
+                ]
+                - beat_timing.offset_ms
+            ),
+        )
+    )
+
+
+def _pane_effect_interval(
+    beat: OuterBeatPlan,
+    *,
+    effect: TextHighlightEffectPlan,
+    timing: CompiledRecordingTiming,
+    beat_timing,
+    pane_offset_ms: int,
+    pane_end_ms: int,
+    transition_ms: int,
+) -> tuple[int, int] | None:
+    content_start_ms = pane_offset_ms + transition_ms
+    effect_start_ms = (
+        timing.anchor_times_ms[(beat.id, effect.start_anchor)]
+        - beat_timing.offset_ms
+    )
+    effect_end_ms = (
+        timing.anchor_times_ms[(beat.id, effect.end_anchor)]
+        - beat_timing.offset_ms
+    )
+    start_ms = max(effect_start_ms, content_start_ms)
+    end_ms = min(effect_end_ms, pane_end_ms)
+    if end_ms <= start_ms:
+        return None
+    return start_ms - content_start_ms, end_ms - content_start_ms
+
+
+def _terminal_highlight_events(
+    beat: OuterBeatPlan,
+    *,
+    pane_id: str,
+    timing: CompiledRecordingTiming,
+    beat_timing,
+    pane_offset_ms: int,
+    pane_end_ms: int,
+    transition_ms: int,
+) -> tuple[TerminalTextHighlightEvent, ...]:
+    result: list[TerminalTextHighlightEvent] = []
+    for index, highlight in enumerate(beat.effects):
+        if highlight.pane_id != pane_id:
+            continue
+        interval = _pane_effect_interval(
+            beat,
+            effect=highlight,
+            timing=timing,
+            beat_timing=beat_timing,
+            pane_offset_ms=pane_offset_ms,
+            pane_end_ms=pane_end_ms,
+            transition_ms=transition_ms,
+        )
+        if interval is None:
+            continue
+        start_ms, end_ms = interval
+        result.append(
+            TerminalTextHighlightEvent(
+                id=f"{beat.id}-highlight-{index}",
+                color=highlight.color,
+                targets=tuple(
+                    TerminalTextHighlightTargetEvent(
+                        kind=target.kind,
+                        pattern=target.pattern,
+                        occurrence=target.occurrence,
+                    )
+                    for target in highlight.targets
+                ),
+                start_ms=start_ms,
+                end_ms=end_ms,
+            )
+        )
+    return tuple(result)
+
+
+def _visualization_highlights(
+    beat: OuterBeatPlan,
+    *,
+    pane_id: str,
+    text: str,
+    timing: CompiledRecordingTiming,
+    beat_timing,
+    pane_offset_ms: int,
+    pane_end_ms: int,
+    transition_ms: int,
+) -> list[VisualizationHighlightV1]:
+    result: list[VisualizationHighlightV1] = []
+    for effect_index, effect in enumerate(beat.effects):
+        if effect.pane_id != pane_id:
+            continue
+        interval = _pane_effect_interval(
+            beat,
+            effect=effect,
+            timing=timing,
+            beat_timing=beat_timing,
+            pane_offset_ms=pane_offset_ms,
+            pane_end_ms=pane_end_ms,
+            transition_ms=transition_ms,
+        )
+        if interval is None:
+            continue
+        start_ms, end_ms = interval
+        for target_index, target in enumerate(effect.targets):
+            matches = (
+                tuple(re.finditer(re.escape(target.pattern), text))
+                if target.kind == "text"
+                else tuple(re.finditer(target.pattern, text))
+            )
+            if len(matches) < target.occurrence:
+                raise PresentationBuildError(
+                    f"text highlight effect {effect_index} in beat {beat.id!r} "
+                    f"did not find target {target_index} occurrence "
+                    f"{target.occurrence} in pane {pane_id!r}"
+                )
+            match = matches[target.occurrence - 1]
+            result.append(
+                VisualizationHighlightV1(
+                    start=match.start(),
+                    end=match.end(),
+                    color=effect.color,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                )
+            )
+    return sorted(
+        result,
+        key=lambda item: (item.start_ms, item.end_ms, item.start, item.end),
+    )
+
+
+def _explicit_pane_tracks(
+    beat: OuterBeatPlan,
+    *,
+    beat_timing,
+    timing: CompiledRecordingTiming,
+    captured_by_outer_pane_beat: Mapping[
+        tuple[str, str, str], CapturedPaneBeatPlan
+    ],
+    terminal_intervals: Mapping[str, Mapping[str, tuple[int, int]]],
+    paths: Mapping[str, Path],
+    staging: Path,
+) -> list[PresentationPaneTrackV1]:
+    tracks: list[PresentationPaneTrackV1] = []
+    for track in beat.pane_tracks:
+        presentation_beats: list[PresentationPaneBeatV1] = []
+        for pane_beat in track.beats:
+            pane_timing = timing.pane_beat(
+                beat.id,
+                track.pane_id,
+                pane_beat.id,
+            )
+            transition = PresentationPaneTransitionV1(
+                kind=pane_beat.transition.kind.value,
+                duration_ms=pane_beat.transition.duration_ms,
+            )
+            duration_ms = pane_timing.local_end_ms - pane_timing.local_start_ms
+            content_duration_ms = duration_ms - pane_beat.transition.duration_ms
+            if content_duration_ms <= 0:
+                raise PresentationBuildError(
+                    f"pane beat {track.pane_id!r}/{pane_beat.id!r} has no content "
+                    "time after its transition"
+                )
+            if track.kind is PaneKind.visualization:
+                action = pane_beat.actions[0]
+                if not isinstance(action, VisualizationActionPlan):
+                    raise PresentationBuildError(
+                        f"visualization pane {track.pane_id!r} has an invalid action"
+                    )
+                try:
+                    tokens = syntax_tokens(action.language, action.text)
+                except VisualizationError as exc:
+                    raise PresentationBuildError(str(exc)) from exc
+                payload = (
+                    f"beats/{beat.id}--{track.pane_id}--"
+                    f"{pane_beat.id}.visualization.json"
+                )
+                visualization = VisualizationPayloadV1(
+                    beat_id=pane_beat.id,
+                    duration_ms=content_duration_ms,
+                    language=action.language,
+                    text=action.text,
+                    highlights=_visualization_highlights(
+                        beat,
+                        pane_id=track.pane_id,
+                        text=action.text,
+                        timing=timing,
+                        beat_timing=beat_timing,
+                        pane_offset_ms=pane_timing.local_start_ms,
+                        pane_end_ms=pane_timing.local_end_ms,
+                        transition_ms=pane_beat.transition.duration_ms,
+                    ),
+                    tokens=[
+                        VisualizationTokenV1(
+                            start=token.start,
+                            end=token.end,
+                            kind=token.kind,
+                        )
+                        for token in tokens
+                    ],
+                )
+                (staging / payload).write_text(
+                    json.dumps(
+                        serialize_visualization_payload(visualization),
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            elif track.kind is PaneKind.terminal:
+                captured = captured_by_outer_pane_beat[
+                    (beat.id, track.pane_id, pane_beat.id)
+                ]
+                payload = f"beats/{captured.capture_id}.cast"
+                materialize_terminal_beat(
+                    paths["terminal_beats"] / f"{captured.capture_id}.cast",
+                    staging / payload,
+                    duration_ms=content_duration_ms,
+                    text_highlights=_terminal_highlight_events(
+                        beat,
+                        pane_id=track.pane_id,
+                        timing=timing,
+                        beat_timing=beat_timing,
+                        pane_offset_ms=pane_timing.local_start_ms,
+                        pane_end_ms=pane_timing.local_end_ms,
+                        transition_ms=pane_beat.transition.duration_ms,
+                    ),
+                )
+                if captured.capture_id not in terminal_intervals:
+                    raise PresentationBuildError(
+                        "terminal action timing is missing for "
+                        f"{captured.capture_id!r}"
+                    )
+            else:  # pragma: no cover - rejected during normalization
+                raise PresentationBuildError(
+                    f"explicit pane renderer {track.kind.value!r} is unsupported"
+                )
+            presentation_beats.append(
+                PresentationPaneBeatV1(
+                    id=pane_beat.id,
+                    offset_ms=pane_timing.local_start_ms,
+                    duration_ms=duration_ms,
+                    payload=payload,
+                    transition=transition,
+                )
+            )
+        tracks.append(
+            PresentationPaneTrackV1(
+                pane_id=track.pane_id,
+                beats=presentation_beats,
+            )
+        )
+    return tracks
+
+
 def _browser_pass(
     plan: RecordingPlan,
     log: BrowserCaptureLog,
@@ -1468,7 +1794,10 @@ def compile_presentation_bundle(
     if not capture_artifacts_exist(plan, run_dir):
         raise PresentationBuildError("private capture is incomplete")
     paths = run_paths(run_dir)
-    has_browser = any(beat.medium is RecordingMedium.browser for beat in plan.beats)
+    captured_beats = captured_pane_beats(plan)
+    has_browser = any(
+        captured.kind is PaneKind.browser for captured in captured_beats
+    )
     browser_log = load_browser_capture_log(paths["browser_capture"]) if has_browser else None
     preliminary: dict[str, CompiledBrowserBeat] = {}
     if browser_log is not None:
@@ -1476,25 +1805,64 @@ def compile_presentation_bundle(
     action_durations: dict[tuple[str, str], int] = {}
     visual_durations: dict[str, int] = {}
     terminal_intervals: dict[str, dict[str, tuple[int, int]]] = {}
-    for beat in plan.beats:
-        if beat.medium is RecordingMedium.browser:
-            compiled = preliminary[beat.id]
-            visual_durations[beat.id] = int(compiled.payload["duration_ms"])
-            for action_id, start in compiled.action_starts_ms.items():
-                action_durations[(beat.id, action_id)] = (
-                    compiled.action_completions_ms[action_id] - start
+    if plan.panes:
+        captured_by_outer_pane_beat = {
+            (
+                captured.outer_beat_id,
+                captured.pane_id,
+                captured.beat.id,
+            ): captured
+            for captured in captured_beats
+        }
+        for beat in plan.beats:
+            track_durations: list[int] = []
+            for track in beat.pane_tracks:
+                track_duration = 0
+                for pane_beat in track.beats:
+                    if track.kind is PaneKind.visualization:
+                        track_duration += pane_beat.transition.duration_ms
+                        continue
+                    captured = captured_by_outer_pane_beat[
+                        (beat.id, track.pane_id, pane_beat.id)
+                    ]
+                    source = (
+                        paths["terminal_beats"] / f"{captured.capture_id}.cast"
+                    )
+                    duration = _terminal_duration_ms(source)
+                    track_duration += (
+                        duration + pane_beat.transition.duration_ms
+                    )
+                    intervals = _load_terminal_action_intervals(
+                        paths["terminal_beats"]
+                        / f"{captured.capture_id}.actions.json",
+                        beat_id=captured.capture_id,
+                        expected_action_ids=_terminal_pane_action_ids(
+                            captured.beat
+                        ),
+                    )
+                    terminal_intervals[captured.capture_id] = intervals
+                track_durations.append(track_duration)
+            visual_durations[beat.id] = max(track_durations, default=0)
+    else:
+        for beat in plan.beats:
+            if beat.medium is RecordingMedium.browser:
+                compiled = preliminary[beat.id]
+                visual_durations[beat.id] = int(compiled.payload["duration_ms"])
+                for action_id, start in compiled.action_starts_ms.items():
+                    action_durations[(beat.id, action_id)] = (
+                        compiled.action_completions_ms[action_id] - start
+                    )
+            else:
+                source = paths["terminal_beats"] / f"{beat.id}.cast"
+                visual_durations[beat.id] = _terminal_duration_ms(source)
+                intervals = _load_terminal_action_intervals(
+                    paths["terminal_beats"] / f"{beat.id}.actions.json",
+                    beat_id=beat.id,
+                    expected_action_ids=_terminal_action_ids(beat),
                 )
-        else:
-            source = paths["terminal_beats"] / f"{beat.id}.cast"
-            visual_durations[beat.id] = _terminal_duration_ms(source)
-            intervals = _load_terminal_action_intervals(
-                paths["terminal_beats"] / f"{beat.id}.actions.json",
-                beat_id=beat.id,
-                expected_action_ids=_terminal_action_ids(beat),
-            )
-            terminal_intervals[beat.id] = intervals
-            for action_id, (start_ms, end_ms) in intervals.items():
-                action_durations[(beat.id, action_id)] = end_ms - start_ms
+                terminal_intervals[beat.id] = intervals
+                for action_id, (start_ms, end_ms) in intervals.items():
+                    action_durations[(beat.id, action_id)] = end_ms - start_ms
     timing_plan = _timing_plan(plan, audio_artifacts is not None)
     timing = compile_recording_timing(
         timing_plan,
@@ -1520,7 +1888,25 @@ def compile_presentation_bundle(
         (staging / "beats").mkdir()
         (staging / "media").mkdir()
         manifest_beats: list[PresentationBeatV1] = []
-        manifest_panes: list[PresentationPaneV1] = []
+        manifest_panes: list[PresentationPaneV1] = (
+            [
+                PresentationPaneV1(
+                    id=pane.id,
+                    title=PresentationPaneTitleV1(
+                        visible=pane.title.visible,
+                        text=pane.title.text,
+                        alignment_x=pane.title.alignment_x,
+                        alignment_y=pane.title.alignment_y,
+                        position_x=pane.title.position_x,
+                        position_y=pane.title.position_y,
+                    ),
+                    renderer=pane.kind.value,
+                )
+                for pane in plan.panes
+            ]
+            if plan.panes
+            else []
+        )
         manifest_assets: dict[str, PresentationAssetV1] = {}
         all_sources: dict[str, Any] = {}
         timing_by_id = {item.id: item for item in timing.beats}
@@ -1529,6 +1915,38 @@ def compile_presentation_bundle(
         presentation_config = presentation_settings["browser"]
         for beat in plan.beats:
             beat_timing = timing_by_id[beat.id]
+            guide = _presentation_guide(beat)
+            player = _presentation_player(
+                beat,
+                timing=timing,
+                beat_timing=beat_timing,
+            )
+            if plan.panes:
+                manifest_beats.append(
+                    PresentationBeatV1(
+                        id=beat.id,
+                        heading=beat.heading,
+                        offset_ms=beat_timing.offset_ms,
+                        duration_ms=beat_timing.duration_ms,
+                        layout=PresentationPaneLayoutV1(
+                            areas=[list(row) for row in beat.layout.areas]
+                        ),
+                        pane_tracks=_explicit_pane_tracks(
+                            beat,
+                            beat_timing=beat_timing,
+                            timing=timing,
+                            captured_by_outer_pane_beat=(
+                                captured_by_outer_pane_beat
+                            ),
+                            terminal_intervals=terminal_intervals,
+                            paths=paths,
+                            staging=staging,
+                        ),
+                        guide=guide,
+                        player=player,
+                    )
+                )
+                continue
             beat_browser = None
             if beat.medium is RecordingMedium.terminal:
                 payload = f"beats/{beat.id}.cast"
@@ -1542,30 +1960,14 @@ def compile_presentation_bundle(
                         for item in timing.actions
                         if item.beat_id == beat.id
                     },
-                    text_highlights=tuple(
-                        TerminalTextHighlightEvent(
-                            id=f"{beat.id}-highlight-{index}",
-                            color=highlight.color,
-                            targets=tuple(
-                                TerminalTextHighlightTargetEvent(
-                                    kind=target.kind,
-                                    pattern=target.pattern,
-                                    occurrence=target.occurrence,
-                                )
-                                for target in highlight.targets
-                            ),
-                            start_ms=(
-                                timing.anchor_times_ms[
-                                    (beat.id, highlight.start_anchor)
-                                ]
-                                - beat_timing.offset_ms
-                            ),
-                            end_ms=(
-                                timing.anchor_times_ms[(beat.id, highlight.end_anchor)]
-                                - beat_timing.offset_ms
-                            ),
-                        )
-                        for index, highlight in enumerate(beat.terminal_highlights)
+                    text_highlights=_terminal_highlight_events(
+                        beat,
+                        pane_id="main",
+                        timing=timing,
+                        beat_timing=beat_timing,
+                        pane_offset_ms=0,
+                        pane_end_ms=beat_timing.duration_ms,
+                        transition_ms=0,
                     ),
                 )
                 transition = None
@@ -1598,47 +2000,6 @@ def compile_presentation_bundle(
                         ),
                     )
                 first_browser = False
-            guide = None
-            if beat.guide is not None:
-                guide_config = thaw(beat.guide)
-                commands = guide_config.get("commands", [])
-                summary = guide_config.get("summary")
-                hint = guide_config.get("success_hint")
-                if (
-                    commands
-                    or (isinstance(summary, str) and summary)
-                    or (isinstance(hint, str) and hint)
-                ):
-                    from .presentation_schema import PresentationGuideV1
-
-                    guide = PresentationGuideV1(
-                        commands=list(commands),
-                        summary=summary,
-                        success_hint=hint,
-                    )
-            player = (
-                None
-                if beat.player_highlight is None
-                else PresentationBeatPlayerV1(
-                    highlight=PresentationPlayerToolbarHighlightV1(
-                        control=PlayerToolbarControl(beat.player_highlight.control),
-                        start_ms=(
-                            timing.anchor_times_ms[
-                                (beat.id, beat.player_highlight.start_anchor)
-                            ]
-                            - beat_timing.offset_ms
-                        ),
-                        end_ms=(
-                            beat_timing.duration_ms
-                            if beat.player_highlight.end_anchor is None
-                            else timing.anchor_times_ms[
-                                (beat.id, beat.player_highlight.end_anchor)
-                            ]
-                            - beat_timing.offset_ms
-                        ),
-                    )
-                )
-            )
             manifest_beats.append(
                 PresentationBeatV1(
                     id=beat.id,
@@ -1714,12 +2075,19 @@ def compile_presentation_bundle(
                 intervals=list(timing.audio_intervals),
             )
 
+        renderer_names = (
+            {pane.kind.value for pane in plan.panes}
+            if plan.panes
+            else {beat.medium.value for beat in plan.beats}
+        )
         renderers = {
-            medium.value: PresentationRendererV1()
-            for medium in {beat.medium for beat in plan.beats}
+            name: PresentationRendererV1() for name in renderer_names
         }
         header = PresentationHeaderV1(
             guided=bool(presentation_settings["guided"]),
+            pane_chrome=PresentationPaneChromeV1(
+                style=presentation_settings["pane_chrome"]["style"],
+            ),
             browser=(
                 _browser_presentation_header(presentation_config)
                 if has_browser
@@ -1906,6 +2274,22 @@ def _terminal_action_ids(beat: OuterBeatPlan) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _terminal_pane_action_ids(pane_beat) -> tuple[str, ...]:
+    result: list[str] = []
+    for action_index, action in enumerate(pane_beat.actions):
+        if not isinstance(action, TerminalActionPlan):
+            continue
+        commands = action.config.get("commands")
+        if commands:
+            for command_index, command in enumerate(commands):
+                result.append(
+                    terminal_action_id(action_index, command_index, command)
+                )
+        else:
+            result.append(terminal_action_id(action_index, None))
+    return tuple(result)
+
+
 def _load_terminal_action_intervals(
     path: Path,
     *,
@@ -2054,8 +2438,13 @@ def _secret_values(spec: Mapping[str, Any]) -> tuple[str, ...]:
 
 def _delegated_environment_names(plan: RecordingPlan) -> tuple[str, ...]:
     names: list[str] = []
-    for beat in plan.beats:
-        for action in beat.actions:
+    action_groups = (
+        (captured.beat.actions for captured in captured_pane_beats(plan))
+        if plan.panes
+        else (beat.actions for beat in plan.beats)
+    )
+    for actions in action_groups:
+        for action in actions:
             if not isinstance(action, TerminalActionPlan):
                 continue
             commands = action.config.get("commands")

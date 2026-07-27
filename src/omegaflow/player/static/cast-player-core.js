@@ -23,6 +23,7 @@
   const visualizationPayloadKeys = [
     'beat_id',
     'duration_ms',
+    'highlights',
     'language',
     'payload_version',
     'text',
@@ -1010,7 +1011,7 @@
     return {events, header};
   }
 
-  function visualizationSegments(payload) {
+  function visualizationSegments(payload, localMs = 0) {
     if (!payload || typeof payload !== 'object') {
       throw new Error('visualization payload is invalid');
     }
@@ -1026,14 +1027,53 @@
       typeof payload.text !== 'string' ||
       payload.text.length === 0 ||
       Array.from(payload.text).length > visualizationTextLimit ||
+      !Array.isArray(payload.highlights) ||
+      payload.highlights.length > visualizationTokenLimit ||
       !Array.isArray(payload.tokens) ||
       payload.tokens.length > visualizationTokenLimit
     ) {
       throw new Error('visualization payload is invalid');
     }
     const characters = Array.from(payload.text);
-    const segments = [];
-    let cursor = 0;
+    const resolvedLocalMs = Math.max(
+      0,
+      Math.min(Number(localMs) || 0, payload.duration_ms),
+    );
+    const highlights = [];
+    for (const highlight of payload.highlights) {
+      if (
+        !highlight ||
+        typeof highlight !== 'object' ||
+        Object.keys(highlight).sort().join(',') !== 'color,end,end_ms,start,start_ms' ||
+        !Number.isInteger(highlight.start) ||
+        !Number.isInteger(highlight.end) ||
+        !Number.isInteger(highlight.start_ms) ||
+        !Number.isInteger(highlight.end_ms) ||
+        highlight.start < 0 ||
+        highlight.end <= highlight.start ||
+        highlight.end > characters.length ||
+        highlight.start_ms < 0 ||
+        highlight.end_ms <= highlight.start_ms ||
+        highlight.end_ms > payload.duration_ms ||
+        !['cue', 'brand'].includes(highlight.color)
+      ) {
+        throw new Error('visualization highlight range is invalid');
+      }
+      if (
+        resolvedLocalMs >= highlight.start_ms &&
+        resolvedLocalMs < highlight.end_ms
+      ) {
+        highlights.push(highlight);
+      }
+    }
+    highlights.sort((left, right) => left.start - right.start || left.end - right.end);
+    for (let index = 1; index < highlights.length; index += 1) {
+      if (highlights[index].start < highlights[index - 1].end) {
+        throw new Error('active visualization highlights overlap');
+      }
+    }
+    const tokens = [];
+    let previousTokenEnd = 0;
     for (const token of payload.tokens) {
       if (
         !token ||
@@ -1041,27 +1081,55 @@
         Object.keys(token).sort().join(',') !== 'end,kind,start' ||
         !Number.isInteger(token.start) ||
         !Number.isInteger(token.end) ||
-        token.start < cursor ||
+        token.start < previousTokenEnd ||
         token.end <= token.start ||
         token.end > characters.length ||
         !visualizationTokenKinds.has(token.kind)
       ) {
         throw new Error('visualization token range is invalid');
       }
-      if (token.start > cursor) {
-        segments.push({
-          kind: null,
-          text: characters.slice(cursor, token.start).join(''),
-        });
-      }
-      segments.push({
-        kind: token.kind,
-        text: characters.slice(token.start, token.end).join(''),
-      });
-      cursor = token.end;
+      tokens.push(token);
+      previousTokenEnd = token.end;
     }
-    if (cursor < characters.length) {
-      segments.push({kind: null, text: characters.slice(cursor).join('')});
+    const boundaries = new Set([0, characters.length]);
+    for (const token of tokens) {
+      boundaries.add(token.start);
+      boundaries.add(token.end);
+    }
+    for (const highlight of highlights) {
+      boundaries.add(highlight.start);
+      boundaries.add(highlight.end);
+    }
+    const positions = Array.from(boundaries).sort((left, right) => left - right);
+    const segments = [];
+    let tokenIndex = 0;
+    let highlightIndex = 0;
+    for (let index = 0; index < positions.length - 1; index += 1) {
+      const start = positions[index];
+      const end = positions[index + 1];
+      if (end <= start) {
+        continue;
+      }
+      while (tokenIndex < tokens.length && tokens[tokenIndex].end <= start) {
+        tokenIndex += 1;
+      }
+      while (
+        highlightIndex < highlights.length &&
+        highlights[highlightIndex].end <= start
+      ) {
+        highlightIndex += 1;
+      }
+      const token = tokens[tokenIndex];
+      const highlight = highlights[highlightIndex];
+      segments.push({
+        kind: token && token.start <= start && token.end >= end
+          ? token.kind
+          : null,
+        highlight: highlight && highlight.start <= start && highlight.end >= end
+          ? highlight.color
+          : null,
+        text: characters.slice(start, end).join(''),
+      });
     }
     return segments;
   }
@@ -1082,7 +1150,7 @@
         payload = typeof nextContext.payload === 'string'
           ? JSON.parse(nextContext.payload)
           : nextContext.payload;
-        segments = visualizationSegments(payload);
+        segments = visualizationSegments(payload, 0);
         if (typeof options.load === 'function') {
           await options.load({...context, payload, segments});
         }
@@ -1091,10 +1159,15 @@
         if (!segments || disposed) {
           throw new Error('visualization renderer is not loaded');
         }
+        const resolvedLocalMs = Math.max(
+          0,
+          Math.min(Number(localMs) || 0, payload.duration_ms),
+        );
+        segments = visualizationSegments(payload, resolvedLocalMs);
         if (typeof options.render === 'function') {
           options.render({
             ...context,
-            localMs: Math.max(0, Math.min(Number(localMs) || 0, payload.duration_ms)),
+            localMs: resolvedLocalMs,
             payload,
             playbackRate,
             segments,
@@ -1130,6 +1203,41 @@
       throw new Error('visualization DOM renderer requires a document');
     }
     let root = null;
+    let rendered = '';
+    function renderSegments(segments) {
+      const signature = JSON.stringify(segments);
+      if (!root || signature === rendered) {
+        return;
+      }
+      rendered = signature;
+      root.replaceChildren();
+      for (const segment of segments) {
+        if (segment.kind == null && segment.highlight == null) {
+          root.append(documentObject.createTextNode(segment.text));
+          continue;
+        }
+        const token = documentObject.createElement('span');
+        token.className = [
+          segment.kind == null
+            ? ''
+            : `visualization-token visualization-token-${segment.kind}`,
+          segment.highlight == null
+            ? ''
+            : 'visualization-text-highlight',
+          segment.highlight === 'brand'
+            ? 'visualization-text-highlight-brand'
+            : '',
+        ].filter(Boolean).join(' ');
+        if (segment.kind != null) {
+          token.dataset.tokenKind = segment.kind;
+        }
+        if (segment.highlight != null) {
+          token.dataset.highlightColor = segment.highlight;
+        }
+        token.textContent = segment.text;
+        root.append(token);
+      }
+    }
     return createVisualizationRendererAdapter({
       load({container, payload, segments}) {
         if (!container) {
@@ -1138,24 +1246,18 @@
         root = documentObject.createElement('pre');
         root.className = 'visualization-content';
         root.dataset.language = payload.language;
-        for (const segment of segments) {
-          if (segment.kind == null) {
-            root.append(documentObject.createTextNode(segment.text));
-            continue;
-          }
-          const token = documentObject.createElement('span');
-          token.className = `visualization-token visualization-token-${segment.kind}`;
-          token.dataset.tokenKind = segment.kind;
-          token.textContent = segment.text;
-          root.append(token);
-        }
         container.append(root);
+        renderSegments(segments);
+      },
+      render({segments}) {
+        renderSegments(segments);
       },
       dispose() {
         if (root) {
           root.remove();
         }
         root = null;
+        rendered = '';
       },
     });
   }

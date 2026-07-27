@@ -248,6 +248,90 @@
         display: grid;
       }
 
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"] {
+        gap: clamp(0.4rem, 1.2vmin, 0.7rem);
+        padding: clamp(0.4rem, 1.2vmin, 0.7rem);
+        background: #0b0e14;
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .visualization-renderer-host,
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .terminal-renderer-host,
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .browser-renderer-host {
+        --pane-accent: var(--brand);
+        position: relative;
+        border: 1px solid #465166;
+        border-radius: 0.55rem;
+        box-shadow:
+          inset 0 3px 0 var(--pane-accent),
+          0 0.35rem 1rem rgba(0, 0, 0, 0.24);
+        isolation: isolate;
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .visualization-renderer-host {
+        --pane-accent: var(--cyan);
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .terminal-renderer-host {
+        --pane-accent: var(--green);
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .browser-renderer-host {
+        --pane-accent: var(--brand);
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .visualization-renderer-host::before,
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .terminal-renderer-host::before,
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        .browser-renderer-host::before {
+        position: absolute;
+        z-index: 20;
+        border: 1px solid color-mix(in srgb, var(--pane-accent) 48%, var(--border));
+        border-radius: 999px;
+        padding: 0.15rem 0.5rem;
+        background: rgba(16, 19, 26, 0.9);
+        color: var(--pane-accent);
+        content: attr(data-pane-label);
+        font-size: 0.68rem;
+        font-weight: 750;
+        letter-spacing: 0.06em;
+        line-height: 1.35;
+        pointer-events: none;
+        text-transform: uppercase;
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        [data-pane-label][data-pane-renderer]::before {
+        right: auto;
+        bottom: auto;
+        left: var(--pane-title-position-x);
+        top: var(--pane-title-position-y);
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        [data-pane-label][data-pane-renderer][data-title-alignment-x="right"]::before {
+        right: var(--pane-title-position-x);
+        left: auto;
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        [data-pane-label][data-pane-renderer][data-title-alignment-y="bottom"]::before {
+        top: auto;
+        bottom: var(--pane-title-position-y);
+      }
+
+      .stage[data-pane-layout="true"][data-pane-chrome="framed"]
+        [data-pane-label][data-pane-renderer][data-pane-title-visible="false"]::before {
+        display: none;
+      }
+
       .stage[data-pane-layout="true"] .terminal {
         position: relative;
         min-width: 0;
@@ -303,6 +387,17 @@
       .visualization-token-operator,
       .visualization-token-punctuation {
         color: var(--pink);
+      }
+
+      .visualization-text-highlight {
+        border-radius: 0.16em;
+        background: rgba(255, 194, 71, 0.28);
+        box-shadow: 0 0 0 0.08em rgba(255, 194, 71, 0.5);
+      }
+
+      .visualization-text-highlight-brand {
+        background: rgba(139, 124, 255, 0.28);
+        box-shadow: 0 0 0 0.08em rgba(139, 124, 255, 0.58);
       }
 
       .stage[data-pane-layout="true"] .browser-stage {
@@ -4136,6 +4231,29 @@
               (pane, index) => [pane.id, `pane-${index + 1}`],
             ),
           );
+          const paneLabel = (pane) => pane.id
+            .split(/[-_]+/)
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
+          const paneChrome = presentationManifest.presentation?.pane_chrome || {
+            style: 'framed',
+          };
+          const configurePaneTitle = (host, pane) => {
+            const title = pane.title || {};
+            host.dataset.paneLabel = title.text || paneLabel(pane);
+            host.dataset.paneTitleVisible = String(title.visible !== false);
+            host.dataset.titleAlignmentX = title.alignment_x || 'right';
+            host.dataset.titleAlignmentY = title.alignment_y || 'top';
+            host.style.setProperty(
+              '--pane-title-position-x',
+              title.position_x || '0.25rem',
+            );
+            host.style.setProperty(
+              '--pane-title-position-y',
+              title.position_y || '0.25rem',
+            );
+          };
           presentationShell = CastPlayerCore.createPresentationShell({
             manifest: presentationManifest,
             rendererFactories: {
@@ -4183,6 +4301,8 @@
                 host.dataset.outerBeatIndex = String(outerIndex);
                 host.dataset.paneBeatIndex = String(paneBeatIndex);
                 host.dataset.trackIndex = String(trackIndex);
+                host.dataset.paneRenderer = pane.renderer;
+                configurePaneTitle(host, pane);
                 host.hidden = true;
                 host.addEventListener('click', togglePlaybackFromSelectableStageContent);
                 stage.append(host);
@@ -4194,6 +4314,8 @@
                 host.dataset.outerBeatIndex = String(outerIndex);
                 host.dataset.paneBeatIndex = String(paneBeatIndex);
                 host.dataset.trackIndex = String(trackIndex);
+                host.dataset.paneRenderer = pane.renderer;
+                configurePaneTitle(host, pane);
                 host.hidden = true;
                 host.addEventListener('click', togglePlaybackFromSelectableStageContent);
                 stage.append(host);
@@ -4204,6 +4326,8 @@
               host.dataset.outerBeatIndex = String(outerIndex);
               host.dataset.paneBeatIndex = String(paneBeatIndex);
               host.dataset.trackIndex = String(trackIndex);
+              host.dataset.paneRenderer = pane.renderer;
+              configurePaneTitle(host, pane);
               host.hidden = true;
               browserStage.append(host);
               return host;
@@ -4222,6 +4346,7 @@
                 (layer) => layer.pane.renderer === 'browser',
               );
               stage.dataset.paneLayout = 'true';
+              stage.dataset.paneChrome = paneChrome.style;
               stage.style.gridTemplateAreas = layout.areas
                 .map((row) => `"${row.map((paneId) => paneAreaNames.get(paneId)).join(' ')}"`)
                 .join(' ');

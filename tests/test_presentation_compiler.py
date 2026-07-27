@@ -160,6 +160,120 @@ def timestamp_sidecar(
     }
 
 
+def sequential_visualization_plan() -> object:
+    return normalize_recording_plan(
+        {
+            "id": "sequential-visualization",
+            "audio": {"enabled": True},
+            "narration": {"id": "voiceover"},
+            "panes": [
+                {"id": "definition", "kind": "visualization"},
+                {"id": "terminal", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "explain",
+                    "narration": (
+                        "Inspect the exact target. "
+                        "@regex@ Inspect the regular expression. "
+                        "@combined@ Combine both targets."
+                    ),
+                    "layout": {"areas": [["definition"], ["terminal"]]},
+                    "panes": {
+                        "definition": [
+                            {
+                                "id": "exact",
+                                "actions": [
+                                    {
+                                        "id": "show-exact",
+                                        "show": {
+                                            "language": "yaml",
+                                            "text": '- text: "ready"\n',
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "id": "regex",
+                                "after": "voiceover.regex.started",
+                                "actions": [
+                                    {
+                                        "id": "show-regex",
+                                        "show": {
+                                            "language": "yaml",
+                                            "text": "- regex: 'Elapsed: .*'\n",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "id": "combined",
+                                "after": "voiceover.combined.started",
+                                "actions": [
+                                    {
+                                        "id": "show-combined",
+                                        "show": {
+                                            "language": "yaml",
+                                            "text": (
+                                                '- text: "ready"\n'
+                                                "- regex: 'Elapsed: .*'\n"
+                                            ),
+                                        },
+                                    }
+                                ],
+                            },
+                        ],
+                        "terminal": [
+                            {
+                                "id": "status",
+                                "actions": [
+                                    {
+                                        "id": "run-status",
+                                        "run": "printf ready",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+
+def test_narration_events_schedule_sequential_pane_beats() -> None:
+    plan = sequential_visualization_plan()
+    take = plan.narration_takes[0]
+    sidecar = timestamp_sidecar(
+        plan,
+        take.id,
+        duration_ms=1400,
+        member_ranges=[(0, 1400)],
+        anchor_times=[400, 900],
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={take.id: sidecar},
+        beat_visual_durations_ms={"explain": 1200},
+    )
+
+    assert [
+        (
+            pane.pane_id,
+            pane.pane_beat_id,
+            pane.local_start_ms,
+            pane.local_end_ms,
+        )
+        for pane in timing.pane_beats
+    ] == [
+        ("definition", "exact", 0, 400),
+        ("definition", "regex", 400, 900),
+        ("definition", "combined", 900, 1400),
+        ("terminal", "status", 0, 1400),
+    ]
+
+
 def cross_beat_terminal_plan(*, viewer_hold: float | None = None) -> object:
     first: dict[str, object] = {
         "id": "one",

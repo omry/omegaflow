@@ -35,9 +35,11 @@ from .presentation_schema import (
     PresentationHeaderV1,
     PresentationManifestV1,
     PresentationPaneBeatV1,
+    PresentationPaneChromeV1,
     PresentationPaneInitial,
     PresentationPaneLayoutV1,
     PresentationPaneTrackV1,
+    PresentationPaneTitleV1,
     PresentationPaneTransitionKind,
     PresentationPaneTransitionV1,
     PresentationPaneV1,
@@ -46,6 +48,7 @@ from .presentation_schema import (
     PlayerToolbarControl,
     PresentationPlayerToolbarHighlightV1,
     PresentationWindowV1,
+    VisualizationHighlightV1,
     VisualizationPayloadV1,
     VisualizationTokenKind,
     VisualizationTokenV1,
@@ -77,6 +80,9 @@ PRESENTATION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 PRESENTATION_PANE_LIMIT = 64
 PRESENTATION_ITEM_LIMIT = 100_000
 VISUALIZATION_LANGUAGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+.-]{0,31}\Z")
+CSS_LENGTH_RE = re.compile(
+    r"(?:0|(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%))\Z"
+)
 VISUALIZATION_TEXT_LIMIT = 100_000
 VISUALIZATION_TOKEN_LIMIT = 10_000
 ASSET_MEDIA_TYPES = {
@@ -450,6 +456,53 @@ def validate_visualization_payload(value: object) -> VisualizationPayloadV1:
         raise PresentationValidationError(
             f"{field} text exceeds {VISUALIZATION_TEXT_LIMIT} characters"
         )
+    highlights = mapping.get("highlights")
+    if not isinstance(highlights, list):
+        raise PresentationValidationError(f"{field} highlights must be a list")
+    if len(highlights) > VISUALIZATION_TOKEN_LIMIT:
+        raise PresentationValidationError(
+            f"{field} highlights exceed {VISUALIZATION_TOKEN_LIMIT} entries"
+        )
+    resolved_highlights: list[tuple[int, int, int, int]] = []
+    for index, value in enumerate(highlights):
+        highlight_field = f"{field} highlights.{index}"
+        highlight = _mapping(value, field=highlight_field)
+        _reject_unknown(highlight, VisualizationHighlightV1, field=highlight_field)
+        _require_fields(
+            highlight,
+            _allowed_fields(VisualizationHighlightV1),
+            field=highlight_field,
+        )
+        start = _integer(highlight.get("start"), field=f"{highlight_field}.start")
+        end = _integer(highlight.get("end"), field=f"{highlight_field}.end")
+        start_ms = _integer(
+            highlight.get("start_ms"),
+            field=f"{highlight_field}.start_ms",
+        )
+        end_ms = _integer(
+            highlight.get("end_ms"),
+            field=f"{highlight_field}.end_ms",
+        )
+        if start < 0 or end <= start or end > len(text):
+            raise PresentationValidationError(
+                f"{highlight_field} range must be non-empty and within text"
+            )
+        if start_ms < 0 or end_ms <= start_ms or end_ms > mapping["duration_ms"]:
+            raise PresentationValidationError(
+                f"{highlight_field} time range must be non-empty and within duration"
+            )
+        if highlight.get("color") not in {"cue", "brand"}:
+            raise PresentationValidationError(
+                f"{highlight_field}.color is unsupported"
+            )
+        for other_start, other_end, other_start_ms, other_end_ms in resolved_highlights:
+            spatial_overlap = start < other_end and other_start < end
+            temporal_overlap = start_ms < other_end_ms and other_start_ms < end_ms
+            if spatial_overlap and temporal_overlap:
+                raise PresentationValidationError(
+                    f"{highlight_field} overlaps another active highlight"
+                )
+        resolved_highlights.append((start, end, start_ms, end_ms))
     tokens = mapping.get("tokens")
     if not isinstance(tokens, list):
         raise PresentationValidationError(f"{field} tokens must be a list")
@@ -891,6 +944,16 @@ def _validate_presentation_header(value: object) -> PresentationHeaderV1:
     _reject_unknown(mapping, PresentationHeaderV1, field=field)
     if not isinstance(mapping.get("guided", False), bool):
         raise PresentationValidationError(f"{field}.guided must be a boolean")
+    pane_chrome = _mapping(
+        mapping.get("pane_chrome"), field=f"{field}.pane_chrome"
+    )
+    _reject_unknown(
+        pane_chrome, PresentationPaneChromeV1, field=f"{field}.pane_chrome"
+    )
+    if pane_chrome.get("style") not in {"none", "framed"}:
+        raise PresentationValidationError(
+            f"{field}.pane_chrome.style must be none or framed"
+        )
     browser = mapping.get("browser")
     if browser is not None:
         _validate_browser_presentation_header(browser, field=f"{field}.browser")
@@ -948,8 +1011,37 @@ def validate_presentation_manifest(
         field = f"manifest panes.{index}"
         pane = _mapping(value, field=field)
         _reject_unknown(pane, PresentationPaneV1, field=field)
-        _require_fields(pane, {"id", "renderer"}, field=field)
+        _require_fields(pane, {"id", "title", "renderer"}, field=field)
         pane_id = _presentation_id(pane.get("id"), field=f"{field}.id")
+        title_field = f"{field}.title"
+        title = _mapping(pane.get("title"), field=title_field)
+        _reject_unknown(title, PresentationPaneTitleV1, field=title_field)
+        if not isinstance(title.get("visible"), bool):
+            raise PresentationValidationError(
+                f"{title_field}.visible must be a boolean"
+            )
+        text = title.get("text")
+        if text is not None and (
+            not isinstance(text, str) or not text.strip()
+        ):
+            raise PresentationValidationError(
+                f"{title_field}.text must be a non-empty string"
+            )
+        if title.get("alignment_x") not in {"left", "right"}:
+            raise PresentationValidationError(
+                f"{title_field}.alignment_x must be left or right"
+            )
+        if title.get("alignment_y") not in {"top", "bottom"}:
+            raise PresentationValidationError(
+                f"{title_field}.alignment_y must be top or bottom"
+            )
+        for name in ("position_x", "position_y"):
+            if not isinstance(title.get(name), str) or not CSS_LENGTH_RE.fullmatch(
+                title[name]
+            ):
+                raise PresentationValidationError(
+                    f"{title_field}.{name} must be a non-negative CSS length"
+                )
         if pane_id in pane_renderers:
             raise PresentationValidationError(f"duplicate manifest pane id {pane_id!r}")
         renderer = pane.get("renderer")

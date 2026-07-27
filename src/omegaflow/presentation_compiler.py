@@ -27,6 +27,7 @@ from .recording_plan import (
     NarrationTakePlan,
     RecordingPlan,
     TerminalActionPlan,
+    captured_pane_beats,
     terminal_action_id,
 )
 
@@ -226,10 +227,22 @@ class CompiledActionTiming:
 
 
 @dataclass(frozen=True)
+class CompiledPaneBeatTiming:
+    outer_beat_id: str
+    pane_id: str
+    pane_beat_id: str
+    presentation_start_ms: int
+    presentation_end_ms: int
+    local_start_ms: int
+    local_end_ms: int
+
+
+@dataclass(frozen=True)
 class CompiledRecordingTiming:
     duration_ms: int
     beats: tuple[CompiledBeatTiming, ...]
     actions: tuple[CompiledActionTiming, ...]
+    pane_beats: tuple[CompiledPaneBeatTiming, ...]
     anchor_times_ms: Mapping[tuple[str, str], int]
     audio_intervals: tuple[PresentationAudioIntervalV1, ...]
 
@@ -244,6 +257,24 @@ class CompiledRecordingTiming:
             if action.beat_id == beat_id and action.action_id == action_id:
                 return action
         raise KeyError(f"unknown compiled action {beat_id!r}/{action_id!r}")
+
+    def pane_beat(
+        self,
+        outer_beat_id: str,
+        pane_id: str,
+        pane_beat_id: str,
+    ) -> CompiledPaneBeatTiming:
+        for pane_beat in self.pane_beats:
+            if (
+                pane_beat.outer_beat_id,
+                pane_beat.pane_id,
+                pane_beat.pane_beat_id,
+            ) == (outer_beat_id, pane_id, pane_beat_id):
+                return pane_beat
+        raise KeyError(
+            "unknown compiled pane beat "
+            f"{outer_beat_id!r}/{pane_id!r}/{pane_beat_id!r}"
+        )
 
 
 @dataclass(frozen=True)
@@ -260,6 +291,14 @@ class _ScheduledAction:
     action_id: str
     start_node: str
     end_node: str
+
+
+@dataclass(frozen=True)
+class _ScheduledPaneBeat:
+    outer_beat_id: str
+    pane_id: str
+    pane_beat_id: str
+    start_node: str
 
 
 def compile_recording_timing(
@@ -325,7 +364,29 @@ def compile_recording_timing(
         for previous, following in zip(take.members, take.members[1:]):
             cross_boundaries.add((previous.beat_id, following.beat_id))
 
+    narration_event_nodes: dict[str, str] = {}
+    for segment in plan.narration_stream.segments:
+        beat = beat_by_id[segment.beat_id]
+        anchor_index = next(
+            index
+            for index, anchor in enumerate(beat.anchors)
+            if anchor.id == segment.id
+        )
+        started = anchor_nodes[(segment.beat_id, segment.id)]
+        ended = (
+            anchor_nodes[(segment.beat_id, beat.anchors[anchor_index + 1].id)]
+            if anchor_index + 1 < len(beat.anchors)
+            else member_end_nodes[segment.beat_id]
+        )
+        narration_event_nodes[
+            f"{plan.narration_stream.id}.{segment.id}.started"
+        ] = started
+        narration_event_nodes[
+            f"{plan.narration_stream.id}.{segment.id}.ended"
+        ] = ended
+
     scheduled_actions: list[_ScheduledAction] = []
+    scheduled_pane_beats: list[_ScheduledPaneBeat] = []
     action_end_nodes: dict[tuple[str, str], str] = {}
     visual_end_nodes: dict[str, str] = {}
     for beat in plan.beats:
@@ -349,6 +410,63 @@ def compile_recording_timing(
             ),
             reason=f"visual baseline for beat {beat.id}",
         )
+        for track in beat.pane_tracks:
+            previous_start: str | None = None
+            for pane_beat in track.beats:
+                start = (
+                    f"pane:{beat.id}:{track.pane_id}:{pane_beat.id}:start"
+                )
+                graph.constrain(
+                    beat_start_nodes[beat.id],
+                    start,
+                    reason=(
+                        f"outer beat {beat.id} contains pane beat "
+                        f"{track.pane_id}/{pane_beat.id}"
+                    ),
+                )
+                if previous_start is not None:
+                    graph.constrain(
+                        previous_start,
+                        start,
+                        reason=(
+                            f"source pane beat order in {beat.id}/{track.pane_id}"
+                        ),
+                    )
+                if pane_beat.start_join is not None:
+                    event_id = pane_beat.start_join.event.qualified_id
+                    event_node = narration_event_nodes.get(event_id)
+                    if event_node is None:
+                        raise PresentationCompileError(
+                            "PRESENTATION_SCHEMA",
+                            f"missing timing event {event_id!r}",
+                        )
+                    graph.constrain(
+                        event_node,
+                        start,
+                        gap_ms=pane_beat.start_join.gap_ms,
+                        reason=(
+                            f"pane beat {beat.id}/{track.pane_id}/"
+                            f"{pane_beat.id} follows {event_id}"
+                        ),
+                    )
+                graph.constrain(
+                    start,
+                    visual_end,
+                    gap_ms=pane_beat.transition.duration_ms,
+                    reason=(
+                        f"pane transition for {beat.id}/{track.pane_id}/"
+                        f"{pane_beat.id}"
+                    ),
+                )
+                scheduled_pane_beats.append(
+                    _ScheduledPaneBeat(
+                        outer_beat_id=beat.id,
+                        pane_id=track.pane_id,
+                        pane_beat_id=pane_beat.id,
+                        start_node=start,
+                    )
+                )
+                previous_start = start
         for action in scheduled:
             graph.constrain(
                 action.end_node,
@@ -468,6 +586,43 @@ def compile_recording_timing(
         )
         for action in scheduled_actions
     )
+    beat_timing_by_id = {beat.id: beat for beat in beat_timings}
+    pane_beat_timings: list[CompiledPaneBeatTiming] = []
+    for outer in plan.beats:
+        outer_timing = beat_timing_by_id[outer.id]
+        for track in outer.pane_tracks:
+            scheduled_track = [
+                scheduled
+                for scheduled in scheduled_pane_beats
+                if scheduled.outer_beat_id == outer.id
+                and scheduled.pane_id == track.pane_id
+            ]
+            for index, scheduled in enumerate(scheduled_track):
+                start = solution.time(scheduled.start_node)
+                end = (
+                    solution.time(scheduled_track[index + 1].start_node)
+                    if index + 1 < len(scheduled_track)
+                    else outer_timing.offset_ms + outer_timing.duration_ms
+                )
+                pane_beat = track.beats[index]
+                if end - start < pane_beat.transition.duration_ms:
+                    raise PresentationCompileError(
+                        "PRESENTATION_OVERFLOW",
+                        "pane beat "
+                        f"{outer.id!r}/{track.pane_id!r}/{pane_beat.id!r} "
+                        "ends before its transition completes",
+                    )
+                pane_beat_timings.append(
+                    CompiledPaneBeatTiming(
+                        outer_beat_id=outer.id,
+                        pane_id=track.pane_id,
+                        pane_beat_id=pane_beat.id,
+                        presentation_start_ms=start,
+                        presentation_end_ms=end,
+                        local_start_ms=start - outer_timing.offset_ms,
+                        local_end_ms=end - outer_timing.offset_ms,
+                    )
+                )
     audio_intervals = _resolve_audio_intervals(
         plan.narration_takes,
         sidecars,
@@ -480,6 +635,7 @@ def compile_recording_timing(
         duration_ms=recording_end,
         beats=tuple(beat_timings),
         actions=action_timings,
+        pane_beats=tuple(pane_beat_timings),
         anchor_times_ms=MappingProxyType(
             {key: solution.time(node) for key, node in anchor_nodes.items()}
         ),
@@ -757,6 +913,8 @@ def _add_beat_action_constraints(
     anchor_nodes: Mapping[tuple[str, str], str],
     action_durations_ms: Mapping[tuple[str, str], int],
 ) -> tuple[_ScheduledAction, ...]:
+    if len(beat.pane_tracks) != 1 or len(beat.pane_tracks[0].beats) != 1:
+        return ()
     definitions: list[tuple[str, str | None, bool]] = []
     for action_index, action in enumerate(beat.actions):
         if isinstance(action, BrowserActionPlan):
@@ -1001,11 +1159,24 @@ def artifact_freshness(
 
 
 def _capture_plan_value(plan: RecordingPlan) -> dict[str, Any]:
-    return {
-        "id": plan.id,
-        "browser": _canonical_value(plan.browser),
-        "setup": _canonical_value(plan.setup),
-        "beats": [
+    if plan.panes:
+        beats = [
+            {
+                "outer_beat_id": captured.outer_beat_id,
+                "pane_id": captured.pane_id,
+                "capture_id": captured.capture_id,
+                "kind": captured.kind.value,
+                "actions": [
+                    _capture_action_value(action)
+                    for action in captured.beat.actions
+                    if isinstance(action, (TerminalActionPlan, BrowserActionPlan))
+                ],
+                "checks": _canonical_value(captured.beat.checks),
+            }
+            for captured in captured_pane_beats(plan)
+        ]
+    else:
+        beats = [
             {
                 "id": beat.id,
                 "medium": beat.medium.value,
@@ -1015,7 +1186,12 @@ def _capture_plan_value(plan: RecordingPlan) -> dict[str, Any]:
                 "checks": _canonical_value(beat.checks),
             }
             for beat in plan.beats
-        ],
+        ]
+    return {
+        "id": plan.id,
+        "browser": _canonical_value(plan.browser),
+        "setup": _canonical_value(plan.setup),
+        "beats": beats,
         "cleanup": _canonical_value(plan.cleanup),
     }
 
@@ -1060,11 +1236,24 @@ def _strip_terminal_presentation_fields(value: dict[str, Any]) -> None:
 
 
 def _presentation_plan_value(plan: RecordingPlan) -> dict[str, Any]:
-    return {
-        "id": plan.id,
-        "title": plan.title,
-        "presentation": _canonical_value(plan.presentation),
-        "beats": [
+    if plan.panes:
+        beats = [
+            {
+                "id": beat.id,
+                "heading": beat.heading,
+                "narration_text": beat.narration_text,
+                "narration_take": beat.explicit_narration_take,
+                "viewer_hold_ms": beat.viewer_hold_ms,
+                "guide": _canonical_value(beat.guide),
+                "anchors": _canonical_value(beat.anchors),
+                "waits": _canonical_value(beat.waits),
+                "layout": _canonical_value(beat.layout),
+                "pane_tracks": _canonical_value(beat.pane_tracks),
+            }
+            for beat in plan.beats
+        ]
+    else:
+        beats = [
             {
                 "id": beat.id,
                 "medium": beat.medium.value,
@@ -1078,7 +1267,13 @@ def _presentation_plan_value(plan: RecordingPlan) -> dict[str, Any]:
                 "actions": _canonical_value(beat.actions),
             }
             for beat in plan.beats
-        ],
+        ]
+    return {
+        "id": plan.id,
+        "title": plan.title,
+        "presentation": _canonical_value(plan.presentation),
+        "panes": _canonical_value(plan.panes),
+        "beats": beats,
         "narration_takes": _canonical_value(plan.narration_takes),
     }
 

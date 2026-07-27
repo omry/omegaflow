@@ -86,6 +86,10 @@ audio:
   format: mp3
 ```
 
+`capture.timeout` limits how long OmegaFlow waits for one terminal request,
+including a command or check. The default is 30 seconds; increase it for an
+intentional realtime action that runs longer.
+
 Enabling narration requires FFmpeg tools and OpenAI API access when generating
 new audio. Put the local key in `.omegaflow/omegaflow-secret.env`; CI may
 provide the same name in the parent process environment. `env_file` remains an
@@ -219,6 +223,8 @@ browser beat:
 ```yaml
 presentation:
   guided: true
+  pane_chrome:
+    style: framed
   browser:
     window:
       mode: framed
@@ -235,8 +241,13 @@ The captured viewport never changes during playback. The renderer scales and
 letterboxes it inside any selected window frame. Set `guided: true` to start
 the player in guided mode; beats with `guide` content then pause before the
 following beat is rendered. See [Beat](./beat.md#guide) for checkpoint and
-toolbar-highlight authoring. Individual browser beats can override the window
-and browser chrome modes; see [Browser beats](./beat.md#browser-beats).
+toolbar-highlight authoring. Multi-pane layouts use
+`pane_chrome.style: framed` by default, which adds pane labels, borders, and
+renderer-colored accents. Set the style to `none` for an undecorated layout.
+Pane declarations and titles are body authoring rather than frontmatter
+configuration; see [Multi-pane Beats](./beat.md#multi-pane-beats). Individual
+browser beats can override the window and browser chrome modes; see
+[Browser beats](./beat.md#browser-beats).
 
 ## Config Schema
 
@@ -256,6 +267,7 @@ class RecordingCaptureConfig:
     window_size: str = "100x28"
     headless: bool = True
     idle_time_limit: float | None = None
+    timeout: float = 30.0
 
 
 @dataclass
@@ -421,9 +433,22 @@ class BrowserPresentationConfig:
     )
 
 
+class PaneChromeStyle(str, Enum):
+    none = "none"
+    framed = "framed"
+
+
+@dataclass
+class RecordingPaneChromeConfig:
+    style: PaneChromeStyle = PaneChromeStyle.framed
+
+
 @dataclass
 class RecordingPresentationConfig:
     guided: bool = False
+    pane_chrome: RecordingPaneChromeConfig = field(
+        default_factory=RecordingPaneChromeConfig
+    )
     browser: BrowserPresentationConfig = field(default_factory=BrowserPresentationConfig)
 
 

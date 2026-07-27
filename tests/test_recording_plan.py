@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
-from typing import Any, get_args, get_type_hints
+from typing import Any, Literal, get_args, get_type_hints
 
 import pytest
 from omegaconf import OmegaConf
@@ -39,13 +39,15 @@ from omegaflow.recording_plan import (
     PaneLayoutPlan,
     PanePlan,
     PanePresentationPlan,
+    PaneTitlePlan,
     PaneTransitionPlan,
     RecordingPlanError,
     StreamKind,
     StreamPosition,
     StreamRef,
-    TerminalTextHighlightPlan,
-    TerminalTextHighlightTargetPlan,
+    TerminalPaneRecordingPlan,
+    TextHighlightEffectPlan,
+    TextHighlightTargetPlan,
     normalize_recording_plan,
     terminal_action_id,
     validate_recording_modalities,
@@ -53,10 +55,16 @@ from omegaflow.recording_plan import (
 from omegaflow.studio_config import (
     OuterBeatPaneTrackConfig,
     PaneBeatConfig,
+    PaneChromeStyle,
     PaneConfig,
     PaneLayoutConfig,
+    PaneTitleAlignmentX,
+    PaneTitleAlignmentY,
+    PaneTitleConfig,
     PaneTransitionConfig,
+    RecordingPaneChromeConfig,
     RecordingNarrationConfig,
+    RecordingPresentationConfig,
     RecordingSpec,
     USER_RECORDING_YAML_SCHEMAS,
 )
@@ -498,15 +506,16 @@ def test_terminal_text_highlight_targets_are_typed_and_bound_to_narration_anchor
 
     plan = normalize_recording_plan(spec)
 
-    assert plan.beats[0].terminal_highlights == (
-        TerminalTextHighlightPlan(
+    assert plan.beats[0].effects == (
+        TextHighlightEffectPlan(
+            pane_id="main",
             targets=(
-                TerminalTextHighlightTargetPlan(
+                TextHighlightTargetPlan(
                     kind="text",
                     pattern="audio:\n  enabled: true",
                     occurrence=1,
                 ),
-                TerminalTextHighlightTargetPlan(
+                TextHighlightTargetPlan(
                     kind="regex",
                     pattern=r"config-\d+\.yaml",
                     occurrence=2,
@@ -691,14 +700,14 @@ def test_terminal_text_highlight_accepts_safe_grouping_and_alternation() -> None
 
     assert tuple(
         target.pattern
-        for target in plan.beats[0].terminal_highlights[0].targets
+        for target in plan.beats[0].effects[0].targets
     ) == (
         r"Renderer: (status|ready)+",
         r"(a+)+$",
     )
 
 
-def test_browser_beat_rejects_terminal_text_highlight() -> None:
+def test_text_highlight_rejects_pane_without_text_surface() -> None:
     spec = browser_spec()
     spec["beats"][0]["effects"] = [
         {
@@ -712,7 +721,7 @@ def test_browser_beat_rejects_terminal_text_highlight() -> None:
 
     with pytest.raises(
         RecordingPlanError,
-        match=r"beats\.0\.effects are invalid for browser beats",
+        match=r"pane 'main' does not expose a text surface",
     ):
         normalize_recording_plan(spec)
 
@@ -1182,6 +1191,522 @@ def test_single_pane_shorthand_normalizes_to_implicit_main_track() -> None:
     assert not hasattr(pane_beat, "viewer_hold_ms")
 
 
+def visualization_terminal_spec() -> dict[str, object]:
+    return {
+        "id": "visualization-terminal",
+        "panes": [
+            {
+                "id": "definition",
+                "title": {
+                    "text": "Beat definition",
+                    "alignment_x": "right",
+                    "alignment_y": "bottom",
+                    "position_x": "0.8rem",
+                    "position_y": "0.7rem",
+                },
+                "kind": "visualization",
+            },
+            {
+                "id": "terminal",
+                "title": "hidden",
+                "kind": "terminal",
+            },
+        ],
+        "beats": [
+            {
+                "id": "explain",
+                "heading": "Explain the definition",
+                "layout": {"areas": [["definition"], ["terminal"]]},
+                "panes": {
+                    "definition": [
+                        {
+                            "id": "show-definition",
+                            "actions": [
+                                {
+                                    "id": "show-source",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": (
+                                            "effects:\n"
+                                            "- highlight:\n"
+                                            '    regex: "Renderer: .*"\n'
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    "terminal": [
+                        {
+                            "id": "show-status",
+                            "actions": [
+                                {
+                                    "id": "run-status",
+                                    "run": "printf 'Renderer: ready\\n'",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
+def sequential_visualization_spec() -> dict[str, object]:
+    spec = visualization_terminal_spec()
+    spec["audio"] = {"enabled": True}
+    spec["narration"] = {"id": "voiceover"}
+    beat = spec["beats"][0]
+    beat["narration"] = (
+        "First, inspect the exact target. "
+        "@regex@ Next, inspect the regular expression. "
+        "@combined@ Finally, combine both targets."
+    )
+    beat["panes"]["definition"] = [
+        {
+            "id": "exact",
+            "actions": [
+                {
+                    "id": "show-exact",
+                    "show": {
+                        "language": "yaml",
+                        "text": '- text: "Renderer: ready"\n',
+                    },
+                }
+            ],
+        },
+        {
+            "id": "regex",
+            "after": "voiceover.regex.started",
+            "actions": [
+                {
+                    "id": "show-regex",
+                    "show": {
+                        "language": "yaml",
+                        "text": "- regex: 'Elapsed: .*'\n",
+                    },
+                }
+            ],
+        },
+        {
+            "id": "combined",
+            "after": "voiceover.combined.started",
+            "actions": [
+                {
+                    "id": "show-combined",
+                    "show": {
+                        "language": "yaml",
+                        "text": (
+                            '- text: "Renderer: ready"\n'
+                            "- regex: 'Elapsed: .*'\n"
+                        ),
+                    },
+                }
+            ],
+        },
+    ]
+    return spec
+
+
+def test_explicit_visualization_and_terminal_authoring_normalizes_to_typed_plan() -> None:
+    plan = normalize_recording_plan(visualization_terminal_spec())
+
+    assert plan.presentation["pane_chrome"]["style"] == "framed"
+    assert plan.panes == (
+        PanePlan(
+            id="definition",
+            kind=PaneKind.visualization,
+            title=PaneTitlePlan(
+                text="Beat definition",
+                alignment_x="right",
+                alignment_y="bottom",
+                position_x="0.8rem",
+                position_y="0.7rem",
+            ),
+        ),
+        PanePlan(
+            id="terminal",
+            kind=PaneKind.terminal,
+            title=PaneTitlePlan(visible=False),
+        ),
+    )
+    beat = plan.beats[0]
+    assert beat.layout == PaneLayoutPlan(
+        areas=(("definition",), ("terminal",))
+    )
+    assert [(track.pane_id, track.kind) for track in beat.pane_tracks] == [
+        ("definition", PaneKind.visualization),
+        ("terminal", PaneKind.terminal),
+    ]
+    visualization = beat.pane_tracks[0].beats[0]
+    action = visualization.actions[0]
+    assert type(action).__name__ == "VisualizationActionPlan"
+    assert action.id == "show-source"
+    assert action.language == "yaml"
+    assert action.text.startswith("effects:\n")
+    terminal = beat.pane_tracks[1].beats[0]
+    assert terminal.actions[0].config["commands"][0]["id"] == "run-status"
+
+
+def test_container_beat_owns_highlight_for_visualization_pane() -> None:
+    spec = visualization_terminal_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["narration"] = (
+        "@ready_start@ Explain readiness. @ready_end@ Done."
+    )
+    show = spec["beats"][0]["panes"]["definition"][0]["actions"][0]["show"]
+    show["text"] = (
+        "narration: '@ready@ Show readiness.'\n"
+        "start: '@ready@'\n"
+    )
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "pane": "definition",
+                "color": "brand",
+                "targets": [
+                    {"text": "@ready@", "occurrence": 1},
+                    {"text": "@ready@", "occurrence": 2},
+                ],
+                "start": "@ready_start@",
+                "end": "@ready_end@",
+            },
+        }
+    ]
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].effects == (
+        TextHighlightEffectPlan(
+            pane_id="definition",
+            targets=(
+                TextHighlightTargetPlan("text", "@ready@", 1),
+                TextHighlightTargetPlan("text", "@ready@", 2),
+            ),
+            color="brand",
+            start_anchor="ready_start",
+            end_anchor="ready_end",
+        ),
+    )
+
+
+def test_multi_pane_highlight_requires_target_pane() -> None:
+    spec = visualization_terminal_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["narration"] = "@start@ Explain. @end@ Done."
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "targets": [{"text": "effects:"}],
+                "start": "@start@",
+                "end": "@end@",
+            },
+        }
+    ]
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"effects\.0\.highlight\.pane is required",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_multi_pane_highlight_rejects_superseded_pane_local_effects() -> None:
+    spec = visualization_terminal_spec()
+    pane_beat = spec["beats"][0]["panes"]["definition"][0]
+    pane_beat["effects"] = [
+        {
+            "highlight": {
+                "targets": [{"text": "effects:"}],
+                "start": "@start@",
+                "end": "@end@",
+            },
+        }
+    ]
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"invalid beats\.0\.panes\.definition\.0",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_multi_pane_highlight_rejects_superseded_show_level_effects() -> None:
+    spec = visualization_terminal_spec()
+    show = spec["beats"][0]["panes"]["definition"][0]["actions"][0]["show"]
+    show["highlight"] = {
+        "targets": [{"text": "effects:"}],
+        "start": "@start@",
+        "end": "@end@",
+    }
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"invalid beats\.0\.panes\.definition\.0",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_sequential_visualization_beats_join_narration_segment_events() -> None:
+    plan = normalize_recording_plan(sequential_visualization_spec())
+
+    track = plan.beats[0].pane_tracks[0]
+    assert [beat.id for beat in track.beats] == ["exact", "regex", "combined"]
+    assert track.beats[0].start_join is None
+    assert track.beats[1].start_join == JoinPlan(
+        waiting_stream=StreamRef(StreamKind.pane, "definition"),
+        waiting_position=StreamPosition(
+            pane_beat_id="regex",
+            action_id=None,
+        ),
+        event=EventRef(
+            stream=StreamRef(StreamKind.narration, "voiceover"),
+            action_id="regex",
+            endpoint=EventEndpoint.started,
+        ),
+    )
+    assert track.beats[2].start_join is not None
+    assert track.beats[2].start_join.event.qualified_id == (
+        "voiceover.combined.started"
+    )
+
+
+def test_first_pane_beat_rejects_a_transition_without_prior_content() -> None:
+    spec = sequential_visualization_spec()
+    spec["beats"][0]["panes"]["definition"][0]["transition"] = {
+        "kind": "fade",
+        "duration_ms": 100,
+    }
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"panes\.definition\.0\.transition is only valid between pane beats",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_sequential_visualization_beat_rejects_unknown_narration_event() -> None:
+    spec = sequential_visualization_spec()
+    spec["beats"][0]["panes"]["definition"][1]["after"] = (
+        "voiceover.missing.started"
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="unknown narration event 'voiceover.missing.started'",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_pane_chrome_style_accepts_none_and_rejects_unknown_values() -> None:
+    spec = visualization_terminal_spec()
+    spec["presentation"] = {"pane_chrome": {"style": "none"}}
+
+    plan = normalize_recording_plan(spec)
+
+    chrome = plan.presentation["pane_chrome"]
+    assert chrome["style"] == "none"
+    assert (
+        get_type_hints(RecordingPresentationConfig)["pane_chrome"]
+        is RecordingPaneChromeConfig
+    )
+    assert get_type_hints(PaneTitleConfig) == {
+        "visible": bool,
+        "text": str | None,
+        "alignment_x": PaneTitleAlignmentX,
+        "alignment_y": PaneTitleAlignmentY,
+        "position_x": str,
+        "position_y": str,
+    }
+    assert get_type_hints(PaneConfig)["title"] == (
+        Literal["hidden"] | str | PaneTitleConfig | None
+    )
+
+    spec["presentation"] = {"pane_chrome": {"style": "ornate"}}
+    with pytest.raises(RecordingPlanError, match="pane_chrome"):
+        normalize_recording_plan(spec)
+
+    spec = visualization_terminal_spec()
+    spec["panes"][0]["title"]["position_x"] = "calc(1rem + 2px)"
+    with pytest.raises(
+        RecordingPlanError,
+        match="position_x must be a non-negative CSS length",
+    ):
+        normalize_recording_plan(spec)
+
+    spec = visualization_terminal_spec()
+    spec["panes"][0]["title"] = {"text": " "}
+    with pytest.raises(RecordingPlanError, match="pane title must be non-empty"):
+        normalize_recording_plan(spec)
+
+
+def test_pane_title_shortcuts_cover_automatic_explicit_and_hidden() -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"] = [
+        {"id": "automatic", "kind": "visualization"},
+        {"id": "explicit", "kind": "visualization", "title": "Live output"},
+        {"id": "untitled", "kind": "visualization", "title": "hidden"},
+        {
+            "id": "literal-hidden",
+            "kind": "visualization",
+            "title": {"text": "hidden"},
+        },
+    ]
+    spec["beats"][0]["layout"]["areas"] = [
+        ["automatic"],
+        ["explicit"],
+        ["untitled"],
+        ["literal-hidden"],
+    ]
+    spec["beats"][0]["panes"] = {
+        "automatic": spec["beats"][0]["panes"]["definition"],
+        "explicit": spec["beats"][0]["panes"]["definition"],
+        "untitled": spec["beats"][0]["panes"]["definition"],
+        "literal-hidden": spec["beats"][0]["panes"]["definition"],
+    }
+
+    plan = normalize_recording_plan(spec)
+
+    assert [pane.title for pane in plan.panes] == [
+        PaneTitlePlan(),
+        PaneTitlePlan(text="Live output"),
+        PaneTitlePlan(visible=False),
+        PaneTitlePlan(text="hidden"),
+    ]
+
+
+def test_explicit_multi_pane_authoring_rejects_more_than_one_captured_pane() -> None:
+    spec = visualization_terminal_spec()
+    spec["browser"] = {}
+    spec["panes"].append({"id": "browser", "kind": "browser"})
+    beat = spec["beats"][0]
+    beat["layout"]["areas"][0].append("browser")
+    beat["panes"]["browser"] = [
+        {
+            "id": "open-preview",
+            "actions": [
+                {
+                    "id": "open",
+                    "open_page": {"url": "about:blank"},
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="at most one captured pane",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_explicit_multi_pane_authoring_rejects_captured_panes_across_beats() -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"].append({"id": "other-terminal", "kind": "terminal"})
+    second_definition = {
+        **spec["beats"][0]["panes"]["definition"][0],
+        "id": "show-second-definition",
+    }
+    spec["beats"].append(
+        {
+            "id": "explain-more",
+            "layout": {"areas": [["definition"], ["other-terminal"]]},
+            "panes": {
+                "definition": [second_definition],
+                "other-terminal": [
+                    {
+                        "id": "show-more-status",
+                        "actions": [
+                            {
+                                "id": "run-more-status",
+                                "run": "printf 'Renderer: still ready\\n'",
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="supports at most one captured pane per recording",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_explicit_multi_pane_authoring_rejects_unused_declared_pane() -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"].append({"id": "unused", "kind": "visualization"})
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"declared panes are not used: unused",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_explicit_multi_pane_authoring_rejects_duplicate_pane_beat_ids_across_outer_beats() -> None:
+    spec = visualization_terminal_spec()
+    spec["beats"].append(
+        {
+            "id": "explain-again",
+            "layout": {"areas": [["definition"]]},
+            "panes": {
+                "definition": spec["beats"][0]["panes"]["definition"],
+            },
+        }
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match=(
+            r"duplicate pane beat id 'show-definition' in pane "
+            r"'definition' across recording"
+        ),
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_explicit_multi_pane_authoring_accepts_visualization_only_outer_beat() -> None:
+    spec = visualization_terminal_spec()
+    spec["beats"].append(
+        {
+            "id": "visualization-only",
+            "layout": {"areas": [["definition"]]},
+            "panes": {
+                "definition": [
+                    {
+                        "id": "show-another-definition",
+                        "actions": [
+                            {
+                                "id": "show-another-source",
+                                "show": {"text": "Another definition"},
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[1].pane_tracks[0].kind is PaneKind.visualization
+
+
+def test_explicit_multi_pane_authoring_rejects_mixed_shorthand_fields() -> None:
+    spec = visualization_terminal_spec()
+    spec["beats"][0]["actions"] = [{"run": "must not be accepted"}]
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="cannot mix explicit panes with single-pane",
+    ):
+        normalize_recording_plan(spec)
+
+
 def test_implicit_main_track_is_local_to_each_mixed_medium_outer_beat() -> None:
     spec = terminal_spec()
     spec["browser"] = {"base_url": "https://example.test"}
@@ -1280,9 +1805,7 @@ def test_pane_track_requires_unique_valid_pane_beats() -> None:
     pane_beat = PaneBeatPlan(
         id="show",
         start_join=None,
-        actions=(),
-        checks=(),
-        terminal_highlights=(),
+        recording=TerminalPaneRecordingPlan(actions=(), checks=()),
         presentation=PanePresentationPlan(),
         transition=PaneTransitionPlan(),
     )

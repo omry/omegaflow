@@ -1,16 +1,16 @@
 {
   "files": {
     "beats/definition.visualization.json": {
-      "bytes": 554,
-      "sha256": "e0a6c59677db68db2f9b8a92cc9299f0f766f60c502395bf3e1532b531150767"
+      "bytes": 574,
+      "sha256": "b35836617f9d89dad6c6fc9f792a0a176c7b169c091bac3ef47d4d71bbc02bda"
     },
     "beats/status.cast": {
       "bytes": 97,
       "sha256": "2458cc600c5fdc45774f1db86b5dc8cde0167259eaf07ceb6821e84bcccc8ca6"
     },
     "recording.presentation.json": {
-      "bytes": 1738,
-      "sha256": "94ab192af8e1f508d1042b5bb282561ac1718f6f069351593ef7b3f6644f05db"
+      "bytes": 2203,
+      "sha256": "2c226d296f3cef1504b56ddfbc46f09fbdc50f5bdb1eeca1e6a4494dd616a3af"
     }
   },
   "version": 1

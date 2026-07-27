@@ -14,7 +14,8 @@ authors = [
 ]
 dependencies = [
   "hydra-core==1.4.0.dev5",
-  "omegaconf>=2.3",
+  "omegaconf>=2.4.0.dev14",
+  "pygments>=2.18",
   "pyyaml>=6.0",
 ]
 

@@ -24,6 +24,8 @@ from .recording_plan import (
     BrowserActionPlan,
     RecordingPlan,
     TerminalActionPlan,
+    capture_runner_beat,
+    captured_pane_beats,
     terminal_action_id,
 )
 from .studio_config import RecordingMedium
@@ -295,7 +297,8 @@ def capture_action_items(plan: RecordingPlan) -> tuple[CaptureActionItem, ...]:
     """Flatten user-facing terminal commands and browser actions in source order."""
 
     items: list[CaptureActionItem] = []
-    for beat in plan.beats:
+    for captured in captured_pane_beats(plan):
+        beat = capture_runner_beat(plan, captured)
         for action_index, action in enumerate(beat.actions):
             if isinstance(action, BrowserActionPlan):
                 items.append(
@@ -456,7 +459,20 @@ class CaptureCoordinator:
                             "terminal capture runner does not support project setup"
                         )
                     run_setup(plan.setup)
-            beat_index = 0
+            if plan.panes:
+                for captured in captured_pane_beats(plan):
+                    beat = capture_runner_beat(plan, captured)
+                    runner = ensure_runner(beat.medium)
+                    operation = (
+                        f"capture pane {captured.pane_id} beat {captured.beat.id} "
+                        f"in outer beat {captured.outer_beat_id}"
+                    )
+                    capture = capture_beat(runner, beat)
+                    _validate_beat_capture(capture, beat)
+                    captures.append(capture)
+                beat_index = len(plan.beats)
+            else:
+                beat_index = 0
             while beat_index < len(plan.beats):
                 beat = plan.beats[beat_index]
                 runner = ensure_runner(beat.medium)

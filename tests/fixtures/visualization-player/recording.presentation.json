@@ -57,15 +57,34 @@
   "panes": [
     {
       "id": "definition",
+      "title": {
+        "visible": true,
+        "text": "Beat definition",
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem"
+      },
       "renderer": "visualization"
     },
     {
       "id": "status",
+      "title": {
+        "visible": true,
+        "text": null,
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem"
+      },
       "renderer": "terminal"
     }
   ],
   "presentation": {
-    "guided": false
+    "guided": false,
+    "pane_chrome": {
+      "style": "framed"
+    }
   },
   "recording": {
     "duration_ms": 4000,

@@ -39,7 +39,7 @@ A recording Markdown file has three main parts:
 | --- | --- | --- |
 | Recording configuration | YAML frontmatter at the top of the file. Defines `id`, `title`, and per-video config overrides. | [Recording Configuration](./config.md) |
 | Markdown prose | Human-readable notes and headings for the authored walkthrough. | This page |
-| `studio-directive` blocks | Machine-readable scene and beat blocks that OmegaFlow records, retimes, checks, and publishes. | [Beat](./beat.md) |
+| `studio-directive` blocks | Machine-readable scene, pane, and beat declarations that OmegaFlow records, retimes, checks, and publishes. | [Beat](./beat.md) |
 
 ````md
 ---

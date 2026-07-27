@@ -5,9 +5,9 @@ sidebar_label: Beat
 
 # Beat
 
-A beat is one narrated section of a recording. It can describe what the viewer
-is seeing, operate either a terminal or browser, run checks, and provide guide
-text.
+A beat is one recorded unit in a video. It can describe what the viewer is
+seeing, operate a terminal or browser, run checks, and provide guide text.
+Narration can be absent, local to one beat, or shared across multiple beats.
 
 ```yaml
 beat:
@@ -31,8 +31,125 @@ beat:
 | `pointer` | mapping | Browser-beat override for pointer visibility. Use `visible: false` to hide the cursor for the whole beat. |
 | `actions` | list | Commands to record. |
 | `checks` | list | Commands that validate the result. |
-| `effects` | list | Narration-synchronized terminal presentation effects. |
+| `effects` | list | Narration-synchronized presentation effects for terminal or visualization text. |
 | `guide` | mapping | Guided-mode summary, commands, and success hint. |
+| `layout` | mapping | Grid of pane IDs for an explicit multi-pane beat. |
+| `panes` | mapping | Pane IDs mapped to their ordered pane beats. |
+
+## Multi-pane Beats
+
+The regular `medium`, `actions`, `checks`, and `effects` fields are convenient
+single-pane shorthand. To show multiple synchronized views, declare recording
+panes once in a `studio-directive` before any `beat` or `beats` declaration:
+
+```yaml
+scene: Highlighting terminal text
+panes:
+- id: definition
+  kind: visualization
+  title: Beat definition
+- id: output
+  kind: terminal
+  title: Live output
+```
+
+Omitting `title` derives a label from the pane ID. Use a string for explicit
+text, `hidden` to suppress the label, or a mapping to place it relative to the
+pane frame:
+
+```yaml
+- id: preview
+  kind: browser
+  title:
+    text: Preview
+    alignment_x: right
+    alignment_y: bottom
+    position_x: 0.25rem
+    position_y: 0.25rem
+```
+
+The full title form defaults to `right`, `top`, `0.25rem`, and `0.25rem`.
+
+Pane IDs are stable across the recording. Every declared pane must be used by
+at least one outer beat. The outer beat owns narration and layout. Each pane
+then supplies its own pane beat and identified actions:
+
+```yaml
+beat:
+  id: explain-highlight
+  heading: Explain A Highlight
+  narration: >-
+    @definition_start@ Compare the highlight definition
+    @definition_end@ with its terminal output.
+  effects:
+  - highlight:
+      pane: definition
+      color: brand
+      targets:
+      - text: "Renderer: ready"
+      start: "@definition_start@"
+      end: "@definition_end@"
+  layout:
+    areas:
+    - [definition]
+    - [output]
+  panes:
+    definition:
+    - id: show-definition
+      actions:
+      - id: show-source
+        show:
+          language: yaml
+          text: |
+            effects:
+            - highlight:
+                pane: output
+                targets:
+                - text: "Renderer: ready"
+    output:
+    - id: show-output
+      actions:
+      - id: run-status
+        run: printf 'Renderer: ready\n'
+```
+
+Effects belong to the outer beat because their timing comes from its narration.
+Set `highlight.pane` to the pane whose recording surface contains the target
+text. The same effect syntax works for syntax-colored visualization text and
+captured terminal text.
+
+Multi-pane authoring currently supports one visualization pane beside one
+captured terminal pane. A pane track can contain sequential pane beats. The
+first appears with the outer beat; each later pane beat uses `after` to wait for
+a narration segment event:
+
+```yaml
+narration: >-
+  @exact@ First, show an exact target.
+  @pattern@ Then show a pattern.
+panes:
+  definition:
+  - id: exact
+    actions:
+    - show:
+        text: Exact target
+  - id: pattern
+    after: voiceover.pattern.started
+    actions:
+    - show:
+        text: Pattern target
+```
+
+`voiceover` is the recording's narration stream id, `pattern` is the narration
+segment introduced by `@pattern@`, and `started` selects the segment's start
+event. Use `ended` to wait for its end instead.
+
+Narration events can start sequential pane beats. Browser panes, multiple
+captured panes, and pane-to-pane joins are not currently supported.
+
+The pane declaration is authoring structure, not recording configuration. It
+cannot be placed in frontmatter, inherited from `recordings/config.yaml`, or
+changed with a `rec.*` override.
 
 ## Synchronizing Narration And Commands
 
@@ -288,12 +405,13 @@ For authentication and other token-bearing URLs, use a static, sanitized
 `display_url` as shown above. The display URL changes only the browser chrome;
 the recorder still navigates to the handed-off URL.
 
-### Highlight terminal text during narration
+### Highlight pane text during narration
 
-Use a terminal highlight effect to draw attention to an exact piece of text
-already visible in the terminal. Its `start` and `end` values reference local
-narration anchors, so the highlight follows the spoken words when narration is
-regenerated or retimed.
+Use a highlight effect to draw attention to text already visible in a pane.
+Its `start` and `end` values reference local narration anchors, so the
+highlight follows the spoken words when narration is regenerated or retimed.
+In an explicit multi-pane beat, `pane` is required. Single-pane shorthand
+implicitly targets its `main` pane.
 
 ```yaml
 narration: >-
@@ -301,6 +419,7 @@ narration: >-
   @settings_end@ then continues.
 effects:
 - highlight:
+    pane: output
     targets:
     - text: |-
         audio:
@@ -322,6 +441,8 @@ Set the optional, one-based `occurrence` on a target when its match appears
 more than once; matching is deterministic and starts at the beginning of the
 rendered terminal buffer. Active regex highlights are recalculated when
 terminal output redraws, so the emphasis follows changing status text.
+Visualization targets are resolved against the active pane beat's displayed
+text and retain its syntax coloring.
 
 Set `color: brand` for a purple explanatory callout. The default
 `color: cue` uses gold for the text being demonstrated.
@@ -331,8 +452,8 @@ linear-time engine in the player. Groups and alternation are supported.
 Patterns cannot match empty text or use backreferences, lookaround, possessive
 quantifiers, or engine-specific character escapes.
 
-Highlights are valid only on terminal beats and require `audio.enabled: true`
-because their timing comes from narration timestamps.
+Highlights are valid on terminal and visualization text surfaces and require
+`audio.enabled: true` because their timing comes from narration timestamps.
 
 ### Browser beats
 
@@ -840,25 +961,94 @@ class RecordingGuideConfig:
 
 
 @dataclass
-class TerminalTextHighlightTargetConfig:
+class TextHighlightTargetConfig:
     text: str | None = None
     regex: str | None = None
     occurrence: int = 1
 
 
 @dataclass
-class TerminalTextHighlightConfig:
-    targets: list[TerminalTextHighlightTargetConfig] = field(default_factory=list)
+class TextHighlightConfig:
+    pane: str | None = None
+    targets: list[TextHighlightTargetConfig] = field(default_factory=list)
     color: TerminalHighlightColor = TerminalHighlightColor.cue
     start: str = ""
     end: str = ""
 
 
 @dataclass
-class TerminalEffectConfig:
-    """Typed envelope for presentation effects on terminal beats."""
+class BeatEffectConfig:
+    """Typed envelope for presentation effects owned by a container beat."""
 
-    highlight: TerminalTextHighlightConfig | None = None
+    highlight: TextHighlightConfig | None = None
+
+
+class PaneTitleAlignmentX(str, Enum):
+    left = "left"
+    right = "right"
+
+
+class PaneTitleAlignmentY(str, Enum):
+    top = "top"
+    bottom = "bottom"
+
+
+@dataclass
+class PaneTitleConfig:
+    visible: bool = True
+    text: str | None = None
+    alignment_x: PaneTitleAlignmentX = PaneTitleAlignmentX.right
+    alignment_y: PaneTitleAlignmentY = PaneTitleAlignmentY.top
+    position_x: str = "0.25rem"
+    position_y: str = "0.25rem"
+
+
+@dataclass
+class PaneConfig:
+    id: str = ""
+    kind: PaneKind = PaneKind.visualization
+    title: Literal["hidden"] | str | PaneTitleConfig | None = None
+
+
+@dataclass
+class PaneTransitionConfig:
+    kind: PaneTransitionKind = PaneTransitionKind.cut
+    duration_ms: int = 0
+
+
+@dataclass
+class PaneLayoutConfig:
+    areas: list[list[str]] = field(default_factory=list)
+
+
+@dataclass
+class VisualizationShowConfig:
+    language: str = "text"
+    text: str = ""
+
+
+@dataclass
+class PaneActionConfig(RecordingActionConfig):
+    timing: str = "presentation"
+    show: VisualizationShowConfig | None = None
+
+
+@dataclass
+class PaneBeatConfig:
+    id: str = ""
+    after: str | None = None
+    transition: PaneTransitionConfig = field(default_factory=PaneTransitionConfig)
+    pointer: BrowserPointerPresentationConfig | None = None
+    window: BrowserWindowModeConfig | None = None
+    chrome: BrowserChromePresentationConfig | None = None
+    actions: list[PaneActionConfig] = field(default_factory=list)
+    checks: list[RecordingCheckConfig] = field(default_factory=list)
+
+
+@dataclass
+class OuterBeatPaneTrackConfig:
+    pane_id: str = ""
+    beats: list[PaneBeatConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -877,8 +1067,10 @@ class RecordingBeatConfig:
     player: BeatPlayerConfig | None = None
     actions: list[RecordingActionConfig] = field(default_factory=list)
     checks: list[RecordingCheckConfig] = field(default_factory=list)
-    effects: list[TerminalEffectConfig] = field(default_factory=list)
+    effects: list[BeatEffectConfig] = field(default_factory=list)
     guide: RecordingGuideConfig | None = None
+    layout: PaneLayoutConfig | None = None
+    panes: dict[str, list[PaneBeatConfig]] = field(default_factory=dict)
 ```
 
 <!-- recording-beat-schema:end -->

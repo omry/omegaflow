@@ -49,6 +49,32 @@ def recording_metadata(recording_id: str = "demo") -> dict[str, object]:
     }
 
 
+def browser_presentation_header() -> dict[str, object]:
+    return {
+        "guided": False,
+        "pane_chrome": {"style": "framed"},
+        "browser": {
+            "window": {
+                "mode": "none",
+                "theme": "kde-breeze",
+                "title": None,
+            },
+            "chrome": {"mode": "hidden"},
+        },
+    }
+
+
+def pane_title() -> dict[str, object]:
+    return {
+        "visible": True,
+        "text": None,
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+    }
+
+
 def write_terminal_bundle(root: Path, *, output: str = "ok") -> Path:
     beats = root / "beats"
     beats.mkdir(parents=True)
@@ -252,6 +278,12 @@ def test_public_allowlist_retains_supported_audio_names(audio_name: str) -> None
     assert publish_module._allowlisted_path(audio_name)
 
 
+def test_public_allowlist_retains_visualization_payloads() -> None:
+    assert publish_module._allowlisted_path(
+        "beats/definition.visualization.json"
+    )
+
+
 @pytest.mark.parametrize(
     ("relative", "content"),
     [
@@ -345,19 +377,14 @@ def test_public_staging_rejects_sidecar_asset_hash_mismatch(tmp_path: Path) -> N
         "signatures": "signatures.json",
         "recording": {"id": "demo", "title": None, "duration_ms": 1000},
         "renderers": {"browser": {"payload_version": 1}},
-        "presentation": {
-            "browser": {
-                "window": {"mode": "none", "theme": "kde-breeze", "title": None},
-                "chrome": {"mode": "hidden"},
-            }
-        },
+        "presentation": browser_presentation_header(),
         "assets": {
             "state": {
                 "path": "media/state.webp",
                 "media_type": "image/webp",
             }
         },
-        "panes": [{"id": "main", "renderer": "browser"}],
+        "panes": [{"id": "main", "title": pane_title(), "renderer": "browser"}],
         "beats": [
             {
                 "id": "outer",
@@ -489,14 +516,9 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
         "signatures": "signatures.json",
         "recording": {"id": "demo", "title": None, "duration_ms": 400},
         "renderers": {"browser": {"payload_version": 1}},
-        "presentation": {
-            "browser": {
-                "window": {"mode": "none", "theme": "kde-breeze", "title": None},
-                "chrome": {"mode": "hidden"},
-            }
-        },
+        "presentation": browser_presentation_header(),
         "assets": assets,
-        "panes": [{"id": "main", "renderer": "browser"}],
+        "panes": [{"id": "main", "title": pane_title(), "renderer": "browser"}],
         "beats": [
             {
                 "id": "outer",

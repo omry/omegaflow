@@ -29,12 +29,15 @@ const payload = {
   duration_ms: 1000,
   language: 'yaml',
   text,
+  highlights: [
+    {start, end, color: 'brand', start_ms: 100, end_ms: 900},
+  ],
   tokens: [
     {start: 0, end: 5, kind: 'key'},
     {start, end, kind: 'string'},
   ],
 };
-const segments = core.visualizationSegments(payload);
+const segments = core.visualizationSegments(payload, 500);
 const reconstructed = segments.map((segment) => segment.text).join('');
 if (reconstructed !== text) {
   console.error(JSON.stringify({reconstructed, text, segments}));
@@ -43,7 +46,11 @@ if (reconstructed !== text) {
 if (
   segments[0].text !== 'title' ||
   segments[0].kind !== 'key' ||
-  !segments.some((segment) => segment.text.includes('🏝️') && segment.kind === 'string')
+  !segments.some((segment) => (
+    segment.text.includes('🏝️') &&
+    segment.kind === 'string' &&
+    segment.highlight === 'brand'
+  ))
 ) {
   console.error(JSON.stringify(segments));
   process.exit(1);
@@ -63,6 +70,7 @@ const payload = {
   duration_ms: 1000,
   language: 'yaml',
   text: 'status: ready\n',
+  highlights: [],
   tokens: [],
   unsafe_html: '<script>alert(1)</script>',
 };
@@ -76,6 +84,68 @@ try {
     process.exit(1);
   }
 }
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_visualization_dom_renderer_marks_only_active_timed_callout_ranges() -> None:
+    result = run_core_script(
+        r"""
+function node(tag) {
+  return {
+    tag, children: [], className: '', dataset: {}, textContent: '',
+    append(...items) { this.children.push(...items); },
+    replaceChildren(...items) { this.children = items; },
+    remove() { this.removed = true; },
+  };
+}
+const document = {
+  createElement: node,
+  createTextNode: (text) => ({tag: 'text', textContent: text}),
+};
+const container = node('container');
+const payload = {
+  payload_version: 1,
+  beat_id: 'definition',
+  duration_ms: 1000,
+  language: 'yaml',
+  text: 'start: "@ready@"\n',
+  highlights: [
+    {start: 8, end: 15, color: 'brand', start_ms: 200, end_ms: 800},
+  ],
+  tokens: [
+    {start: 0, end: 5, kind: 'key'},
+    {start: 7, end: 16, kind: 'string'},
+  ],
+};
+(async () => {
+  const renderer = core.createVisualizationDomRenderer({document});
+  await renderer.load({container, payload});
+  renderer.renderAt(500);
+  const root = container.children[0];
+  const highlighted = root.children.find(
+    (child) => child.dataset?.highlightColor === 'brand',
+  );
+  if (
+    !highlighted ||
+    highlighted.textContent !== '@ready@' ||
+    !highlighted.className.includes('visualization-text-highlight-brand') ||
+    highlighted.dataset.tokenKind !== 'string'
+  ) {
+    console.error(JSON.stringify({root, highlighted}));
+    process.exit(1);
+  }
+  renderer.renderAt(900);
+  if (root.children.some((child) => child.dataset?.highlightColor)) {
+    console.error(JSON.stringify({root, phase: 'after'}));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
 """
     )
 

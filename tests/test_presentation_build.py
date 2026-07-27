@@ -23,13 +23,19 @@ from omegaflow.presentation_build import (
     _auth_state_sha256,
     _capture_environment,
     _source_words_with_timing,
+    _visualization_highlights,
     capture_recording,
     compile_presentation_bundle,
+    PresentationAudioArtifacts,
     prepare_narration_audio,
     public_bundle_dir,
     publish_bundle,
     validate_run_bundle,
     write_capture_fingerprint,
+)
+from omegaflow.presentation_compiler import (
+    CompiledBeatTiming,
+    CompiledRecordingTiming,
 )
 from omegaflow.recording_plan import (
     NarrationTakeMemberPlan,
@@ -199,7 +205,7 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
         "id": "headed-mixed",
         "_project_root": str(tmp_path),
         "environment": {"working_directory": str(tmp_path)},
-        "capture": {"headless": True},
+        "capture": {"headless": True, "timeout": 50},
         "style": {
             "typing": True,
             "typing_min_delay": 0.02,
@@ -261,6 +267,7 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
     assert observed["terminal"]["typing_seed"] == 5
     assert observed["terminal"]["post_enter_pause"] == 0.25
     assert observed["terminal"]["post_command_pause"] == 0.55
+    assert observed["terminal"]["timeout_seconds"] == 50
     assert observed["browser"]["headless"] is False
     assert observed["browser_plan"] == plan.browser
 
@@ -453,6 +460,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "outputs": {"asset_dir": str(output_dir)},
         "browser": {},
         "presentation": {
+            "pane_chrome": {"style": "none"},
             "browser": {
                 "window": {"mode": "framed", "title": "Default"},
                 "chrome": {"mode": "full"},
@@ -508,6 +516,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     assert result.manifest == run_dir / "presentation/recording.presentation.json"
     assert manifest["manifest_version"] == 1
     assert manifest["signatures"] == "signatures.json"
+    assert manifest["presentation"]["pane_chrome"] == {"style": "none"}
     signatures = json.loads(
         (result.bundle_dir / "signatures.json").read_text(encoding="utf-8")
     )
@@ -556,6 +565,422 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     assert destination == public_bundle_dir(spec)
     assert (destination / "recording.presentation.json").is_file()
     assert list((destination / "media").glob("*.webp"))
+
+
+def test_visualization_and_terminal_authoring_compiles_end_to_end(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    terminal_dir = run_dir / "capture" / "terminal-beats"
+    terminal_dir.mkdir(parents=True)
+    capture_id = "compose--terminal--status"
+    (terminal_dir / f"{capture_id}.cast").write_text(
+        json.dumps({"version": 3, "width": 80, "height": 20})
+        + "\n"
+        + json.dumps([0.1, "o", "Renderer: ready\n"])
+        + "\n",
+        encoding="utf-8",
+    )
+    (terminal_dir / f"{capture_id}.actions.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "beat_id": capture_id,
+                "actions": [
+                    {
+                        "id": "run-status",
+                        "start_ms": 0,
+                        "end_ms": 100,
+                        "duration_ms": 100,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    spec = {
+        "id": "visualization-terminal",
+        "audio": {"enabled": False},
+        "panes": [
+            {"id": "definition", "kind": "visualization"},
+            {"id": "terminal", "kind": "terminal"},
+        ],
+        "beats": [
+            {
+                "id": "compose",
+                "heading": "Explain the definition",
+                "layout": {"areas": [["definition"], ["terminal"]]},
+                "panes": {
+                    "definition": [
+                        {
+                            "id": "source",
+                            "actions": [
+                                {
+                                    "id": "show-source",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": (
+                                            "effects:\n"
+                                            "- highlight:\n"
+                                            '    regex: "Renderer: .*"\n'
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    "terminal": [
+                        {
+                            "id": "status",
+                            "actions": [
+                                {
+                                    "id": "run-status",
+                                    "run": "printf 'Renderer: ready\\n'",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    result = compile_presentation_bundle(spec, plan, run_dir)
+    manifest = validate_run_bundle(spec, run_dir)
+
+    assert manifest["panes"] == [
+        {
+            "id": "definition",
+            "renderer": "visualization",
+            "title": {
+                "visible": True,
+                "text": None,
+                "alignment_x": "right",
+                "alignment_y": "top",
+                "position_x": "0.25rem",
+                "position_y": "0.25rem",
+            },
+        },
+        {
+            "id": "terminal",
+            "renderer": "terminal",
+            "title": {
+                "visible": True,
+                "text": None,
+                "alignment_x": "right",
+                "alignment_y": "top",
+                "position_x": "0.25rem",
+                "position_y": "0.25rem",
+            },
+        },
+    ]
+    assert manifest["beats"][0]["layout"] == {
+        "areas": [["definition"], ["terminal"]]
+    }
+    tracks = manifest["beats"][0]["pane_tracks"]
+    assert [track["pane_id"] for track in tracks] == [
+        "definition",
+        "terminal",
+    ]
+    visualization_path = (
+        result.bundle_dir / tracks[0]["beats"][0]["payload"]
+    )
+    visualization = json.loads(
+        visualization_path.read_text(encoding="utf-8")
+    )
+    assert visualization["language"] == "yaml"
+    assert visualization["text"].startswith("effects:\n")
+    assert any(token["kind"] == "key" for token in visualization["tokens"])
+    assert visualization["highlights"] == []
+    assert (
+        result.bundle_dir / tracks[1]["beats"][0]["payload"]
+    ).read_text(encoding="utf-8").endswith(
+        json.dumps([0.1, "o", "Renderer: ready\n"], separators=(",", ":"))
+        + "\n"
+    )
+
+
+def test_container_highlight_compiles_to_timed_visualization_ranges() -> None:
+    spec = {
+        "id": "visualization-highlight",
+        "audio": {"enabled": True},
+        "panes": [
+            {"id": "definition", "kind": "visualization"},
+            {"id": "terminal", "kind": "terminal"},
+        ],
+        "beats": [
+            {
+                "id": "explain",
+                "narration": "@start@ Explain. @end@ Done.",
+                "effects": [
+                    {
+                        "highlight": {
+                            "pane": "definition",
+                            "targets": [
+                                {"text": "@ready@", "occurrence": 1},
+                                {"text": "@ready@", "occurrence": 2},
+                            ],
+                            "start": "@start@",
+                            "end": "@end@",
+                        },
+                    }
+                ],
+                "layout": {"areas": [["definition"], ["terminal"]]},
+                "panes": {
+                    "definition": [
+                        {
+                            "id": "source",
+                            "actions": [
+                                {
+                                    "id": "show-source",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": (
+                                            "narration: '@ready@ Explain.'\n"
+                                            "start: '@ready@'\n"
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    "terminal": [
+                        {
+                            "id": "status",
+                            "actions": [
+                                {"id": "run-status", "run": "printf ready"},
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    beat = normalize_recording_plan(spec).beats[0]
+    beat_timing = CompiledBeatTiming(id="explain", offset_ms=1000, duration_ms=2000)
+    timing = CompiledRecordingTiming(
+        duration_ms=3000,
+        beats=(beat_timing,),
+        actions=(),
+        pane_beats=(),
+        anchor_times_ms={
+            ("explain", "start"): 1200,
+            ("explain", "end"): 1800,
+        },
+        audio_intervals=(),
+    )
+
+    highlights = _visualization_highlights(
+        beat,
+        pane_id="definition",
+        text="narration: '@ready@ Explain.'\nstart: '@ready@'\n",
+        timing=timing,
+        beat_timing=beat_timing,
+        pane_offset_ms=0,
+        pane_end_ms=2000,
+        transition_ms=0,
+    )
+
+    assert [
+        (item.start, item.end, item.start_ms, item.end_ms)
+        for item in highlights
+    ] == [
+        (12, 19, 200, 800),
+        (38, 45, 200, 800),
+    ]
+
+
+def test_sequential_visualization_beats_compile_at_narration_events(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    terminal_dir = run_dir / "capture" / "terminal-beats"
+    terminal_dir.mkdir(parents=True)
+    capture_id = "compose--terminal--status"
+    (terminal_dir / f"{capture_id}.cast").write_text(
+        json.dumps({"version": 3, "width": 80, "height": 20})
+        + "\n"
+        + json.dumps([0.1, "o", "Renderer: ready\n"])
+        + "\n",
+        encoding="utf-8",
+    )
+    (terminal_dir / f"{capture_id}.actions.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "beat_id": capture_id,
+                "actions": [
+                    {
+                        "id": "run-status",
+                        "start_ms": 0,
+                        "end_ms": 100,
+                        "duration_ms": 100,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    spec = {
+        "id": "sequential-visualization",
+        "audio": {"enabled": True},
+        "narration": {"id": "voiceover"},
+        "panes": [
+            {"id": "definition", "kind": "visualization"},
+            {"id": "terminal", "kind": "terminal"},
+        ],
+        "beats": [
+            {
+                "id": "compose",
+                "narration": (
+                    "Inspect the exact target. "
+                    "@regex@ Inspect the regular expression. "
+                    "@combined@ Combine both targets."
+                ),
+                "layout": {"areas": [["definition"], ["terminal"]]},
+                "panes": {
+                    "definition": [
+                        {
+                            "id": "exact",
+                            "actions": [
+                                {
+                                    "id": "show-exact",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": '- text: "ready"\n',
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "id": "regex",
+                            "after": "voiceover.regex.started",
+                            "actions": [
+                                {
+                                    "id": "show-regex",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": "- regex: 'Elapsed: .*'\n",
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "id": "combined",
+                            "after": "voiceover.combined.started",
+                            "actions": [
+                                {
+                                    "id": "show-combined",
+                                    "show": {
+                                        "language": "yaml",
+                                        "text": (
+                                            '- text: "ready"\n'
+                                            "- regex: 'Elapsed: .*'\n"
+                                        ),
+                                    },
+                                }
+                            ],
+                        },
+                    ],
+                    "terminal": [
+                        {
+                            "id": "status",
+                            "actions": [
+                                {
+                                    "id": "run-status",
+                                    "run": "printf ready",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    take = plan.narration_takes[0]
+    timestamp = run_dir / "audio-source" / "timestamps.json"
+    timestamp.parent.mkdir(parents=True)
+    timestamp.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "take_id": take.id,
+                "duration_ms": 1400,
+                "members": [
+                    {
+                        "beat_id": "compose",
+                        "text_start": take.members[0].text_start,
+                        "text_end": take.members[0].text_end,
+                        "source_start_ms": 0,
+                        "source_end_ms": 1400,
+                    }
+                ],
+                "words": [],
+                "anchors": [
+                    {
+                        "beat_id": anchor.beat_id,
+                        "id": anchor.id,
+                        "text_offset": anchor.text_offset,
+                        "source_ms": source_ms,
+                    }
+                    for anchor, source_ms in zip(
+                        take.anchors,
+                        (400, 900),
+                        strict=True,
+                    )
+                ],
+                "waits": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    source_audio = run_dir / "audio-source" / "take.mp3"
+    source_audio.write_bytes(b"fake-audio")
+    metadata = run_dir / "audio-source" / "audio.json"
+    metadata.write_text(
+        json.dumps(
+            audio_module.narration_audio_metadata_v1_payload(
+                plan,
+                take_audio_paths={take.id: "audio/take.mp3"},
+                take_durations_ms={take.id: 1400},
+                timestamp_paths={take.id: f"timestamps/{timestamp.name}"},
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    artifacts = PresentationAudioArtifacts(
+        metadata=metadata,
+        timestamps={take.id: timestamp},
+        take_audio={take.id: source_audio},
+    )
+
+    result = compile_presentation_bundle(
+        spec,
+        plan,
+        run_dir,
+        audio_artifacts=artifacts,
+    )
+    manifest = validate_run_bundle(spec, run_dir)
+
+    definition_beats = manifest["beats"][0]["pane_tracks"][0]["beats"]
+    assert [
+        (beat["id"], beat["offset_ms"], beat["duration_ms"])
+        for beat in definition_beats
+    ] == [
+        ("exact", 0, 400),
+        ("regex", 400, 500),
+        ("combined", 900, 500),
+    ]
+    assert all(
+        (result.bundle_dir / beat["payload"]).is_file()
+        for beat in definition_beats
+    )
 
 
 def test_prepare_narration_audio_writes_cross_beat_v1_metadata(

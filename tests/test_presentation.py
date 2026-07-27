@@ -37,11 +37,23 @@ from omegaflow.presentation_schema import (
     PresentationRecordingV1,
     PresentationRendererV1,
     VisualizationPayloadV1,
+    VisualizationHighlightV1,
     VisualizationTokenKind,
     VisualizationTokenV1,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def pane_title(text: str | None = None) -> dict[str, object]:
+    return {
+        "visible": True,
+        "text": text,
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+    }
 
 
 def browser_payload() -> BrowserPayloadV1:
@@ -185,6 +197,7 @@ def multi_pane_manifest() -> dict:
         },
         "presentation": {
             "guided": False,
+            "pane_chrome": {"style": "framed"},
             "browser": {
                 "window": {"mode": "none", "theme": "kde-breeze", "title": None},
                 "chrome": {"mode": "hidden"},
@@ -193,8 +206,8 @@ def multi_pane_manifest() -> dict:
         "signatures": "signatures.json",
         "assets": {},
         "panes": [
-            {"id": "source", "renderer": "terminal"},
-            {"id": "preview", "renderer": "browser"},
+            {"id": "source", "title": pane_title(), "renderer": "terminal"},
+            {"id": "preview", "title": pane_title(), "renderer": "browser"},
         ],
         "beats": [
             {
@@ -264,6 +277,7 @@ def write_visualization_bundle(tmp_path: Path) -> dict:
         "duration_ms": 1000,
         "language": "yaml",
         "text": text,
+        "highlights": [],
         "tokens": [
             {"start": 0, "end": 5, "kind": "key"},
             {"start": 7, "end": 34, "kind": "string"},
@@ -282,10 +296,15 @@ def write_visualization_bundle(tmp_path: Path) -> dict:
             "duration_ms": 1000,
         },
         "renderers": {"visualization": {"payload_version": 1}},
-        "presentation": {"guided": False},
+        "presentation": {
+            "guided": False,
+            "pane_chrome": {"style": "framed"},
+        },
         "signatures": "signatures.json",
         "assets": {},
-        "panes": [{"id": "definition", "renderer": "visualization"}],
+        "panes": [
+            {"id": "definition", "title": pane_title(), "renderer": "visualization"}
+        ],
         "beats": [
             {
                 "id": "explain",
@@ -324,6 +343,15 @@ def test_visualization_payload_serializes_typed_tokens() -> None:
         duration_ms=1000,
         language="yaml",
         text="status: ready\n",
+        highlights=[
+            VisualizationHighlightV1(
+                start=8,
+                end=13,
+                color="brand",
+                start_ms=100,
+                end_ms=900,
+            )
+        ],
         tokens=[
             VisualizationTokenV1(
                 start=0,
@@ -339,6 +367,15 @@ def test_visualization_payload_serializes_typed_tokens() -> None:
         "duration_ms": 1000,
         "language": "yaml",
         "text": "status: ready\n",
+        "highlights": [
+            {
+                "start": 8,
+                "end": 13,
+                "color": "brand",
+                "start_ms": 100,
+                "end_ms": 900,
+            }
+        ],
         "tokens": [{"start": 0, "end": 6, "kind": "key"}],
     }
 
@@ -483,7 +520,9 @@ def test_manifest_accepts_three_and_four_pane_layouts(pane_count: int) -> None:
     beat = manifest["beats"][0]
     for index in range(2, pane_count):
         pane_id = f"support-{index}"
-        manifest["panes"].append({"id": pane_id, "renderer": "terminal"})
+        manifest["panes"].append(
+            {"id": pane_id, "title": pane_title(), "renderer": "terminal"}
+        )
         beat["layout"]["areas"][0].append(pane_id)
         beat["pane_tracks"].append(
             {
@@ -694,6 +733,17 @@ def test_manifest_presentation_header_accepts_typed_guided_default(tmp_path: Pat
 
     manifest["presentation"]["guided"] = "true"
     with pytest.raises(PresentationValidationError, match="guided must be a boolean"):
+        validate_presentation_manifest(manifest, manifest_dir=tmp_path)
+
+
+def test_manifest_rejects_invalid_pane_chrome_style(tmp_path: Path) -> None:
+    manifest = write_browser_bundle(tmp_path)
+    manifest["presentation"]["pane_chrome"]["style"] = "ornate"
+
+    with pytest.raises(
+        PresentationValidationError,
+        match="pane_chrome.style must be none or framed",
+    ):
         validate_presentation_manifest(manifest, manifest_dir=tmp_path)
 
 

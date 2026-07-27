@@ -2,6 +2,7 @@
   "beat_id": "definition",
   "duration_ms": 4000,
   "language": "yaml",
+  "highlights": [],
   "payload_version": 1,
   "text": "effects:\n  - highlight:\n      targets:\n        - regex: \"Renderer: .*\"\n",
   "tokens": [

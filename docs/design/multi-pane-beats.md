@@ -545,8 +545,12 @@ code points rather than UTF-16 code units. Token kinds are a closed set:
 
 The player creates text nodes and token spans from this payload. It never
 interprets visualization text as HTML. Payload text and token counts are
-bounded, token ranges must remain within the text, and no public authoring
-syntax is exposed until the slice-4 build path can execute it.
+bounded, and token ranges must remain within the text.
+
+Slice 4 exposes the first public authoring subset: one explicitly authored
+visualization pane beside one captured terminal pane. Each pane track currently
+contains exactly one pane beat. Cross-stream joins, explicit browser panes,
+and multiple captured panes remain rejected until their execution paths land.
 
 The version-1 bundle uses one representation rather than retaining the former
 flat beat representation:
@@ -675,9 +679,11 @@ and the shortest relevant dependency chain.
    payloads, including sequential pane beats and pane-scoped transitions.
 3. Explicit visualization renderer with escaped text and syntax tokens.
 4. Visualization-plus-terminal capture/build path, with validation rejecting
-   more than one captured pane.
+   more than one captured pane. Implemented as the strict one-pane-beat-per-track
+   subset described above.
 5. Migrate the terminal highlight demo and remove its occurrence workaround.
-6. Add concurrent captured-pane scheduling, cleanup, progress attribution, and
+6. Add multi-stream event resolution, join validation, presentation retiming,
+   concurrent captured-pane scheduling, cleanup, progress attribution, and
    tests; then lift the capability gate.
 7. Demonstrate synchronized terminal-to-browser influence.
 
