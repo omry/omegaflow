@@ -73,8 +73,8 @@ payloads preserves the useful middle ground.
 - General-purpose DOM archival or executable DOM replay.
 - Pixel-perfect capture of every class of website.
 - User-driven interaction with the captured application during playback.
-- Mobile capture profiles, touch gestures, drag-and-drop, multiple simultaneous
-  pages, captured native browser or operating-system chrome, extension UI,
+- Mobile capture profiles, touch gestures, multiple simultaneous pages,
+  captured native browser or operating-system chrome, extension UI,
   camera or microphone input, WebXR, or native file pickers. Mobile playback
   and player-generated presentation frames are in scope.
 - Capturing, mixing, or publishing webpage audio. Pages are muted during

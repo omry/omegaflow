@@ -51,6 +51,7 @@ class DynamicFragmentRequest:
     start_state_path: Path | None = None
     explicit_dynamic: bool = False
     preserve_start: bool = False
+    trim_confirmed_start: bool = False
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ class BrowserVisualCapture:
         force_dynamic: bool = False,
         explicit_dynamic: bool = False,
         preserve_start: bool = False,
+        trim_confirmed_start: bool = False,
     ) -> dict[str, Any]:
         samples: list[bytes] = []
         hashes: list[str] = []
@@ -201,6 +203,7 @@ class BrowserVisualCapture:
             start_state_path=start_state_path,
             explicit_dynamic=explicit_dynamic,
             preserve_start=preserve_start,
+            trim_confirmed_start=trim_confirmed_start,
         )
         self.dynamic_requests.append(request)
         return {
@@ -258,6 +261,7 @@ class BrowserVisualCapture:
                         reference_ms=request.source_start_ms,
                         maximum_ms=source_end_ms,
                         prefer_reference=request.preserve_start,
+                        trim_confirmed_state=request.trim_confirmed_start,
                     )
                 if (
                     previous_request is not None
@@ -520,6 +524,7 @@ def _matching_start_frame_ms(
     reference_ms: int,
     maximum_ms: int,
     prefer_reference: bool = False,
+    trim_confirmed_state: bool = False,
 ) -> int:
     frame_size = FRAME_MATCH_WIDTH * FRAME_MATCH_HEIGHT
     target = _normalized_state_frame(ffmpeg, start_state, boundary="start")
@@ -607,7 +612,17 @@ def _matching_start_frame_ms(
             "BROWSER_UNSUPPORTED_MOTION",
             "could not align a dynamic fragment with its initial browser frame",
         )
-    return search_start_ms + match_index * FRAME_MATCH_DURATION_MS
+    matched_start_ms = search_start_ms + match_index * FRAME_MATCH_DURATION_MS
+    if prefer_reference or not trim_confirmed_state:
+        return matched_start_ms
+    # The consecutive frames establish that this is the authored start state;
+    # they are evidence for the boundary, not part of the motion itself. The
+    # preceding static state is already rendered by the player, so begin the
+    # fragment immediately after the confirmed run.
+    return (
+        matched_start_ms
+        + FRAME_MATCH_CONSECUTIVE_FRAMES * FRAME_MATCH_DURATION_MS
+    )
 
 
 def _matching_end_frame_ms(

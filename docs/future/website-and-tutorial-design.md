@@ -6,10 +6,16 @@
   recorded here
 - Scope: public website, documentation hierarchy, and tutorial curriculum
 - Prerequisite implementation is underway. Typed project bootstrap,
-  deterministic command environments, scoped private TTS access, and terminal
-  ASCII/DEC character-set playback are complete.
+  deterministic command environments, scoped private TTS access, terminal
+  ASCII/DEC character-set playback, scripted realtime terminal input,
+  terminal highlight ranges, multi-pane presentation synchronization, and
+  stable public media paths are complete.
 - Tutorial authoring has not started. Remaining prerequisite capabilities must
-  be implemented, demonstrated, and approved one at a time first.
+  be implemented, demonstrated, and approved one at a time first. Semantic
+  browser drag and pointer feedback is complete; beat-targeted watch is the
+  next slice.
+- Release-readiness work is parked behind completion of the website and
+  tutorial workflow.
 
 ## Context
 
@@ -1163,7 +1169,7 @@ center defaults, and optional component-relative percentage positions. Add a
 brief ordinary-click indication and a persistent pressed-pointer indication
 for the duration of a drag.
 
-Demonstration: drag two SVG objects between semantic targets in a small fixture
+Demonstration: drag one SVG object between semantic targets in a small fixture
 and show the generated player at normal and resized layouts. The recording
 source must contain no absolute pixels.
 

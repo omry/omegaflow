@@ -60,6 +60,7 @@ SCHEMA_GROUPS = {
         "BrowserClickConfig",
         "BrowserViewportPointConfig",
         "BrowserMovePointerConfig",
+        "BrowserDragEndpointConfig",
         "BrowserSecretConfig",
         "BrowserFillConfig",
         "BrowserTypeKeysConfig",

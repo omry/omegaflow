@@ -538,6 +538,7 @@ Each action has an `id` and exactly one operation:
 | `open_page` | Navigate, optionally show loading, and wait for a readiness boundary. |
 | `click` | Click a semantic target. |
 | `move_pointer` | Move the pointer to viewport-relative coordinates or a normalized position within a semantic target. |
+| `drag` | Hold the primary pointer button while moving between two semantic targets. |
 | `set_pointer` | Show or hide the recorded pointer without moving it. |
 | `fill` | Set a field efficiently; this is the default for text entry. |
 | `type_keys` | Fall back to physical key events when a site rejects fill or paste. |
@@ -580,6 +581,25 @@ Pointer moves use the same deterministic motion as the movement before a
 click. The common action fields `after`, `hold_before_ms`, and `hold_after_ms`
 can synchronize the move with narration, pause before it starts, and keep the
 pointer at its destination.
+
+Use `drag.from` and `drag.to` to resolve the source and destination elements.
+Each endpoint defaults to the element center and accepts the same normalized
+component-relative `position` as a targeted pointer move:
+
+```yaml
+- id: move-sun
+  drag:
+    from:
+      target: {test_id: sun}
+      position: {x: 0.5, y: 0.5}
+    to:
+      target: {test_id: sky}
+      position: {x: 0.75, y: 0.25}
+```
+
+The generated player shows the pointer held down throughout the drag. Because
+both endpoints are semantic and component-relative, the action remains stable
+when the page or player is resized.
 
 Use `set_pointer` when the pointer should appear only for a specific part of a
 browser beat:
@@ -850,6 +870,12 @@ class BrowserMovePointerConfig:
 
 
 @dataclass
+class BrowserDragEndpointConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+    position: BrowserViewportPointConfig | None = None
+
+
+@dataclass
 class BrowserSecretConfig:
     env: str = ""
     presentation: str = "masked"
@@ -899,6 +925,7 @@ class BrowserActionConfig:
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
@@ -939,6 +966,7 @@ class RecordingActionConfig(RecordingStepConfig):
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None

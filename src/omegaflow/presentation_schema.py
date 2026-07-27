@@ -112,6 +112,11 @@ class BrowserPointerMoveEventV1(BrowserEventV1):
 
 
 @dataclass
+class BrowserDragEventV1(BrowserPointerMoveEventV1):
+    button: str = "left"
+
+
+@dataclass
 class BrowserClickEventV1(BrowserEventV1):
     point: BrowserPointV1 = field(default_factory=BrowserPointV1)
     button: str = "left"
@@ -171,6 +176,7 @@ class BrowserCompleteEventV1(BrowserEventV1):
 BROWSER_EVENT_SCHEMAS_V1: dict[str, type[BrowserEventV1]] = {
     "state": BrowserStateEventV1,
     "pointer_move": BrowserPointerMoveEventV1,
+    "drag": BrowserDragEventV1,
     "pointer_visibility": BrowserPointerVisibilityEventV1,
     "click": BrowserClickEventV1,
     "focus": BrowserFocusEventV1,

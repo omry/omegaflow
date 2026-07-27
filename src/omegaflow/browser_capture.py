@@ -46,6 +46,42 @@ GRAPHICAL_RUNTIME_ENVIRONMENT = (
     "XDG_RUNTIME_DIR",
     "XDG_SESSION_TYPE",
 )
+DRAG_MIN_DURATION_MS = 700
+DRAG_MAX_DURATION_MS = 1400
+DRAG_FRAME_INTERVAL_MS = 1000 / 30
+
+
+def _linear_curve(
+    start: Mapping[str, Any], end: Mapping[str, Any]
+) -> dict[str, float]:
+    start_x = float(start["x"])
+    start_y = float(start["y"])
+    delta_x = float(end["x"]) - start_x
+    delta_y = float(end["y"]) - start_y
+    return {
+        "x1": start_x + delta_x / 3,
+        "y1": start_y + delta_y / 3,
+        "x2": start_x + delta_x * 2 / 3,
+        "y2": start_y + delta_y * 2 / 3,
+    }
+
+
+def _minimum_jerk_progress(progress: float) -> float:
+    value = min(1.0, max(0.0, progress))
+    return value * value * value * (10 + value * (6 * value - 15))
+
+
+def _paced_drag_duration_ms(
+    start: Mapping[str, Any], end: Mapping[str, Any]
+) -> int:
+    distance = math.hypot(
+        float(end["x"]) - float(start["x"]),
+        float(end["y"]) - float(start["y"]),
+    )
+    return min(
+        DRAG_MAX_DURATION_MS,
+        max(DRAG_MIN_DURATION_MS, round(300 + distance)),
+    )
 
 
 class BrowserCaptureError(RuntimeError):
@@ -665,6 +701,7 @@ class PersistentBrowserRunner:
         )
         self._current_action_id = action.id
         target_fact: dict[str, Any] | None = None
+        drag_fact: dict[str, dict[str, Any]] | None = None
         completion: dict[str, Any] = {"kind": "action"}
         before_state: dict[str, Any] | None = None
         visual: dict[str, Any] | None = None
@@ -747,6 +784,67 @@ class PersistentBrowserRunner:
                     field=f"action {action.id}.move_pointer point",
                 )
                 self.page.mouse.move(float(point["x"]), float(point["y"]))
+            elif action.kind == "drag":
+                endpoints: dict[str, tuple[Any, dict[str, Any]]] = {}
+                for endpoint_name in ("from", "to"):
+                    endpoint = _mapping(
+                        payload.get(endpoint_name),
+                        field=f"action {action.id}.drag.{endpoint_name}",
+                    )
+                    locator, fact = self._strict_target(
+                        endpoint.get("target"),
+                        beat_id=beat_id,
+                        action_id=action.id,
+                    )
+                    position = endpoint.get("position")
+                    if isinstance(position, dict):
+                        fact["point"] = {
+                            "x": fact["bounds"]["x"]
+                            + fact["bounds"]["width"] * float(position["x"]),
+                            "y": fact["bounds"]["y"]
+                            + fact["bounds"]["height"] * float(position["y"]),
+                        }
+                    endpoints[endpoint_name] = (locator, fact)
+                source = endpoints["from"][1]["point"]
+                destination = endpoints["to"][1]["point"]
+                self.page.mouse.move(float(source["x"]), float(source["y"]))
+                drag_duration_ms = _paced_drag_duration_ms(source, destination)
+                drag_curve = _linear_curve(source, destination)
+                drag_steps = max(
+                    2, round(drag_duration_ms / DRAG_FRAME_INTERVAL_MS)
+                )
+                self.page.mouse.down(button="left")
+                try:
+                    drag_started = time.monotonic()
+                    for step in range(1, drag_steps + 1):
+                        target_time = (
+                            drag_started
+                            + drag_duration_ms / 1000 * step / drag_steps
+                        )
+                        remaining_ms = round(
+                            max(0.0, target_time - time.monotonic()) * 1000
+                        )
+                        if remaining_ms:
+                            self.page.wait_for_timeout(remaining_ms)
+                        progress = _minimum_jerk_progress(step / drag_steps)
+                        self.page.mouse.move(
+                            float(source["x"])
+                            + (float(destination["x"]) - float(source["x"]))
+                            * progress,
+                            float(source["y"])
+                            + (float(destination["y"]) - float(source["y"]))
+                            * progress,
+                        )
+                finally:
+                    self.page.mouse.up(button="left")
+                drag_fact = {
+                    endpoint_name: fact
+                    for endpoint_name, (_, fact) in endpoints.items()
+                }
+                drag_fact["motion"] = {
+                    "duration_ms": drag_duration_ms,
+                    "curve": drag_curve,
+                }
             elif action.kind == "set_pointer":
                 # Pointer visibility belongs to the reconstructed presentation,
                 # not the live page. Do not sample the page here: it may already
@@ -837,6 +935,7 @@ class PersistentBrowserRunner:
                     force_dynamic=force_dynamic,
                     explicit_dynamic=explicit_dynamic,
                     preserve_start=video_start_override_ms is not None,
+                    trim_confirmed_start=action.kind == "drag",
                 )
                 current_secret = self._current_secret_redaction(action.kind, payload)
                 if current_secret:
@@ -876,6 +975,8 @@ class PersistentBrowserRunner:
             result["before_state"] = before_state
         if target_fact is not None:
             result["target"] = target_fact
+        if drag_fact is not None:
+            result.update(drag_fact)
         self._current_action_id = None
         return result
 

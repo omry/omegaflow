@@ -956,6 +956,16 @@ def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
                 "position": {"x": 0.25, "y": 0.75},
             },
         },
+        {
+            "id": "drag",
+            "drag": {
+                "from": {
+                    "target": {"test_id": "sun"},
+                    "position": {"x": 0.25, "y": 0.75},
+                },
+                "to": {"target": {"test_id": "sky"}},
+            },
+        },
         {"id": "show_pointer", "set_pointer": {"visible": True}},
         {"id": "press", "press": {"key": "Control+K", "target": {"text": "Search"}}},
         {"id": "scroll_target", "scroll": {"target": {"text": "Results"}}},
@@ -1050,6 +1060,48 @@ def test_rejects_invalid_pointer_move_destination(
     spec["beats"][0]["actions"].append(
         {"id": "move", "move_pointer": move_pointer}
     )
+
+    with pytest.raises(RecordingPlanError, match=match):
+        normalize_recording_plan(spec)
+
+
+@pytest.mark.parametrize(
+    ("drag", "match"),
+    [
+        ({}, "must contain from and to"),
+        (
+            {
+                "from": {"target": {"test_id": "sun"}},
+                "to": {"target": {"test_id": "sky"}},
+                "duration_ms": 500,
+            },
+            "unknown fields",
+        ),
+        (
+            {
+                "from": {
+                    "target": {"test_id": "sun"},
+                    "position": {"x": -0.1, "y": 0.5},
+                },
+                "to": {"target": {"test_id": "sky"}},
+            },
+            "position values must be between 0 and 1",
+        ),
+        (
+            {
+                "from": {"target": {"test_id": "sun"}},
+                "to": {
+                    "target": {"test_id": "sky"},
+                    "position": {"x": 0.5},
+                },
+            },
+            "position must contain x and y",
+        ),
+    ],
+)
+def test_rejects_invalid_browser_drag(drag: dict, match: str) -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append({"id": "drag", "drag": drag})
 
     with pytest.raises(RecordingPlanError, match=match):
         normalize_recording_plan(spec)

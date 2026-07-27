@@ -18,6 +18,7 @@ from .presentation_schema import (
     BROWSER_EVENT_SCHEMAS_V1,
     BrowserBoundsV1,
     BrowserClipEventV1,
+    BrowserDragEventV1,
     BrowserEventV1,
     BrowserPayloadV1,
     BrowserPointV1,
@@ -70,6 +71,7 @@ EVENT_KIND_PRIORITY = (
     "key",
     "pointer_visibility",
     "pointer_move",
+    "drag",
     "click",
     "display_url",
     "complete",
@@ -247,7 +249,7 @@ def validate_browser_event(
         _non_empty_string(mapping["asset"], field=f"{field}.asset")
         if mapping["transition"] not in {"cut", "fade"}:
             raise PresentationValidationError(f"{field}.transition is invalid")
-    elif kind == "pointer_move":
+    elif kind in {"pointer_move", "drag"}:
         _point(mapping["start"], field=f"{field}.start")
         _point(mapping["end"], field=f"{field}.end")
         curve = _mapping(mapping["curve"], field=f"{field}.curve")
@@ -257,6 +259,12 @@ def validate_browser_event(
             )
         for name, coordinate in curve.items():
             _number(coordinate, field=f"{field}.curve.{name}")
+        if kind == "drag" and mapping["button"] not in {
+            "left",
+            "middle",
+            "right",
+        }:
+            raise PresentationValidationError(f"{field}.button is invalid")
     elif kind == "pointer_visibility":
         if not isinstance(mapping["visible"], bool):
             raise PresentationValidationError(f"{field}.visible must be boolean")

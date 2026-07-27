@@ -669,6 +669,12 @@ class BrowserMovePointerConfig:
 
 
 @dataclass
+class BrowserDragEndpointConfig:
+    target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
+    position: BrowserViewportPointConfig | None = None
+
+
+@dataclass
 class BrowserSetPointerConfig:
     visible: bool = True
 
@@ -723,6 +729,7 @@ class BrowserActionConfig:
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
@@ -763,6 +770,7 @@ class RecordingActionConfig(RecordingStepConfig):
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
+    drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
     type_keys: BrowserTypeKeysConfig | None = None
@@ -1028,6 +1036,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     BrowserClickConfig,
     BrowserViewportPointConfig,
     BrowserMovePointerConfig,
+    BrowserDragEndpointConfig,
     BrowserSetPointerConfig,
     BrowserSecretConfig,
     BrowserFillConfig,

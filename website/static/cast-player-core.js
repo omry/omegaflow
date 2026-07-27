@@ -1415,7 +1415,7 @@
       localMs: clampedMs,
       viewport: payload.viewport,
       visual: {kind: 'state', asset: payload.initial_state, transition: 'cut', progress: 1},
-      pointer: {...payload.initial_pointer},
+      pointer: {...payload.initial_pointer, pressed: false},
       click: null,
       focus: null,
       text: null,
@@ -1473,9 +1473,21 @@
             minimumJerkProgress(progress),
           ),
           visible: pointerVisible,
+          pressed: false,
+        };
+      } else if (event.kind === 'drag') {
+        scene.pointer = {
+          ...cubicPoint(
+            event.start,
+            event.end,
+            event.curve,
+            minimumJerkProgress(progress),
+          ),
+          visible: pointerVisible,
+          pressed: progress < 1,
         };
       } else if (event.kind === 'click') {
-        scene.pointer = {...event.point, visible: pointerVisible};
+        scene.pointer = {...event.point, visible: pointerVisible, pressed: false};
         scene.click = progress < 1 ? {...event.point, progress, button: event.button} : null;
       } else if (event.kind === 'focus') {
         scene.focus = progress < 1 ? {target: event.target, progress} : null;
@@ -1574,6 +1586,8 @@
     let playing = false;
     let decodedAssetBytes = 0;
     let preloadedImages = [];
+    let clipPreloads = new Map();
+    let clipsWithDecodedFrames = new Set();
     let entryTransitionStartMs = 0;
     let windowDecoration = {};
     let resizeObserver = null;
@@ -1839,9 +1853,10 @@
         clip.muted = true;
         clip.playsInline = true;
         clip.playbackRate = playbackRate;
-        clip.style.opacity = !Number.isFinite(clip.readyState) || clip.readyState >= 2
-          ? '1'
-          : '0';
+        if (!Number.isFinite(clip.readyState) || clip.readyState >= 2) {
+          clipsWithDecodedFrames.add(clip);
+        }
+        clip.style.opacity = clipsWithDecodedFrames.has(clip) ? '1' : '0';
         const targetSeconds = visual.mediaMs / 1000;
         const diagnostic = clipDiagnostics.get(visual.asset);
         const enteringClip = activeClipAsset !== visual.asset;
@@ -1911,6 +1926,13 @@
       elements.pointer.hidden = !scene.pointer.visible;
       if (scene.pointer.visible) {
         elements.pointer.style.transform = `translate(${scene.pointer.x}px, ${scene.pointer.y}px)`;
+        if (scene.pointer.pressed) {
+          elements.pointer.dataset.pressed = 'true';
+        } else {
+          delete elements.pointer.dataset.pressed;
+        }
+      } else {
+        delete elements.pointer.dataset.pressed;
       }
       elements.click.hidden = !scene.click;
       if (scene.click) {
@@ -1976,6 +1998,8 @@
     const adapter = createBrowserRendererAdapter({
       async load(nextContext) {
         context = nextContext;
+        clipPreloads = new Map();
+        clipsWithDecodedFrames = new Set();
         const firstVisualEvent = nextContext.payload.events.find(
           (event) => ['state', 'clip', 'scroll'].includes(event.kind),
         );
@@ -2128,32 +2152,39 @@
           }
         });
         const clipLoads = [...elements.clips.values()].map((clip) => {
+          const existing = clipPreloads.get(clip);
+          if (existing) {
+            return existing;
+          }
+          let load;
           if (!Number.isFinite(clip.readyState) || clip.readyState >= 2) {
-            return Promise.resolve();
-          }
-          if (typeof clip.addEventListener !== 'function') {
+            load = Promise.resolve();
+          } else if (typeof clip.addEventListener !== 'function') {
             if (typeof clip.load === 'function') {
               clip.load();
             }
-            return Promise.resolve();
-          }
-          return new Promise((resolve) => {
-            let timer = null;
-            const finish = () => {
-              clip.removeEventListener('loadeddata', finish);
-              clip.removeEventListener('error', finish);
-              if (timer !== null) {
-                global.clearTimeout(timer);
+            load = Promise.resolve();
+          } else {
+            load = new Promise((resolve) => {
+              let timer = null;
+              const finish = () => {
+                clip.removeEventListener('loadeddata', finish);
+                clip.removeEventListener('error', finish);
+                if (timer !== null) {
+                  global.clearTimeout(timer);
+                }
+                resolve();
+              };
+              clip.addEventListener('loadeddata', finish, {once: true});
+              clip.addEventListener('error', finish, {once: true});
+              timer = global.setTimeout(finish, 3000);
+              if (typeof clip.load === 'function') {
+                clip.load();
               }
-              resolve();
-            };
-            clip.addEventListener('loadeddata', finish, {once: true});
-            clip.addEventListener('error', finish, {once: true});
-            timer = global.setTimeout(finish, 3000);
-            if (typeof clip.load === 'function') {
-              clip.load();
-            }
-          });
+            });
+          }
+          clipPreloads.set(clip, load);
+          return load;
         });
         await Promise.all([...imageLoads, ...clipLoads]);
       },
@@ -2171,6 +2202,8 @@
         elements = null;
         decodedAssetBytes = 0;
         preloadedImages = [];
+        clipPreloads.clear();
+        clipsWithDecodedFrames.clear();
         entryTransitionStartMs = 0;
         windowDecoration = {};
         resizeObserver = null;

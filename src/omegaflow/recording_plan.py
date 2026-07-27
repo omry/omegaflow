@@ -75,6 +75,7 @@ ACTION_KINDS = (
     "open_page",
     "click",
     "move_pointer",
+    "drag",
     "set_pointer",
     "fill",
     "type_keys",
@@ -707,6 +708,35 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
                 payload["viewport"],
                 field=f"{field}.move_pointer.viewport",
             )
+    elif kind == "drag":
+        unknown_drag_fields = sorted(set(payload) - {"from", "to"})
+        if unknown_drag_fields:
+            raise RecordingPlanError(
+                f"{field}.drag has unknown fields: "
+                + ", ".join(unknown_drag_fields)
+            )
+        if not {"from", "to"} <= set(payload):
+            raise RecordingPlanError(
+                f"{field}.drag must contain from and to"
+            )
+        for endpoint_name in ("from", "to"):
+            endpoint_field = f"{field}.drag.{endpoint_name}"
+            endpoint = _mapping(payload[endpoint_name], field=endpoint_field)
+            unexpected_endpoint = sorted(set(endpoint) - {"target", "position"})
+            if unexpected_endpoint:
+                raise RecordingPlanError(
+                    f"{endpoint_field} has unknown fields: "
+                    + ", ".join(unexpected_endpoint)
+                )
+            validate_target(
+                endpoint.get("target"),
+                field=f"{endpoint_field}.target",
+            )
+            if endpoint.get("position") is not None:
+                _normalized_point(
+                    endpoint["position"],
+                    field=f"{endpoint_field}.position",
+                )
     elif kind == "set_pointer":
         if set(payload) != {"visible"}:
             raise RecordingPlanError(

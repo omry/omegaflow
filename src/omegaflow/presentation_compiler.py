@@ -2351,6 +2351,7 @@ def _compile_browser_action(
     events: list[dict[str, Any]] = []
     cursor = start_ms
     resolved_pointer = dict(pointer)
+    captured_visual_interval: tuple[int, int] | None = None
     target = capture.get("target")
     target = target if isinstance(target, Mapping) else None
     if action.kind == "set_pointer":
@@ -2404,6 +2405,84 @@ def _compile_browser_action(
             )
             cursor += CLICK_DURATION_MS
         resolved_pointer.update(point)
+    elif action.kind == "drag":
+        source = capture.get("from")
+        destination = capture.get("to")
+        source = source if isinstance(source, Mapping) else None
+        destination = destination if isinstance(destination, Mapping) else None
+        source_point = _target_point(source, action.id)
+        destination_point = _target_point(destination, action.id)
+        move_duration, move_curve = pointer_motion(
+            recording_id,
+            beat_id,
+            action.id + "-approach",
+            resolved_pointer,
+            source_point,
+        )
+        events.append(
+            {
+                "kind": "pointer_move",
+                "action_id": action.id,
+                "at_ms": cursor,
+                "end_ms": cursor + move_duration,
+                "start": {
+                    "x": float(resolved_pointer["x"]),
+                    "y": float(resolved_pointer["y"]),
+                },
+                "end": source_point,
+                "curve": move_curve,
+            }
+        )
+        cursor += move_duration
+        drag_duration, drag_curve = pointer_motion(
+            recording_id,
+            beat_id,
+            action.id + "-held",
+            source_point,
+            destination_point,
+        )
+        captured_motion = capture.get("motion")
+        if isinstance(captured_motion, Mapping):
+            drag_duration = _positive_integer(
+                captured_motion.get("duration_ms"),
+                field=f"drag action {action.id!r} motion duration",
+            )
+            captured_curve = _mapping_value(
+                captured_motion.get("curve"),
+                field=f"drag action {action.id!r} motion curve",
+            )
+            drag_curve = {
+                coordinate: _number(
+                    captured_curve.get(coordinate),
+                    field=f"drag action {action.id!r} motion curve {coordinate}",
+                )
+                for coordinate in ("x1", "y1", "x2", "y2")
+            }
+        if config.get("transition") == "captured" and clip_asset is not None:
+            drag_duration = min(
+                drag_duration,
+                _positive_integer(
+                    clip_asset.get("duration_ms"),
+                    field="browser clip duration",
+                ),
+            )
+        drag_start_ms = cursor
+        drag_end_ms = cursor + drag_duration
+        events.append(
+            {
+                "kind": "drag",
+                "action_id": action.id,
+                "at_ms": drag_start_ms,
+                "end_ms": drag_end_ms,
+                "start": source_point,
+                "end": destination_point,
+                "curve": drag_curve,
+                "button": "left",
+            }
+        )
+        captured_visual_interval = (drag_start_ms, drag_end_ms)
+        cursor = drag_end_ms
+        resolved_pointer.update(destination_point)
     elif action.kind in {"fill", "type_keys"}:
         bounds = _target_bounds(target, action.id)
         events.append(
@@ -2546,18 +2625,28 @@ def _compile_browser_action(
                 f"captured clip for action {action.id!r} is unavailable",
             )
         asset_id, clip_duration = _register_clip_asset(clip_asset, assets)
+        clip_start_ms, clip_end_ms = (
+            captured_visual_interval
+            if captured_visual_interval is not None
+            else (cursor, cursor + clip_duration)
+        )
+        trim_end_ms = (
+            min(clip_duration, clip_end_ms - clip_start_ms)
+            if captured_visual_interval is not None
+            else clip_duration
+        )
         events.append(
             {
                 "kind": "clip",
                 "action_id": action.id,
-                "at_ms": cursor,
-                "end_ms": cursor + clip_duration,
+                "at_ms": clip_start_ms,
+                "end_ms": clip_end_ms,
                 "asset": asset_id,
                 "trim_start_ms": 0,
-                "trim_end_ms": clip_duration,
+                "trim_end_ms": trim_end_ms,
             }
         )
-        cursor += clip_duration
+        cursor = max(cursor, clip_end_ms)
         end_state = _mapping_value(
             visual.get("end_state"), field=f"browser clip {action.id} end state"
         )

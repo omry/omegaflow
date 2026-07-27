@@ -657,6 +657,60 @@ const renderer = core.createBrowserRendererAdapter({
     assert result.returncode == 0, result.stderr
 
 
+def test_browser_drag_moves_pointer_while_preserving_pressed_feedback() -> None:
+    result = run_core_script(
+        r"""
+const payload = {
+  payload_version: 1,
+  beat_id: 'browser',
+  duration_ms: 900,
+  viewport: {width: 1000, height: 500, device_scale_factor: 1},
+  initial_state: 'initial',
+  initial_pointer: {x: 0, y: 0, visible: true},
+  initial_display_url: 'https://example.test/',
+  events: [
+    {
+      kind: 'pointer_move', action_id: 'drag', at_ms: 0, end_ms: 200,
+      start: {x: 0, y: 0}, end: {x: 100, y: 200},
+      curve: {x1: 25, y1: 50, x2: 75, y2: 150},
+    },
+    {
+      kind: 'drag', action_id: 'drag', at_ms: 200, end_ms: 800,
+      start: {x: 100, y: 200}, end: {x: 600, y: 300},
+      curve: {x1: 225, y1: 225, x2: 475, y2: 275},
+      button: 'left',
+    },
+  ],
+};
+const renderer = core.createBrowserRendererAdapter({
+  render() {},
+});
+(async () => {
+  await renderer.load({payload, beat: {id: 'browser'}, assets: {}, container: null});
+  const before = renderer.renderAt(100).pointer;
+  const during = renderer.renderAt(500).pointer;
+  const after = renderer.renderAt(850).pointer;
+  if (
+    before.pressed ||
+    !during.pressed ||
+    during.x <= 100 || during.x >= 600 ||
+    during.y <= 200 || during.y >= 300 ||
+    after.pressed ||
+    after.x !== 600 || after.y !== 300
+  ) {
+    console.error(JSON.stringify({before, during, after}));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_pointer_visibility_can_change_during_a_beat() -> None:
     result = run_core_script(
         r"""
@@ -762,8 +816,8 @@ function node(tag) {
     tag, children: [], className: '', dataset: {}, _hidden: false,
     hiddenTransitions: 0, hiddenWrites: 0, textContent: '',
     clientWidth: 800, clientHeight: 600, _currentTime: 0, duration: 10,
-    paused: true, ended: false, seeking: false,
-    playCalls: 0, pauseCalls: 0, seekCalls: 0,
+    paused: true, ended: false, seeking: false, readyState: 4,
+    playCalls: 0, pauseCalls: 0, seekCalls: 0, loadCalls: 0,
     muted: false, playsInline: false, playbackRate: 1,
     attributes: new Map(), style: {},
     get hidden() { return this._hidden; },
@@ -773,7 +827,11 @@ function node(tag) {
       this._hidden = value;
     },
     get currentTime() { return this._currentTime; },
-    set currentTime(value) { this._currentTime = value; this.seekCalls += 1; },
+    set currentTime(value) {
+      this._currentTime = value;
+      this.readyState = 1;
+      this.seekCalls += 1;
+    },
     append(...items) { this.children.push(...items); },
     replaceChildren(...items) { this.children = items; },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
@@ -784,6 +842,11 @@ function node(tag) {
       if (this.playError) return Promise.reject(this.playError);
       this.paused = false;
       return Promise.resolve();
+    },
+    load() {
+      this.loadCalls += 1;
+      this._currentTime = 0;
+      this.readyState = 4;
     },
     remove() { this.removed = true; },
   };
@@ -838,6 +901,7 @@ global.ResizeObserver = class {
     assets, beat: {id: 'browser', transition_in: 'window-open'}, container, payload,
     presentation: {browser: {window: {mode: 'framed', theme: 'kde-breeze', title: 'Demo'}, chrome: {mode: 'full'}}},
   });
+  await renderer.preload();
   renderer.renderAt(50);
   const root = container.children[0];
   const layoutBox = find(root, 'browser-window-layout');
@@ -946,6 +1010,24 @@ global.ResizeObserver = class {
       hidden: clip.hidden, muted: clip.muted, rate: clip.playbackRate,
       time: clip.currentTime, fallbackHidden: primary.hidden,
       fallback: primary.getAttribute('src'), opacity: clip.style.opacity,
+    }));
+    process.exit(1);
+  }
+  renderer.renderAt(700);
+  if (clip.style.opacity !== '1') {
+    console.error(JSON.stringify({
+      phase: 'paused-seek-pending-frame',
+      opacity: clip.style.opacity,
+      readyState: clip.readyState,
+    }));
+    process.exit(1);
+  }
+  await renderer.preload();
+  if (clip.loadCalls !== 0 || Math.abs(clip.currentTime - 0.3) > 0.001) {
+    console.error(JSON.stringify({
+      phase: 'paused-seek-preload',
+      loadCalls: clip.loadCalls,
+      time: clip.currentTime,
     }));
     process.exit(1);
   }

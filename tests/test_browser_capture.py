@@ -47,6 +47,8 @@ FIXTURE_HTML = b"""<!doctype html>
   <input placeholder="Search">
   <p data-testid="status">Idle</p>
   <div class="item">One</div><div class="item">Two</div>
+  <div data-testid="drag-source" style="position:absolute;left:700px;top:20px;width:80px;height:40px">Sun</div>
+  <div data-testid="drag-target" style="position:absolute;left:900px;top:120px;width:120px;height:80px">Sky</div>
   <div data-testid="scrollbox" style="height:80px;overflow:auto">
     <div style="height:300px"></div><span>Bottom</span>
   </div>
@@ -63,6 +65,21 @@ FIXTURE_HTML = b"""<!doctype html>
         document.querySelector('#delayed-status').textContent = 'Complete';
       }, 3600);
     });
+    let dragging = false;
+    document.querySelector('[data-testid=drag-source]').addEventListener('pointerdown', () => {
+      dragging = true;
+      document.body.dataset.dragMoves = '0';
+    });
+    addEventListener('pointermove', () => {
+      if (!dragging) return;
+      document.body.dataset.dragMoves = String(
+        Number(document.body.dataset.dragMoves) + 1
+      );
+    });
+    document.querySelector('[data-testid=drag-target]').addEventListener('pointerup', () => {
+      if (dragging) document.body.dataset.dragged = 'yes';
+    });
+    addEventListener('pointerup', () => { dragging = false; });
     addEventListener('keydown', (event) => {
       if (event.ctrlKey && event.key.toLowerCase() === 'k') {
         document.body.dataset.shortcut = 'yes';
@@ -728,6 +745,76 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
         assert str(tmp_path) not in page_error_text
         assert "[PRIVATE_PATH]" in page_error_text
         assert "/api/create" not in network_text
+
+
+def test_drag_uses_semantic_targets_and_component_relative_positions(
+    tmp_path: Path,
+) -> None:
+    with fixture_site() as base_url:
+        plan = normalize_recording_plan(
+            {
+                "id": "browser-drag",
+                "browser": {"base_url": base_url},
+                "beats": [
+                    {
+                        "id": "drag",
+                        "medium": "browser",
+                        "actions": [
+                            {"id": "open", "open_page": {"url": "/"}},
+                            {
+                                "id": "move-sun",
+                                "drag": {
+                                    "from": {
+                                        "target": {"test_id": "drag-source"},
+                                        "position": {"x": 0.25, "y": 0.75},
+                                    },
+                                    "to": {
+                                        "target": {"test_id": "drag-target"},
+                                        "position": {"x": 0.75, "y": 0.25},
+                                    },
+                                },
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        runner = PersistentBrowserRunner(plan.browser)
+        runner.start(capture_context(tmp_path))
+        try:
+            actions = runner.capture_beat(plan.beats[0]).metadata["actions"]
+            drag = actions[1]
+            assert runner.page.locator("body").get_attribute("data-dragged") == "yes"
+            assert int(
+                runner.page.locator("body").get_attribute("data-drag-moves")
+            ) >= 15
+            assert drag["motion"]["duration_ms"] >= 700
+            assert (
+                drag["execution"]["end_ms"] - drag["execution"]["start_ms"]
+                >= drag["motion"]["duration_ms"]
+            )
+            assert drag["from"]["point"] == {
+                "x": pytest.approx(
+                    drag["from"]["bounds"]["x"]
+                    + drag["from"]["bounds"]["width"] * 0.25
+                ),
+                "y": pytest.approx(
+                    drag["from"]["bounds"]["y"]
+                    + drag["from"]["bounds"]["height"] * 0.75
+                ),
+            }
+            assert drag["to"]["point"] == {
+                "x": pytest.approx(
+                    drag["to"]["bounds"]["x"]
+                    + drag["to"]["bounds"]["width"] * 0.75
+                ),
+                "y": pytest.approx(
+                    drag["to"]["bounds"]["y"]
+                    + drag["to"]["bounds"]["height"] * 0.25
+                ),
+            }
+        finally:
+            runner.close()
 
 
 def test_response_checks_are_scoped_to_the_current_beat(tmp_path: Path) -> None:
@@ -1608,12 +1695,15 @@ def test_dynamic_fragment_aligns_states_when_video_lags_authored_interval(
             start_state_path=start_state,
             end_state_path=end_state,
             explicit_dynamic=True,
+            trim_confirmed_start=True,
         )
     )
 
     (asset,) = visuals.finalize_dynamic_fragments(source)
 
-    assert 880 <= asset.source_start_ms <= 960
+    # The three matching frames verify the initial state. They are trimmed
+    # because the player already displays that state before starting the clip.
+    assert 1000 <= asset.source_start_ms <= 1040
     assert 1000 <= asset.source_end_ms <= 1080
 
 

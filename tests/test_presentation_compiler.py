@@ -1646,6 +1646,181 @@ def test_pointer_visibility_actions_compile_without_moving_the_pointer() -> None
     assert visibility_events[1]["at_ms"] == visibility_events[1]["end_ms"]
 
 
+def test_drag_compiles_pointer_move_and_pressed_drag_feedback() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "browser-drag",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                        {
+                            "id": "move-sun",
+                            "drag": {
+                                "from": {"target": {"test_id": "sun"}},
+                                "to": {"target": {"test_id": "sky"}},
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    capture = {
+        "action_id": "move-sun",
+        "kind": "drag",
+        "from": {
+            "bounds": {"x": 100, "y": 200, "width": 80, "height": 40},
+            "point": {"x": 140, "y": 220},
+        },
+        "to": {
+            "bounds": {"x": 400, "y": 100, "width": 200, "height": 100},
+            "point": {"x": 500, "y": 150},
+        },
+        "motion": {
+            "duration_ms": 900,
+            "curve": {
+                "x1": 260,
+                "y1": 196.6666666667,
+                "x2": 380,
+                "y2": 173.3333333333,
+            },
+        },
+        "completion": {"kind": "action"},
+        "visual": {"kind": "state", "state": state_asset("1")},
+    }
+    open_capture = {
+        "action_id": "open",
+        "kind": "open_page",
+        "completion": {"kind": "navigation"},
+        "visual": {"kind": "state", "state": state_asset("0")},
+    }
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=[open_capture, capture],
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("0"),
+        initial_pointer={"x": 20, "y": 30, "visible": True},
+    )
+
+    pointer_move, drag = [
+        event
+        for event in compiled.payload["events"]
+        if event["kind"] in {"pointer_move", "drag"}
+    ]
+    assert pointer_move["start"] == {"x": 20.0, "y": 30.0}
+    assert pointer_move["end"] == {"x": 140.0, "y": 220.0}
+    assert drag["start"] == {"x": 140.0, "y": 220.0}
+    assert drag["end"] == {"x": 500.0, "y": 150.0}
+    assert drag["button"] == "left"
+    assert drag["at_ms"] == pointer_move["end_ms"]
+    assert compiled.action_completions_ms["move-sun"] >= drag["end_ms"]
+
+
+def test_captured_drag_motion_plays_during_the_pressed_pointer_interval() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "captured-browser-drag",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                        {
+                            "id": "move-sun",
+                            "drag": {
+                                "from": {"target": {"test_id": "sun"}},
+                                "to": {"target": {"test_id": "sky"}},
+                            },
+                            "transition": "captured",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    capture = {
+        "action_id": "move-sun",
+        "kind": "drag",
+        "from": {
+            "bounds": {"x": 100, "y": 200, "width": 80, "height": 40},
+            "point": {"x": 140, "y": 220},
+        },
+        "to": {
+            "bounds": {"x": 400, "y": 100, "width": 200, "height": 100},
+            "point": {"x": 500, "y": 150},
+        },
+        "motion": {
+            "duration_ms": 900,
+            "curve": {
+                "x1": 260,
+                "y1": 196.6666666667,
+                "x2": 380,
+                "y2": 173.3333333333,
+            },
+        },
+        "completion": {"kind": "action"},
+        "visual": {
+            "kind": "clip",
+            "request": {},
+            "end_state": state_asset("2"),
+        },
+    }
+    open_capture = {
+        "action_id": "open",
+        "kind": "open_page",
+        "completion": {"kind": "navigation"},
+        "visual": {"kind": "state", "state": state_asset("1")},
+    }
+    clip = {
+        "path": "capture/fragments/" + "a" * 64 + ".mp4",
+        "sha256": "a" * 64,
+        "media_type": "video/mp4",
+        "width": 1440,
+        "height": 900,
+        "duration_ms": 1000,
+        "encoded_bytes": 200,
+    }
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=[open_capture, capture],
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=state_asset("1"),
+        initial_pointer={"x": 20, "y": 30, "visible": True},
+        clip_assets={("browser", "move-sun"): clip},
+    )
+
+    drag = next(
+        event for event in compiled.payload["events"] if event["kind"] == "drag"
+    )
+    motion = next(
+        event for event in compiled.payload["events"] if event["kind"] == "clip"
+    )
+    final_state = next(
+        event
+        for event in compiled.payload["events"]
+        if event["kind"] == "state" and event["action_id"] == "move-sun"
+    )
+
+    assert (motion["at_ms"], motion["end_ms"]) == (
+        drag["at_ms"],
+        drag["end_ms"],
+    )
+    assert motion["trim_end_ms"] == 900
+    assert drag["end_ms"] - drag["at_ms"] == 900
+    assert drag["curve"] == capture["motion"]["curve"]
+    assert final_state["at_ms"] == drag["end_ms"]
+
+
 def test_handoff_display_url_uses_the_captured_watch_url() -> None:
     plan = normalize_recording_plan(
         {
