@@ -107,14 +107,20 @@ No active release blockers.
       MP4; document the tradeoffs clearly; and add a sample publish surface that
       can be validated without requiring secrets in normal tests.
 
-- [ ] `P2` Explore a YAML-safe sync marker syntax.
-      The current `@anchor@` syntax is compact in narration, but problematic
-      when reused as a YAML scalar (`after: @install@` is invalid unless
-      quoted). Consider a clearer split: inline narration markers such as
-      `[cue:install]` and `[wait:install_command +300ms]`, plus plain YAML ids
-      such as `after: install`. Acceptance checks: compare readability against
-      current `@anchor@` syntax; decide whether `after` should accept bare ids;
-      define migration behavior for existing recordings; update docs and tests
+- [ ] `P2` Evaluate a unified, YAML-safe event-reference syntax.
+      Narration anchors and pane action endpoints belong to the same
+      synchronization substrate, but the current authoring forms do not yet
+      express that uniformly. The compact `@anchor@` narration syntax is also
+      awkward when reused as a YAML scalar (`after: @install@` is invalid
+      unless quoted). Evaluate readable references to narration segments and
+      pane events for presentation ordering, runtime dependencies, and
+      narration waits. Consider inline narration forms such as `[cue:install]`
+      and `[wait:terminal.build.install.ended +300ms]`, plus plain YAML event
+      references. Acceptance checks: define event identity and endpoint
+      defaults; compare readability with the current `@anchor@` and
+      `@wait:action+gap@` forms; distinguish presentation ordering from runtime
+      causality; update all repository recordings atomically with any syntax
+      change rather than adding a compatibility path; update docs and tests
       only after the syntax decision is made.
 
 - [ ] `P1` Add a generic prompt system for OmegaFlow recordings.
