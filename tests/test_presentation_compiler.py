@@ -274,6 +274,176 @@ def test_narration_events_schedule_sequential_pane_beats() -> None:
     ]
 
 
+def test_cross_stream_action_events_retime_both_captured_panes() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "cross-capture",
+            "browser": {"base_url": "http://127.0.0.1:18765"},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "browser", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "synchronize",
+                    "layout": {"areas": [["terminal", "browser"]]},
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {"id": "start-app", "run": "start"},
+                                    {
+                                        "id": "verify-ready",
+                                        "run": "verify",
+                                        "after": (
+                                            "browser.interaction.mark-ready.ended"
+                                        ),
+                                    },
+                                ],
+                            }
+                        ],
+                        "browser": [
+                            {
+                                "id": "interaction",
+                                "actions": [
+                                    {
+                                        "id": "open-app",
+                                        "open_page": {"url": "/"},
+                                        "after": (
+                                            "terminal.session.start-app.ended"
+                                        ),
+                                    },
+                                    {
+                                        "id": "mark-ready",
+                                        "click": {
+                                            "target": {
+                                                "role": "button",
+                                                "name": "Mark ready",
+                                            }
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={},
+        pane_action_intervals_ms={
+            ("synchronize", "terminal", "session", "start-app"): (0, 200),
+            ("synchronize", "terminal", "session", "verify-ready"): (300, 400),
+            ("synchronize", "browser", "interaction", "open-app"): (0, 300),
+            ("synchronize", "browser", "interaction", "mark-ready"): (400, 500),
+        },
+        pane_beat_visual_durations_ms={
+            ("synchronize", "terminal", "session"): 400,
+            ("synchronize", "browser", "interaction"): 500,
+        },
+    )
+
+    assert [
+        (
+            action.pane_id,
+            action.action_id,
+            action.local_start_ms,
+            action.local_end_ms,
+        )
+        for action in timing.pane_actions
+    ] == [
+        ("terminal", "start-app", 0, 200),
+        ("terminal", "verify-ready", 700, 800),
+        ("browser", "open-app", 200, 500),
+        ("browser", "mark-ready", 600, 700),
+    ]
+    assert timing.beats[0].duration_ms == 800
+
+
+def test_explicit_browser_handoff_orders_target_after_producer_start() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff-timing",
+            "browser": {},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "preview", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "handoff",
+                    "layout": {"areas": [["terminal", "preview"]]},
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {
+                                        "id": "watch",
+                                        "run": "watch",
+                                        "browser_handoff": {
+                                            "target": "preview",
+                                        },
+                                        "timing": "realtime",
+                                    }
+                                ],
+                            }
+                        ],
+                        "preview": [
+                            {
+                                "id": "player",
+                                "actions": [
+                                    {
+                                        "id": "open",
+                                        "open_page": {"handoff": "watch"},
+                                    },
+                                    {
+                                        "id": "inspect",
+                                        "wait_for": {
+                                            "visible": {"role": "main"},
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={},
+        pane_action_intervals_ms={
+            ("handoff", "terminal", "session", "watch"): (500, 600),
+            ("handoff", "preview", "player", "open"): (0, 200),
+            ("handoff", "preview", "player", "inspect"): (300, 700),
+        },
+        pane_beat_visual_durations_ms={
+            ("handoff", "terminal", "session"): 600,
+            ("handoff", "preview", "player"): 700,
+        },
+    )
+
+    action_intervals = {
+        (action.pane_id, action.action_id): (
+            action.local_start_ms,
+            action.local_end_ms,
+        )
+        for action in timing.pane_actions
+    }
+    assert action_intervals == {
+        ("terminal", "watch"): (500, 1200),
+        ("preview", "open"): (500, 700),
+        ("preview", "inspect"): (800, 1200),
+    }
+
+
 def cross_beat_terminal_plan(*, viewer_hold: float | None = None) -> object:
     first: dict[str, object] = {
         "id": "one",

@@ -87,7 +87,10 @@ class BrowserHandoffBroker:
         _secure_directory(channel, create=False)
         path = channel / "closed.json"
         if not path.exists():
-            _write_exclusive(path, {"closed": True})
+            try:
+                _write_exclusive(path, {"closed": True})
+            except FileExistsError:
+                pass
 
 
 class BrokeredBrowserSession:

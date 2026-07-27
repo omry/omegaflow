@@ -24,10 +24,13 @@ from .recording_plan import (
     OuterBeatPlan,
     BrowserActionPlan,
     FrozenMapping,
+    JoinPlan,
     NarrationTakePlan,
     RecordingPlan,
+    StreamKind,
     TerminalActionPlan,
     captured_pane_beats,
+    pane_action_id,
     terminal_action_id,
 )
 
@@ -238,6 +241,18 @@ class CompiledPaneBeatTiming:
 
 
 @dataclass(frozen=True)
+class CompiledPaneActionTiming:
+    outer_beat_id: str
+    pane_id: str
+    pane_beat_id: str
+    action_id: str
+    presentation_start_ms: int
+    presentation_end_ms: int
+    local_start_ms: int
+    local_end_ms: int
+
+
+@dataclass(frozen=True)
 class CompiledRecordingTiming:
     duration_ms: int
     beats: tuple[CompiledBeatTiming, ...]
@@ -245,6 +260,7 @@ class CompiledRecordingTiming:
     pane_beats: tuple[CompiledPaneBeatTiming, ...]
     anchor_times_ms: Mapping[tuple[str, str], int]
     audio_intervals: tuple[PresentationAudioIntervalV1, ...]
+    pane_actions: tuple[CompiledPaneActionTiming, ...] = ()
 
     def beat(self, beat_id: str) -> CompiledBeatTiming:
         for beat in self.beats:
@@ -301,12 +317,30 @@ class _ScheduledPaneBeat:
     start_node: str
 
 
+@dataclass(frozen=True)
+class _ScheduledPaneAction:
+    outer_beat_id: str
+    pane_id: str
+    pane_beat_id: str
+    action_id: str
+    start_node: str
+    end_node: str
+
+
 def compile_recording_timing(
     plan: RecordingPlan,
     *,
     timestamp_sidecars: Mapping[str, Mapping[str, Any]],
     action_durations_ms: Mapping[tuple[str, str], int] | None = None,
     beat_visual_durations_ms: Mapping[str, int] | None = None,
+    pane_action_intervals_ms: Mapping[
+        tuple[str, str, str, str], tuple[int, int]
+    ]
+    | None = None,
+    pane_beat_visual_durations_ms: Mapping[
+        tuple[str, str, str], int
+    ]
+    | None = None,
     take_source_starts_ms: Mapping[str, int] | None = None,
 ) -> CompiledRecordingTiming:
     """Solve one recording timeline without inserting unauthored audio pauses."""
@@ -316,6 +350,16 @@ def compile_recording_timing(
     )
     beat_visual_durations_ms = (
         {} if beat_visual_durations_ms is None else beat_visual_durations_ms
+    )
+    pane_action_intervals_ms = (
+        {}
+        if pane_action_intervals_ms is None
+        else pane_action_intervals_ms
+    )
+    pane_beat_visual_durations_ms = (
+        {}
+        if pane_beat_visual_durations_ms is None
+        else pane_beat_visual_durations_ms
     )
     sidecars = {
         take.id: _validate_take_timestamps(
@@ -387,93 +431,55 @@ def compile_recording_timing(
 
     scheduled_actions: list[_ScheduledAction] = []
     scheduled_pane_beats: list[_ScheduledPaneBeat] = []
+    scheduled_pane_actions: list[_ScheduledPaneAction] = []
     action_end_nodes: dict[tuple[str, str], str] = {}
     visual_end_nodes: dict[str, str] = {}
-    for beat in plan.beats:
-        scheduled = _add_beat_action_constraints(
+    if plan.panes:
+        (
+            explicit_pane_beats,
+            explicit_pane_actions,
+            explicit_visual_ends,
+        ) = _add_explicit_pane_constraints(
             graph,
-            beat,
-            beat_start_node=beat_start_nodes[beat.id],
-            anchor_nodes=anchor_nodes,
-            action_durations_ms=action_durations_ms,
+            plan,
+            beat_start_nodes=beat_start_nodes,
+            narration_event_nodes=narration_event_nodes,
+            beat_visual_durations_ms=beat_visual_durations_ms,
+            pane_action_intervals_ms=pane_action_intervals_ms,
+            pane_beat_visual_durations_ms=pane_beat_visual_durations_ms,
         )
-        scheduled_actions.extend(scheduled)
-        for action in scheduled:
-            action_end_nodes[(action.beat_id, action.action_id)] = action.end_node
-        visual_end = f"beat:{beat.id}:visual-end"
-        graph.constrain(
-            beat_start_nodes[beat.id],
-            visual_end,
-            gap_ms=_duration_value(
-                beat_visual_durations_ms.get(beat.id, 0),
-                field=f"visual duration for beat {beat.id!r}",
-            ),
-            reason=f"visual baseline for beat {beat.id}",
-        )
-        for track in beat.pane_tracks:
-            previous_start: str | None = None
-            for pane_beat in track.beats:
-                start = (
-                    f"pane:{beat.id}:{track.pane_id}:{pane_beat.id}:start"
-                )
-                graph.constrain(
-                    beat_start_nodes[beat.id],
-                    start,
-                    reason=(
-                        f"outer beat {beat.id} contains pane beat "
-                        f"{track.pane_id}/{pane_beat.id}"
-                    ),
-                )
-                if previous_start is not None:
-                    graph.constrain(
-                        previous_start,
-                        start,
-                        reason=(
-                            f"source pane beat order in {beat.id}/{track.pane_id}"
-                        ),
-                    )
-                if pane_beat.start_join is not None:
-                    event_id = pane_beat.start_join.event.qualified_id
-                    event_node = narration_event_nodes.get(event_id)
-                    if event_node is None:
-                        raise PresentationCompileError(
-                            "PRESENTATION_SCHEMA",
-                            f"missing timing event {event_id!r}",
-                        )
-                    graph.constrain(
-                        event_node,
-                        start,
-                        gap_ms=pane_beat.start_join.gap_ms,
-                        reason=(
-                            f"pane beat {beat.id}/{track.pane_id}/"
-                            f"{pane_beat.id} follows {event_id}"
-                        ),
-                    )
-                graph.constrain(
-                    start,
-                    visual_end,
-                    gap_ms=pane_beat.transition.duration_ms,
-                    reason=(
-                        f"pane transition for {beat.id}/{track.pane_id}/"
-                        f"{pane_beat.id}"
-                    ),
-                )
-                scheduled_pane_beats.append(
-                    _ScheduledPaneBeat(
-                        outer_beat_id=beat.id,
-                        pane_id=track.pane_id,
-                        pane_beat_id=pane_beat.id,
-                        start_node=start,
-                    )
-                )
-                previous_start = start
-        for action in scheduled:
-            graph.constrain(
-                action.end_node,
-                visual_end,
-                reason=f"visual completion for beat {beat.id}",
+        scheduled_pane_beats.extend(explicit_pane_beats)
+        scheduled_pane_actions.extend(explicit_pane_actions)
+        visual_end_nodes.update(explicit_visual_ends)
+    else:
+        for beat in plan.beats:
+            scheduled = _add_beat_action_constraints(
+                graph,
+                beat,
+                beat_start_node=beat_start_nodes[beat.id],
+                anchor_nodes=anchor_nodes,
+                action_durations_ms=action_durations_ms,
             )
-        visual_end_nodes[beat.id] = visual_end
+            scheduled_actions.extend(scheduled)
+            for action in scheduled:
+                action_end_nodes[(action.beat_id, action.action_id)] = action.end_node
+            visual_end = f"beat:{beat.id}:visual-end"
+            graph.constrain(
+                beat_start_nodes[beat.id],
+                visual_end,
+                gap_ms=_duration_value(
+                    beat_visual_durations_ms.get(beat.id, 0),
+                    field=f"visual duration for beat {beat.id!r}",
+                ),
+                reason=f"visual baseline for beat {beat.id}",
+            )
+            for action in scheduled:
+                graph.constrain(
+                    action.end_node,
+                    visual_end,
+                    reason=f"visual completion for beat {beat.id}",
+                )
+            visual_end_nodes[beat.id] = visual_end
 
     for take in plan.narration_takes:
         timestamps = sidecars[take.id]
@@ -586,6 +592,25 @@ def compile_recording_timing(
         )
         for action in scheduled_actions
     )
+    pane_action_timings = tuple(
+        CompiledPaneActionTiming(
+            outer_beat_id=action.outer_beat_id,
+            pane_id=action.pane_id,
+            pane_beat_id=action.pane_beat_id,
+            action_id=action.action_id,
+            presentation_start_ms=solution.time(action.start_node),
+            presentation_end_ms=solution.time(action.end_node),
+            local_start_ms=(
+                solution.time(action.start_node)
+                - solution.time(beat_start_nodes[action.outer_beat_id])
+            ),
+            local_end_ms=(
+                solution.time(action.end_node)
+                - solution.time(beat_start_nodes[action.outer_beat_id])
+            ),
+        )
+        for action in scheduled_pane_actions
+    )
     beat_timing_by_id = {beat.id: beat for beat in beat_timings}
     pane_beat_timings: list[CompiledPaneBeatTiming] = []
     for outer in plan.beats:
@@ -640,6 +665,7 @@ def compile_recording_timing(
             {key: solution.time(node) for key, node in anchor_nodes.items()}
         ),
         audio_intervals=audio_intervals,
+        pane_actions=pane_action_timings,
     )
 
 
@@ -903,6 +929,294 @@ def _add_take_audio_constraints(
         previous_source = source_ms
 
     take_end_nodes[take.id] = cursor_node
+
+
+def _add_explicit_pane_constraints(
+    graph: ConstraintGraph,
+    plan: RecordingPlan,
+    *,
+    beat_start_nodes: Mapping[str, str],
+    narration_event_nodes: Mapping[str, str],
+    beat_visual_durations_ms: Mapping[str, int],
+    pane_action_intervals_ms: Mapping[
+        tuple[str, str, str, str], tuple[int, int]
+    ],
+    pane_beat_visual_durations_ms: Mapping[tuple[str, str, str], int],
+) -> tuple[
+    tuple[_ScheduledPaneBeat, ...],
+    tuple[_ScheduledPaneAction, ...],
+    Mapping[str, str],
+]:
+    """Schedule explicit pane streams while preserving captured local pacing."""
+
+    scheduled_beats: list[_ScheduledPaneBeat] = []
+    scheduled_actions: list[_ScheduledPaneAction] = []
+    event_nodes = dict(narration_event_nodes)
+    pending_joins: list[tuple[JoinPlan, str, str]] = []
+    visual_end_nodes: dict[str, str] = {}
+    pane_end_nodes: dict[tuple[str, str, str], str] = {}
+
+    for outer in plan.beats:
+        outer_start = beat_start_nodes[outer.id]
+        visual_end = f"beat:{outer.id}:visual-end"
+        graph.constrain(
+            outer_start,
+            visual_end,
+            gap_ms=_duration_value(
+                beat_visual_durations_ms.get(outer.id, 0),
+                field=f"visual duration for beat {outer.id!r}",
+            ),
+            reason=f"visual baseline for beat {outer.id}",
+        )
+        visual_end_nodes[outer.id] = visual_end
+
+        for track in outer.pane_tracks:
+            previous_pane_end: str | None = None
+            for pane_beat in track.beats:
+                identity = (outer.id, track.pane_id, pane_beat.id)
+                start = (
+                    f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:start"
+                )
+                transition_end = (
+                    f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:"
+                    "transition-end"
+                )
+                pane_end = (
+                    f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:end"
+                )
+                pane_end_nodes[identity] = pane_end
+                graph.constrain(
+                    outer_start,
+                    start,
+                    reason=(
+                        f"outer beat {outer.id} contains pane beat "
+                        f"{track.pane_id}/{pane_beat.id}"
+                    ),
+                )
+                if previous_pane_end is not None:
+                    graph.constrain(
+                        previous_pane_end,
+                        start,
+                        reason=(
+                            f"source pane beat order in "
+                            f"{outer.id}/{track.pane_id}"
+                        ),
+                    )
+                graph.constrain(
+                    start,
+                    transition_end,
+                    gap_ms=pane_beat.transition.duration_ms,
+                    reason=(
+                        f"pane transition for "
+                        f"{outer.id}/{track.pane_id}/{pane_beat.id}"
+                    ),
+                )
+                if pane_beat.start_join is not None:
+                    pending_joins.append(
+                        (
+                            pane_beat.start_join,
+                            start,
+                            (
+                                f"pane beat {outer.id}/{track.pane_id}/"
+                                f"{pane_beat.id}"
+                            ),
+                        )
+                    )
+
+                actions = tuple(pane_beat.actions)
+                action_intervals: list[tuple[int, int]] = []
+                previous_observed_end = 0
+                previous_action_end = transition_end
+                for action_index, action in enumerate(actions):
+                    action_id = pane_action_id(action, action_index)
+                    key = (*identity, action_id)
+                    raw_interval = pane_action_intervals_ms.get(key, (0, 0))
+                    if (
+                        not isinstance(raw_interval, tuple)
+                        or len(raw_interval) != 2
+                    ):
+                        raise PresentationCompileError(
+                            "PRESENTATION_SCHEMA",
+                            f"action interval for {key!r} must be a pair",
+                        )
+                    observed_start = _duration_value(
+                        raw_interval[0],
+                        field=f"action start for {key!r}",
+                    )
+                    observed_end = _duration_value(
+                        raw_interval[1],
+                        field=f"action end for {key!r}",
+                    )
+                    if (
+                        observed_end < observed_start
+                        or observed_start < previous_observed_end
+                    ):
+                        raise PresentationCompileError(
+                            "PRESENTATION_SCHEMA",
+                            f"action intervals for {identity!r} are not ordered",
+                        )
+                    action_intervals.append((observed_start, observed_end))
+
+                    action_start = (
+                        f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:"
+                        f"action:{action_id}:start"
+                    )
+                    action_end = (
+                        f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:"
+                        f"action:{action_id}:end"
+                    )
+                    graph.constrain(
+                        previous_action_end,
+                        action_start,
+                        gap_ms=observed_start - previous_observed_end,
+                        reason=(
+                            f"captured action spacing for "
+                            f"{track.pane_id}/{pane_beat.id}/{action_id}"
+                        ),
+                    )
+                    graph.constrain(
+                        action_start,
+                        action_end,
+                        gap_ms=observed_end - observed_start,
+                        reason=(
+                            f"captured action duration for "
+                            f"{track.pane_id}/{pane_beat.id}/{action_id}"
+                        ),
+                    )
+                    event_prefix = f"{track.pane_id}.{pane_beat.id}.{action_id}"
+                    event_nodes[f"{event_prefix}.started"] = action_start
+                    event_nodes[f"{event_prefix}.ended"] = action_end
+                    scheduled_actions.append(
+                        _ScheduledPaneAction(
+                            outer_beat_id=outer.id,
+                            pane_id=track.pane_id,
+                            pane_beat_id=pane_beat.id,
+                            action_id=action_id,
+                            start_node=action_start,
+                            end_node=action_end,
+                        )
+                    )
+                    start_join = getattr(action, "start_join", None)
+                    if start_join is not None:
+                        pending_joins.append(
+                            (
+                                start_join,
+                                action_start,
+                                (
+                                    f"pane action {outer.id}/{track.pane_id}/"
+                                    f"{pane_beat.id}/{action_id}"
+                                ),
+                            )
+                        )
+                    previous_observed_end = observed_end
+                    previous_action_end = action_end
+
+                captured_duration = _duration_value(
+                    pane_beat_visual_durations_ms.get(
+                        identity,
+                        action_intervals[-1][1] if action_intervals else 0,
+                    ),
+                    field=f"pane beat duration for {identity!r}",
+                )
+                if captured_duration < previous_observed_end:
+                    raise PresentationCompileError(
+                        "PRESENTATION_SCHEMA",
+                        f"pane beat duration for {identity!r} ends before its actions",
+                    )
+                graph.constrain(
+                    previous_action_end,
+                    pane_end,
+                    gap_ms=captured_duration - previous_observed_end,
+                    reason=(
+                        f"captured tail for "
+                        f"{outer.id}/{track.pane_id}/{pane_beat.id}"
+                    ),
+                )
+                graph.constrain(
+                    pane_end,
+                    visual_end,
+                    reason=(
+                        f"visual completion for "
+                        f"{outer.id}/{track.pane_id}/{pane_beat.id}"
+                    ),
+                )
+                scheduled_beats.append(
+                    _ScheduledPaneBeat(
+                        outer_beat_id=outer.id,
+                        pane_id=track.pane_id,
+                        pane_beat_id=pane_beat.id,
+                        start_node=start,
+                    )
+                )
+                previous_pane_end = pane_end
+
+    for handoff in plan.browser_handoffs:
+        producer_prefix = (
+            f"{handoff.producer_pane_id}."
+            f"{handoff.producer_pane_beat_id}.{handoff.id}"
+        )
+        consumer_prefix = (
+            f"{handoff.target_pane_id}."
+            f"{handoff.consumer_pane_beat_id}."
+            f"{handoff.consumer_action_id}"
+        )
+        producer_start = event_nodes.get(f"{producer_prefix}.started")
+        producer_end = event_nodes.get(f"{producer_prefix}.ended")
+        consumer_start = event_nodes.get(f"{consumer_prefix}.started")
+        consumer_end = pane_end_nodes.get(
+            (
+                handoff.consumer_outer_beat_id,
+                handoff.target_pane_id,
+                handoff.consumer_pane_beat_id,
+            )
+        )
+        if (
+            producer_start is None
+            or producer_end is None
+            or consumer_start is None
+            or consumer_end is None
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                f"browser handoff {handoff.id!r} has incomplete timing events",
+            )
+        graph.constrain(
+            producer_start,
+            consumer_start,
+            reason=(
+                f"browser handoff {handoff.id} is published by "
+                f"{handoff.producer_pane_id}"
+            ),
+        )
+        graph.constrain(
+            consumer_end,
+            producer_end,
+            reason=(
+                f"browser handoff {handoff.id} remains open through "
+                f"{handoff.target_pane_id}/{handoff.consumer_action_id}"
+            ),
+        )
+
+    for join, target_node, label in pending_joins:
+        event_id = join.event.qualified_id
+        event_node = event_nodes.get(event_id)
+        if event_node is None:
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                f"missing timing event {event_id!r}",
+            )
+        graph.constrain(
+            event_node,
+            target_node,
+            gap_ms=join.gap_ms,
+            reason=f"{label} follows {event_id}",
+        )
+
+    return (
+        tuple(scheduled_beats),
+        tuple(scheduled_actions),
+        MappingProxyType(visual_end_nodes),
+    )
 
 
 def _add_beat_action_constraints(

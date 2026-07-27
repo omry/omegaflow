@@ -367,7 +367,7 @@ class PersistentBrowserRunner:
             )
         resolved = _resolved_context_values(config)
         authentication = resolve_browser_authentication(config, context)
-        fragments = context.paths.capture / "fragments"
+        fragments = context.runner_capture / "fragments"
         _prepare_private_browser_directory(fragments)
 
         try:
@@ -383,10 +383,10 @@ class PersistentBrowserRunner:
         self.capture_context = context
         self.authentication = authentication
         self.secrets.register_storage_state(authentication.storage_state)
-        self.capture_log_path = context.paths.capture / "browser.capture.jsonl"
-        self.console_log_path = context.paths.diagnostics / "console.jsonl"
-        self.network_log_path = context.paths.diagnostics / "network.jsonl"
-        self.page_error_log_path = context.paths.diagnostics / "page-errors.jsonl"
+        self.capture_log_path = context.runner_capture / "browser.capture.jsonl"
+        self.console_log_path = context.runner_diagnostics / "console.jsonl"
+        self.network_log_path = context.runner_diagnostics / "network.jsonl"
+        self.page_error_log_path = context.runner_diagnostics / "page-errors.jsonl"
         for path in (
             self.capture_log_path,
             self.console_log_path,
@@ -480,9 +480,9 @@ class PersistentBrowserRunner:
             self.visuals = BrowserVisualCapture(
                 self.page,
                 run_dir=context.paths.run,
-                states_dir=context.paths.capture / "states",
+                states_dir=context.runner_capture / "states",
                 fragments_dir=fragments,
-                diagnostics_dir=context.paths.diagnostics / "stability",
+                diagnostics_dir=context.runner_diagnostics / "stability",
                 redaction_targets=redactions,
                 locator_factory=self._locator_without_count,
             )
@@ -529,9 +529,14 @@ class PersistentBrowserRunner:
         beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
+        before_action: Callable[[str], None] | None = None,
     ) -> BeatCapture:
         try:
-            return self._capture_browser_beat(beat, on_progress=on_progress)
+            return self._capture_browser_beat(
+                beat,
+                on_progress=on_progress,
+                before_action=before_action,
+            )
         except BaseException:
             self._capture_failed = True
             raise
@@ -541,6 +546,7 @@ class PersistentBrowserRunner:
         beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
+        before_action: Callable[[str], None] | None = None,
     ) -> BeatCapture:
         if beat.medium is not RecordingMedium.browser:
             raise BrowserCaptureError(
@@ -570,6 +576,8 @@ class PersistentBrowserRunner:
                     "BROWSER_SCHEMA", f"browser beat {beat.id!r} has a terminal action"
                 )
             action_response_start = len(self.responses)
+            if before_action is not None:
+                before_action(raw_action.id)
             if on_progress is not None:
                 on_progress("started", raw_action.id)
             owner_index = deferred_visuals.get(action_index)

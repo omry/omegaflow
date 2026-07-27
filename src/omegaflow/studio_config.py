@@ -586,9 +586,14 @@ class TerminalInputStepConfig:
 
 
 @dataclass
+class BrowserHandoffConfig:
+    target: str = ""
+
+
+@dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
-    browser_handoff: bool = False
+    browser_handoff: bool | BrowserHandoffConfig = False
     with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
     timing: str = "presentation"
@@ -853,6 +858,7 @@ class VisualizationShowConfig:
 class PaneActionConfig(RecordingActionConfig):
     timing: str = "presentation"
     show: VisualizationShowConfig | None = None
+    browser_handoff: bool | BrowserHandoffConfig = False
 
 
 @dataclass
@@ -1723,7 +1729,9 @@ def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if key == "beat" and value is not None
                 else value if key == "beats" and isinstance(value, list) else []
             )
-            if not beat_values or declaration is not None:
+            if not beat_values:
+                continue
+            if declaration is not None:
                 continue
             for beat in beat_values:
                 if not isinstance(beat, dict) or "panes" not in beat:

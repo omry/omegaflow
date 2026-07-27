@@ -48,6 +48,7 @@ SCHEMA_GROUPS = {
         "RecordingExpectationConfig",
         "RecordingInvocationConfig",
         "TerminalInputStepConfig",
+        "BrowserHandoffConfig",
         "RecordingCommandConfig",
         "RecordingStepConfig",
         "BrowserTargetConfig",

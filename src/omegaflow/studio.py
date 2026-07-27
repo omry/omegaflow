@@ -1512,6 +1512,7 @@ def selected_surface(
 
 def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
     spec = load_recording_spec_from_hydra_cfg(cfg)
+    recording_plan = normalized_recording_plan(spec)
     manifest_path = optional_string(spec.get("_manifest_path"))
     script_path = optional_string(spec.get("script"))
     surface_info: list[dict[str, Any]] = []
@@ -1532,6 +1533,10 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
     presentation_paths = presentation_build.run_paths(
         current_recording_run_dir(spec)
     )
+    browser_capture_logs = presentation_build.browser_capture_paths(
+        recording_plan,
+        current_recording_run_dir(spec),
+    )
     return {
         "recording": str(spec["_recording_id"]),
         "title": optional_string(spec.get("title")),
@@ -1541,9 +1546,9 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
         },
         "outputs": {
             "private_capture": display_path(presentation_paths["capture"]),
-            "browser_capture_log": display_path(
-                presentation_paths["browser_capture"]
-            ),
+            "browser_capture_logs": [
+                display_path(path) for path in browser_capture_logs
+            ],
             "narration": display_path(presentation_paths["audio"]),
             "presentation_bundle": display_path(
                 presentation_paths["presentation"]
@@ -1582,7 +1587,15 @@ def print_build_plan(plan: dict[str, Any]) -> None:
     print()
     print("Outputs:")
     for name, value in plan["outputs"].items():
-        print(f"  {name}: {value}")
+        if isinstance(value, list):
+            if value:
+                print(f"  {name}:")
+                for item in value:
+                    print(f"    - {item}")
+            else:
+                print(f"  {name}: []")
+        else:
+            print(f"  {name}: {value}")
     publish = plan.get("publish")
     if isinstance(publish, dict) and publish.get("surfaces"):
         print()

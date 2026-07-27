@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import shlex
 import shutil
@@ -17,6 +18,7 @@ from omegaflow.record import asciinema_command
 from omegaflow.recording_plan import normalize_recording_plan
 from omegaflow.terminal_capture import (
     PersistentTerminalRunner,
+    TerminalCaptureError,
     TerminalControlSession,
     TerminalLifecycleStepError,
     extract_terminal_beat_casts,
@@ -85,6 +87,162 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
             "duration_ms": 200,
         }
     ]
+
+
+def test_terminal_action_gate_runs_before_the_command(tmp_path: Path) -> None:
+    marker = tmp_path / "command-ran"
+    plan = normalize_recording_plan(
+        {
+            "id": "action-gate",
+            "beats": [
+                {
+                    "id": "gated",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "write-marker",
+                                    "run": f"touch {shlex.quote(str(marker))}",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=5.0,
+    )
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+        )
+    )
+    gates: list[str] = []
+    progress: list[tuple[str, str]] = []
+
+    def before_action(action_id: str) -> None:
+        gates.append(action_id)
+        assert not marker.exists(), "command ran before its action gate"
+
+    try:
+        runner.capture_beat(
+            plan.beats[0],
+            before_action=before_action,
+            on_progress=lambda state, action_id: progress.append(
+                (state, action_id)
+            ),
+        )
+    finally:
+        runner.close()
+
+    assert gates == ["write-marker"]
+    assert progress == [
+        ("started", "write-marker"),
+        ("completed", "write-marker"),
+    ]
+    assert marker.exists()
+
+
+def test_terminal_action_gate_does_not_disable_command_timeout(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "action-gate-timeout",
+            "beats": [
+                {
+                    "id": "gated",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "slow-command",
+                                    "run": "sleep 0.3",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=0.1,
+    )
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+        )
+    )
+
+    try:
+        with pytest.raises(TerminalCaptureError, match="timed out"):
+            runner.capture_beat(
+                plan.beats[0],
+                before_action=lambda _action_id: None,
+            )
+    finally:
+        runner.cancel_capture()
+        with contextlib.suppress(TerminalCaptureError):
+            runner.close()
+
+
+def test_terminal_action_gate_gets_a_fresh_command_timeout(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "slow-action-gate",
+            "beats": [
+                {
+                    "id": "gated",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "quick-command",
+                                    "run": "true",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=0.15,
+    )
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+        )
+    )
+
+    try:
+        runner.capture_beat(
+            plan.beats[0],
+            before_action=lambda _action_id: time.sleep(0.25),
+        )
+    finally:
+        runner.close()
 
 
 def test_persistent_terminal_protocol_preserves_state_and_marks_hidden_intervals(

@@ -91,6 +91,7 @@ from .recording_plan import (
     TerminalActionPlan,
     TextHighlightEffectPlan,
     VisualizationActionPlan,
+    capture_runner_beat,
     captured_pane_beats,
     terminal_action_id,
 )
@@ -106,9 +107,9 @@ from .visualization import VisualizationError, syntax_tokens
 
 
 CAPTURE_POLICY_VERSIONS = {
-    "coordinator": "capture-v1",
-    "terminal": "persistent-terminal-v4",
-    "browser": "playwright-capture-v7-visual-state-aligned",
+    "coordinator": "capture-v2-runner-scopes",
+    "terminal": "persistent-terminal-v5-runner-scopes",
+    "browser": "playwright-capture-v8-runner-scopes",
     "stability": "stable-v1",
     "redaction": "capture-mask-v1",
 }
@@ -395,6 +396,48 @@ def run_paths(run_dir: Path) -> dict[str, Path]:
     }
 
 
+def _browser_capture_groups(
+    plan: RecordingPlan,
+    run_dir: Path,
+) -> tuple[tuple[Path, tuple[CapturedPaneBeatPlan, ...]], ...]:
+    browser_captures = tuple(
+        captured
+        for captured in captured_pane_beats(plan)
+        if captured.kind is PaneKind.browser
+    )
+    if not browser_captures:
+        return ()
+    if not plan.panes:
+        return ((run_paths(run_dir)["browser_capture"], browser_captures),)
+    pane_ids = tuple(
+        dict.fromkeys(captured.pane_id for captured in browser_captures)
+    )
+    return tuple(
+        (
+            run_dir
+            / "capture"
+            / "runners"
+            / pane_id
+            / "browser.capture.jsonl",
+            tuple(
+                captured
+                for captured in browser_captures
+                if captured.pane_id == pane_id
+            ),
+        )
+        for pane_id in pane_ids
+    )
+
+
+def browser_capture_paths(
+    plan: RecordingPlan,
+    run_dir: Path,
+) -> tuple[Path, ...]:
+    """Return every private browser capture log produced for a recording."""
+
+    return tuple(path for path, _ in _browser_capture_groups(plan, run_dir))
+
+
 def public_bundle_dir(spec: Mapping[str, Any]) -> Path:
     outputs = spec.get("outputs", {})
     if not isinstance(outputs, Mapping):
@@ -616,13 +659,29 @@ def capture_recording(
 def _copy_capture_logs(run_dir: Path) -> tuple[Path, Path, Path]:
     capture_dir = run_dir / "capture"
     outputs = (
-        (capture_dir / "terminal.stdout.log", run_dir / "stdout"),
-        (capture_dir / "terminal.stderr.log", run_dir / "stderr"),
+        ("terminal.stdout.log", run_dir / "stdout"),
+        ("terminal.stderr.log", run_dir / "stderr"),
     )
-    for source, destination in outputs:
+    for filename, destination in outputs:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if source.is_file():
-            shutil.copy2(source, destination)
+        legacy_source = capture_dir / filename
+        scoped_sources = tuple(
+            path
+            for path in sorted((capture_dir / "runners").glob(f"*/{filename}"))
+            if path.is_file() and path.stat().st_size
+        )
+        if legacy_source.is_file():
+            shutil.copy2(legacy_source, destination)
+        elif scoped_sources:
+            with destination.open("wb") as output:
+                for index, source in enumerate(scoped_sources):
+                    if len(scoped_sources) > 1:
+                        if index:
+                            output.write(b"\n")
+                        output.write(
+                            f"=== pane {source.parent.name} ===\n".encode()
+                        )
+                    output.write(source.read_bytes())
         elif not destination.exists():
             destination.write_text("", encoding="utf-8")
     progress = run_dir / "progress"
@@ -661,6 +720,32 @@ def _preserve_capture_diagnostics(
         ):
             if source.is_file():
                 shutil.copy2(source, destination)
+        scoped_terminal_dirs = tuple(
+            path.parent
+            for path in sorted(
+                (capture_dir / "runners").glob("*/terminal.cast")
+            )
+            if path.is_file()
+        )
+        for index, terminal_dir in enumerate(scoped_terminal_dirs):
+            pane_id = terminal_dir.name
+            for source_name, destination_name in (
+                ("terminal.cast", f"failed-{pane_id}.cast"),
+                (
+                    "terminal.timeline.jsonl",
+                    f"failed-{pane_id}.timeline.jsonl",
+                ),
+            ):
+                source = terminal_dir / source_name
+                if source.is_file():
+                    shutil.copy2(source, run_dir / destination_name)
+                    if index == 0:
+                        fallback_name = (
+                            "failed.cast"
+                            if source_name == "terminal.cast"
+                            else "failed.timeline.jsonl"
+                        )
+                        shutil.copy2(source, run_dir / fallback_name)
         output_path = (
             stderr_path
             if stderr_path.is_file() and stderr_path.stat().st_size
@@ -723,12 +808,9 @@ def capture_artifacts_exist(plan: RecordingPlan, run_dir: Path) -> bool:
         for beat_id in terminal_ids
     ):
         return False
-    if any(
-        captured.kind is PaneKind.browser
-        for captured in captured_pane_beats(plan)
-    ):
+    for browser_capture, _ in _browser_capture_groups(plan, run_dir):
         try:
-            load_browser_capture_log(paths["browser_capture"])
+            load_browser_capture_log(browser_capture)
         except Exception:
             return False
     return True
@@ -1583,6 +1665,9 @@ def _explicit_pane_tracks(
         tuple[str, str, str], CapturedPaneBeatPlan
     ],
     terminal_intervals: Mapping[str, Mapping[str, tuple[int, int]]],
+    compiled_browser: Mapping[str, CompiledBrowserBeat],
+    all_sources: dict[str, Any],
+    presentation_config: Mapping[str, Any],
     paths: Mapping[str, Path],
     staging: Path,
 ) -> list[PresentationPaneTrackV1]:
@@ -1657,11 +1742,33 @@ def _explicit_pane_tracks(
                 captured = captured_by_outer_pane_beat[
                     (beat.id, track.pane_id, pane_beat.id)
                 ]
+                if captured.capture_id not in terminal_intervals:
+                    raise PresentationBuildError(
+                        "terminal action timing is missing for "
+                        f"{captured.capture_id!r}"
+                    )
                 payload = f"beats/{captured.capture_id}.cast"
                 materialize_terminal_beat(
                     paths["terminal_beats"] / f"{captured.capture_id}.cast",
                     staging / payload,
                     duration_ms=content_duration_ms,
+                    captured_action_intervals_ms=terminal_intervals[
+                        captured.capture_id
+                    ],
+                    action_starts_ms={
+                        item.action_id: (
+                            item.local_start_ms
+                            - pane_timing.local_start_ms
+                            - pane_beat.transition.duration_ms
+                        )
+                        for item in timing.pane_actions
+                        if (
+                            item.outer_beat_id,
+                            item.pane_id,
+                            item.pane_beat_id,
+                        )
+                        == (beat.id, track.pane_id, pane_beat.id)
+                    },
                     text_highlights=_terminal_highlight_events(
                         beat,
                         pane_id=track.pane_id,
@@ -1672,11 +1779,24 @@ def _explicit_pane_tracks(
                         transition_ms=pane_beat.transition.duration_ms,
                     ),
                 )
-                if captured.capture_id not in terminal_intervals:
-                    raise PresentationBuildError(
-                        "terminal action timing is missing for "
-                        f"{captured.capture_id!r}"
+            elif track.kind is PaneKind.browser:
+                captured = captured_by_outer_pane_beat[
+                    (beat.id, track.pane_id, pane_beat.id)
+                ]
+                payload = f"beats/{captured.capture_id}.browser.json"
+                compiled = compiled_browser[captured.capture_id]
+                browser_payload = dict(compiled.payload)
+                browser_payload["beat_id"] = pane_beat.id
+                (staging / payload).write_text(
+                    json.dumps(
+                        browser_payload,
+                        separators=(",", ":"),
+                        sort_keys=True,
                     )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                all_sources.update(compiled.assets)
             else:  # pragma: no cover - rejected during normalization
                 raise PresentationBuildError(
                     f"explicit pane renderer {track.kind.value!r} is unsupported"
@@ -1688,6 +1808,30 @@ def _explicit_pane_tracks(
                     duration_ms=duration_ms,
                     payload=payload,
                     transition=transition,
+                    browser=(
+                        _browser_presentation_header(
+                            presentation_config,
+                            window_override=(
+                                None
+                                if pane_beat.presentation.browser_window is None
+                                else thaw(
+                                    pane_beat.presentation.browser_window
+                                )
+                            ),
+                            chrome_override=(
+                                None
+                                if pane_beat.presentation.browser_chrome is None
+                                else thaw(
+                                    pane_beat.presentation.browser_chrome
+                                )
+                            ),
+                        )
+                        if (
+                            pane_beat.presentation.browser_window is not None
+                            or pane_beat.presentation.browser_chrome is not None
+                        )
+                        else None
+                    ),
                 )
             )
         tracks.append(
@@ -1703,6 +1847,7 @@ def _browser_pass(
     plan: RecordingPlan,
     log: BrowserCaptureLog,
     *,
+    browser_captures: Iterable[CapturedPaneBeatPlan] | None = None,
     action_starts: Mapping[tuple[str, str], int] | None = None,
     beat_durations: Mapping[str, int] | None = None,
 ) -> tuple[dict[str, CompiledBrowserBeat], dict[str, Mapping[str, Any]]]:
@@ -1721,9 +1866,19 @@ def _browser_pass(
     state: Mapping[str, Any] = log.initial_state
     compiled_by_beat: dict[str, CompiledBrowserBeat] = {}
     initial_states: dict[str, Mapping[str, Any]] = {}
-    for beat in plan.beats:
-        if beat.medium is not RecordingMedium.browser:
-            continue
+    selected_captures = (
+        tuple(browser_captures)
+        if browser_captures is not None
+        else tuple(
+            captured
+            for captured in captured_pane_beats(plan)
+            if captured.kind is PaneKind.browser
+        )
+    )
+    browser_beats = tuple(
+        capture_runner_beat(plan, captured) for captured in selected_captures
+    )
+    for beat in browser_beats:
         pointer["visible"] = (
             default_pointer_visible
             if beat.browser_pointer_visible is None
@@ -1798,13 +1953,32 @@ def compile_presentation_bundle(
     has_browser = any(
         captured.kind is PaneKind.browser for captured in captured_beats
     )
-    browser_log = load_browser_capture_log(paths["browser_capture"]) if has_browser else None
+    browser_logs = tuple(
+        (
+            load_browser_capture_log(capture_path),
+            browser_captures,
+        )
+        for capture_path, browser_captures in _browser_capture_groups(
+            plan, run_dir
+        )
+    )
     preliminary: dict[str, CompiledBrowserBeat] = {}
-    if browser_log is not None:
-        preliminary, _ = _browser_pass(plan, browser_log)
+    for browser_log, browser_captures in browser_logs:
+        compiled, _ = _browser_pass(
+            plan,
+            browser_log,
+            browser_captures=browser_captures,
+        )
+        preliminary.update(compiled)
     action_durations: dict[tuple[str, str], int] = {}
     visual_durations: dict[str, int] = {}
     terminal_intervals: dict[str, dict[str, tuple[int, int]]] = {}
+    pane_action_intervals: dict[
+        tuple[str, str, str, str], tuple[int, int]
+    ] = {}
+    pane_beat_visual_durations: dict[
+        tuple[str, str, str], int
+    ] = {}
     if plan.panes:
         captured_by_outer_pane_beat = {
             (
@@ -1815,34 +1989,54 @@ def compile_presentation_bundle(
             for captured in captured_beats
         }
         for beat in plan.beats:
-            track_durations: list[int] = []
             for track in beat.pane_tracks:
-                track_duration = 0
                 for pane_beat in track.beats:
                     if track.kind is PaneKind.visualization:
-                        track_duration += pane_beat.transition.duration_ms
                         continue
                     captured = captured_by_outer_pane_beat[
                         (beat.id, track.pane_id, pane_beat.id)
                     ]
-                    source = (
-                        paths["terminal_beats"] / f"{captured.capture_id}.cast"
-                    )
-                    duration = _terminal_duration_ms(source)
-                    track_duration += (
-                        duration + pane_beat.transition.duration_ms
-                    )
-                    intervals = _load_terminal_action_intervals(
-                        paths["terminal_beats"]
-                        / f"{captured.capture_id}.actions.json",
-                        beat_id=captured.capture_id,
-                        expected_action_ids=_terminal_pane_action_ids(
-                            captured.beat
-                        ),
-                    )
-                    terminal_intervals[captured.capture_id] = intervals
-                track_durations.append(track_duration)
-            visual_durations[beat.id] = max(track_durations, default=0)
+                    if track.kind is PaneKind.browser:
+                        compiled = preliminary[captured.capture_id]
+                        duration = int(compiled.payload["duration_ms"])
+                        intervals = {
+                            action_id: (
+                                start_ms,
+                                compiled.action_completions_ms[action_id],
+                            )
+                            for action_id, start_ms
+                            in compiled.action_starts_ms.items()
+                        }
+                    else:
+                        source = (
+                            paths["terminal_beats"]
+                            / f"{captured.capture_id}.cast"
+                        )
+                        duration = _terminal_duration_ms(source)
+                        intervals = _load_terminal_action_intervals(
+                            paths["terminal_beats"]
+                            / f"{captured.capture_id}.actions.json",
+                            beat_id=captured.capture_id,
+                            expected_action_ids=_terminal_pane_action_ids(
+                                captured.beat
+                            ),
+                        )
+                        terminal_intervals[captured.capture_id] = intervals
+                        duration = max(
+                            duration,
+                            max(
+                                (end_ms for _, end_ms in intervals.values()),
+                                default=0,
+                            ),
+                        )
+                    pane_beat_visual_durations[
+                        (beat.id, track.pane_id, pane_beat.id)
+                    ] = duration
+                    for action_id, interval in intervals.items():
+                        pane_action_intervals[
+                            (beat.id, track.pane_id, pane_beat.id, action_id)
+                        ] = interval
+            visual_durations[beat.id] = 0
     else:
         for beat in plan.beats:
             if beat.medium is RecordingMedium.browser:
@@ -1869,19 +2063,80 @@ def compile_presentation_bundle(
         timestamp_sidecars=_load_sidecars(audio_artifacts),
         action_durations_ms=action_durations,
         beat_visual_durations_ms=visual_durations,
+        pane_action_intervals_ms=pane_action_intervals,
+        pane_beat_visual_durations_ms=pane_beat_visual_durations,
     )
     compiled_browser: dict[str, CompiledBrowserBeat] = {}
-    if browser_log is not None:
-        compiled_browser, _ = _browser_pass(
-            plan,
-            browser_log,
-            action_starts={
-                (item.beat_id, item.action_id): item.local_start_ms
-                for item in timing.actions
-                if (item.beat_id, item.action_id) in action_durations
-            },
-            beat_durations={item.id: item.duration_ms for item in timing.beats},
-        )
+    if browser_logs:
+        if plan.panes:
+            pane_timing_by_key = {
+                (
+                    item.outer_beat_id,
+                    item.pane_id,
+                    item.pane_beat_id,
+                ): item
+                for item in timing.pane_beats
+            }
+            capture_by_id = {
+                captured.capture_id: captured for captured in captured_beats
+            }
+            browser_action_starts: dict[tuple[str, str], int] = {}
+            browser_beat_durations: dict[str, int] = {}
+            for capture_id, captured in capture_by_id.items():
+                if captured.kind is not PaneKind.browser:
+                    continue
+                pane_timing = pane_timing_by_key[
+                    (
+                        captured.outer_beat_id,
+                        captured.pane_id,
+                        captured.beat.id,
+                    )
+                ]
+                content_start = (
+                    pane_timing.local_start_ms
+                    + captured.beat.transition.duration_ms
+                )
+                browser_beat_durations[capture_id] = (
+                    pane_timing.local_end_ms - content_start
+                )
+                for item in timing.pane_actions:
+                    if (
+                        item.outer_beat_id,
+                        item.pane_id,
+                        item.pane_beat_id,
+                    ) == (
+                        captured.outer_beat_id,
+                        captured.pane_id,
+                        captured.beat.id,
+                    ):
+                        browser_action_starts[(capture_id, item.action_id)] = (
+                            item.local_start_ms - content_start
+                        )
+            for browser_log, browser_captures in browser_logs:
+                compiled, _ = _browser_pass(
+                    plan,
+                    browser_log,
+                    browser_captures=browser_captures,
+                    action_starts=browser_action_starts,
+                    beat_durations=browser_beat_durations,
+                )
+                compiled_browser.update(compiled)
+        else:
+            for browser_log, browser_captures in browser_logs:
+                compiled, _ = _browser_pass(
+                    plan,
+                    browser_log,
+                    browser_captures=browser_captures,
+                    action_starts={
+                        (item.beat_id, item.action_id): item.local_start_ms
+                        for item in timing.actions
+                        if (item.beat_id, item.action_id) in action_durations
+                    },
+                    beat_durations={
+                        item.id: item.duration_ms for item in timing.beats
+                    },
+                )
+                compiled_browser.update(compiled)
 
     staging = Path(tempfile.mkdtemp(prefix=".presentation-build-", dir=run_dir))
     try:
@@ -1939,6 +2194,9 @@ def compile_presentation_bundle(
                                 captured_by_outer_pane_beat
                             ),
                             terminal_intervals=terminal_intervals,
+                            compiled_browser=compiled_browser,
+                            all_sources=all_sources,
+                            presentation_config=presentation_config,
                             paths=paths,
                             staging=staging,
                         ),
@@ -2135,7 +2393,11 @@ def compile_presentation_bundle(
             timestamp_hashes=timestamp_hashes,
         )
         warnings = sorted(
-            set(_capture_warnings(paths["browser_capture"]) if has_browser else ())
+            {
+                warning
+                for capture_path, _ in _browser_capture_groups(plan, run_dir)
+                for warning in _capture_warnings(capture_path)
+            }
             | set(audio_artifacts.warnings if audio_artifacts is not None else ())
         )
         dependencies = [

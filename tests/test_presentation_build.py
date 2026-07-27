@@ -77,6 +77,67 @@ def state(path: Path, *, color: tuple[int, int, int]) -> dict[str, object]:
     }
 
 
+def test_copy_capture_logs_aggregates_nonempty_runner_output(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    client = run_dir / "capture/runners/client"
+    server = run_dir / "capture/runners/server"
+    client.mkdir(parents=True)
+    server.mkdir(parents=True)
+    (client / "terminal.stdout.log").write_text(
+        "PING from client\n", encoding="utf-8"
+    )
+    (server / "terminal.stdout.log").write_text(
+        "PONG from server\n", encoding="utf-8"
+    )
+    (client / "terminal.stderr.log").write_text("", encoding="utf-8")
+    (server / "terminal.stderr.log").write_text("", encoding="utf-8")
+
+    stdout, stderr, _ = presentation_build._copy_capture_logs(run_dir)
+
+    assert stdout.read_text(encoding="utf-8") == (
+        "=== pane client ===\n"
+        "PING from client\n"
+        "\n"
+        "=== pane server ===\n"
+        "PONG from server\n"
+    )
+    assert stderr.read_text(encoding="utf-8") == ""
+
+
+def test_capture_failure_preserves_each_terminal_runner_cast(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    for pane_id in ("client", "server"):
+        runner_dir = run_dir / "capture/runners" / pane_id
+        runner_dir.mkdir(parents=True)
+        (runner_dir / "terminal.cast").write_text(
+            f"{pane_id} cast\n", encoding="utf-8"
+        )
+        (runner_dir / "terminal.timeline.jsonl").write_text(
+            f"{pane_id} timeline\n", encoding="utf-8"
+        )
+
+    presentation_build._preserve_capture_diagnostics(
+        {"id": "two-terminals"},
+        run_dir,
+        RuntimeError("capture failed"),
+        working_directory=tmp_path,
+    )
+
+    assert (run_dir / "failed-client.cast").read_text(
+        encoding="utf-8"
+    ) == "client cast\n"
+    assert (run_dir / "failed-server.cast").read_text(
+        encoding="utf-8"
+    ) == "server cast\n"
+    assert (run_dir / "failed.cast").read_text(
+        encoding="utf-8"
+    ) == "client cast\n"
+
+
 def test_materialized_wait_is_silence_between_complete_audio_fragments(
     tmp_path: Path,
 ) -> None:
@@ -699,6 +760,341 @@ def test_visualization_and_terminal_authoring_compiles_end_to_end(
     ).read_text(encoding="utf-8").endswith(
         json.dumps([0.1, "o", "Renderer: ready\n"], separators=(",", ":"))
         + "\n"
+    )
+
+
+def test_terminal_and_browser_panes_compile_browser_presentation_overrides(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    capture_dir = run_dir / "capture"
+    browser_capture_dir = capture_dir / "runners" / "browser"
+    terminal_dir = capture_dir / "terminal-beats"
+    terminal_dir.mkdir(parents=True)
+    terminal_capture_id = "compose--terminal--session"
+    (terminal_dir / f"{terminal_capture_id}.cast").write_text(
+        json.dumps({"version": 3, "width": 80, "height": 20})
+        + "\n"
+        + json.dumps([0.1, "o", "Terminal ready\n"])
+        + "\n",
+        encoding="utf-8",
+    )
+    (terminal_dir / f"{terminal_capture_id}.actions.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "beat_id": terminal_capture_id,
+                "actions": [
+                    {
+                        "id": "run-app",
+                        "start_ms": 0,
+                        "end_ms": 100,
+                        "duration_ms": 100,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    initial_path = browser_capture_dir / "states" / "initial.png"
+    initial = state(
+        initial_path,
+        color=(245, 245, 245),
+    )
+    initial["path"] = initial_path.relative_to(run_dir).as_posix()
+    opened_path = browser_capture_dir / "states" / "opened.png"
+    opened = state(
+        opened_path,
+        color=(20, 80, 160),
+    )
+    opened["path"] = opened_path.relative_to(run_dir).as_posix()
+    browser_capture_id = "compose--browser--interaction"
+    records = [
+        {
+            "capture_version": 1,
+            "seq": 1,
+            "type": "run_start",
+            "profile": {
+                "viewport_width": 1440,
+                "viewport_height": 900,
+                "device_scale_factor": 1.0,
+            },
+            "initial_state": initial,
+        },
+        {
+            "capture_version": 1,
+            "seq": 2,
+            "type": "beat_start",
+            "beat_id": browser_capture_id,
+        },
+        {
+            "capture_version": 1,
+            "seq": 3,
+            "type": "action",
+            "beat_id": browser_capture_id,
+            "action_id": "open-app",
+            "kind": "open_page",
+            "completion": {"kind": "navigation"},
+            "visual": {"kind": "state", "state": opened},
+        },
+        {
+            "capture_version": 1,
+            "seq": 4,
+            "type": "beat_end",
+            "beat_id": browser_capture_id,
+        },
+        {
+            "capture_version": 1,
+            "seq": 5,
+            "type": "run_end",
+            "status": "completed",
+        },
+    ]
+    (browser_capture_dir / "browser.capture.jsonl").write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    spec = {
+        "id": "terminal-browser",
+        "browser": {},
+        "presentation": {
+            "browser": {
+                "window": {"mode": "framed", "title": "Default"},
+                "chrome": {"mode": "full"},
+            }
+        },
+        "audio": {"enabled": False},
+        "panes": [
+            {"id": "terminal", "kind": "terminal"},
+            {"id": "browser", "kind": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "compose",
+                "layout": {"areas": [["terminal", "browser"]]},
+                "panes": {
+                    "terminal": [
+                        {
+                            "id": "session",
+                            "actions": [
+                                {
+                                    "id": "run-app",
+                                    "run": "printf 'Terminal ready\\n'",
+                                }
+                            ],
+                        }
+                    ],
+                    "browser": [
+                        {
+                            "id": "interaction",
+                            "window": {"mode": "none"},
+                            "chrome": {"mode": "hidden"},
+                            "actions": [
+                                {
+                                    "id": "open-app",
+                                    "open_page": {"url": "about:blank"},
+                                    "hold_after_ms": 100,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    compile_presentation_bundle(spec, plan, run_dir)
+    manifest = validate_run_bundle(spec, run_dir)
+
+    browser_beat = manifest["beats"][0]["pane_tracks"][1]["beats"][0]
+    assert browser_beat["browser"] == {
+        "window": {
+            "mode": "none",
+            "theme": "kde-breeze",
+            "title": "Default",
+        },
+        "chrome": {"mode": "hidden"},
+    }
+
+
+def test_two_browser_panes_compile_from_isolated_capture_logs(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    spec = {
+        "id": "two-browsers",
+        "browser": {},
+        "audio": {"enabled": False},
+        "panes": [
+            {"id": "left", "kind": "browser"},
+            {"id": "right", "kind": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "compare",
+                "layout": {"areas": [["left", "right"]]},
+                "panes": {
+                    "left": [
+                        {
+                            "id": "first",
+                            "actions": [
+                                {
+                                    "id": "open-left",
+                                    "open_page": {"url": "about:blank"},
+                                    "hold_after_ms": 100,
+                                }
+                            ],
+                        }
+                    ],
+                    "right": [
+                        {
+                            "id": "second",
+                            "actions": [
+                                {
+                                    "id": "open-right",
+                                    "open_page": {"url": "about:blank"},
+                                    "hold_after_ms": 100,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    for index, (pane_id, pane_beat_id, action_id) in enumerate(
+        (
+            ("left", "first", "open-left"),
+            ("right", "second", "open-right"),
+        ),
+        start=1,
+    ):
+        capture_dir = run_dir / "capture" / "runners" / pane_id
+        capture_id = f"compare--{pane_id}--{pane_beat_id}"
+        initial_path = capture_dir / "states" / "initial.png"
+        initial = state(
+            initial_path,
+            color=(245, 245, 245),
+        )
+        initial["path"] = initial_path.relative_to(run_dir).as_posix()
+        opened_path = capture_dir / "states" / "opened.png"
+        opened = state(
+            opened_path,
+            color=(20 * index, 80, 160),
+        )
+        opened["path"] = opened_path.relative_to(run_dir).as_posix()
+        records = [
+            {
+                "capture_version": 1,
+                "seq": 1,
+                "type": "run_start",
+                "profile": {
+                    "viewport_width": 1440,
+                    "viewport_height": 900,
+                    "device_scale_factor": 1.0,
+                },
+                "initial_state": initial,
+            },
+            {
+                "capture_version": 1,
+                "seq": 2,
+                "type": "beat_start",
+                "beat_id": capture_id,
+            },
+            {
+                "capture_version": 1,
+                "seq": 3,
+                "type": "action",
+                "beat_id": capture_id,
+                "action_id": action_id,
+                "kind": "open_page",
+                "completion": {"kind": "navigation"},
+                "visual": {"kind": "state", "state": opened},
+            },
+            {
+                "capture_version": 1,
+                "seq": 4,
+                "type": "beat_end",
+                "beat_id": capture_id,
+            },
+            {
+                "capture_version": 1,
+                "seq": 5,
+                "type": "run_end",
+                "status": "completed",
+            },
+        ]
+        (capture_dir / "browser.capture.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records),
+            encoding="utf-8",
+        )
+
+    compile_presentation_bundle(spec, plan, run_dir)
+    manifest = validate_run_bundle(spec, run_dir)
+
+    tracks = manifest["beats"][0]["pane_tracks"]
+    assert [track["pane_id"] for track in tracks] == ["left", "right"]
+    assert [pane["renderer"] for pane in manifest["panes"]] == [
+        "browser",
+        "browser",
+    ]
+    assert all(
+        (run_dir / "presentation" / track["beats"][0]["payload"]).is_file()
+        for track in tracks
+    )
+
+
+def test_browser_capture_paths_report_each_scoped_pane_log(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "two-browsers",
+            "browser": {},
+            "panes": [
+                {"id": "left", "kind": "browser"},
+                {"id": "right", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "compare",
+                    "layout": {"areas": [["left", "right"]]},
+                    "panes": {
+                        "left": [
+                            {
+                                "id": "first",
+                                "actions": [
+                                    {
+                                        "id": "open-left",
+                                        "open_page": {"url": "about:blank"},
+                                    }
+                                ],
+                            }
+                        ],
+                        "right": [
+                            {
+                                "id": "second",
+                                "actions": [
+                                    {
+                                        "id": "open-right",
+                                        "open_page": {"url": "about:blank"},
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert presentation_build.browser_capture_paths(plan, tmp_path / "run") == (
+        tmp_path / "run/capture/runners/left/browser.capture.jsonl",
+        tmp_path / "run/capture/runners/right/browser.capture.jsonl",
     )
 
 

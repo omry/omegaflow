@@ -118,10 +118,10 @@ Set `highlight.pane` to the pane whose recording surface contains the target
 text. The same effect syntax works for syntax-colored visualization text and
 captured terminal text.
 
-Multi-pane authoring currently supports one visualization pane beside one
-captured terminal pane. A pane track can contain sequential pane beats. The
-first appears with the outer beat; each later pane beat uses `after` to wait for
-a narration segment event:
+Pane tracks can use visualization, terminal, or browser renderers and can
+contain sequential pane beats. Pane beats follow their authored order.
+An `after` join can additionally delay any pane beat until an event from
+narration or another pane:
 
 ```yaml
 narration: >-
@@ -143,9 +143,6 @@ panes:
 `voiceover` is the recording's narration stream id, `pattern` is the narration
 segment introduced by `@pattern@`, and `started` selects the segment's start
 event. Use `ended` to wait for its end instead.
-
-Narration events can start sequential pane beats. Browser panes, multiple
-captured panes, and pane-to-pane joins are not currently supported.
 
 The pane declaration is authoring structure, not recording configuration. It
 cannot be placed in frontmatter, inherited from `recordings/config.yaml`, or
@@ -368,37 +365,46 @@ OmegaFlow waits for the program to exit after all input has been sent. A
 readiness timeout or a program that exits before its remaining input steps
 fails the recording and identifies the unfinished step.
 
-#### Hand a browser URL to the next beat
+#### Hand a browser URL to a browser pane
 
-Use `browser_handoff: true` when a real, blocking OmegaFlow command opens its
-managed browser and the immediately following browser beat should take control.
-OmegaFlow keeps the command running, captures its real output, opens the
-reported URL in the recorder-owned browser, and releases the command after that
-browser beat ends. The current handoff integration is supported by OmegaFlow's
-managed `action=watch` browser launch; it does not intercept arbitrary system
-browser commands.
+Use `browser_handoff.target` when a real, blocking OmegaFlow command opens its
+managed browser and a named browser pane should take control. OmegaFlow keeps
+the command running, captures its real output, routes the reported URL to the
+named pane, and releases the command after that pane beat ends. The current
+handoff integration is supported by OmegaFlow's managed `action=watch` browser
+launch; it does not intercept arbitrary system browser commands.
 
 ```yaml
-- id: watch
-  actions:
-  - commands:
-    - id: watch_command
-      run: omegaflow recording=demo action=watch
-      browser_handoff: true
-      timing: realtime
-      show_prompt_after: false
-- id: inspect-player
-  medium: browser
-  actions:
-  - id: open-player
-    open_page:
-      handoff: watch_command
-      display_url: https://app.example.com/player
+beat:
+  id: inspect-player
+  heading: Inspect the player
+  narration: Open the generated player.
+  layout:
+    areas:
+    - [terminal, player]
+  panes:
+    terminal:
+    - id: watch
+      actions:
+      - id: watch_command
+        run: omegaflow recording=demo action=watch
+        browser_handoff:
+          target: player
+        timing: realtime
+    player:
+    - id: inspect
+      actions:
+      - id: open-player
+        open_page:
+          handoff: watch_command
+          display_url: https://app.example.com/player
 ```
 
 The handoff command must have an explicit `id`, use real output, and be the
-last command in its terminal beat. Its browser consumer must be the next beat,
-with a matching `open_page.handoff` as the first action.
+last command in its terminal pane beat. The target must name a declared browser
+pane containing exactly one matching `open_page.handoff` consumer.
+`browser_handoff: true` is a shortcut only when the recording declares exactly
+one browser pane; OmegaFlow rejects it as ambiguous otherwise.
 
 Set `display_url: $handoff` only when the exact captured URL is safe to publish.
 For authentication and other token-bearing URLs, use a static, sanitized
@@ -748,9 +754,14 @@ class TerminalInputStepConfig:
 
 
 @dataclass
+class BrowserHandoffConfig:
+    target: str = ""
+
+
+@dataclass
 class RecordingCommandConfig(RecordingInvocationConfig):
     id: str | None = None
-    browser_handoff: bool = False
+    browser_handoff: bool | BrowserHandoffConfig = False
     with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
     timing: str = "presentation"
@@ -1031,6 +1042,7 @@ class VisualizationShowConfig:
 class PaneActionConfig(RecordingActionConfig):
     timing: str = "presentation"
     show: VisualizationShowConfig | None = None
+    browser_handoff: bool | BrowserHandoffConfig = False
 
 
 @dataclass

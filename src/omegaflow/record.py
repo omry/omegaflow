@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -300,9 +301,26 @@ def action_command_entries(
                 f"{field}.{index}.commands.{command_index}.after must use @anchor@ syntax"
             )
         browser_handoff = raw_command.get("browser_handoff", False)
-        if not isinstance(browser_handoff, bool):
+        if isinstance(browser_handoff, Mapping):
+            unknown_handoff_fields = sorted(
+                set(browser_handoff) - {"target"}
+            )
+            target = browser_handoff.get("target")
+            if unknown_handoff_fields:
+                raise RecordingError(
+                    f"{field}.{index}.commands.{command_index}.browser_handoff "
+                    f"contains unsupported field {unknown_handoff_fields[0]!r}"
+                )
+            if not isinstance(target, str) or not target:
+                raise RecordingError(
+                    f"{field}.{index}.commands.{command_index}.browser_handoff.target "
+                    "must be a non-empty pane id"
+                )
+            browser_handoff = {"target": target}
+        elif not isinstance(browser_handoff, bool):
             raise RecordingError(
-                f"{field}.{index}.commands.{command_index}.browser_handoff must be a boolean"
+                f"{field}.{index}.commands.{command_index}.browser_handoff must "
+                "be a boolean or target mapping"
             )
         with_env = raw_command.get("with_env", [])
         if not isinstance(with_env, list) or any(

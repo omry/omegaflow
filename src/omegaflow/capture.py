@@ -1,8 +1,9 @@
 """Media-neutral capture lifecycle primitives.
 
 The coordinator built on this module owns a private, recording-scoped run
-directory.  Terminal and browser runners receive the same immutable context so
-they observe the same working directory, environment, and temporary storage.
+directory. Terminal and browser runners share the recording workspace and
+authored environment while receiving private artifact, diagnostic, and
+temporary namespaces.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from types import MappingProxyType
 from typing import Any, Callable, Protocol, runtime_checkable
 
@@ -22,10 +23,14 @@ from .browser_handoff import BROWSER_HANDOFF_ROOT_ENV, BrowserHandoffBroker
 from .recording_plan import (
     OuterBeatPlan,
     BrowserActionPlan,
+    CapturedPaneBeatPlan,
+    JoinPlan,
     RecordingPlan,
+    StreamKind,
     TerminalActionPlan,
     capture_runner_beat,
     captured_pane_beats,
+    pane_action_id,
     terminal_action_id,
 )
 from .studio_config import RecordingMedium
@@ -102,12 +107,31 @@ def prepare_capture_paths(run_dir: Path) -> CapturePaths:
 
 @dataclass(frozen=True)
 class CaptureContext:
-    """Immutable recording-scoped state shared by every capture runner."""
+    """Immutable recording state with an optional private runner scope."""
 
     paths: CapturePaths
     workspace: Path
     working_directory: Path
     environment: Mapping[str, str]
+    runner_id: str | None = None
+
+    @property
+    def runner_capture(self) -> Path:
+        if self.runner_id is None:
+            return self.paths.capture
+        return self.paths.capture / "runners" / self.runner_id
+
+    @property
+    def runner_diagnostics(self) -> Path:
+        if self.runner_id is None:
+            return self.paths.diagnostics
+        return self.paths.diagnostics / "runners" / self.runner_id
+
+    @property
+    def runner_temporary(self) -> Path:
+        if self.runner_id is None:
+            return self.paths.temporary
+        return self.paths.temporary / "runners" / self.runner_id
 
     @classmethod
     def create(
@@ -158,6 +182,41 @@ class CaptureContext:
             environment=MappingProxyType(resolved_environment),
         )
 
+    def for_runner(self, runner_id: str) -> CaptureContext:
+        """Return a pane-runner scope while retaining shared recording state."""
+
+        relative = Path(runner_id)
+        if (
+            not runner_id
+            or relative.is_absolute()
+            or len(relative.parts) != 1
+            or relative.parts[0] in {"", ".", ".."}
+        ):
+            raise CaptureSetupError(f"invalid capture runner id: {runner_id!r}")
+        runner_environment = dict(self.environment)
+        runner_temporary = self.paths.temporary / "runners" / runner_id
+        runner_environment.update(
+            {
+                "HOME": str(runner_temporary / "home"),
+                "TMPDIR": str(runner_temporary),
+            }
+        )
+        scoped = CaptureContext(
+            paths=self.paths,
+            workspace=self.workspace,
+            working_directory=self.working_directory,
+            environment=MappingProxyType(runner_environment),
+            runner_id=runner_id,
+        )
+        for path in (
+            scoped.runner_capture,
+            scoped.runner_diagnostics,
+            scoped.runner_temporary,
+            Path(scoped.environment["HOME"]),
+        ):
+            _prepare_private_directory(path)
+        return scoped
+
 
 @dataclass(frozen=True)
 class BeatCapture:
@@ -184,6 +243,7 @@ class CaptureRunner(Protocol):
         beat: OuterBeatPlan,
         *,
         on_progress: RunnerProgressCallback | None = None,
+        before_action: RunnerActionGate | None = None,
     ) -> BeatCapture: ...
 
     def close(self) -> None: ...
@@ -270,6 +330,7 @@ def _failure_detail(operation: str, error: BaseException) -> CaptureFailureDetai
 
 
 RunnerProgressCallback = Callable[[str, str], None]
+RunnerActionGate = Callable[[str], None]
 CaptureRunnerFactory = Callable[[], CaptureRunner]
 
 
@@ -281,6 +342,8 @@ class CaptureActionItem:
     beat_heading: str
     action_id: str
     label: str
+    pane_id: str | None = None
+    pane_beat_id: str | None = None
 
 
 CaptureProgressCallback = Callable[[str, CaptureActionItem, int, int], None]
@@ -307,6 +370,10 @@ def capture_action_items(plan: RecordingPlan) -> tuple[CaptureActionItem, ...]:
                         beat_heading=beat.heading,
                         action_id=action.id,
                         label=_action_label(action.config, action.id),
+                        pane_id=captured.pane_id if plan.panes else None,
+                        pane_beat_id=(
+                            captured.beat.id if plan.panes else None
+                        ),
                     )
                 )
                 continue
@@ -326,6 +393,10 @@ def capture_action_items(plan: RecordingPlan) -> tuple[CaptureActionItem, ...]:
                         beat_heading=beat.heading,
                         action_id=action_id,
                         label=_action_label(command, action_id),
+                        pane_id=captured.pane_id if plan.panes else None,
+                        pane_beat_id=(
+                            captured.beat.id if plan.panes else None
+                        ),
                     )
                 )
     return tuple(items)
@@ -442,14 +513,362 @@ class CaptureCoordinator:
             started.add(medium)
             return runner
 
-        def capture_beat(runner: CaptureRunner, beat: OuterBeatPlan) -> BeatCapture:
-            progress_callback = runner_progress(beat)
+        def capture_beat(
+            runner: CaptureRunner,
+            beat: OuterBeatPlan,
+            *,
+            progress_callback: RunnerProgressCallback | None = None,
+            before_action: RunnerActionGate | None = None,
+        ) -> BeatCapture:
             if progress_callback is None:
-                return runner.capture_beat(beat)
-            return runner.capture_beat(beat, on_progress=progress_callback)
+                progress_callback = runner_progress(beat)
+            kwargs: dict[str, Any] = {}
+            if progress_callback is not None:
+                kwargs["on_progress"] = progress_callback
+            if before_action is not None:
+                kwargs["before_action"] = before_action
+            return runner.capture_beat(beat, **kwargs)
+
+        def capture_explicit_panes() -> list[BeatCapture]:
+            captured_beats = captured_pane_beats(plan)
+            handoff_broker = BrowserHandoffBroker(
+                Path(context.environment[BROWSER_HANDOFF_ROOT_ENV])
+            )
+            handoff_by_consumer = {
+                (
+                    handoff.consumer_outer_beat_id,
+                    handoff.target_pane_id,
+                    handoff.consumer_pane_beat_id,
+                    handoff.consumer_action_id,
+                ): handoff
+                for handoff in plan.browser_handoffs
+            }
+            handoff_by_id = {
+                handoff.id: handoff for handoff in plan.browser_handoffs
+            }
+            for handoff in plan.browser_handoffs:
+                handoff_broker.prepare(handoff.id)
+            streams: dict[str, list[CapturedPaneBeatPlan]] = {}
+            medium_by_pane: dict[str, RecordingMedium] = {}
+            for captured in captured_beats:
+                streams.setdefault(captured.pane_id, []).append(captured)
+                medium = RecordingMedium(captured.kind.value)
+                medium_by_pane[captured.pane_id] = medium
+            lifecycle_pane = next(
+                (
+                    pane_id
+                    for pane_id, medium in medium_by_pane.items()
+                    if medium is RecordingMedium.terminal
+                ),
+                None,
+            )
+            if (plan.setup or plan.cleanup) and lifecycle_pane is None:
+                lifecycle_pane = "__recording_terminal__"
+                streams[lifecycle_pane] = []
+                medium_by_pane[lifecycle_pane] = RecordingMedium.terminal
+
+            capture_events: dict[str, Event] = {}
+            for captured in captured_beats:
+                for action_index, action in enumerate(captured.beat.actions):
+                    action_id = pane_action_id(action, action_index)
+                    prefix = (
+                        f"{captured.pane_id}.{captured.beat.id}.{action_id}"
+                    )
+                    capture_events[f"{prefix}.started"] = Event()
+                    capture_events[f"{prefix}.ended"] = Event()
+
+            failed = Event()
+            allow_teardown = Event()
+            setup_done = Event()
+            if not plan.setup:
+                setup_done.set()
+            stream_capture_done = {
+                pane_id: Event() for pane_id in streams
+            }
+            results: dict[str, BeatCapture] = {}
+            results_lock = Lock()
+            runners_by_pane: dict[str, CaptureRunner] = {}
+            runners_lock = Lock()
+            first_failure: list[tuple[str, BaseException]] = []
+            failure_lock = Lock()
+
+            def record_stream_failure(
+                pane_id: str,
+                error: BaseException,
+            ) -> None:
+                with failure_lock:
+                    if not first_failure:
+                        first_failure.append((pane_id, error))
+
+            def close_handoff(handoff_id: str) -> None:
+                try:
+                    handoff_broker.close(handoff_id)
+                except BaseException as exc:
+                    record_stream_failure(
+                        f"browser handoff {handoff_id}",
+                        exc,
+                    )
+                    failed.set()
+
+            def wait_for_join(join: JoinPlan | None) -> None:
+                if (
+                    join is None
+                    or join.event.stream.kind is not StreamKind.pane
+                ):
+                    return
+                event_id = join.event.qualified_id
+                event = capture_events.get(event_id)
+                if event is None:
+                    raise CaptureSetupError(
+                        f"capture join references unavailable event {event_id!r}"
+                    )
+                while not event.wait(0.05):
+                    if failed.is_set():
+                        raise CaptureSetupError(
+                            f"capture join {event_id!r} was cancelled"
+                        )
+
+            def receive_handoff(
+                handoff_id: str,
+                runner: CaptureRunner,
+            ) -> None:
+                handoff = handoff_by_id[handoff_id]
+                producer_ended = capture_events[
+                    f"{handoff.producer_pane_id}."
+                    f"{handoff.producer_pane_beat_id}.{handoff.id}.ended"
+                ]
+                while True:
+                    url = handoff_broker.ready_url(handoff_id)
+                    if url is not None:
+                        break
+                    if failed.is_set():
+                        raise CaptureSetupError(
+                            f"browser handoff {handoff_id!r} was cancelled"
+                        )
+                    if producer_ended.wait(0.05):
+                        raise CaptureSetupError(
+                            f"terminal action {handoff_id!r} exited without "
+                            "opening a browser"
+                        )
+                set_handoff_url = getattr(runner, "set_handoff_url", None)
+                if not callable(set_handoff_url):
+                    raise CaptureSetupError(
+                        f"target pane {handoff.target_pane_id!r} does not "
+                        "support browser handoff"
+                    )
+                set_handoff_url(handoff_id, url)
+
+            def capture_stream(
+                pane_id: str,
+                stream: list[CapturedPaneBeatPlan],
+            ) -> None:
+                medium = medium_by_pane[pane_id]
+                factory = self._runner_factories[medium]
+                if factory is None:
+                    error = CaptureSetupError(
+                        f"no {medium.value} capture runner is configured"
+                    )
+                    record_stream_failure(pane_id, error)
+                    failed.set()
+                    stream_capture_done[pane_id].set()
+                    raise error
+                runner: CaptureRunner | None = None
+                primary: BaseException | None = None
+                try:
+                    runner = factory()
+                    with runners_lock:
+                        runners_by_pane[pane_id] = runner
+                    runner.start(context.for_runner(pane_id))
+                    if pane_id == lifecycle_pane and plan.setup:
+                        run_setup = getattr(runner, "run_setup", None)
+                        if not callable(run_setup):
+                            raise CaptureSetupError(
+                                "terminal capture runner does not support "
+                                "project setup"
+                            )
+                        run_setup(plan.setup)
+                        setup_done.set()
+                    elif plan.setup:
+                        while not setup_done.wait(0.05):
+                            if failed.is_set():
+                                raise CaptureSetupError(
+                                    "project setup failed before pane capture"
+                                )
+                    for captured in stream:
+                        beat = capture_runner_beat(plan, captured)
+                        wait_for_join(captured.beat.start_join)
+                        authored_actions = {
+                            pane_action_id(action, action_index): action
+                            for action_index, action in enumerate(
+                                captured.beat.actions
+                            )
+                        }
+                        user_progress = runner_progress(beat)
+
+                        def before_action(action_id: str) -> None:
+                            try:
+                                action = authored_actions[action_id]
+                            except KeyError as exc:
+                                raise CaptureSetupError(
+                                    f"runner requested unknown action gate "
+                                    f"{beat.id!r}/{action_id!r}"
+                                ) from exc
+                            wait_for_join(getattr(action, "start_join", None))
+                            handoff = handoff_by_consumer.get(
+                                (
+                                    captured.outer_beat_id,
+                                    captured.pane_id,
+                                    captured.beat.id,
+                                    action_id,
+                                )
+                            )
+                            if handoff is not None:
+                                receive_handoff(handoff.id, runner)
+
+                        def report(state: str, action_id: str) -> None:
+                            if state not in {"started", "completed"}:
+                                raise CaptureSetupError(
+                                    f"runner reported invalid action state {state!r}"
+                                )
+                            endpoint = (
+                                "started" if state == "started" else "ended"
+                            )
+                            event_id = (
+                                f"{captured.pane_id}.{captured.beat.id}."
+                                f"{action_id}.{endpoint}"
+                            )
+                            event = capture_events.get(event_id)
+                            if event is None:
+                                raise CaptureSetupError(
+                                    f"runner reported unknown capture event "
+                                    f"{event_id!r}"
+                            )
+                            event.set()
+                            if user_progress is not None:
+                                user_progress(state, action_id)
+
+                        capture = capture_beat(
+                            runner,
+                            beat,
+                            progress_callback=report,
+                            before_action=before_action,
+                        )
+                        _validate_beat_capture(capture, beat)
+                        for handoff in plan.browser_handoffs:
+                            if (
+                                handoff.consumer_outer_beat_id,
+                                handoff.target_pane_id,
+                                handoff.consumer_pane_beat_id,
+                            ) == (
+                                captured.outer_beat_id,
+                                captured.pane_id,
+                                captured.beat.id,
+                            ):
+                                close_handoff(handoff.id)
+                        for action_id in authored_actions:
+                            prefix = (
+                                f"{captured.pane_id}.{captured.beat.id}."
+                                f"{action_id}"
+                            )
+                            if not all(
+                                capture_events[f"{prefix}.{endpoint}"].is_set()
+                                for endpoint in ("started", "ended")
+                            ):
+                                raise CaptureSetupError(
+                                    f"runner did not report complete capture events "
+                                    f"for {prefix!r}"
+                                )
+                        with results_lock:
+                            results[captured.capture_id] = capture
+                except BaseException as exc:
+                    primary = exc
+                    record_stream_failure(pane_id, exc)
+                    failed.set()
+                finally:
+                    stream_capture_done[pane_id].set()
+                    allow_teardown.wait()
+                    if (
+                        runner is not None
+                        and pane_id == lifecycle_pane
+                        and plan.cleanup
+                    ):
+                        try:
+                            run_cleanup = getattr(runner, "run_cleanup", None)
+                            if not callable(run_cleanup):
+                                raise CaptureSetupError(
+                                    "terminal capture runner does not support "
+                                    "project cleanup"
+                                )
+                            run_cleanup(plan.cleanup)
+                        except BaseException as exc:
+                            if primary is None:
+                                primary = exc
+                    if runner is not None:
+                        try:
+                            runner.close()
+                        except BaseException as exc:
+                            if primary is None:
+                                primary = exc
+                        complete = getattr(runner, "complete", None)
+                        if callable(complete):
+                            try:
+                                complete()
+                            except BaseException as exc:
+                                if primary is None:
+                                    primary = exc
+                if primary is not None:
+                    record_stream_failure(pane_id, primary)
+                    raise primary
+
+            executor = ThreadPoolExecutor(max_workers=max(1, len(streams)))
+            futures = {
+                pane_id: executor.submit(capture_stream, pane_id, stream)
+                for pane_id, stream in streams.items()
+            }
+            future_errors: list[BaseException] = []
+            try:
+                while not all(
+                    event.wait(0.05)
+                    for event in stream_capture_done.values()
+                ):
+                    if failed.is_set():
+                        break
+                if failed.is_set():
+                    for handoff in plan.browser_handoffs:
+                        close_handoff(handoff.id)
+                    with runners_lock:
+                        active_runners = tuple(runners_by_pane.values())
+                    for runner in active_runners:
+                        cancel = getattr(runner, "cancel_capture", None)
+                        if callable(cancel):
+                            cancel()
+                allow_teardown.set()
+                for pane_id, future in futures.items():
+                    try:
+                        future.result()
+                    except BaseException as exc:
+                        failed.set()
+                        future_errors.append(exc)
+            finally:
+                for handoff in plan.browser_handoffs:
+                    close_handoff(handoff.id)
+                allow_teardown.set()
+                executor.shutdown(wait=True, cancel_futures=True)
+            if first_failure:
+                failed_pane, error = first_failure[0]
+                raise CaptureSetupError(
+                    f"capture pane stream {failed_pane!r} failed"
+                ) from error
+            if future_errors:
+                raise CaptureSetupError(
+                    "capture pane stream failed"
+                ) from future_errors[0]
+            return [
+                results[captured.capture_id] for captured in captured_beats
+            ]
 
         try:
-            if plan.setup or plan.cleanup:
+            if (plan.setup or plan.cleanup) and not plan.panes:
                 terminal_runner = ensure_runner(RecordingMedium.terminal)
                 if plan.setup:
                     operation = "project setup"
@@ -460,16 +879,8 @@ class CaptureCoordinator:
                         )
                     run_setup(plan.setup)
             if plan.panes:
-                for captured in captured_pane_beats(plan):
-                    beat = capture_runner_beat(plan, captured)
-                    runner = ensure_runner(beat.medium)
-                    operation = (
-                        f"capture pane {captured.pane_id} beat {captured.beat.id} "
-                        f"in outer beat {captured.outer_beat_id}"
-                    )
-                    capture = capture_beat(runner, beat)
-                    _validate_beat_capture(capture, beat)
-                    captures.append(capture)
+                operation = "capture concurrent pane streams"
+                captures.extend(capture_explicit_panes())
                 beat_index = len(plan.beats)
             else:
                 beat_index = 0

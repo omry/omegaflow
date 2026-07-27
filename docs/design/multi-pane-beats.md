@@ -588,9 +588,12 @@ The capture coordinator becomes a stream scheduler:
 - fail when an action cannot complete, an event is never emitted, a join cycle
   exists, or no further action can become ready.
 
-The first useful slice needs one captured terminal pane plus one static
-visualization pane. Until concurrent captured-pane scheduling lands, validation
-must reject outer beats containing more than one captured pane.
+The capture coordinator supports multiple persistent terminal and browser
+panes in the same recording, alongside any number of visualization panes. Each
+captured runner owns one thread and one private artifact namespace for its
+complete lifecycle. Recording-level setup and cleanup run once through the
+first terminal pane, or through a private lifecycle-only terminal when the
+recording has no terminal pane.
 
 ## Validation
 
@@ -607,7 +610,6 @@ At minimum, validation must reject:
 - missing, ambiguous, same-stream, or phase-invalid join references;
 - capture-observable join cycles;
 - presentation constraint cycles;
-- unsupported combinations of multiple captured panes while capability-gated;
 - manifests whose event identities, payloads, or solved durations disagree.
 
 Validation also enforces bounded pane, action, event, visualization-text, and
@@ -657,11 +659,11 @@ and the shortest relevant dependency chain.
 ### Capture and failure handling
 
 - build a visualization-plus-terminal recording end to end;
-- reject a second captured pane while the capability gate is active;
+- build two terminal panes with cross-pane joins and isolated runtime state;
+- compile two browser panes from isolated capture logs;
 - verify action progress includes pane and beat context;
 - verify failures cancel dependent work and close every started runner;
-- later, verify concurrent terminal-to-browser causality before lifting the
-  capability gate.
+- verify concurrent terminal-to-browser-to-terminal causality.
 
 ### Tutorial acceptance
 
@@ -683,9 +685,14 @@ and the shortest relevant dependency chain.
    subset described above.
 5. Migrate the terminal highlight demo and remove its occurrence workaround.
 6. Add multi-stream event resolution, join validation, presentation retiming,
-   concurrent captured-pane scheduling, cleanup, progress attribution, and
-   tests; then lift the capability gate.
-7. Demonstrate synchronized terminal-to-browser influence.
+   concurrent terminal-and-browser scheduling, lifecycle cleanup, progress
+   attribution, and tests. Implemented.
+7. Demonstrate synchronized terminal-to-browser-to-terminal influence.
+   Implemented by `recording=cross-capture-synchronization-smoke`.
+8. Namespace private runner artifacts and persistent runtime state so multiple
+   captured panes of the same medium can run concurrently.
+   Implemented and exercised by
+   `recording=two-terminal-synchronization-smoke`.
 
 No public configuration is accepted before its corresponding execution path is
 available.

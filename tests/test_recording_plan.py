@@ -22,6 +22,7 @@ from omegaflow.audio import (
 from omegaflow.presentation_schema import BrowserPayloadV1, PresentationManifestV1
 from omegaflow.recording_plan import (
     BrowserActionPlan,
+    BrowserPaneRecordingPlan,
     EventEndpoint,
     EventRef,
     JoinPlan,
@@ -327,9 +328,139 @@ def browser_handoff_spec() -> dict:
     }
 
 
+def explicit_browser_handoff_spec(
+    browser_handoff: object,
+) -> dict[str, object]:
+    return {
+        "id": "explicit-browser-handoff",
+        "browser": {},
+        "panes": [
+            {"id": "terminal", "kind": "terminal"},
+            {"id": "primary", "kind": "browser"},
+            {"id": "secondary", "kind": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "handoff",
+                "layout": {
+                    "areas": [["terminal", "primary", "secondary"]],
+                },
+                "panes": {
+                    "terminal": [
+                        {
+                            "id": "session",
+                            "actions": [
+                                {
+                                    "id": "watch",
+                                    "run": "omegaflow recording=demo action=watch",
+                                    "browser_handoff": browser_handoff,
+                                    "timing": "realtime",
+                                }
+                            ],
+                        }
+                    ],
+                    "primary": [
+                        {
+                            "id": "main",
+                            "actions": [
+                                {
+                                    "id": "open-main",
+                                    "open_page": {
+                                        "url": "https://example.test/main",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    "secondary": [
+                        {
+                            "id": "preview",
+                            "actions": [
+                                {
+                                    "id": "open-preview",
+                                    "open_page": {
+                                        "handoff": "watch",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+
 def test_omegaconf_schema_authority_supports_versioned_artifacts() -> None:
     for schema in (RecordingSpec, BrowserPayloadV1, PresentationManifestV1):
         assert OmegaConf.structured(schema) is not None
+
+
+def test_explicit_browser_handoff_targets_named_browser_pane() -> None:
+    plan = normalize_recording_plan(
+        explicit_browser_handoff_spec({"target": "secondary"})
+    )
+
+    assert len(plan.browser_handoffs) == 1
+    handoff = plan.browser_handoffs[0]
+    assert handoff.id == "watch"
+    assert handoff.producer_pane_id == "terminal"
+    assert handoff.target_pane_id == "secondary"
+    assert handoff.consumer_action_id == "open-preview"
+
+
+def test_explicit_browser_handoff_shortcut_rejects_ambiguous_target() -> None:
+    with pytest.raises(
+        RecordingPlanError,
+        match="browser_handoff target is ambiguous.*primary.*secondary",
+    ):
+        normalize_recording_plan(explicit_browser_handoff_spec(True))
+
+
+def test_explicit_browser_handoff_shortcut_resolves_unique_target() -> None:
+    spec = explicit_browser_handoff_spec(True)
+    spec["panes"] = [
+        pane for pane in spec["panes"] if pane["id"] != "primary"
+    ]
+    beat = spec["beats"][0]
+    beat["layout"]["areas"] = [["terminal", "secondary"]]
+    del beat["panes"]["primary"]
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.browser_handoffs[0].target_pane_id == "secondary"
+
+
+def test_explicit_browser_handoff_rejects_non_browser_target() -> None:
+    with pytest.raises(
+        RecordingPlanError,
+        match="browser_handoff target 'terminal' is not a browser pane",
+    ):
+        normalize_recording_plan(
+            explicit_browser_handoff_spec({"target": "terminal"})
+        )
+
+
+def test_explicit_browser_handoff_rejects_consumer_in_different_pane() -> None:
+    spec = explicit_browser_handoff_spec({"target": "primary"})
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="target 'primary' does not consume exactly one",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_explicit_browser_handoff_rejects_dependency_on_producer_end() -> None:
+    spec = explicit_browser_handoff_spec({"target": "secondary"})
+    consumer = spec["beats"][0]["panes"]["secondary"][0]["actions"][0]
+    consumer["after"] = "terminal.session.watch.ended"
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="capture dependency cycle",
+    ):
+        normalize_recording_plan(spec)
 
 
 def test_multi_pane_authoring_foundation_is_omegaconf_typed() -> None:
@@ -1147,7 +1278,10 @@ def test_rejects_handoff_consumer_without_a_matching_terminal_producer() -> None
     spec = browser_handoff_spec()
     spec["beats"][0]["actions"][0]["commands"][0]["browser_handoff"] = False
 
-    with pytest.raises(RecordingPlanError, match="no preceding terminal command"):
+    with pytest.raises(
+        RecordingPlanError,
+        match="no matching browser_handoff producer targeting its pane",
+    ):
         normalize_recording_plan(spec)
 
 
@@ -1307,6 +1441,62 @@ def sequential_visualization_spec() -> dict[str, object]:
         },
     ]
     return spec
+
+
+def cross_capture_spec() -> dict[str, object]:
+    return {
+        "id": "cross-capture",
+        "browser": {"base_url": "http://127.0.0.1:18765"},
+        "panes": [
+            {"id": "terminal", "kind": "terminal"},
+            {"id": "browser", "kind": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "synchronize",
+                "layout": {"areas": [["terminal", "browser"]]},
+                "panes": {
+                    "terminal": [
+                        {
+                            "id": "session",
+                            "actions": [
+                                {
+                                    "id": "start-app",
+                                    "run": "python3 sync_demo.py start",
+                                },
+                                {
+                                    "id": "verify-ready",
+                                    "run": "python3 sync_demo.py status",
+                                    "after": "browser.interaction.mark-ready.ended",
+                                },
+                            ],
+                        }
+                    ],
+                    "browser": [
+                        {
+                            "id": "interaction",
+                            "actions": [
+                                {
+                                    "id": "open-app",
+                                    "open_page": {"url": "/"},
+                                    "after": "terminal.session.start-app.ended",
+                                },
+                                {
+                                    "id": "mark-ready",
+                                    "click": {
+                                        "target": {
+                                            "role": "button",
+                                            "name": "Mark ready",
+                                        }
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
 
 
 def test_explicit_visualization_and_terminal_authoring_normalizes_to_typed_plan() -> None:
@@ -1494,7 +1684,7 @@ def test_sequential_visualization_beat_rejects_unknown_narration_event() -> None
 
     with pytest.raises(
         RecordingPlanError,
-        match="unknown narration event 'voiceover.missing.started'",
+        match="unknown event 'voiceover.missing.started'",
     ):
         normalize_recording_plan(spec)
 
@@ -1576,32 +1766,32 @@ def test_pane_title_shortcuts_cover_automatic_explicit_and_hidden() -> None:
     ]
 
 
-def test_explicit_multi_pane_authoring_rejects_more_than_one_captured_pane() -> None:
-    spec = visualization_terminal_spec()
-    spec["browser"] = {}
-    spec["panes"].append({"id": "browser", "kind": "browser"})
-    beat = spec["beats"][0]
-    beat["layout"]["areas"][0].append("browser")
-    beat["panes"]["browser"] = [
-        {
-            "id": "open-preview",
-            "actions": [
-                {
-                    "id": "open",
-                    "open_page": {"url": "about:blank"},
-                }
-            ],
-        }
-    ]
+def test_explicit_terminal_and_browser_actions_normalize_cross_stream_joins() -> None:
+    plan = normalize_recording_plan(cross_capture_spec())
 
-    with pytest.raises(
-        RecordingPlanError,
-        match="at most one captured pane",
-    ):
-        normalize_recording_plan(spec)
+    terminal, browser = plan.beats[0].pane_tracks
+    assert isinstance(terminal.beats[0].recording, TerminalPaneRecordingPlan)
+    assert isinstance(browser.beats[0].recording, BrowserPaneRecordingPlan)
+    assert terminal.beats[0].actions[1].start_join == JoinPlan(
+        waiting_stream=StreamRef(StreamKind.pane, "terminal"),
+        waiting_position=StreamPosition(
+            pane_beat_id="session",
+            action_id="verify-ready",
+        ),
+        event=EventRef(
+            stream=StreamRef(StreamKind.pane, "browser"),
+            pane_beat_id="interaction",
+            action_id="mark-ready",
+            endpoint=EventEndpoint.ended,
+        ),
+    )
+    assert browser.beats[0].actions[0].start_join is not None
+    assert browser.beats[0].actions[0].start_join.event.qualified_id == (
+        "terminal.session.start-app.ended"
+    )
 
 
-def test_explicit_multi_pane_authoring_rejects_captured_panes_across_beats() -> None:
+def test_explicit_multi_pane_authoring_accepts_two_terminal_pane_streams() -> None:
     spec = visualization_terminal_spec()
     spec["panes"].append({"id": "other-terminal", "kind": "terminal"})
     second_definition = {
@@ -1629,9 +1819,52 @@ def test_explicit_multi_pane_authoring_rejects_captured_panes_across_beats() -> 
         }
     )
 
+    plan = normalize_recording_plan(spec)
+
+    assert [
+        (track.pane_id, track.kind.value)
+        for beat in plan.beats
+        for track in beat.pane_tracks
+        if track.kind.value != "visualization"
+    ] == [
+        ("terminal", "terminal"),
+        ("other-terminal", "terminal"),
+    ]
+
+
+def test_explicit_multi_pane_authoring_rejects_unused_declared_terminal_pane() -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"].append({"id": "unused", "kind": "terminal"})
+
     with pytest.raises(
         RecordingPlanError,
-        match="supports at most one captured pane per recording",
+        match=r"declared panes are not used: unused",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_cross_stream_join_rejects_unknown_action_event() -> None:
+    spec = cross_capture_spec()
+    spec["beats"][0]["panes"]["terminal"][0]["actions"][1]["after"] = (
+        "browser.interaction.missing.ended"
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="unknown event 'browser.interaction.missing.ended'",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_cross_stream_join_rejects_capture_dependency_cycle() -> None:
+    spec = cross_capture_spec()
+    spec["beats"][0]["panes"]["terminal"][0]["actions"][0]["after"] = (
+        "browser.interaction.mark-ready.ended"
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="capture dependency cycle",
     ):
         normalize_recording_plan(spec)
 

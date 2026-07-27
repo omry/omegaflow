@@ -805,7 +805,13 @@ omegaflow_run_marked() {
   local beat_id="$1"
   local action_id="$2"
   local script="$3"
+  local action_gate
   local status
+  printf '{"seq":%s,"status":"action_ready","action_id":"%s"}\n' "$seq" "$action_id" >&9
+  IFS= read -r action_gate <&8
+  if [[ "$action_gate" != "continue:$seq:$action_id" ]]; then
+    return 125
+  fi
   printf '{"seq":%s,"status":"action_started","action_id":"%s"}\n' "$seq" "$action_id" >&9
   printf '\033]1337;OmegaFlowAction;%s;%s;start\007' "$beat_id" "$action_id"
   eval "$script"
@@ -914,13 +920,13 @@ class TerminalControlSession:
         self.post_enter_pause = post_enter_pause
         self.post_command_pause = post_command_pause
         self.timeout_seconds = timeout_seconds
-        self.control_dir = context.paths.capture / ".terminal-control"
+        self.control_dir = context.runner_capture / ".terminal-control"
         self.request_path = self.control_dir / "requests.jsonl"
         self.response_path = self.control_dir / "responses.jsonl"
         self.script_path = self.control_dir / "session.sh"
-        self.cast_path = context.paths.capture / "terminal.cast"
-        self.output_path = context.paths.capture / "terminal.output.log"
-        self.timeline_path = context.paths.capture / "terminal.timeline.jsonl"
+        self.cast_path = context.runner_capture / "terminal.cast"
+        self.output_path = context.runner_capture / "terminal.output.log"
+        self.timeline_path = context.runner_capture / "terminal.timeline.jsonl"
         self._process: subprocess.Popen[bytes] | None = None
         self._request_fd: int | None = None
         self._response_fd: int | None = None
@@ -967,10 +973,10 @@ class TerminalControlSession:
                 "OMEGAFLOW_POST_ENTER_PAUSE": str(self.post_enter_pause),
                 "OMEGAFLOW_POST_COMMAND_PAUSE": str(self.post_command_pause),
                 "OMEGAFLOW_TERMINAL_STDOUT": str(
-                    self.context.paths.capture / "terminal.stdout.log"
+                    self.context.runner_capture / "terminal.stdout.log"
                 ),
                 "OMEGAFLOW_TERMINAL_STDERR": str(
-                    self.context.paths.capture / "terminal.stderr.log"
+                    self.context.runner_capture / "terminal.stderr.log"
                 ),
             }
         )
@@ -1046,6 +1052,7 @@ class TerminalControlSession:
         beat_id: str = "",
         wait_indefinitely: bool = False,
         on_progress: Callable[[str, str], None] | None = None,
+        before_action: Callable[[str], None] | None = None,
     ) -> tuple[int, int]:
         if op not in CONTROL_OPERATIONS or op == "shutdown":
             raise ValueError(f"invalid terminal execution operation: {op}")
@@ -1068,6 +1075,7 @@ class TerminalControlSession:
             seq,
             wait_indefinitely=wait_indefinitely,
             on_progress=on_progress,
+            before_action=before_action,
         )
         end_ms = self._elapsed_ms()
         status = completed.get("status")
@@ -1080,9 +1088,7 @@ class TerminalControlSession:
         )
         if status != "completed":
             error = completed.get("error", "unknown terminal failure")
-            stderr_path = (
-                self.context.paths.capture / "terminal.stderr.log"
-            )
+            stderr_path = self.context.runner_capture / "terminal.stderr.log"
             try:
                 stderr_text = stderr_path.read_text(
                     encoding="utf-8", errors="replace"
@@ -1170,6 +1176,7 @@ class TerminalControlSession:
         *,
         wait_indefinitely: bool = False,
         on_progress: Callable[[str, str], None] | None = None,
+        before_action: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         deadline = time.monotonic() + self.timeout_seconds
         while True:
@@ -1185,6 +1192,19 @@ class TerminalControlSession:
                         f"terminal response sequence mismatch for request {seq}"
                     )
                 status = response.get("status")
+                if status == "action_ready":
+                    action_id = response.get("action_id")
+                    if not isinstance(action_id, str) or not action_id:
+                        raise TerminalCaptureError(
+                            "terminal action response is missing its action id"
+                        )
+                    if before_action is not None:
+                        before_action(action_id)
+                    self._write_request(
+                        f"continue:{seq}:{action_id}\n".encode("utf-8")
+                    )
+                    deadline = time.monotonic() + self.timeout_seconds
+                    continue
                 if status in {"action_started", "action_completed"}:
                     action_id = response.get("action_id")
                     if not isinstance(action_id, str) or not action_id:
@@ -1330,6 +1350,7 @@ class PersistentTerminalRunner:
         beat: OuterBeatPlan,
         *,
         on_progress: Callable[[str, str], None] | None = None,
+        before_action: Callable[[str], None] | None = None,
     ) -> BeatCapture:
         if beat.medium is not RecordingMedium.terminal:
             raise TerminalCaptureError(
@@ -1357,6 +1378,7 @@ class PersistentTerminalRunner:
             ),
             wait_indefinitely=_beat_has_browser_handoff(actions),
             on_progress=on_progress,
+            before_action=before_action,
         )
         if checks:
             session.execute(
@@ -1364,9 +1386,10 @@ class PersistentTerminalRunner:
                 beat_id=beat.id,
                 script=_steps_script((check.config for check in checks), self.context),
             )
-        beat_cast = session.cast_path.parent / "terminal-beats" / f"{beat.id}.cast"
+        beat_dir = self.context.paths.capture / "terminal-beats"
+        beat_cast = beat_dir / f"{beat.id}.cast"
         action_timing = (
-            session.cast_path.parent / "terminal-beats" / f"{beat.id}.actions.json"
+            beat_dir / f"{beat.id}.actions.json"
         )
         return BeatCapture(
             beat_id=beat.id,
@@ -1383,7 +1406,7 @@ class PersistentTerminalRunner:
             if session.record_cast:
                 extract_terminal_beat_casts(
                     session.cast_path,
-                    session.cast_path.parent / "terminal-beats",
+                    self.context.paths.capture / "terminal-beats",
                     expected_beat_ids=tuple(self._captured_beat_ids),
                     command_snapshots=self._command_snapshots,
                 )

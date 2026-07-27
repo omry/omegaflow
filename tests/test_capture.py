@@ -53,6 +53,59 @@ def test_capture_context_creates_private_staged_directories(tmp_path: Path) -> N
         context.environment["MUTATED"] = "no"  # type: ignore[index]
 
 
+def test_capture_context_allocates_private_runner_directories(
+    tmp_path: Path,
+) -> None:
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    left = context.for_runner("left")
+    right = context.for_runner("right")
+
+    assert left.paths is context.paths
+    assert right.paths is context.paths
+    assert left.runner_id == "left"
+    assert right.runner_id == "right"
+    assert left.runner_capture == context.paths.capture / "runners/left"
+    assert right.runner_capture == context.paths.capture / "runners/right"
+    assert left.runner_diagnostics == context.paths.diagnostics / "runners/left"
+    assert right.runner_temporary == context.paths.temporary / "runners/right"
+    assert left.runner_capture.is_dir()
+    assert right.runner_capture.is_dir()
+    assert (
+        left.environment["OMEGAFLOW_RUN_DIR"]
+        == context.environment["OMEGAFLOW_RUN_DIR"]
+    )
+    assert (
+        right.environment["OMEGAFLOW_RUN_DIR"]
+        == context.environment["OMEGAFLOW_RUN_DIR"]
+    )
+    assert left.environment["TMPDIR"] == str(left.runner_temporary)
+    assert right.environment["TMPDIR"] == str(right.runner_temporary)
+    assert left.environment["HOME"] == str(left.runner_temporary / "home")
+    assert right.environment["HOME"] == str(right.runner_temporary / "home")
+    assert (
+        left.environment[capture_module.BROWSER_HANDOFF_ROOT_ENV]
+        == right.environment[capture_module.BROWSER_HANDOFF_ROOT_ENV]
+    )
+
+
+@pytest.mark.parametrize("runner_id", ["", ".", "..", "../escape", "/absolute"])
+def test_capture_context_rejects_unsafe_runner_ids(
+    tmp_path: Path,
+    runner_id: str,
+) -> None:
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    with pytest.raises(CaptureSetupError, match="runner id"):
+        context.for_runner(runner_id)
+
+
 def test_capture_context_does_not_inherit_arbitrary_host_environment(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -178,9 +231,27 @@ class FakeRunner:
         self.context = context
         self.calls.append(f"{self.name}:start")
 
-    def capture_beat(self, beat: object) -> BeatCapture:
+    def capture_beat(
+        self,
+        beat: object,
+        *,
+        on_progress=None,
+        before_action=None,
+    ) -> BeatCapture:
         beat_id = getattr(beat, "id")
         self.calls.append(f"{self.name}:beat:{beat_id}")
+        for action_index, action in enumerate(getattr(beat, "actions", ())):
+            action_id = getattr(action, "id", None)
+            if action_id is None:
+                commands = action.config.get("commands")
+                if commands:
+                    action_id = commands[0].get("id")
+                action_id = action_id or f"__step_{action_index}"
+            if before_action is not None:
+                before_action(action_id)
+            if on_progress is not None:
+                on_progress("started", action_id)
+                on_progress("completed", action_id)
         return BeatCapture(beat_id=beat_id)
 
     def close(self) -> None:
@@ -301,6 +372,556 @@ def test_coordinator_captures_only_the_terminal_stream_in_visualization_layout(
     ]
     assert [beat.beat_id for beat in result.beats] == [
         "compose--terminal--status"
+    ]
+
+
+def test_coordinator_synchronizes_terminal_and_browser_action_streams(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "cross-capture",
+            "browser": {"base_url": "http://127.0.0.1:18765"},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "browser", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "synchronize",
+                    "layout": {"areas": [["terminal", "browser"]]},
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {"id": "start-app", "run": "start"},
+                                    {
+                                        "id": "verify-ready",
+                                        "run": "verify",
+                                        "after": (
+                                            "browser.interaction.mark-ready.ended"
+                                        ),
+                                    },
+                                ],
+                            }
+                        ],
+                        "browser": [
+                            {
+                                "id": "interaction",
+                                "actions": [
+                                    {
+                                        "id": "open-app",
+                                        "open_page": {"url": "/"},
+                                        "after": (
+                                            "terminal.session.start-app.ended"
+                                        ),
+                                    },
+                                    {
+                                        "id": "mark-ready",
+                                        "click": {
+                                            "target": {
+                                                "role": "button",
+                                                "name": "Mark ready",
+                                            }
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    events: list[str] = []
+    assert [
+        (item.pane_id, item.pane_beat_id, item.action_id)
+        for item in capture_action_items(plan)
+    ] == [
+        ("terminal", "session", "start-app"),
+        ("terminal", "session", "verify-ready"),
+        ("browser", "interaction", "open-app"),
+        ("browser", "interaction", "mark-ready"),
+    ]
+    runner_threads: dict[str, set[int]] = {
+        "terminal": set(),
+        "browser": set(),
+    }
+
+    class SynchronizedRunner(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            runner_threads[self.name].add(threading.get_ident())
+            super().start(context)
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            runner_threads[self.name].add(threading.get_ident())
+            beat_id = getattr(beat, "id")
+            self.calls.append(f"{self.name}:beat:{beat_id}")
+            for action in getattr(beat, "actions"):
+                action_id = getattr(action, "id", None)
+                if action_id is None:
+                    action_id = action.config["commands"][0]["id"]
+                assert before_action is not None
+                before_action(action_id)
+                events.append(f"{self.name}.{action_id}.started")
+                assert on_progress is not None
+                on_progress("started", action_id)
+                events.append(f"{self.name}.{action_id}.ended")
+                on_progress("completed", action_id)
+            return BeatCapture(beat_id=beat_id)
+
+        def close(self) -> None:
+            runner_threads[self.name].add(threading.get_ident())
+            super().close()
+
+    calls: list[str] = []
+    result = CaptureCoordinator(
+        terminal_runner_factory=lambda: SynchronizedRunner("terminal", calls),
+        browser_runner_factory=lambda: SynchronizedRunner("browser", calls),
+    ).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert events == [
+        "terminal.start-app.started",
+        "terminal.start-app.ended",
+        "browser.open-app.started",
+        "browser.open-app.ended",
+        "browser.mark-ready.started",
+        "browser.mark-ready.ended",
+        "terminal.verify-ready.started",
+        "terminal.verify-ready.ended",
+    ]
+    assert [capture.beat_id for capture in result.beats] == [
+        "synchronize--terminal--session",
+        "synchronize--browser--interaction",
+    ]
+    assert all(len(thread_ids) == 1 for thread_ids in runner_threads.values())
+
+
+def test_coordinator_routes_explicit_handoff_to_named_browser_pane(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "targeted-handoff",
+            "browser": {},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "primary", "kind": "browser"},
+                {"id": "secondary", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "handoff",
+                    "layout": {
+                        "areas": [["terminal", "primary", "secondary"]],
+                    },
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {
+                                        "id": "watch",
+                                        "run": "watch",
+                                        "browser_handoff": {
+                                            "target": "secondary",
+                                        },
+                                        "timing": "realtime",
+                                    }
+                                ],
+                            }
+                        ],
+                        "primary": [
+                            {
+                                "id": "main",
+                                "actions": [
+                                    {
+                                        "id": "open-main",
+                                        "open_page": {
+                                            "url": "https://example.test/main",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                        "secondary": [
+                            {
+                                "id": "preview",
+                                "actions": [
+                                    {
+                                        "id": "open-preview",
+                                        "open_page": {"handoff": "watch"},
+                                    },
+                                    {
+                                        "id": "inspect-preview",
+                                        "wait_for": {
+                                            "visible": {"role": "main"},
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    calls: list[str] = []
+    events: list[str] = []
+    delivered: dict[str, tuple[str, str]] = {}
+
+    class HandoffTerminal(FakeRunner):
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            assert self.context is not None
+            action_id = "watch"
+            assert before_action is not None
+            before_action(action_id)
+            assert on_progress is not None
+            on_progress("started", action_id)
+            events.append("terminal.watch.started")
+            environment = dict(self.context.environment)
+            environment[BROWSER_HANDOFF_ID_ENV] = action_id
+            session = BrokeredBrowserSession.from_environment(
+                "http://127.0.0.1:43123/watch/demo/",
+                environment=environment,
+            )
+            assert session is not None
+            while session.is_open():
+                time.sleep(0.005)
+            events.append("terminal.watch.completed")
+            on_progress("completed", action_id)
+            return BeatCapture(beat_id=getattr(beat, "id"))
+
+    class TargetBrowser(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            assert context.runner_id is not None
+            self.name = context.runner_id
+            super().start(context)
+
+        def set_handoff_url(self, handoff_id: str, url: str) -> None:
+            delivered[self.name] = (handoff_id, url)
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            beat_id = getattr(beat, "id")
+            self.calls.append(f"{self.name}:beat:{beat_id}")
+            for action in getattr(beat, "actions", ()):
+                action_id = action.id
+                if before_action is not None:
+                    before_action(action_id)
+                if on_progress is not None:
+                    on_progress("started", action_id)
+                events.append(f"{self.name}.{action_id}.started")
+                events.append(f"{self.name}.{action_id}.completed")
+                if on_progress is not None:
+                    on_progress("completed", action_id)
+            return BeatCapture(beat_id=beat_id)
+
+    result = CaptureCoordinator(
+        terminal_runner_factory=lambda: HandoffTerminal("terminal", calls),
+        browser_runner_factory=lambda: TargetBrowser("browser", calls),
+    ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert delivered == {
+        "secondary": (
+            "watch",
+            "http://127.0.0.1:43123/watch/demo/",
+        )
+    }
+    assert events.index("secondary.inspect-preview.completed") < events.index(
+        "terminal.watch.completed"
+    )
+    assert [capture.beat_id for capture in result.beats] == [
+        "handoff--terminal--session",
+        "handoff--primary--main",
+        "handoff--secondary--preview",
+    ]
+
+
+def test_handoff_close_failure_does_not_mask_pane_failure_or_skip_cancellation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff-failure",
+            "browser": {},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "primary", "kind": "browser"},
+                {"id": "secondary", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "handoff",
+                    "layout": {
+                        "areas": [["terminal", "primary", "secondary"]],
+                    },
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {
+                                        "id": "watch",
+                                        "run": "watch",
+                                        "browser_handoff": {
+                                            "target": "secondary",
+                                        },
+                                        "timing": "realtime",
+                                    }
+                                ],
+                            }
+                        ],
+                        "primary": [
+                            {
+                                "id": "main",
+                                "actions": [
+                                    {
+                                        "id": "fail",
+                                        "open_page": {
+                                            "url": "https://example.test/",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                        "secondary": [
+                            {
+                                "id": "preview",
+                                "actions": [
+                                    {
+                                        "id": "open-preview",
+                                        "open_page": {"handoff": "watch"},
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    producer_started = threading.Event()
+    terminal_cancelled = threading.Event()
+    browser_cancelled = threading.Event()
+    calls: list[str] = []
+
+    class BlockingTerminal(FakeRunner):
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            assert before_action is not None
+            assert on_progress is not None
+            before_action("watch")
+            on_progress("started", "watch")
+            producer_started.set()
+            if not terminal_cancelled.wait(timeout=1):
+                raise AssertionError("terminal handoff was not cancelled")
+            raise RuntimeError("terminal cancelled")
+
+        def cancel_capture(self) -> None:
+            calls.append("terminal.cancel")
+            terminal_cancelled.set()
+
+    class FailingBrowser(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            assert context.runner_id is not None
+            self.name = context.runner_id
+            super().start(context)
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            if self.name == "primary":
+                assert producer_started.wait(timeout=1)
+                raise RuntimeError("primary failed")
+            if not browser_cancelled.wait(timeout=1):
+                raise AssertionError("browser handoff was not cancelled")
+            raise RuntimeError("browser cancelled")
+
+        def cancel_capture(self) -> None:
+            calls.append(f"{self.name}.cancel")
+            browser_cancelled.set()
+
+    close = capture_module.BrowserHandoffBroker.close
+    close_calls = 0
+
+    def fail_first_close(
+        broker: capture_module.BrowserHandoffBroker,
+        handoff_id: str,
+    ) -> None:
+        nonlocal close_calls
+        close_calls += 1
+        if close_calls == 1:
+            raise OSError("handoff close failed")
+        close(broker, handoff_id)
+
+    monkeypatch.setattr(
+        capture_module.BrowserHandoffBroker,
+        "close",
+        fail_first_close,
+    )
+
+    with pytest.raises(CaptureFailed) as caught:
+        CaptureCoordinator(
+            terminal_runner_factory=lambda: BlockingTerminal(
+                "terminal",
+                calls,
+            ),
+            browser_runner_factory=lambda: FailingBrowser("browser", calls),
+        ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert isinstance(caught.value.__cause__, CaptureSetupError)
+    assert isinstance(caught.value.__cause__.__cause__, RuntimeError)
+    assert str(caught.value.__cause__.__cause__) == "primary failed"
+    assert "terminal.cancel" in calls
+    assert "secondary.cancel" in calls
+
+
+def test_coordinator_isolates_two_terminal_streams_and_runs_lifecycle_once(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "two-terminals",
+            "setup": [{"run": "prepare"}],
+            "cleanup": [{"run": "cleanup"}],
+            "panes": [
+                {"id": "left", "kind": "terminal"},
+                {"id": "right", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "exchange",
+                    "layout": {"areas": [["left", "right"]]},
+                    "panes": {
+                        "left": [
+                            {
+                                "id": "client",
+                                "actions": [
+                                    {"id": "ping", "run": "ping"},
+                                    {
+                                        "id": "finish",
+                                        "run": "finish",
+                                        "after": "right.server.pong.ended",
+                                    },
+                                ],
+                            }
+                        ],
+                        "right": [
+                            {
+                                "id": "server",
+                                "actions": [
+                                    {
+                                        "id": "pong",
+                                        "run": "pong",
+                                        "after": "left.client.ping.ended",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    calls: list[str] = []
+    events: list[str] = []
+    contexts: dict[str, CaptureContext] = {}
+
+    class TwoTerminalRunner(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            assert context.runner_id is not None
+            self.name = context.runner_id
+            contexts[self.name] = context
+            super().start(context)
+
+        def run_setup(self, _steps: object) -> None:
+            self.calls.append(f"{self.name}:setup")
+
+        def run_cleanup(self, _steps: object) -> None:
+            self.calls.append(f"{self.name}:cleanup")
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            beat_id = getattr(beat, "id")
+            self.calls.append(f"{self.name}:beat:{beat_id}")
+            for action in getattr(beat, "actions"):
+                action_id = action.config["commands"][0]["id"]
+                assert before_action is not None
+                before_action(action_id)
+                assert on_progress is not None
+                events.append(f"{self.name}.{action_id}.started")
+                on_progress("started", action_id)
+                events.append(f"{self.name}.{action_id}.ended")
+                on_progress("completed", action_id)
+            return BeatCapture(beat_id=beat_id)
+
+    result = CaptureCoordinator(
+        terminal_runner_factory=lambda: TwoTerminalRunner("pending", calls),
+    ).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert events == [
+        "left.ping.started",
+        "left.ping.ended",
+        "right.pong.started",
+        "right.pong.ended",
+        "left.finish.started",
+        "left.finish.ended",
+    ]
+    assert calls.count("left:setup") == 1
+    assert calls.count("left:cleanup") == 1
+    assert "right:setup" not in calls
+    assert "right:cleanup" not in calls
+    assert contexts["left"].runner_capture == (
+        tmp_path / "run/capture/runners/left"
+    )
+    assert contexts["right"].runner_capture == (
+        tmp_path / "run/capture/runners/right"
+    )
+    assert [capture.beat_id for capture in result.beats] == [
+        "exchange--left--client",
+        "exchange--right--server",
     ]
 
 

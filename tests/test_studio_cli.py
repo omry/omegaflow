@@ -1375,6 +1375,67 @@ def test_step_rejects_non_build_action() -> None:
         studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
 
 
+def test_build_plan_lists_each_scoped_browser_capture_log(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    spec = {
+        "id": "two-browsers",
+        "_recording_id": "two-browsers",
+        "_hydra_output_dir": str(run_dir),
+        "outputs": {"asset_dir": str(tmp_path / "public")},
+        "browser": {},
+        "panes": [
+            {"id": "left", "kind": "browser"},
+            {"id": "right", "kind": "browser"},
+        ],
+        "beats": [
+            {
+                "id": "compare",
+                "layout": {"areas": [["left", "right"]]},
+                "panes": {
+                    "left": [
+                        {
+                            "id": "first",
+                            "actions": [
+                                {
+                                    "id": "open-left",
+                                    "open_page": {"url": "about:blank"},
+                                }
+                            ],
+                        }
+                    ],
+                    "right": [
+                        {
+                            "id": "second",
+                            "actions": [
+                                {
+                                    "id": "open-right",
+                                    "open_page": {"url": "about:blank"},
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        studio,
+        "load_recording_spec_from_hydra_cfg",
+        lambda _cfg: spec,
+    )
+
+    plan = studio.build_plan(OmegaConf.create({}), {})
+
+    assert plan["outputs"]["browser_capture_logs"] == [
+        str(run_dir / "capture/runners/left/browser.capture.jsonl"),
+        str(run_dir / "capture/runners/right/browser.capture.jsonl"),
+    ]
+    assert "browser_capture_log" not in plan["outputs"]
+
+
 def test_capture_step_uses_the_hydra_run_directory(monkeypatch, tmp_path) -> None:
     run_dir = tmp_path / "capture-run"
     spec = {
@@ -3180,6 +3241,68 @@ beat:
     ]
 
 
+def test_studio_directive_accepts_targeted_browser_handoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+browser: {}
+---
+
+```yaml studio-directive
+scene: Hello Video
+panes:
+- id: terminal
+  kind: terminal
+- id: preview
+  kind: browser
+```
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Open the preview
+  narration: Open the generated player.
+  layout:
+    areas:
+    - [terminal, preview]
+  panes:
+    terminal:
+    - id: session
+      actions:
+      - id: watch
+        run: omegaflow recording=demo action=watch
+        browser_handoff:
+          target: preview
+        timing: realtime
+    preview:
+    - id: player
+      actions:
+      - id: open
+        open_page:
+          handoff: watch
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        studio_config_module,
+        "RECORDING_SCRIPT_DIR",
+        recordings_dir,
+    )
+
+    plan = normalize_recording_plan(recording_from_script("hello"))
+
+    assert len(plan.browser_handoffs) == 1
+    assert plan.browser_handoffs[0].target_pane_id == "preview"
+
+
 def test_recording_frontmatter_rejects_pane_declarations(
     tmp_path: Path,
     monkeypatch,
@@ -3551,6 +3674,64 @@ beat:
         ),
     ):
         recording_from_script("hello")
+
+
+def test_studio_directive_panes_build_a_multi_pane_plan(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+audio:
+  enabled: false
+---
+
+```yaml studio-directive
+scene: Hello Video
+panes:
+- id: definition
+  kind: visualization
+- id: terminal
+  kind: terminal
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+  layout:
+    areas:
+    - [definition]
+    - [terminal]
+  panes:
+    definition:
+    - id: source
+      actions:
+      - id: show-source
+        show:
+          language: yaml
+          text: "run: printf hello"
+    terminal:
+    - id: output
+      actions:
+      - id: run-command
+        run: printf hello
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    spec = recording_from_script("hello")
+    plan = normalize_recording_plan(spec)
+
+    assert [(pane.id, pane.kind.value) for pane in plan.panes] == [
+        ("definition", "visualization"),
+        ("terminal", "terminal"),
+    ]
 
 
 def test_studio_directive_schema_does_not_inject_defaults() -> None:
