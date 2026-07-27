@@ -289,6 +289,12 @@ RECORD_ACTIONS = {
 WATCH_ARTIFACT_PREFIX = "/__studio_artifacts__/"
 WATCH_SNAPSHOT_PREFIX = "/__studio_snapshots__/"
 WATCH_ROUTE_PREFIX = "/watch/"
+WATCH_PLAYER_ASSETS = frozenset(
+    {
+        "cast-player-core.js",
+        "re2js-2.8.5.umd.js",
+    }
+)
 WATCH_HOST = "127.0.0.1"
 WATCH_POLL_INTERVAL_SECONDS = 0.25
 WATCH_IGNORED_DIRECTORY_NAMES = {
@@ -1879,8 +1885,8 @@ class StudioWatchRequestHandler(http.server.SimpleHTTPRequestHandler):
             relative = request_path[len(route) :]
             if relative == "":
                 return str(self.player_directory / "cast-player.html")
-            if relative == "cast-player-core.js":
-                return str(self.player_directory / "cast-player-core.js")
+            if relative in WATCH_PLAYER_ASSETS:
+                return str(self.player_directory / relative)
         return super().translate_path(path)
 
     def end_headers(self) -> None:

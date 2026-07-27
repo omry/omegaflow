@@ -1155,10 +1155,17 @@ class TerminalBeatMaterialization:
 
 
 @dataclass(frozen=True)
+class TerminalTextHighlightTargetEvent:
+    kind: str
+    pattern: str
+    occurrence: int
+
+
+@dataclass(frozen=True)
 class TerminalTextHighlightEvent:
     id: str
-    text: str
-    occurrence: int
+    color: str
+    targets: tuple[TerminalTextHighlightTargetEvent, ...]
     start_ms: int
     end_ms: int
 
@@ -1318,10 +1325,16 @@ def _insert_terminal_text_highlights(
         if (
             not highlight.id
             or highlight.id in seen_ids
-            or not highlight.text
-            or isinstance(highlight.occurrence, bool)
-            or not isinstance(highlight.occurrence, int)
-            or highlight.occurrence <= 0
+            or highlight.color not in {"cue", "brand"}
+            or not highlight.targets
+            or any(
+                target.kind not in {"text", "regex"}
+                or not target.pattern
+                or isinstance(target.occurrence, bool)
+                or not isinstance(target.occurrence, int)
+                or target.occurrence <= 0
+                for target in highlight.targets
+            )
             or isinstance(highlight.start_ms, bool)
             or not isinstance(highlight.start_ms, int)
             or isinstance(highlight.end_ms, bool)
@@ -1334,9 +1347,15 @@ def _insert_terminal_text_highlights(
         seen_ids.add(highlight.id)
         start_payload = {
             "active": True,
+            "color": highlight.color,
             "id": highlight.id,
-            "occurrence": highlight.occurrence,
-            "text": highlight.text,
+            "targets": [
+                {
+                    "occurrence": target.occurrence,
+                    target.kind: target.pattern,
+                }
+                for target in highlight.targets
+            ],
         }
         end_payload = {"active": False, "id": highlight.id}
         prefix = "omegaflow:highlight:"

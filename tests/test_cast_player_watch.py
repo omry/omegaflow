@@ -17,6 +17,40 @@ def test_published_player_matches_packaged_player() -> None:
     assert published.read_bytes() == packaged.read_bytes()
 
 
+def test_published_re2js_matches_packaged_re2js_and_preserves_its_license() -> None:
+    relative_paths = (
+        "re2js-2.8.5.umd.js",
+        "third_party/re2js.LICENSE.txt",
+    )
+
+    for relative_path in relative_paths:
+        packaged = REPO_ROOT / "src/omegaflow/player/static" / relative_path
+        published = REPO_ROOT / "website/static" / relative_path
+        assert packaged.is_file()
+        assert published.read_bytes() == packaged.read_bytes()
+
+    license_text = (
+        REPO_ROOT
+        / "src/omegaflow/player/static/third_party/re2js.LICENSE.txt"
+    ).read_text(encoding="utf-8")
+    assert "MIT License" in license_text
+    assert "Copyright (c) 2023 Oleksii Vasyliev" in license_text
+
+
+def test_player_loads_re2js_before_author_controlled_regex_is_evaluated() -> None:
+    html = (
+        REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        html.index('<script src="re2js-2.8.5.umd.js"></script>')
+        < html.index('<script src="cast-player-core.js"></script>')
+    )
+    assert "new RegExp(target.regex" not in html
+    assert "RestrictedRegExp.compile(" in html
+    assert "RestrictedRegExp.MULTILINE" in html
+
+
 def test_player_uses_night_studio_brand_without_replacing_ansi_colors() -> None:
     html = (
         REPO_ROOT / "src/omegaflow/player/static/cast-player.html"
@@ -543,21 +577,29 @@ if (
     assert result.returncode == 0, result.stderr
 
 
-def test_terminal_text_highlight_marker_adds_and_removes_exact_occurrence() -> None:
+def test_terminal_text_highlight_marker_adds_multiline_and_disjoint_targets() -> None:
     result = run_player_script(
         r"""
 vm.runInContext(`
 resetTerminalBuffer();
-appendChunk('created config.yaml\\ncreated config.yaml');
-applyTerminalHighlightMarker('omegaflow:highlight:{"active":true,"id":"one","text":"config.yaml","occurrence":2}');
+appendChunk('frontmatter:\\n  audio: true\\nfirst action\\nsecond action\\nfirst action');
+applyTerminalHighlightMarker('omegaflow:highlight:{"active":true,"id":"one","targets":[{"text":"frontmatter:\\\\n  audio: true","occurrence":1},{"text":"first action","occurrence":2}]}');
 `, context);
 const highlighted = element('terminal').innerHTML;
-if ((highlighted.match(/terminal-text-highlight/g) || []).length !== 1) {
+if ((highlighted.match(/terminal-text-highlight/g) || []).length !== 3) {
   console.error(JSON.stringify({phase: 'active', highlighted}));
   process.exit(1);
 }
-if (!highlighted.includes('<span class="terminal-text-highlight">config.yaml</span>')) {
-  console.error(JSON.stringify({phase: 'exact-text', highlighted}));
+if (!highlighted.includes('<span class="terminal-text-highlight">frontmatter:</span>')) {
+  console.error(JSON.stringify({phase: 'multiline-first-line', highlighted}));
+  process.exit(1);
+}
+if (!highlighted.includes('<span class="terminal-text-highlight">  audio: true</span>')) {
+  console.error(JSON.stringify({phase: 'multiline-second-line', highlighted}));
+  process.exit(1);
+}
+if (!highlighted.includes('<span class="terminal-text-highlight">first action</span>')) {
+  console.error(JSON.stringify({phase: 'disjoint-occurrence', highlighted}));
   process.exit(1);
 }
 vm.runInContext(`
@@ -566,6 +608,268 @@ applyTerminalHighlightMarker('omegaflow:highlight:{"active":false,"id":"one"}');
 const cleared = element('terminal').innerHTML;
 if (cleared.includes('terminal-text-highlight')) {
   console.error(JSON.stringify({phase: 'cleared', cleared}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_text_highlight_marker_uses_brand_color() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('targets: Renderer ready');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    color: 'brand',
+    id: 'config',
+    targets: [{text: 'Renderer ready', occurrence: 1}],
+  })
+);
+`, context);
+const highlighted = element('terminal').innerHTML;
+if (!highlighted.includes(
+  '<span class="terminal-text-highlight terminal-text-highlight-brand">' +
+  'Renderer ready</span>'
+)) {
+  console.error(JSON.stringify({highlighted}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_follows_redrawn_text() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('Rendering frame 1/3\\r\\nEncoding layer 1/3');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'status',
+    targets: [{
+      regex: 'Rendering frame \\\\d/3\\\\nEncoding layer \\\\d/3',
+      occurrence: 1,
+    }],
+  })
+);
+`, context);
+let highlighted = element('terminal').innerHTML;
+if (
+  !highlighted.includes(
+    '<span class="terminal-text-highlight">Rendering frame 1/3</span>'
+  ) ||
+  !highlighted.includes(
+    '<span class="terminal-text-highlight">Encoding layer 1/3</span>'
+  )
+) {
+  console.error(JSON.stringify({phase: 'first-state', highlighted}));
+  process.exit(1);
+}
+vm.runInContext(`
+appendChunk(
+  '\\r\\u001b[1A\\u001b[2KRendering frame 2/3' +
+  '\\r\\n\\u001b[2KEncoding layer 2/3'
+);
+`, context);
+highlighted = element('terminal').innerHTML;
+if (
+  highlighted.includes('Rendering frame 1/3') ||
+  highlighted.includes('Encoding layer 1/3') ||
+  !highlighted.includes(
+    '<span class="terminal-text-highlight">Rendering frame 2/3</span>'
+  ) ||
+  !highlighted.includes(
+    '<span class="terminal-text-highlight">Encoding layer 2/3</span>'
+  )
+) {
+  console.error(JSON.stringify({phase: 'redrawn-state', highlighted}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_survives_intro_until_matching_output_arrives() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+introActive = true;
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'status',
+    targets: [{regex: 'Rendering frame \\\\d/3', occurrence: 1}],
+  })
+);
+appendChunk('Rendering frame 1/3');
+`, context);
+const highlighted = element('terminal').innerHTML;
+if (!highlighted.includes(
+  '<span class="terminal-text-highlight">Rendering frame 1/3</span>'
+)) {
+  console.error(JSON.stringify({highlighted}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_spans_multiple_lines() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('alpha 1\\nbeta 2');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'explicit-newline',
+    targets: [{regex: 'alpha \\\\d\\\\nbeta \\\\d', occurrence: 1}],
+  })
+);
+`, context);
+let highlighted = element('terminal').innerHTML;
+if (
+  !highlighted.includes('<span class="terminal-text-highlight">alpha 1</span>') ||
+  !highlighted.includes('<span class="terminal-text-highlight">beta 2</span>')
+) {
+  console.error(JSON.stringify({phase: 'explicit-newline', highlighted}));
+  process.exit(1);
+}
+
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('start\\nchanging 42\\nfinish');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'variable-lines',
+    targets: [{regex: 'start[\\\\s\\\\S]*finish', occurrence: 1}],
+  })
+);
+`, context);
+highlighted = element('terminal').innerHTML;
+for (const line of ['start', 'changing 42', 'finish']) {
+  if (!highlighted.includes(
+    '<span class="terminal-text-highlight">' + line + '</span>'
+  )) {
+    console.error(JSON.stringify({phase: 'variable-lines', line, highlighted}));
+    process.exit(1);
+  }
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_rejects_invalid_or_zero_width_patterns() -> None:
+    result = run_player_script(
+        r"""
+const accepted = vm.runInContext(`
+[
+  '[broken',
+  '.*',
+  '\\\\b',
+  '(?=status)',
+].map((regex, index) => applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'invalid-' + index,
+    targets: [{regex, occurrence: 1}],
+  })
+))
+`, context);
+if (accepted.some(Boolean)) {
+  console.error(JSON.stringify({accepted}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_uses_linear_time_engine_for_nested_repetition() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('a'.repeat(100000) + '!');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'adversarial',
+    targets: [{regex: '(a+)+$', occurrence: 1}],
+  })
+);
+`, context);
+if (element('terminal').innerHTML.includes('terminal-text-highlight')) {
+  console.error(JSON.stringify({highlighted: element('terminal').innerHTML}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_regex_highlight_supports_grouping_and_alternation() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk('Renderer: ready');
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    id: 'grouping',
+    targets: [{regex: 'Renderer: (ready|waiting)', occurrence: 1}],
+  })
+);
+`, context);
+const highlighted = element('terminal').innerHTML;
+if (!highlighted.includes(
+  '<span class="terminal-text-highlight">Renderer: ready</span>'
+)) {
+  console.error(JSON.stringify({highlighted}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_text_highlight_rejects_unknown_color() -> None:
+    result = run_player_script(
+        r"""
+const accepted = vm.runInContext(`
+applyTerminalHighlightMarker(
+  'omegaflow:highlight:' + JSON.stringify({
+    active: true,
+    color: 'red',
+    id: 'invalid-color',
+    targets: [{text: 'status', occurrence: 1}],
+  })
+)
+`, context);
+if (accepted) {
+  console.error(JSON.stringify({accepted}));
   process.exit(1);
 }
 """

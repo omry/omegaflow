@@ -47,6 +47,7 @@ from .presentation_compiler import (
     CompiledBrowserBeat,
     CompiledRecordingTiming,
     TerminalTextHighlightEvent,
+    TerminalTextHighlightTargetEvent,
     compile_artifact_fingerprints,
     compile_browser_beat,
     compile_recording_timing,
@@ -1538,8 +1539,15 @@ def compile_presentation_bundle(
                     text_highlights=tuple(
                         TerminalTextHighlightEvent(
                             id=f"{beat.id}-highlight-{index}",
-                            text=highlight.text,
-                            occurrence=highlight.occurrence,
+                            color=highlight.color,
+                            targets=tuple(
+                                TerminalTextHighlightTargetEvent(
+                                    kind=target.kind,
+                                    pattern=target.pattern,
+                                    occurrence=target.occurrence,
+                                )
+                                for target in highlight.targets
+                            ),
                             start_ms=(
                                 timing.anchor_times_ms[
                                     (beat.id, highlight.start_anchor)

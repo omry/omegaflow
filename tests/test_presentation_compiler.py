@@ -23,6 +23,7 @@ from omegaflow.presentation_compiler import (
     pointer_motion,
     solved_intervals,
     TerminalTextHighlightEvent,
+    TerminalTextHighlightTargetEvent,
 )
 from omegaflow.presentation_schema import (
     PresentationAudioV1,
@@ -830,8 +831,19 @@ def test_terminal_materialization_inserts_timed_text_highlight_markers(
         text_highlights=(
             TerminalTextHighlightEvent(
                 id="highlight-0",
-                text=".omegaflow/config.yaml",
-                occurrence=1,
+                color="brand",
+                targets=(
+                    TerminalTextHighlightTargetEvent(
+                        kind="text",
+                        pattern="audio:\n  enabled: true",
+                        occurrence=1,
+                    ),
+                    TerminalTextHighlightTargetEvent(
+                        kind="regex",
+                        pattern=r"config-\d+\.yaml",
+                        occurrence=2,
+                    ),
+                ),
                 start_ms=250,
                 end_ms=750,
             ),
@@ -854,9 +866,18 @@ def test_terminal_materialization_inserts_timed_text_highlight_markers(
             250,
             {
                 "active": True,
+                "color": "brand",
                 "id": "highlight-0",
-                "occurrence": 1,
-                "text": ".omegaflow/config.yaml",
+                "targets": [
+                    {
+                        "occurrence": 1,
+                        "text": "audio:\n  enabled: true",
+                    },
+                    {
+                        "occurrence": 2,
+                        "regex": r"config-\d+\.yaml",
+                    },
+                ],
             },
         ),
         (750, {"active": False, "id": "highlight-0"}),

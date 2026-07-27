@@ -301,15 +301,38 @@ narration: >-
   @settings_end@ then continues.
 effects:
 - highlight:
-    text: .omegaflow/config.yaml
+    targets:
+    - text: |-
+        audio:
+          enabled: true
+    - text: recordings/config.yaml
+      occurrence: 2
+    - regex: 'completed after [0-9]+\.[0-9]+s'
     start: "@settings_start@"
     end: "@settings_end@"
 ```
 
-`text` is matched literally against complete terminal lines. Set the optional,
-one-based `occurrence` when the same text appears more than once. Highlights
-are valid only on terminal beats and require `audio.enabled: true` because
-their timing comes from narration timestamps.
+Each target contains exactly one matcher:
+
+- `text` matches literally and may span multiple lines.
+- `regex` matches changing or variable text with a portable regular expression.
+
+Put several targets in one effect to highlight disjoint text at the same time.
+Set the optional, one-based `occurrence` on a target when its match appears
+more than once; matching is deterministic and starts at the beginning of the
+rendered terminal buffer. Active regex highlights are recalculated when
+terminal output redraws, so the emphasis follows changing status text.
+
+Set `color: brand` for a purple explanatory callout. The default
+`color: cue` uses gold for the text being demonstrated.
+
+Regex patterns are limited to 256 characters and use an RE2-compatible,
+linear-time engine in the player. Groups and alternation are supported.
+Patterns cannot match empty text or use backreferences, lookaround, possessive
+quantifiers, or engine-specific character escapes.
+
+Highlights are valid only on terminal beats and require `audio.enabled: true`
+because their timing comes from narration timestamps.
 
 ### Browser beats
 
@@ -817,11 +840,18 @@ class RecordingGuideConfig:
 
 
 @dataclass
+class TerminalTextHighlightTargetConfig:
+    text: str | None = None
+    regex: str | None = None
+    occurrence: int = 1
+
+
+@dataclass
 class TerminalTextHighlightConfig:
-    text: str = ""
+    targets: list[TerminalTextHighlightTargetConfig] = field(default_factory=list)
+    color: TerminalHighlightColor = TerminalHighlightColor.cue
     start: str = ""
     end: str = ""
-    occurrence: int = 1
 
 
 @dataclass

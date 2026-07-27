@@ -26,6 +26,7 @@ from omegaflow.recording_plan import (
     NarrationTakeWaitPlan,
     RecordingPlanError,
     TerminalTextHighlightPlan,
+    TerminalTextHighlightTargetPlan,
     normalize_recording_plan,
     terminal_action_id,
     validate_recording_modalities,
@@ -420,7 +421,7 @@ def test_terminal_beat_rejects_browser_pointer_visibility() -> None:
         normalize_recording_plan(spec)
 
 
-def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> None:
+def test_terminal_text_highlight_targets_are_typed_and_bound_to_narration_anchors() -> None:
     spec = terminal_spec()
     spec["audio"] = {"enabled": True}
     spec["beats"][0]["narration"] = (
@@ -430,10 +431,18 @@ def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> No
     spec["beats"][0]["effects"] = [
         {
             "highlight": {
-                "text": ".omegaflow/config.yaml",
+                "targets": [
+                    {
+                        "text": "audio:\n  enabled: true",
+                    },
+                    {
+                        "regex": r"config-\d+\.yaml",
+                        "occurrence": 2,
+                    },
+                ],
+                "color": "brand",
                 "start": "@highlight_start@",
                 "end": "@highlight_end@",
-                "occurrence": 2,
             }
         }
     ]
@@ -442,10 +451,21 @@ def test_terminal_text_highlight_is_typed_and_bound_to_narration_anchors() -> No
 
     assert plan.beats[0].terminal_highlights == (
         TerminalTextHighlightPlan(
-            text=".omegaflow/config.yaml",
+            targets=(
+                TerminalTextHighlightTargetPlan(
+                    kind="text",
+                    pattern="audio:\n  enabled: true",
+                    occurrence=1,
+                ),
+                TerminalTextHighlightTargetPlan(
+                    kind="regex",
+                    pattern=r"config-\d+\.yaml",
+                    occurrence=2,
+                ),
+            ),
+            color="brand",
             start_anchor="highlight_start",
             end_anchor="highlight_end",
-            occurrence=2,
         ),
     )
 
@@ -455,7 +475,7 @@ def test_terminal_text_highlight_requires_narration_audio() -> None:
     spec["beats"][0]["effects"] = [
         {
             "highlight": {
-                "text": "config.yaml",
+                "targets": [{"text": "config.yaml"}],
                 "start": "@run@",
                 "end": "@done@",
             }
@@ -474,13 +494,78 @@ def test_terminal_text_highlight_requires_narration_audio() -> None:
     ("effect", "message"),
     [
         (
-            {"highlight": {"text": "", "start": "@start@", "end": "@end@"}},
-            r"beats\.0\.effects\.0\.highlight\.text must be non-empty",
+            {"highlight": {"targets": [], "start": "@start@", "end": "@end@"}},
+            r"beats\.0\.effects\.0\.highlight\.targets must be non-empty",
         ),
         (
             {
                 "highlight": {
-                    "text": "config.yaml",
+                    "targets": [{"text": "", "regex": None}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0 must contain exactly "
+            r"one of: text, regex",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"text": "status", "regex": r"status-\d+"}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0 must contain exactly "
+            r"one of: text, regex",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"regex": "["}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0\.regex is invalid",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"regex": ".*"}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0\.regex "
+            r"must not match empty text",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"regex": r"\b"}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0\.regex "
+            r"must not match empty text",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"regex": r"\N{EM DASH}"}],
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"beats\.0\.effects\.0\.highlight\.targets\.0\.regex "
+            r"uses unsupported syntax",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"text": "config.yaml"}],
                     "start": "@missing@",
                     "end": "@end@",
                 }
@@ -490,7 +575,7 @@ def test_terminal_text_highlight_requires_narration_audio() -> None:
         (
             {
                 "highlight": {
-                    "text": "config.yaml",
+                    "targets": [{"text": "config.yaml"}],
                     "start": "@end@",
                     "end": "@start@",
                 }
@@ -500,13 +585,23 @@ def test_terminal_text_highlight_requires_narration_audio() -> None:
         (
             {
                 "highlight": {
-                    "text": "config.yaml",
+                    "targets": [{"text": "config.yaml", "occurrence": 0}],
                     "start": "@start@",
                     "end": "@end@",
-                    "occurrence": 0,
                 }
             },
-            r"beats\.0\.effects\.0\.highlight\.occurrence must be positive",
+            r"beats\.0\.effects\.0\.highlight\.targets\.0\.occurrence must be positive",
+        ),
+        (
+            {
+                "highlight": {
+                    "targets": [{"text": "config.yaml"}],
+                    "color": "red",
+                    "start": "@start@",
+                    "end": "@end@",
+                }
+            },
+            r"Invalid value 'red', expected one of \[cue, brand\]",
         ),
         ({}, r"beats\.0\.effects\.0 must contain exactly one of: highlight"),
     ],
@@ -524,12 +619,42 @@ def test_terminal_text_highlight_rejects_invalid_configuration(
         normalize_recording_plan(spec)
 
 
+def test_terminal_text_highlight_accepts_safe_grouping_and_alternation() -> None:
+    spec = terminal_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["narration"] = (
+        "@start@ Explain. @end@ @run@ Run it. @wait:done@"
+    )
+    spec["beats"][0]["effects"] = [
+        {
+            "highlight": {
+                "targets": [
+                    {"regex": r"Renderer: (status|ready)+"},
+                    {"regex": r"(a+)+$"},
+                ],
+                "start": "@start@",
+                "end": "@end@",
+            }
+        }
+    ]
+
+    plan = normalize_recording_plan(spec)
+
+    assert tuple(
+        target.pattern
+        for target in plan.beats[0].terminal_highlights[0].targets
+    ) == (
+        r"Renderer: (status|ready)+",
+        r"(a+)+$",
+    )
+
+
 def test_browser_beat_rejects_terminal_text_highlight() -> None:
     spec = browser_spec()
     spec["beats"][0]["effects"] = [
         {
             "highlight": {
-                "text": "Create",
+                "targets": [{"text": "Create"}],
                 "start": "@menu@",
                 "end": "@menu@",
             }

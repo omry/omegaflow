@@ -1058,12 +1058,58 @@ def _terminal_text_highlights(
             raise RecordingPlanError(f"{field} must contain exactly one of: highlight")
         highlight = effect.highlight
         highlight_field = f"{field}.highlight"
-        if not highlight.text:
-            raise RecordingPlanError(f"{highlight_field}.text must be non-empty")
-        occurrence = _positive_int(
-            highlight.occurrence,
-            field=f"{highlight_field}.occurrence",
-        )
+        if not highlight.targets:
+            raise RecordingPlanError(f"{highlight_field}.targets must be non-empty")
+        targets: list[TerminalTextHighlightTargetPlan] = []
+        for target_index, target in enumerate(highlight.targets):
+            target_field = f"{highlight_field}.targets.{target_index}"
+            matchers = [
+                (kind, pattern)
+                for kind, pattern in (("text", target.text), ("regex", target.regex))
+                if pattern
+            ]
+            if len(matchers) != 1:
+                raise RecordingPlanError(
+                    f"{target_field} must contain exactly one of: text, regex"
+                )
+            kind, pattern = matchers[0]
+            if kind == "regex":
+                if len(pattern) > 256:
+                    raise RecordingPlanError(
+                        f"{target_field}.regex must be at most 256 characters"
+                    )
+                escapes = re.findall(r"\\([A-Za-z])", pattern)
+                if (
+                    re.search(r"(?:[*+?]|\})\+", pattern)
+                    or any(escape not in "dDsSwWbBnrtfvxu" for escape in escapes)
+                    or re.search(r"\\[1-9]", pattern)
+                    or re.search(r"\(\?(?:[=!]|<[=!]|>|P=|\(|#)", pattern)
+                ):
+                    raise RecordingPlanError(
+                        f"{target_field}.regex uses unsupported syntax"
+                    )
+                try:
+                    compiled = re.compile(pattern)
+                except re.error as exc:
+                    raise RecordingPlanError(
+                        f"{target_field}.regex is invalid: {exc}"
+                    ) from exc
+                for probe in ("", "a", " ", "\n", "ab"):
+                    match = compiled.search(probe)
+                    if match is not None and match.start() == match.end():
+                        raise RecordingPlanError(
+                            f"{target_field}.regex must not match empty text"
+                        )
+            targets.append(
+                TerminalTextHighlightTargetPlan(
+                    kind=kind,
+                    pattern=pattern,
+                    occurrence=_positive_int(
+                        target.occurrence,
+                        field=f"{target_field}.occurrence",
+                    ),
+                )
+            )
         for boundary, reference in (("start", highlight.start), ("end", highlight.end)):
             if not ANCHOR_RE.fullmatch(reference):
                 raise RecordingPlanError(
@@ -1082,10 +1128,10 @@ def _terminal_text_highlights(
             )
         highlights.append(
             TerminalTextHighlightPlan(
-                text=highlight.text,
+                targets=tuple(targets),
+                color=highlight.color.value,
                 start_anchor=start_id,
                 end_anchor=end_id,
-                occurrence=occurrence,
             )
         )
     return tuple(highlights)
@@ -1314,11 +1360,18 @@ class TerminalCheckPlan:
 
 
 @dataclass(frozen=True)
+class TerminalTextHighlightTargetPlan:
+    kind: str
+    pattern: str
+    occurrence: int
+
+
+@dataclass(frozen=True)
 class TerminalTextHighlightPlan:
-    text: str
+    targets: tuple[TerminalTextHighlightTargetPlan, ...]
+    color: str
     start_anchor: str
     end_anchor: str
-    occurrence: int
 
 
 @dataclass(frozen=True)

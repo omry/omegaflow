@@ -1147,11 +1147,15 @@ video.
 ### Prerequisite 5: terminal highlight ranges
 
 Extend narration-synchronized terminal highlighting to support multi-line
-ranges and several disjoint text spans in one effect, with deterministic
-matching and explicit repeated-text behavior.
+ranges, several disjoint text spans in one effect, explicit repeated-match
+selection, and restricted regex targets that follow changing terminal output.
 
 Demonstration: highlight frontmatter, a beat declaration, and two separate
-action fields at narration anchors in a short source walkthrough.
+action fields at narration anchors in a short source walkthrough, then keep a
+regex highlight attached to a changing status line.
+
+Equivalent narration-synchronized highlighting for semantic browser targets is
+useful but is tracked separately; it is not part of this terminal prerequisite.
 
 ### Prerequisite 6: semantic browser drag and pointer feedback
 

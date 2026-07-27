@@ -36,15 +36,18 @@ def player_site(root: Path):
         thread.join()
 
 
+def copy_player_assets(root: Path) -> None:
+    static_root = REPO_ROOT / "src/omegaflow/player/static"
+    for name in (
+        "cast-player.html",
+        "cast-player-core.js",
+        "re2js-2.8.5.umd.js",
+    ):
+        shutil.copy2(static_root / name, root / name)
+
+
 def write_browser_player_fixture(root: Path) -> None:
-    shutil.copy2(
-        REPO_ROOT / "src/omegaflow/player/static/cast-player.html",
-        root / "cast-player.html",
-    )
-    shutil.copy2(
-        REPO_ROOT / "src/omegaflow/player/static/cast-player-core.js",
-        root / "cast-player-core.js",
-    )
+    copy_player_assets(root)
     (root / "beats").mkdir()
     image = (
         "data:image/svg+xml,"
@@ -138,14 +141,7 @@ def write_browser_player_fixture(root: Path) -> None:
 
 
 def write_terminal_player_fixture(root: Path) -> None:
-    shutil.copy2(
-        REPO_ROOT / "src/omegaflow/player/static/cast-player.html",
-        root / "cast-player.html",
-    )
-    shutil.copy2(
-        REPO_ROOT / "src/omegaflow/player/static/cast-player-core.js",
-        root / "cast-player-core.js",
-    )
+    copy_player_assets(root)
     (root / "beats").mkdir()
     payload_path = root / "beats/nano.cast"
     shutil.copy2(

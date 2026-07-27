@@ -229,6 +229,11 @@ class RecordingMedium(str, Enum):
     browser = "browser"
 
 
+class TerminalHighlightColor(str, Enum):
+    cue = "cue"
+    brand = "brand"
+
+
 @dataclass
 class RunGarbageCollectionConfig:
     enabled: bool = True
@@ -736,11 +741,18 @@ class RecordingGuideConfig:
 
 
 @dataclass
+class TerminalTextHighlightTargetConfig:
+    text: str | None = None
+    regex: str | None = None
+    occurrence: int = 1
+
+
+@dataclass
 class TerminalTextHighlightConfig:
-    text: str = ""
+    targets: list[TerminalTextHighlightTargetConfig] = field(default_factory=list)
+    color: TerminalHighlightColor = TerminalHighlightColor.cue
     start: str = ""
     end: str = ""
-    occurrence: int = 1
 
 
 @dataclass
@@ -914,6 +926,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingActionConfig,
     RecordingCheckConfig,
     RecordingGuideConfig,
+    TerminalTextHighlightTargetConfig,
     TerminalTextHighlightConfig,
     TerminalEffectConfig,
     PlayerToolbarHighlightConfig,

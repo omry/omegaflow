@@ -2190,7 +2190,8 @@ beat:
   narration: "@highlight_start@ Project settings. @highlight_end@"
   effects:
   - highlight:
-      text: .omegaflow/config.yaml
+      targets:
+      - text: .omegaflow/config.yaml
       start: "@highlight_start@"
       end: "@highlight_end@"
 ```
@@ -3169,21 +3170,21 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert bootstrap_beat["effects"] == [
         {
             "highlight": {
-                "text": ".omegaflow/config.yaml",
+                "targets": [{"text": ".omegaflow/config.yaml"}],
                 "start": "@project_settings_start@",
                 "end": "@project_settings_end@",
             }
         },
         {
             "highlight": {
-                "text": "recordings/config.yaml",
+                "targets": [{"text": "recordings/config.yaml"}],
                 "start": "@recording_defaults_start@",
                 "end": "@recording_defaults_end@",
             }
         },
         {
             "highlight": {
-                "text": "recordings/quickstart/index.md",
+                "targets": [{"text": "recordings/quickstart/index.md"}],
                 "start": "@quickstart_script_start@",
                 "end": "@quickstart_script_end@",
             }

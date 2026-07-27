@@ -64,6 +64,10 @@ def test_recording_watch_route_refreshes_to_latest_immutable_snapshot(
         "window.playerLoaded = true;",
         encoding="utf-8",
     )
+    (player_root / "re2js-2.8.5.umd.js").write_text(
+        "window.re2jsLoaded = true;",
+        encoding="utf-8",
+    )
 
     def recording_run(name: str, label: str) -> Path:
         run_dir = tmp_path / "runs" / name
@@ -99,6 +103,9 @@ def test_recording_watch_route_refreshes_to_latest_immutable_snapshot(
         )
         assert urlopen(f"{player_url}cast-player-core.js").read().decode() == (
             "window.playerLoaded = true;"
+        )
+        assert urlopen(f"{player_url}re2js-2.8.5.umd.js").read().decode() == (
+            "window.re2jsLoaded = true;"
         )
 
         with urlopen(f"{player_url}recording.presentation.json") as response:

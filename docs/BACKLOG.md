@@ -45,6 +45,16 @@ No active release blockers.
 
 ## Post-release
 
+- [ ] `P2` Add narration-synchronized highlighting for browser beats.
+      Authors should be able to call attention to one or several elements in a
+      recorded browser surface without encoding that emphasis into the
+      application itself. Acceptance checks: use semantic DOM targets with an
+      explicit repeated-match policy; support simultaneous disjoint targets;
+      synchronize the callout to narration anchors; define how the effect is
+      represented in captured states and motion fragments; keep it stable
+      across responsive layouts; and cover activation, clearing, seeking, and
+      missing-target failures.
+
 - [ ] `P2` Add sequential playback for recording collections. Collections
       currently provide shortcuts for building and reviewing related videos,
       but viewers must open each member separately. Acceptance checks: preserve
@@ -200,9 +210,11 @@ No active release blockers.
 
 - [x] `P2` Support narration-synchronized text highlighting in terminal beats.
       Completed: `2026-07-18`. Added typed terminal highlight effects timed by
-      narration anchors, exact occurrence selection for repeated text,
-      deterministic player rendering and clearing, author documentation,
-      validation and playback tests, and a quickstart demonstration.
+      narration anchors, multi-line and simultaneous disjoint targets, exact
+      occurrence selection, and RE2-compatible regex matching that follows
+      terminal redraws without exposing playback to backtracking denial of
+      service. Added deterministic player rendering and clearing, author
+      documentation, and validation, playback, and adversarial-pattern tests.
 
 - [x] `P0` Prevent duplicate voiceover when playback starts before the website
       player has fully loaded. Completed: `2026-07-18`. Playback now remains

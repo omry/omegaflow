@@ -222,6 +222,11 @@
         box-shadow: 0 0 0 0.08em rgba(255, 194, 71, 0.5);
       }
 
+      .terminal-text-highlight-brand {
+        background: rgba(139, 124, 255, 0.28);
+        box-shadow: 0 0 0 0.08em rgba(139, 124, 255, 0.58);
+      }
+
       .terminal-cursor {
         color: var(--bg);
         background: var(--cue);
@@ -1125,8 +1130,10 @@
       </div>
     </main>
 
+    <script src="re2js-2.8.5.umd.js"></script>
     <script src="cast-player-core.js"></script>
     <script>
+      const RestrictedRegExp = globalThis.RE2JS?.RE2JS;
       const params = new URLSearchParams(window.location.search);
       const playerPlayingMessage = 'omegaflow:player-playing';
       const playerPauseMessage = 'omegaflow:player-pause';
@@ -1525,9 +1532,11 @@
         }
       }
 
-      function resetTerminalBuffer() {
+      function resetTerminalBuffer({preserveHighlights = false} = {}) {
         terminalLines = [[]];
-        activeTerminalHighlights.clear();
+        if (!preserveHighlights) {
+          activeTerminalHighlights.clear();
+        }
         cursorRow = 0;
         cursorColumn = 0;
         terminalCursorVisible = true;
@@ -1748,37 +1757,76 @@
         }
       }
 
+      function terminalHighlightMatch(target, terminalText) {
+        let remaining = target.occurrence;
+        if (target.text) {
+          let searchFrom = 0;
+          while (searchFrom <= terminalText.length - target.text.length) {
+            const matchAt = terminalText.indexOf(target.text, searchFrom);
+            if (matchAt < 0) {
+              return null;
+            }
+            remaining -= 1;
+            if (remaining === 0) {
+              return {start: matchAt, length: target.text.length};
+            }
+            searchFrom = matchAt + target.text.length;
+          }
+          return null;
+        }
+
+        const matcher = target.expression.matcher(terminalText);
+        for (let attempts = 0; attempts < 1000; attempts += 1) {
+          if (!matcher.find()) {
+            return null;
+          }
+          const start = matcher.start();
+          const end = matcher.end();
+          if (start === end) {
+            continue;
+          }
+          remaining -= 1;
+          if (remaining === 0) {
+            return {start, length: end - start};
+          }
+        }
+        return null;
+      }
+
       function terminalHighlightColumns() {
         const columnsByLine = new Map();
+        const textCoordinates = [];
+        let terminalText = '';
+        for (let lineIndex = 0; lineIndex < terminalLines.length; lineIndex += 1) {
+          if (lineIndex > 0) {
+            terminalText += '\n';
+            textCoordinates.push(null);
+          }
+          const line = terminalLines[lineIndex];
+          for (let column = 0; column < line.length; column += 1) {
+            terminalText += line[column]?.char || ' ';
+            textCoordinates.push([lineIndex, column]);
+          }
+        }
         for (const highlight of activeTerminalHighlights.values()) {
-          let remaining = highlight.occurrence;
-          for (let lineIndex = 0; lineIndex < terminalLines.length; lineIndex += 1) {
-            const text = terminalLines[lineIndex]
-              .map((cell) => cell?.char || ' ')
-              .join('');
-            let searchFrom = 0;
-            while (searchFrom <= text.length - highlight.text.length) {
-              const matchAt = text.indexOf(highlight.text, searchFrom);
-              if (matchAt < 0) {
-                break;
-              }
-              remaining -= 1;
-              if (remaining === 0) {
-                const columns = columnsByLine.get(lineIndex) || new Set();
-                for (
-                  let column = matchAt;
-                  column < matchAt + highlight.text.length;
-                  column += 1
-                ) {
-                  columns.add(column);
-                }
-                columnsByLine.set(lineIndex, columns);
-                break;
-              }
-              searchFrom = matchAt + Math.max(1, highlight.text.length);
+          for (const target of highlight.targets) {
+            const match = terminalHighlightMatch(target, terminalText);
+            if (!match) {
+              continue;
             }
-            if (remaining === 0) {
-              break;
+            for (
+              let offset = match.start;
+              offset < match.start + match.length;
+              offset += 1
+            ) {
+              const coordinate = textCoordinates[offset];
+              if (!coordinate) {
+                continue;
+              }
+              const [lineIndex, column] = coordinate;
+              const columns = columnsByLine.get(lineIndex) || new Map();
+              columns.set(column, highlight.color);
+              columnsByLine.set(lineIndex, columns);
             }
           }
         }
@@ -1802,7 +1850,9 @@
         for (let column = 0; column < renderWidth; column += 1) {
           const cell = line[column];
           const baseClassName = cell?.className || '';
-          const highlighted = highlightColumns.get(lineIndex)?.has(column);
+          const highlightColor = (
+            highlightColumns.get(lineIndex)?.get(column) || ''
+          );
           const cursor = (
             terminalCursorVisible &&
             lineIndex === cursorRow &&
@@ -1810,7 +1860,10 @@
           );
           const className = [
             baseClassName,
-            highlighted ? 'terminal-text-highlight' : '',
+            highlightColor ? 'terminal-text-highlight' : '',
+            highlightColor === 'brand'
+              ? 'terminal-text-highlight-brand'
+              : '',
             cursor ? 'terminal-cursor' : '',
           ]
             .filter(Boolean)
@@ -1865,16 +1918,72 @@
         }
         if (
           marker.active !== true ||
-          typeof marker.text !== 'string' ||
-          !marker.text ||
-          !Number.isInteger(marker.occurrence) ||
-          marker.occurrence < 1
+          !['cue', 'brand'].includes(marker.color || 'cue') ||
+          !Array.isArray(marker.targets) ||
+          marker.targets.length < 1 ||
+          marker.targets.some(
+            (target) => {
+              const hasText = typeof target?.text === 'string' && !!target.text;
+              const hasRegex = (
+                typeof target?.regex === 'string' &&
+                !!target.regex &&
+                target.regex.length <= 256
+              );
+              if (
+                hasText === hasRegex ||
+                !Number.isInteger(target?.occurrence) ||
+                target.occurrence < 1
+              ) {
+                return true;
+              }
+              if (hasRegex) {
+                try {
+                  if (!RestrictedRegExp) {
+                    return true;
+                  }
+                  const expression = RestrictedRegExp.compile(
+                    target.regex,
+                    RestrictedRegExp.MULTILINE
+                  );
+                  for (const probe of ['', 'a', ' ', '\n', 'ab']) {
+                    const matcher = expression.matcher(probe);
+                    if (
+                      matcher.find() &&
+                      matcher.start() === matcher.end()
+                    ) {
+                      return true;
+                    }
+                  }
+                } catch {
+                  return true;
+                }
+              }
+              return false;
+            }
+          )
         ) {
           return false;
         }
         activeTerminalHighlights.set(marker.id, {
-          text: marker.text,
-          occurrence: marker.occurrence,
+          color: marker.color || 'cue',
+          targets: marker.targets.map(
+            (target) => {
+              if (target.text) {
+                return {
+                  text: target.text,
+                  occurrence: target.occurrence,
+                };
+              }
+              return {
+                regex: target.regex,
+                expression: RestrictedRegExp.compile(
+                  target.regex,
+                  RestrictedRegExp.MULTILINE
+                ),
+                occurrence: target.occurrence,
+              };
+            }
+          ),
         });
         renderTerminalBuffer();
         return true;
@@ -1883,7 +1992,7 @@
       function appendChunk(chunk) {
         if (introActive) {
           introActive = false;
-          resetTerminalBuffer();
+          resetTerminalBuffer({preserveHighlights: true});
         }
         const input = terminalPendingInput + chunk;
         terminalPendingInput = '';
