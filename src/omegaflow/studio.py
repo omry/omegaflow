@@ -298,6 +298,7 @@ WATCH_PLAYER_ASSETS = frozenset(
 )
 WATCH_HOST = "127.0.0.1"
 WATCH_POLL_INTERVAL_SECONDS = 0.25
+WATCH_QUIET_INTERVAL_SECONDS = 2.5
 WATCH_IGNORED_DIRECTORY_NAMES = {
     ".git",
     ".hg",
@@ -2963,6 +2964,7 @@ def run_watch_rebuild_loop(
     stop_event: threading.Event,
     *,
     poll_interval: float = WATCH_POLL_INTERVAL_SECONDS,
+    quiet_interval: float = WATCH_QUIET_INTERVAL_SECONDS,
 ) -> None:
     roots = {
         recording_id: recording_watch_source_roots(config, recording_id)
@@ -2980,14 +2982,19 @@ def run_watch_rebuild_loop(
         if pending == fingerprints:
             continue
 
+        stable_for = 0.0
         while not stop_event.wait(poll_interval):
             settled = {
                 recording_id: watch_source_fingerprint(source_roots)
                 for recording_id, source_roots in roots.items()
             }
-            if settled == pending:
+            if settled != pending:
+                pending = settled
+                stable_for = 0.0
+                continue
+            stable_for += poll_interval
+            if stable_for >= quiet_interval:
                 break
-            pending = settled
         else:
             return
 

@@ -6089,9 +6089,56 @@ def test_watch_rebuilds_after_recording_source_changes(
         ("hello",),
         ChangingEvent(),
         poll_interval=0.001,
+        quiet_interval=0.001,
     )
 
     assert rebuilt == ["hello"]
+
+
+def test_watch_waits_for_2_5_seconds_of_source_quiet_before_rebuilding(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    recording_source = tmp_path / "recordings" / "hello"
+    recording_source.mkdir(parents=True)
+    source = recording_source / "index.md"
+    source.write_text("initial\n", encoding="utf-8")
+    config = {
+        "recording": "hello",
+        "studio": {"recording_dir": str(tmp_path / "recordings")},
+    }
+    rebuilt_at_wait: list[int] = []
+
+    class EditingEvent:
+        def __init__(self) -> None:
+            self.wait_count = 0
+
+        def wait(self, _timeout) -> bool:
+            self.wait_count += 1
+            if self.wait_count == 1:
+                source.write_text("first edit\n", encoding="utf-8")
+            elif self.wait_count == 3:
+                source.write_text("second edit\n", encoding="utf-8")
+            return bool(rebuilt_at_wait)
+
+    editing = EditingEvent()
+
+    def fake_rebuild(_cfg, _recording_id) -> int:
+        rebuilt_at_wait.append(editing.wait_count)
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+
+    studio.run_watch_rebuild_loop(
+        OmegaConf.create(config),
+        config,
+        ("hello",),
+        editing,
+        poll_interval=1.0,
+        quiet_interval=2.5,
+    )
+
+    assert rebuilt_at_wait == [6]
 
 
 def test_watch_source_fingerprint_ignores_generated_cache_files(tmp_path) -> None:
