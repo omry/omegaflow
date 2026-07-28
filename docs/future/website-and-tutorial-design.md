@@ -556,15 +556,21 @@ run `omegaflow bootstrap=project`, and built and watched the generated
 `test-video`. The tutorial then runs `omegaflow bootstrap=tutorial` to add a
 separate cumulative learning workspace.
 
-Use one written tutorial page with anchored milestones and one continuous
-supporting walkthrough divided into meaningful beats. Do not publish one page
-or one video per feature. Split the tutorial only after complete narration and
-real runtime measurements show that navigation between substantial chapters is
-useful.
+Use one guided written tutorial page with anchored milestones and one
+continuous supporting walkthrough divided into meaningful beats. The tutorial
+is a single outcome-driven path, not a catalogue of OmegaFlow features. Do not
+publish one page or one video per feature. Split the tutorial only after
+complete narration and real runtime measurements show that navigation between
+substantial chapters is useful.
 
 The written procedure is authoritative and remains usable without media. The
 supporting video demonstrates meaningful edits, errors, playback, and results;
 it must not contain the only command or explanation.
+
+Keep the learner's visual story linear: establish the recording in the
+terminal, edit the artwork in one browser, and finish on the saved result.
+Advanced compositions such as side-by-side before/after browsers plus a
+terminal belong in focused reference videos rather than first-run onboarding.
 
 ### Supplied application: Tiny Canvas
 
@@ -582,18 +588,19 @@ deterministic standard-library local server, DOM-backed SVG objects, semantic
 targets and destination anchors, disposable state, and no external network,
 account, framework, or secret.
 
-The finished learner-authored video has three beats:
+The generated tutorial workspace begins with one reliable terminal beat. The
+learner adds one complete browser beat:
 
-1. **Open the artwork** from the terminal, handing the editor launch to a
-   browser pane.
-2. **Refine the artwork** in the browser by changing the title and dragging the
-   sun and tree before saving a new, title-derived file.
-3. **Compare before and after** by opening the original and saved SVGs into two
-   browser panes above the terminal commands that launched them.
+1. **Open the artwork** from the generated terminal beat, handing the editor
+   launch to the browser.
+2. **Refine the artwork** in the learner-authored browser beat by changing the
+   title and dragging the sun and tree before saving a new, title-derived file.
 
-This is a terminal-browser-multipane story with a visible before/after result.
-Browser primitives are taught once while constructing the second beat; later
-milestones reuse that beat to teach narration, guidance, and publishing.
+This is a terminal-to-browser story with a visible saved result. Browser
+primitives are taught once while constructing the only complete beat the
+learner writes. Later milestones modify that existing browser beat to teach
+narration, guidance, and publishing instead of asking the learner to author
+more complete beats.
 
 ### Application distribution and release acceptance
 
@@ -684,8 +691,8 @@ merely to present source excerpts.
 
 ### Milestone 3: Automate and review the artwork edit
 
-Add the browser edit beat and final multipane comparison beat. Teach browser
-primitives once as one coherent operation:
+Add one browser edit beat. Teach browser primitives once as one coherent
+operation:
 
 - open Tiny Canvas with an explicit readiness boundary
 - target the title semantically and replace its text
@@ -695,13 +702,11 @@ primitives once as one coherent operation:
 - show a brief click indication and a persistent pressed-pointer state during
   each drag
 - save and check the visible result under its title-derived filename
-- launch the original and saved SVGs from the terminal into side-by-side
-  browser panes
 
-Build and play the complete silent three-beat video before adding TTS. Show the
-original state, the browser edit, and the side-by-side result. This is a
-required working gate: narration cannot hide or compensate for an incorrect
-workflow.
+Build and play the complete silent terminal-to-browser video before adding TTS.
+Show the original state, the browser edit, and the saved result in sequence.
+This is a required working gate: narration cannot hide or compensate for an
+incorrect workflow.
 
 Add beat-targeted watch so the learner and supporting walkthrough can open the
 changed beat directly instead of replaying the whole video. Beat ids must be
@@ -736,11 +741,12 @@ current silent dynamic-fragment implementation is insufficient.
 
 ### Milestone 5: Guide the viewer
 
-Attach the existing textual guide/checkpoint card to the final comparison beat.
-In guided mode it pauses after the comparison and shows the commands for
-opening the original and edited SVGs in browser panes. Multiple commands use
-the plural **Copy commands** label. The same video remains coherent when guided
-mode is disabled.
+Attach the existing textual guide/checkpoint card to the completed browser
+beat. Run the supporting walkthrough in guided mode and introduce the guided
+control during orientation. At the checkpoint, show the practical next command
+or commands for reviewing the saved result. Multiple commands use the plural
+**Copy commands** label. The same video remains coherent when guided mode is
+disabled.
 
 This introduces no new guide type or text recording medium. It demonstrates a
 purposeful viewer task using the workflow already authored.
@@ -762,6 +768,8 @@ after source or application changes.
   independent capability clips.
 - Follow the same materialized workspace and cumulative source states as the
   written tutorial.
+- Keep its visible progression linear: terminal setup, one browser editor, then
+  the finished artwork. Do not use the advanced three-pane comparison layout.
 - Demonstrate real commands, errors, editor input, browser actions, audio,
   checks, guides, and published output; fabricated `printf` status is forbidden.
 - Do not preview the finished video at the beginning. State the outcome briefly
@@ -800,6 +808,7 @@ prerequisite begins.
 - collections
 - complete configuration and option tables
 - every terminal and browser action
+- multipane layout and cross-pane synchronization
 - detailed authentication, application secrets, and visual redaction flows
 - manifest and media-fragment internals
 - encoding choices
@@ -809,15 +818,45 @@ prerequisite begins.
 
 These topics remain available through Concepts, Guides, and Reference.
 
+### Feature reference videos
+
+Reference videos are independent of the cumulative tutorial. They are short,
+capability-focused demonstrations attached to the relevant documentation page,
+not additional tutorial chapters. They may use purpose-built recordings and
+advanced layouts when those make a feature easier to understand.
+
+Before publishing them, inventory the existing demonstration, smoke, and
+proof-of-concept recordings. Classify each as public reference material,
+internal regression fixture, or removable experiment. Do not keep every
+technical proof merely because it already exists.
+
+Candidate reference topics include:
+
+- beat structure and transitions
+- narration anchors, waits, and joins
+- terminal timing, realtime input, and TUI playback
+- browser actions, semantic typing and dragging, and readiness conditions
+- multipane layout and cross-pane synchronization
+- highlights and other presentation effects
+- guided playback
+- build reuse, focused build steps, and publishing
+
+Only reference videos needed to explain release-essential public behavior block
+the initial release. The curation review determines that set before new
+recordings are authored.
+
 ### Decision D4: tutorial project and curriculum
 
 **Resolution:** approved after feedback consolidation. Use the packaged Tiny
-Canvas sunset-beach application, a three-beat terminal-browser-multipane learner
-artifact, one cumulative written tutorial, and one continuous supporting
-walkthrough. Introduce browser primitives once, prove silent playback before
-TTS, expose and fix narration timing, add one practical guide, and end with
-standalone publishing. Determine any later page or video split from substantive
-content and measured narrated runtime rather than a predetermined chapter count.
+Canvas sunset-beach application, one generated terminal beat and one complete
+learner-authored browser beat, one cumulative guided written tutorial, and one
+continuous linear supporting walkthrough. Introduce browser primitives once,
+prove silent playback before TTS, extend the browser beat with narration and
+synchronization, add one practical guide, and end with standalone publishing.
+Keep feature-reference videos as a separate documentation layer and determine
+their release-essential scope through recording curation. Determine any later
+tutorial page split from substantive content and measured narrated runtime
+rather than a predetermined chapter count.
 
 ### Decision D4a: editor and media prerequisites
 
@@ -900,10 +939,10 @@ but each receives content appropriate to its page type.
 | --- | --- |
 | `recordings/quickstart-demo` | Retain as the homepage demonstration; update its visible workflow to `bootstrap=project`, `test-video`, the generated private environment files, and the revised Getting Started path |
 | `website/static/omegaflow-videos/quickstart-demo` | Preserve the public asset path and rebuild from the retained source |
-| `recordings/tutorial/index.md` | Replace the collection with one continuous supporting walkthrough using the materialized Tiny Canvas workspace |
+| `recordings/tutorial/index.md` | Replace the collection with one linear continuous supporting walkthrough using the materialized Tiny Canvas workspace |
 | `recordings/tutorial/*/index.md` | Remove all placeholder and micro-video members after the continuous walkthrough passes validation |
 | `website/static/omegaflow-videos/tutorial` | Regenerate only from the completed continuous walkthrough; do not preserve placeholder output |
-| `recordings/browser-recording-reference` | Retain as a browser integration/reference fixture, outside the tutorial curriculum |
+| `recordings/browser-recording-reference` | Evaluate during reference-video curation as either public browser reference material or an internal integration fixture |
 | `recordings/browser-recording-narration-smoke` | Retain as an internal smoke fixture, outside public navigation |
 
 The learner's generated `sunset-beach` recording remains distinct from the
@@ -1285,14 +1324,32 @@ inspect the generated workspace.
 
 After all prerequisite reviews pass:
 
-1. Author the six cumulative milestones on one written page.
-2. Build the one continuous supporting walkthrough from the same workspace.
-3. Keep the written instructions complete without video playback.
-4. Build and validate the learner's three-beat sunset-beach recording, nested
-   narration demonstration, guide, and standalone output through the
-   development CLI.
-5. Measure complete narrated runtime and add chapter navigation only if the
+1. Orient the learner, introduce guided playback, and verify project setup.
+2. Run `bootstrap=tutorial` and inspect the generated starter terminal beat.
+3. Build and review the starter before asking the learner to author one complete
+   browser beat.
+4. Extend that browser beat with narration anchors and synchronization, then
+   add the guided checkpoint.
+5. Build, review, and publish the completed terminal-to-browser recording
+   through the development CLI.
+6. Build the one continuous linear supporting walkthrough from the same
+   workspace while keeping the written instructions complete without video
+   playback.
+7. Measure complete narrated runtime and add chapter navigation only if the
    substantive content justifies it.
+
+### Reference-video curation phase
+
+After the cumulative tutorial passes:
+
+1. Inventory public demonstrations, internal fixtures, and proof-of-concept
+   recordings.
+2. Map useful reference-video topics to their canonical documentation pages.
+3. Review which existing recordings should be retained, rewritten, or removed.
+4. Implement only the missing reference videos required for the initial public
+   documentation.
+5. Keep advanced demonstrations, including multipane comparisons, out of the
+   onboarding tutorial.
 
 ### Separate release slice: recording-local application secrets
 
@@ -1372,8 +1429,9 @@ the one-feature-at-a-time demonstration gates.
 | D1: website job, audience, and product breadth | Approved | Evaluator-first homepage, author-first documentation, and a two-layer identity grounded in the current video product |
 | D2: homepage hierarchy | Approved | Demo-led hero, Build your first video primary action, script-to-video proof, compact lifecycle |
 | D3: documentation taxonomy | Approved | Four task-oriented navbar destinations plus one initially cohesive Concepts page in the documentation sidebar |
-| D4: tutorial project and curriculum | Approved | One cumulative page and continuous walkthrough using packaged Tiny Canvas and a three-beat sunset-beach recording; prove silent browser workflow before narration and end with standalone HTML |
+| D4: tutorial project and curriculum | Approved | One cumulative guided page and linear walkthrough using packaged Tiny Canvas, a generated terminal beat, and one learner-authored browser beat; prove silent browser workflow before narration and end with standalone HTML |
 | D4a: editor and media prerequisites | Approved | Styled scripted nano input, semantic drag, beat-targeted watch, terminal/browser timing parity, and generic realtime browser audio are explicit gates before tutorial authoring |
+| D4b: reference-video layer | Approved | Keep short capability-focused reference videos independent from the tutorial; curate existing recordings and implement only release-essential gaps |
 | D5: migration policy | Approved | Clean cut with no compatibility routes; remove duplicate pages and tutorial placeholders; retain the suitable homepage demo asset location without promising compatibility |
 | D6: bootstrap and environment contract | Approved | Use mutually exclusive `bootstrap=project|tutorial`; generate `test-video`, scoped OmegaFlow secrets, deterministic command environments, and a guarded packaged Tiny Canvas workspace |
 | D7: prerequisite execution policy | Approved | Implement one prerequisite per vertical slice, test it first, demonstrate its public behavior through the development CLI, review and commit it, then start the next; verify the installed distribution during final release acceptance |
