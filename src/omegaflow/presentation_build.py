@@ -21,6 +21,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__, audio, record
+from .application_environment import (
+    ApplicationEnvironmentError,
+    application_secret_names,
+    resolve_application_environment,
+)
 from .browser_capture import PersistentBrowserRunner
 from .browser_runtime import (
     CHROMIUM_BROWSER_VERSION,
@@ -477,9 +482,20 @@ def _capture_environment(
             f"environment.variables must not contain private OmegaFlow service "
             f"name {reserved[0]!r}; use with_env on one terminal command"
         )
+    try:
+        secret_environment = resolve_application_environment(spec)
+    except ApplicationEnvironmentError as exc:
+        raise PresentationBuildError(str(exc)) from exc
+    overlap = sorted(set(variables) & set(secret_environment))
+    if overlap:
+        raise PresentationBuildError(
+            f"environment variable {overlap[0]!r} is configured as both a "
+            "literal variable and an application secret"
+        )
     resolved: dict[str, str | None] = {
         str(key): str(value) for key, value in variables.items()
     }
+    resolved.update(secret_environment)
     resolved["PATH"] = record.recorded_command_path(path_entries)
     if sys.prefix != sys.base_prefix:
         resolved["VIRTUAL_ENV"] = sys.prefix
@@ -591,6 +607,15 @@ def capture_recording(
     ):
         raise PresentationBuildError("capture.timeout must be positive")
     working_directory, environment = _capture_environment(spec)
+    try:
+        application_names = application_secret_names(spec)
+    except ApplicationEnvironmentError as exc:
+        raise PresentationBuildError(str(exc)) from exc
+    application_environment = {
+        name: str(environment[name])
+        for name in application_names
+        if environment.get(name) is not None
+    }
     terminal_options = _terminal_capture_options(spec)
     run_dir.mkdir(parents=True, exist_ok=True)
     configured_venv = environment.get("VIRTUAL_ENV", "")
@@ -625,13 +650,16 @@ def capture_recording(
             headless=effective_headless,
             color=environment.get("NO_COLOR") is None,
             delegated_environment=delegated_environment,
+            secret_environment=application_environment,
             **terminal_options,
         ),
         browser_runner_factory=(
             None
             if plan.browser is None
             else lambda: PersistentBrowserRunner(
-                plan.browser, headless=effective_headless
+                plan.browser,
+                headless=effective_headless,
+                secret_values=tuple(application_environment.values()),
             )
         ),
     )
@@ -927,7 +955,11 @@ def artifact_fingerprints(
 
 
 def capture_is_fresh(spec: Mapping[str, Any], plan: RecordingPlan, run_dir: Path) -> bool:
-    if _delegated_environment_names(plan):
+    try:
+        has_application_secrets = bool(application_secret_names(spec))
+    except ApplicationEnvironmentError as exc:
+        raise PresentationBuildError(str(exc)) from exc
+    if _delegated_environment_names(plan) or has_application_secrets:
         return False
     stored = read_fingerprint(run_dir)
     if stored is None or not capture_artifacts_exist(plan, run_dir):
@@ -2686,6 +2718,11 @@ def _secret_values(spec: Mapping[str, Any]) -> tuple[str, ...]:
 
     visit(spec)
     values = [os.environ[name] for name in sorted(names) if os.environ.get(name)]
+    try:
+        application_environment = resolve_application_environment(spec)
+    except ApplicationEnvironmentError as exc:
+        raise PresentationBuildError(str(exc)) from exc
+    values.extend(application_environment.values())
     scoped_names = _delegated_environment_names_from_spec(spec)
     if scoped_names:
         try:

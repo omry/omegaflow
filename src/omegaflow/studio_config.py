@@ -364,6 +364,7 @@ class RecordingEnvironmentConfig:
     working_directory: str = "."
     path_prepend: list[str] = field(default_factory=list)
     variables: dict[str, str] = field(default_factory=dict)
+    secrets: list[str] = field(default_factory=list)
 
 
 @dataclass

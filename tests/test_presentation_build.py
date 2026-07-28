@@ -262,10 +262,15 @@ def write_mixed_capture(run_dir: Path) -> None:
 def test_capture_recording_propagates_headed_override_to_both_runners(
     tmp_path: Path, monkeypatch
 ) -> None:
+    monkeypatch.setenv("APP_TOKEN", "ci-token")
     spec = {
         "id": "headed-mixed",
         "_project_root": str(tmp_path),
-        "environment": {"working_directory": str(tmp_path)},
+        "_script_dir": str(tmp_path),
+        "environment": {
+            "working_directory": str(tmp_path),
+            "secrets": ["APP_TOKEN"],
+        },
         "capture": {"headless": True, "timeout": 50},
         "style": {
             "typing": True,
@@ -329,7 +334,11 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
     assert observed["terminal"]["post_enter_pause"] == 0.25
     assert observed["terminal"]["post_command_pause"] == 0.55
     assert observed["terminal"]["timeout_seconds"] == 50
+    assert observed["terminal"]["secret_environment"] == {
+        "APP_TOKEN": "ci-token"
+    }
     assert observed["browser"]["headless"] is False
+    assert observed["browser"]["secret_values"] == ("ci-token",)
     assert observed["browser_plan"] == plan.browser
 
 
@@ -393,6 +402,34 @@ def test_capture_environment_constructs_deterministic_command_environment(
     ]
     assert "HOST_ONLY_APPLICATION_VALUE" not in context.environment
     assert "/host-only/bin" not in context.environment["PATH"]
+
+
+def test_capture_environment_includes_only_declared_application_secrets(
+    tmp_path: Path, monkeypatch
+) -> None:
+    recording_dir = tmp_path / "recordings" / "demo"
+    recording_dir.mkdir(parents=True)
+    monkeypatch.setenv("APP_TOKEN", "ci-token")
+    monkeypatch.setenv("HOST_ONLY_APPLICATION_VALUE", "must-not-leak")
+
+    working_directory, environment = _capture_environment(
+        {
+            "_script_dir": str(recording_dir),
+            "environment": {
+                "working_directory": str(tmp_path),
+                "secrets": ["APP_TOKEN"],
+            },
+        }
+    )
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+        working_directory=working_directory,
+        environment=environment,
+    )
+
+    assert context.environment["APP_TOKEN"] == "ci-token"
+    assert "HOST_ONLY_APPLICATION_VALUE" not in context.environment
 
 
 def test_browser_auth_fingerprint_uses_explicit_recording_environment(
@@ -472,6 +509,43 @@ def test_capture_with_delegated_environment_is_never_reused(
     )
 
     assert not presentation_build.capture_is_fresh(spec, plan, tmp_path)
+
+
+def test_capture_with_application_secrets_is_never_reused(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("APP_TOKEN", "ci-token")
+    spec = {
+        "id": "application-secret",
+        "_script_dir": str(tmp_path),
+        "environment": {"secrets": ["APP_TOKEN"]},
+        "beats": [{"id": "probe", "actions": [{"run": "true"}]}],
+    }
+    plan = normalize_recording_plan(spec)
+    monkeypatch.setattr(
+        presentation_build,
+        "read_fingerprint",
+        lambda _run_dir: {"version": 1},
+    )
+    monkeypatch.setattr(
+        presentation_build,
+        "capture_artifacts_exist",
+        lambda _plan, _run_dir: True,
+    )
+
+    assert not presentation_build.capture_is_fresh(spec, plan, tmp_path)
+
+
+def test_publication_validation_registers_application_secret_values(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("APP_TOKEN", "ci-token")
+    spec = {
+        "_script_dir": str(tmp_path),
+        "environment": {"secrets": ["APP_TOKEN"]},
+    }
+
+    assert presentation_build._secret_values(spec) == ("ci-token",)
 
 
 def test_capture_environment_disables_color(tmp_path: Path, monkeypatch) -> None:

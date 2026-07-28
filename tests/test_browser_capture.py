@@ -918,6 +918,40 @@ def test_drag_uses_semantic_targets_and_component_relative_positions(
             runner.close()
 
 
+def test_browser_capture_rejects_a_visible_application_secret(
+    tmp_path: Path,
+) -> None:
+    secret = "application-secret-sentinel"
+    plan = normalize_recording_plan(
+        {
+            "id": "browser-secret-leak",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "probe",
+                    "medium": "browser",
+                    "actions": [],
+                }
+            ],
+        }
+    )
+    runner = PersistentBrowserRunner(
+        plan.browser,
+        secret_values=(secret,),
+    )
+    runner.start(capture_context(tmp_path, {"APP_TOKEN": secret}))
+    try:
+        runner.page.set_content(f"<main>Account token: {secret}</main>")
+
+        with pytest.raises(
+            BrowserCaptureError,
+            match="BROWSER_SECRET_LEAK.*exposed a configured application secret",
+        ):
+            runner._assert_no_visible_secret()
+    finally:
+        runner.close()
+
+
 def test_response_checks_are_scoped_to_the_current_beat(tmp_path: Path) -> None:
     with fixture_site() as base_url:
         plan = normalize_recording_plan(

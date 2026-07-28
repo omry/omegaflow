@@ -530,7 +530,7 @@ PY
     IFS= read -r status <"$status_result" || status=125
   fi
   if [[ -f "$secret_leak" ]]; then
-    printf '%s\n' 'delegated secret appeared in terminal command output' \
+    printf '%s\n' 'recording secret appeared in terminal command output' \
       >>"$stderr_target"
     status=125
   fi
@@ -577,7 +577,7 @@ for path, offset in paths:
             handle.truncate(offset)
 if leaked:
     with open(stderr_path, "ab") as handle:
-        handle.write(b"delegated secret appeared in terminal command output\n")
+        handle.write(b"recording secret appeared in terminal command output\n")
     raise SystemExit(1)
 PY
 }
@@ -1102,8 +1102,8 @@ class TerminalControlSession:
             )
             if input_errors:
                 error = input_errors[-1]
-            if "delegated secret appeared in terminal command output" in stderr_text:
-                error = "delegated secret appeared in terminal command output"
+            if "recording secret appeared in terminal command output" in stderr_text:
+                error = "recording secret appeared in terminal command output"
             raise TerminalCaptureError(
                 f"terminal {op} request {seq} failed for {beat_id or '<recording>'}: {error}"
             )
@@ -1290,6 +1290,7 @@ class PersistentTerminalRunner:
         post_command_pause: float = 0.0,
         timeout_seconds: float = CONTROL_TIMEOUT_SECONDS,
         delegated_environment: Mapping[str, str] | None = None,
+        secret_environment: Mapping[str, str] | None = None,
     ) -> None:
         self.record_cast = record_cast
         self.title = title
@@ -1308,6 +1309,7 @@ class PersistentTerminalRunner:
         self.post_command_pause = post_command_pause
         self.timeout_seconds = timeout_seconds
         self.delegated_environment = dict(delegated_environment or {})
+        self.secret_environment = dict(secret_environment or {})
         self.context: CaptureContext | None = None
         self.session: TerminalControlSession | None = None
         self._captured_beat_ids: list[str] = []
@@ -1375,6 +1377,7 @@ class PersistentTerminalRunner:
                 self.context,
                 command_snapshots=command_snapshots,
                 delegated_environment=self.delegated_environment,
+                secret_environment=self.secret_environment,
             ),
             wait_indefinitely=_beat_has_browser_handoff(actions),
             on_progress=on_progress,
@@ -1384,7 +1387,11 @@ class PersistentTerminalRunner:
             session.execute(
                 "checks",
                 beat_id=beat.id,
-                script=_steps_script((check.config for check in checks), self.context),
+                script=_steps_script(
+                    (check.config for check in checks),
+                    self.context,
+                    secret_environment=self.secret_environment,
+                ),
             )
         beat_dir = self.context.paths.capture / "terminal-beats"
         beat_cast = beat_dir / f"{beat.id}.cast"
@@ -1434,7 +1441,11 @@ class PersistentTerminalRunner:
             try:
                 session.execute(
                     op,
-                    script=_steps_script((config,), self.context),
+                    script=_steps_script(
+                        (config,),
+                        self.context,
+                        secret_environment=self.secret_environment,
+                    ),
                 )
             except TerminalCaptureError as exc:
                 raise TerminalLifecycleStepError(
@@ -1456,7 +1467,10 @@ class PersistentTerminalRunner:
 
 
 def _steps_script(
-    configs: Iterable[FrozenMapping], context: CaptureContext | None
+    configs: Iterable[FrozenMapping],
+    context: CaptureContext | None,
+    *,
+    secret_environment: Mapping[str, str] | None = None,
 ) -> str:
     if context is None:
         raise TerminalCaptureError("terminal capture context is unavailable")
@@ -1466,7 +1480,11 @@ def _steps_script(
         command_entries = value.get("commands")
         if command_entries:
             command_script = " && ".join(
-                _validated_step_script(command, context)
+                _validated_step_script(
+                    command,
+                    context,
+                    secret_environment=secret_environment,
+                )
                 for command in command_entries
             )
             commands.append(
@@ -1476,7 +1494,13 @@ def _steps_script(
                 )
             )
         else:
-            commands.append(_validated_step_script(value, context))
+            commands.append(
+                _validated_step_script(
+                    value,
+                    context,
+                    secret_environment=secret_environment,
+                )
+            )
     return " && ".join(commands)
 
 
@@ -1487,6 +1511,7 @@ def _beat_script(
     *,
     command_snapshots: Mapping[str, Mapping[str, str]],
     delegated_environment: Mapping[str, str],
+    secret_environment: Mapping[str, str],
 ) -> str:
     if context is None:
         raise TerminalCaptureError("terminal capture context is unavailable")
@@ -1509,6 +1534,7 @@ def _beat_script(
                             context,
                             snapshot=command_snapshots[action_id],
                             delegated_environment=delegated_environment,
+                            secret_environment=secret_environment,
                         ),
                     )
                 )
@@ -1526,6 +1552,7 @@ def _beat_script(
                         context,
                         snapshot=command_snapshots[action_id],
                         delegated_environment=delegated_environment,
+                        secret_environment=secret_environment,
                     ),
                 )
             )
@@ -1578,6 +1605,7 @@ def _validated_step_script(
     *,
     snapshot: Mapping[str, str] | None = None,
     delegated_environment: Mapping[str, str] | None = None,
+    secret_environment: Mapping[str, str] | None = None,
 ) -> str:
     command = snapshot["command"] if snapshot is not None else _step_command(step, context)
     if step.get("browser_handoff"):
@@ -1637,9 +1665,10 @@ def _validated_step_script(
             "terminal step could not resolve scoped environment name "
             + repr(missing[0])
         )
-    scoped_environment = {
-        name: available_environment[name] for name in requested_environment
-    }
+    scoped_environment = dict(secret_environment or {})
+    scoped_environment.update(
+        {name: available_environment[name] for name in requested_environment}
+    )
     encoded_environment = (
         base64.b64encode(
             json.dumps(

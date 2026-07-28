@@ -8,7 +8,7 @@ import math
 import os
 import re
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -298,6 +298,7 @@ class PersistentBrowserRunner:
         browser_config: Mapping[str, Any],
         *,
         headless: bool = True,
+        secret_values: Iterable[str] = (),
     ) -> None:
         self.browser_config = _thaw(browser_config)
         self.headless = headless
@@ -314,6 +315,11 @@ class PersistentBrowserRunner:
         self.responses: list[ResponseObservation] = []
         self.warnings: list[BrowserWarning] = []
         self.secrets = SecretRegistry()
+        self.application_secret_values = tuple(
+            value for value in secret_values if value
+        )
+        for value in self.application_secret_values:
+            self.secrets.register(value)
         self.capture_log_path: Path | None = None
         self.console_log_path: Path | None = None
         self.network_log_path: Path | None = None
@@ -634,6 +640,7 @@ class PersistentBrowserRunner:
         extra_redactions = self._action_redactions(action.kind, payload)
         document_origin = self._document_time_origin()
         try:
+            self._assert_no_visible_secret()
             if action.kind not in {"open_page", "wait_for", "set_pointer"}:
                 before_state = self._require_visuals().capture_state_once(
                     action_id=action.id,
@@ -847,6 +854,7 @@ class PersistentBrowserRunner:
             execution_ended_ms = self._beat_elapsed_ms()
             if action.kind != "set_pointer":
                 self._wait_for_render_assets()
+                self._assert_no_visible_secret()
                 if self._document_time_origin() != document_origin:
                     self._active_secret_redactions = ()
                     extra_redactions = self._current_secret_redaction(
@@ -1643,6 +1651,26 @@ class PersistentBrowserRunner:
             ):
                 value = value.replace(str(path), "[PRIVATE_PATH]")
         return value[:4000]
+
+    def _assert_no_visible_secret(self) -> None:
+        """Fail before capture when an application secret is visible as page text."""
+
+        if not self.application_secret_values:
+            return
+        if self.page is None:
+            raise BrowserCaptureError("BROWSER_SCHEMA", "browser runner is not started")
+        try:
+            visible_text = self.page.locator("body").inner_text()
+        except BaseException as exc:
+            raise BrowserCaptureError(
+                "BROWSER_SECRET_LEAK",
+                "could not verify that the page hides configured application secrets",
+            ) from exc
+        if any(value in visible_text for value in self.application_secret_values):
+            raise BrowserCaptureError(
+                "BROWSER_SECRET_LEAK",
+                "recorded application exposed a configured application secret",
+            )
 
     def complete(self) -> None:
         if self._completed:

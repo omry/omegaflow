@@ -139,7 +139,7 @@ The frontmatter header is the right place for recording-specific config:
 | `style` | mapping | Rendering behavior such as color and typing simulation. |
 | `outputs` | mapping | Output paths for the per-recording asset and presentation-bundle directories. |
 | `timing` | mapping | Presentation timing and playback controls. |
-| `environment` | mapping | Working directory, environment values, and `path_prepend`. |
+| `environment` | mapping | Working directory, literal values, declared application secrets, and `path_prepend`. |
 | `audio` | mapping | Narration audio configuration. |
 | `browser` | mapping or null | Deterministic Playwright capture profile, viewport, context, authentication, timeouts, and redaction targets. Required when any beat has `medium: browser`. |
 | `presentation` | mapping | Recording-wide browser window, chrome, transition, pointer, and typing presentation policy. |
@@ -178,6 +178,41 @@ environment:
 - `path_prepend` adds project-relative command locations ahead of OmegaFlow's
   deterministic command path.
 - `variables` supplies literal, non-secret application settings.
+
+### Application secrets
+
+Declare each secret application input by name:
+
+```yaml
+environment:
+  secrets:
+  - DEMO_API_TOKEN
+```
+
+For local recording, put the value in `app.secret.env` beside that recording's
+`index.md`:
+
+```dotenv
+DEMO_API_TOKEN=local-token
+```
+
+For CI, omit the file and set the declared name in OmegaFlow's parent process
+environment instead. Exactly one source must provide each declared name. A
+missing value, a value present in both sources, or an undeclared entry in
+`app.secret.env` stops the build.
+
+Inside a Git or Sapling repository, OmegaFlow requires a local
+`app.secret.env` to be ignored and untracked. It also rejects a symbolic link.
+Bootstrap adds `**/app.secret.env` to `recordings/.gitignore`. Secret values
+are available to recording setup, actions, checks, cleanup, and browser
+processes, but are registered for output redaction and publication validation.
+A secret-bearing recording is always captured again rather than reusing a
+previous capture.
+
+Application secrets are inputs for the software being recorded. OmegaFlow
+service credentials such as `OPENAI_OMEGAFLOW_API_KEY` belong in
+`.omegaflow/omegaflow-secret.env` and cannot be declared here. Other host
+environment variables are not inherited by recorded commands.
 
 OmegaFlow also sets `OMEGAFLOW_VERSION` to the version performing the
 recording. Values configured under `environment.variables` are not printed by
@@ -304,6 +339,7 @@ class RecordingEnvironmentConfig:
     working_directory: str = "."
     path_prepend: list[str] = field(default_factory=list)
     variables: dict[str, str] = field(default_factory=dict)
+    secrets: list[str] = field(default_factory=list)
 
 
 @dataclass

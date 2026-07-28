@@ -35,7 +35,7 @@ the generated player's section and playback controls. It belongs to the project
 and can be edited or removed.
 
 The generated `.gitignore` files protect the placeholder OmegaFlow service
-environment and future recording-local application secret files. Bootstrap
+environment and recording-local application secret files. Bootstrap
 refuses a service secret that is tracked, staged, or symlinked, and refuses any
 generated-file target that is a symbolic link. When an ignore file already
 exists, bootstrap preserves its rules and adds only the missing OmegaFlow rule.
@@ -45,6 +45,13 @@ explicit parent-process value for CI and otherwise reads
 `.omegaflow/omegaflow-secret.env`. The value is passed directly to the audio
 client without changing the process environment or exposing it to recorded
 commands.
+
+An application used by a recording may need its own secret. Declare its name
+under `environment.secrets` in the recording and put the local value in
+`app.secret.env` beside that recording's `index.md`. CI can provide the same
+declared name directly in the parent process environment. These application
+secrets are separate from OmegaFlow's narration credential; see
+[Recording Configuration](../../recording-files/config.md#application-secrets).
 
 ## Choose the workspace
 

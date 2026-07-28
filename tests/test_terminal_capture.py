@@ -424,6 +424,97 @@ def test_delegated_environment_is_scoped_to_one_command_and_its_children(
     assert "delegated-secret" not in retained
 
 
+def test_application_environment_is_available_to_every_recorded_command(
+    tmp_path: Path,
+) -> None:
+    secret_name = "APP_TOKEN"
+    plan = normalize_recording_plan(
+        {
+            "id": "application-environment",
+            "beats": [
+                {
+                    "id": "probe",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "run": f'test -n "${secret_name}"',
+                                    "output": "suppress",
+                                },
+                                {
+                                    "run": (
+                                        "/bin/bash -c "
+                                        f"'test -n \"${secret_name}\"'"
+                                    ),
+                                    "output": "suppress",
+                                },
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        secret_environment={secret_name: "s3cr3t-token"},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    coordinator.capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+        environment={secret_name: "s3cr3t-token"},
+    )
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert "s3cr3t-token" not in retained
+
+
+def test_application_environment_output_leak_fails_closed(
+    tmp_path: Path,
+) -> None:
+    secret_name = "APP_TOKEN"
+    plan = normalize_recording_plan(
+        {
+            "id": "application-environment-leak",
+            "beats": [
+                {
+                    "id": "probe",
+                    "actions": [{"run": f'printf %s "${secret_name}"'}],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        secret_environment={secret_name: "s3cr3t-token"},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    with pytest.raises(CaptureFailed, match="recording secret"):
+        coordinator.capture(
+            plan,
+            tmp_path / "run",
+            workspace=tmp_path,
+            environment={secret_name: "s3cr3t-token"},
+        )
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert "s3cr3t-token" not in retained
+
+
 def test_delegated_environment_output_leak_fails_closed_and_is_not_retained(
     tmp_path: Path,
 ) -> None:
@@ -455,7 +546,7 @@ def test_delegated_environment_output_leak_fails_closed_and_is_not_retained(
     )
     coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
 
-    with pytest.raises(CaptureFailed, match="delegated secret"):
+    with pytest.raises(CaptureFailed, match="recording secret"):
         coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
 
     retained = "\n".join(
@@ -498,7 +589,7 @@ def test_realtime_delegated_environment_output_is_redacted_and_fails_closed(
     )
     coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
 
-    with pytest.raises(CaptureFailed, match="delegated secret"):
+    with pytest.raises(CaptureFailed, match="recording secret"):
         coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
 
     retained = "\n".join(
@@ -564,6 +655,116 @@ def test_capture_recording_resolves_and_scopes_project_service_environment(
         if path.is_file()
     )
     assert "delegated-secret" not in retained
+
+
+def test_capture_recording_resolves_application_secrets_for_the_full_lifecycle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    secret_name = "APP_TOKEN"
+    monkeypatch.setenv(secret_name, "application-secret")
+    spec = {
+        "id": "application-environment-e2e",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(tmp_path),
+        "environment": {
+            "working_directory": str(tmp_path),
+            "secrets": [secret_name],
+        },
+        "style": {"typing": False},
+        "audio": {"enabled": False},
+        "setup": [
+            {
+                "name": "authenticated setup",
+                "run": f'test -n "${secret_name}"',
+                "output": "suppress",
+            }
+        ],
+        "beats": [
+            {
+                "id": "probe",
+                "actions": [
+                    {
+                        "run": (
+                            f'test -n "${secret_name}"; '
+                            f"/bin/bash -c 'test -n \"${secret_name}\"'"
+                        ),
+                        "output": "suppress",
+                    }
+                ],
+                "checks": [
+                    {
+                        "name": "authenticated check",
+                        "run": f'test -n "${secret_name}"',
+                        "output": "suppress",
+                    }
+                ],
+            }
+        ],
+        "cleanup": [
+            {
+                "name": "authenticated cleanup",
+                "run": f'test -n "${secret_name}"',
+                "output": "suppress",
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    run_dir = tmp_path / "run"
+
+    presentation_build.capture_recording(spec, plan, run_dir)
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    )
+    assert "application-secret" not in retained
+
+
+def test_application_secret_output_from_a_terminal_check_fails_closed(
+    tmp_path: Path,
+) -> None:
+    secret_name = "APP_TOKEN"
+    secret_value = "application-check-secret"
+    plan = normalize_recording_plan(
+        {
+            "id": "application-environment-check-leak",
+            "beats": [
+                {
+                    "id": "probe",
+                    "actions": [{"run": "true", "output": "suppress"}],
+                    "checks": [
+                        {
+                            "name": "must stay private",
+                            "run": f'printf %s "${secret_name}"',
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        timeout_seconds=5.0,
+        secret_environment={secret_name: secret_value},
+    )
+    coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
+
+    with pytest.raises(CaptureFailed, match="recording secret"):
+        coordinator.capture(
+            plan,
+            tmp_path / "run",
+            workspace=tmp_path,
+            environment={secret_name: secret_value},
+        )
+
+    retained = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in (tmp_path / "run").rglob("*")
+        if path.is_file()
+    )
+    assert secret_value not in retained
 
 
 def test_headed_terminal_session_inherits_interactive_stdio(
