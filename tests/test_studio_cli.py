@@ -2524,6 +2524,7 @@ def test_audio_uses_private_omegaflow_service_environment_without_mutation(
     [
         "quickstart-demo",
         "browser-recording-narration-smoke",
+        "tutorial",
     ],
 )
 def test_repository_recordings_use_the_private_tts_service_environment(
@@ -5089,6 +5090,7 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert 'cx="405" cy="390"' in draft
     assert 'id="tree-target"' in draft
     assert 'data-testid="tree-target"' in draft
+    assert 'cx="565" cy="425"' in draft
     assert draft.count('class="palm-leaf"') >= 6
     assert not (tutorial_root / "sunset-study.svg").exists()
 
@@ -5252,10 +5254,21 @@ def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
         == "edit-file"
     )
     browser_actions = edit_tracks["after"].beats[0].actions
-    assert browser_actions[1].kind == "fill"
-    assert browser_actions[1].config["fill"]["target"]["test_id"] == "artwork-title"
+    assert [action.kind for action in browser_actions[:2]] == [
+        "open_page",
+        "type_text",
+    ]
+    assert browser_actions[1].id == "rename-artwork"
+    assert (
+        browser_actions[1].config["type_text"]["target"]["test_id"]
+        == "artwork-title"
+    )
+    assert browser_actions[1].config["type_text"]["text"] == "Coconut Sunset"
+    assert browser_actions[1].config["type_text"]["interval_ms"] == 90
     assert browser_actions[2].kind == "drag"
-    assert browser_actions[2].config["drag"]["from"]["target"]["test_id"] == "sun"
+    assert (
+        browser_actions[2].config["drag"]["from"]["target"]["test_id"] == "sun"
+    )
     assert browser_actions[3].kind == "drag"
     assert (
         browser_actions[3].config["drag"]["from"]["target"]["test_id"]
@@ -5320,6 +5333,29 @@ def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
         .actions[0]
         .config["commands"][0]["run"]
     )
+
+
+def test_repository_tutorial_is_one_continuous_tiny_canvas_video() -> None:
+    repository = Path(__file__).resolve().parents[1]
+
+    plan = normalize_recording_plan(
+        recording_from_script(
+            "tutorial",
+            recording_dir=repository / "recordings",
+        )
+    )
+
+    assert [pane.id for pane in plan.panes] == ["before", "after", "terminal"]
+    assert [beat.id for beat in plan.beats] == [
+        "launch-editor",
+        "edit-artwork",
+        "compare-files",
+    ]
+    edit_tracks = {track.pane_id: track for track in plan.beats[1].pane_tracks}
+    actions = edit_tracks["after"].beats[0].actions
+    assert actions[1].kind == "type_text"
+    assert actions[1].id == "rename-artwork"
+    assert actions[1].config["type_text"]["interval_ms"] == 90
 
 
 def test_success_followups_show_user_facing_actions(capsys) -> None:
