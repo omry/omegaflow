@@ -26,6 +26,18 @@ To open the player paused, without the countdown or automatic playback, use:
 omegaflow recording=demo action=watch autoplay=false
 ```
 
+To open a particular top-level beat, use its beat ID:
+
+```bash
+omegaflow recording=demo action=watch beat=results
+```
+
+OmegaFlow validates the ID against the recording and includes it in the stable
+local URL, for example `/watch/demo/?beat=results&autoplay=countdown`. The
+player starts at that beat whether it opens paused or after the countdown.
+Nested pane beats are not independent watch targets: they inherit their
+top-level beat's narration, layout, and synchronized pane state.
+
 To start the watch server without opening a browser, use:
 
 ```bash
@@ -64,5 +76,7 @@ stack instead of WSLg audio. Native Linux and macOS also use an installed system
 browser; watch does not use OmegaFlow's pinned recording browser or require the
 `browser` extra.
 
-Watch requires a recording id and a built presentation bundle. It always opens
-the latest successful build for that recording.
+Watch requires a recording id and a built presentation bundle. Opening or
+refreshing the stable recording URL resolves the latest successful build to an
+immutable snapshot. Playback that is already in progress keeps using its
+resolved snapshot until the page is refreshed.

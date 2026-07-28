@@ -77,6 +77,7 @@ output, and env-file paths are resolved from that root.
 | `workspace` | Bootstrap-only destination for `bootstrap=project`; defaults to `studio.recording_dir`. |
 | `watch_port` | Optional fixed port for the local `action=watch` server. Leave unset to select a free port automatically. |
 | `autoplay` | Controls countdown autoplay for `action=watch`. Set `false` to open the player paused. |
+| `beat` | Optional top-level beat ID where `action=watch` starts playback. Nested pane beats are not watch targets. |
 | `dry_run` | Preview without writing. For bootstrap, use `dry_run=true` to list generated files or `dry_run=diff` to show unified diffs. |
 | `rec` | Recording config overrides merged on top of the selected recording. CLI shorthand such as `rec.capture.headless=false` is supported. |
 | `script_params` | Values for parameters explicitly declared by the selected recording. |

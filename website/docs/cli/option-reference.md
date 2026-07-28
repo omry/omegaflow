@@ -22,6 +22,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `headed` | `false` | `build` | Override headless capture and show the recorder terminal. |
 | `open` | `true` | `watch` | Open an isolated browser. Set `false` to serve the player without opening one. |
 | `autoplay` | `true` | `watch` | Count down and start playback automatically. Set `false` to open paused. |
+| `beat` | `null` | `watch` | Start at this top-level beat ID. Nested pane beats are not independent watch targets. |
 | `watch_port` | `null` | `watch` | Bind the local player server to this fixed port. The default lets the operating system select a free port. |
 | `surface` | `null` | `build` | Publish only the named configured surface. |
 

@@ -959,6 +959,58 @@ def test_player_reveals_startup_load_errors_instead_of_covering_them(
         browser.close()
 
 
+def test_player_starts_at_the_requested_manifest_beat(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    first = manifest["beats"][0]
+    second = json.loads(json.dumps(first))
+    second["id"] = "second"
+    second["heading"] = "Second step"
+    second["offset_ms"] = 1200
+    second["pane_tracks"][0]["beats"][0]["id"] = "second"
+    manifest["beats"].append(second)
+    manifest["recording"]["duration_ms"] = 2400
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&beat=second"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+
+        assert page.locator("#clock").text_content() == "0:01 / 0:02"
+        assert int(page.locator("#progress").input_value()) == 500
+        assert page.locator("#play").get_attribute("aria-label") == "Play"
+        browser.close()
+
+
+def test_player_rejects_an_unknown_requested_manifest_beat(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 900, "height": 600})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json&beat=missing"
+        )
+        page.wait_for_function(
+            "document.querySelector('#voice').getAttribute('aria-label') === "
+            "'recording unavailable'"
+        )
+
+        assert page.locator("#terminal").text_content() == (
+            "unknown beat \"missing\"; valid beat ids: browser"
+        )
+        browser.close()
+
+
 @pytest.mark.parametrize(
     ("commands", "copy_label"),
     [

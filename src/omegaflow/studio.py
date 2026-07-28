@@ -2259,12 +2259,18 @@ def watch_player_url_path(
 def watch_recording_url_path(
     recording_id: str,
     *,
+    beat_id: str | None = None,
     autoplay_countdown: bool = False,
 ) -> str:
     path = WATCH_ROUTE_PREFIX + quote(recording_id, safe="/") + "/"
-    if not autoplay_countdown:
+    query: dict[str, str] = {}
+    if beat_id is not None:
+        query["beat"] = beat_id
+    if autoplay_countdown:
+        query["autoplay"] = "countdown"
+    if not query:
         return path
-    return path + "?" + urlencode({"autoplay": "countdown"})
+    return path + "?" + urlencode(query)
 
 
 def collection_member_player_url(recording_id: str) -> str:
@@ -3033,6 +3039,34 @@ def configured_watch_port(config: dict[str, Any]) -> int:
     return value
 
 
+def configured_watch_beat(
+    config: dict[str, Any],
+    spec: dict[str, Any],
+    *,
+    recording_id: str,
+) -> str | None:
+    value = config.get("beat")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise StudioError("beat must be a non-empty string or null")
+    beats = spec.get("beats", [])
+    valid_ids = [
+        beat["id"]
+        for beat in beats
+        if isinstance(beat, dict)
+        and isinstance(beat.get("id"), str)
+        and beat["id"]
+    ]
+    if value not in valid_ids:
+        valid_text = ", ".join(valid_ids) if valid_ids else "(none)"
+        raise StudioError(
+            f"unknown beat {value!r} for recording {recording_id}; "
+            f"valid beat ids: {valid_text}"
+        )
+    return value
+
+
 def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
@@ -3042,9 +3076,15 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     port = configured_watch_port(config)
     autoplay = bool_config(config, "autoplay", True)
     spec = recording_spec_from_config(config, recording_id=None, overrides=())
+    beat_id = configured_watch_beat(
+        config,
+        spec,
+        recording_id=recording_id,
+    )
     watch_presentation_artifacts(spec)
     url_path = watch_recording_url_path(
         recording_id,
+        beat_id=beat_id,
         autoplay_countdown=autoplay,
     )
     open_browser = bool_config(config, "open", True)
@@ -3545,6 +3585,8 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
     step = validate_step(config.get("step"))
     if step is not None and configured_action is not None and action != "build":
         raise StudioError("step can only be combined with action=build")
+    if config.get("beat") is not None and action != "watch":
+        raise StudioError("beat can only be combined with action=watch")
 
     if bootstrap is not None:
         if step is not None:
@@ -3626,6 +3668,11 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
         return run_check(cfg)
     if action == "watch":
         if source_kind is RecordingSourceKind.collection:
+            if config.get("beat") is not None:
+                raise StudioError(
+                    "beat cannot target a recording collection; "
+                    "select a collection member"
+                )
             return run_collection_watch(cfg, config)
         return run_watch(cfg, config)
 

@@ -1236,6 +1236,44 @@ vm.runInContext(`
     assert result.returncode == 0, result.stderr
 
 
+def test_watch_autoplay_block_rewinds_to_requested_beat() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+initialPlaybackSeconds = 4;
+currentSeconds = 6;
+totalSeconds = 10;
+playing = true;
+audibleAutoplayPending = true;
+audioReady = true;
+audio = {
+  currentTime: 6,
+  duration: 10,
+  paused: false,
+  pause() { this.paused = true; },
+};
+handleAudioPlaybackRejected();
+if (
+  playing || currentSeconds !== 4 || audio.currentTime !== 4 ||
+  playbackFlash.dataset.audioUnlock !== 'true' ||
+  voice.dataset.state !== 'waiting'
+) {
+  console.error(JSON.stringify({
+    playing,
+    currentSeconds,
+    audioTime: audio.currentTime,
+    flash: playbackFlash.dataset,
+    voice: voice.dataset,
+  }));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_preview_seek_does_not_overwrite_scrubber_value() -> None:
     result = run_player_script(
         r"""

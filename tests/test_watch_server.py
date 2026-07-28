@@ -98,6 +98,9 @@ def test_recording_watch_route_refreshes_to_latest_immutable_snapshot(
     ) as base_url:
         player_url = f"{base_url}/watch/tutorial/beat/"
         assert urlopen(f"{base_url}/watch/tutorial/beat").url == player_url
+        assert urlopen(
+            f"{base_url}/watch/tutorial/beat?beat=highlight"
+        ).url == f"{player_url}?beat=highlight"
         assert urlopen(player_url).read().decode() == (
             '<script src="cast-player-core.js"></script>'
         )

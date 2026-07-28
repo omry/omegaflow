@@ -301,6 +301,7 @@ class StudioConfig:
     force: bool = False
     open: bool = True
     autoplay: bool = True
+    beat: str | None = None
     watch_port: int | None = None
     run_id: str | None = None
     runs_since: str | None = None

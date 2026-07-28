@@ -1375,6 +1375,19 @@ def test_step_rejects_non_build_action() -> None:
         studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
 
 
+def test_beat_target_rejects_non_watch_action() -> None:
+    config = compose_studio_config(
+        None,
+        ("recording=demo", "action=build", "beat=intro"),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=r"beat can only be combined with action=watch",
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+
 def test_build_plan_lists_each_scoped_browser_capture_log(
     monkeypatch,
     tmp_path: Path,
@@ -2138,6 +2151,50 @@ members:
     assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
 
     assert calls == ["tutorial"]
+
+
+def test_tool_rejects_beat_target_for_a_collection(tmp_path, monkeypatch) -> None:
+    recordings_dir = tmp_path / "recordings" / "tutorial"
+    recordings_dir.mkdir(parents=True)
+    (recordings_dir / "index.md").write_text(
+        """
+---
+kind: collection
+id: tutorial
+members:
+  - tutorial/beat
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config = {
+        "project_root": str(tmp_path),
+        "recording": "tutorial",
+        "action": "watch",
+        "beat": "intro",
+        "output_format": "text",
+        "load_env_file": False,
+        "studio": {
+            "recording_dir": "recordings",
+            "data_dir": "recordings/.omegaflow",
+        },
+    }
+    monkeypatch.setattr(
+        studio,
+        "run_collection_watch",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("collection watch started")
+        ),
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"beat cannot target a recording collection; "
+            r"select a collection member"
+        ),
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
 
 
 def test_tool_rejects_single_video_actions_for_a_collection(tmp_path) -> None:
@@ -5378,6 +5435,14 @@ def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> No
     }
 
 
+def test_watch_recording_url_path_targets_a_named_beat() -> None:
+    assert studio.watch_recording_url_path(
+        "tutorial/beat",
+        beat_id="highlight",
+        autoplay_countdown=True,
+    ) == "/watch/tutorial/beat/?beat=highlight&autoplay=countdown"
+
+
 def test_watch_player_url_path_falls_back_to_public_bundle(
     tmp_path, monkeypatch
 ) -> None:
@@ -5664,6 +5729,128 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         "open_browser": True,
         "port": 43123,
     }
+
+
+def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+    spec = {
+        "_recording_id": "hello",
+        "beats": [
+            {"id": "intro", "actions": []},
+            {"id": "highlight", "actions": []},
+        ],
+    }
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_presentation_artifacts",
+        lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
+
+    def fake_run_watch_server(_cfg, url, _artifacts, **_kwargs):
+        requested["url"] = url
+        return 0
+
+    monkeypatch.setattr(studio, "run_watch_server", fake_run_watch_server)
+
+    assert (
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {
+                "recording": "hello",
+                "beat": "highlight",
+                "autoplay": False,
+            },
+        )
+        == 0
+    )
+    assert requested["url"] == "/watch/hello/?beat=highlight"
+
+
+def test_run_watch_rejects_unknown_source_beat_with_valid_ids(monkeypatch) -> None:
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {
+            "_recording_id": "hello",
+            "beats": [
+                {"id": "intro", "actions": []},
+                {"id": "highlight", "actions": []},
+            ],
+        },
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"unknown beat 'missing' for recording hello; "
+            r"valid beat ids: intro, highlight"
+        ),
+    ):
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "beat": "missing"},
+        )
+
+
+def test_run_watch_does_not_treat_nested_pane_beats_as_watch_targets(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {
+            "_recording_id": "hello",
+            "beats": [
+                {
+                    "id": "presentation",
+                    "panes": [
+                        {
+                            "pane": "main",
+                            "beats": [{"id": "nested", "actions": []}],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"unknown beat 'nested' for recording hello; "
+            r"valid beat ids: presentation"
+        ),
+    ):
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "beat": "nested"},
+        )
+
+
+@pytest.mark.parametrize("value", ["", 1, True, ["intro"]])
+def test_run_watch_rejects_invalid_beat_id(value, monkeypatch) -> None:
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): {
+            "_recording_id": "hello",
+            "beats": [{"id": "intro", "actions": []}],
+        },
+    )
+
+    with pytest.raises(
+        studio.StudioError,
+        match="beat must be a non-empty string or null",
+    ):
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "beat": value},
+        )
 
 
 @pytest.mark.parametrize("changed_file", ["index.md", "scripts/action.sh"])

@@ -1336,6 +1336,7 @@
         : null;
       const manifestUrl = params.get('manifest') || implicitWatchManifest;
       const autoplayCountdown = params.get('autoplay') === 'countdown';
+      const requestedBeatId = params.get('beat') || '';
       playerRoot.dataset.autoplayCountdown = String(autoplayCountdown);
       let audioMetaUrl = null;
       let presentationSignatures = {};
@@ -1424,6 +1425,7 @@
       let manifestBaseUrl = null;
       let castSeconds = 0;
       let totalSeconds = 0;
+      let initialPlaybackSeconds = 0;
       let eventIndex = 0;
       let currentSeconds = 0;
       let startedAt = 0;
@@ -3644,14 +3646,13 @@
         clearTimers();
         if (audio) {
           audio.pause();
-          audio.currentTime = 0;
         }
         playing = false;
         dismissedPlayerToolbarHighlights.clear();
         lastPresentationBeatIndex = null;
         pausedAtGuidedPoint = false;
         hideGuideModal();
-        renderAt(0);
+        renderAt(initialPlaybackSeconds);
         setVoiceStatus(
           audioReady ? '' : 'voiceover unavailable',
           audioReady ? 'ready' : 'unavailable',
@@ -3704,9 +3705,8 @@
         hideGuideModal();
         if (audio) {
           audio.pause();
-          audio.currentTime = 0;
         }
-        renderAt(0);
+        renderAt(initialPlaybackSeconds);
         setVoiceStatus(
           'click play for audio',
           'waiting',
@@ -4460,6 +4460,18 @@
         presentationManifest = CastPlayerCore.validatePresentationManifest(
           await response.json(),
         );
+        if (requestedBeatId) {
+          const requestedBeat = presentationManifest.beats.find(
+            (beat) => beat.id === requestedBeatId,
+          );
+          if (!requestedBeat) {
+            const validIds = presentationManifest.beats.map((beat) => beat.id);
+            throw new Error(
+              `unknown beat "${requestedBeatId}"; valid beat ids: ${validIds.join(', ') || '(none)'}`,
+            );
+          }
+          initialPlaybackSeconds = requestedBeat.offset_ms / 1000;
+        }
         guidedMode = presentationManifest.presentation?.guided === true;
         const resolvedManifestUrl = response.url || new URL(manifestUrl, document.baseURI).href;
         manifestBaseUrl = new URL('.', resolvedManifestUrl);
