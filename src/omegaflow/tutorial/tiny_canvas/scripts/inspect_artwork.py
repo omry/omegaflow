@@ -11,7 +11,7 @@ ARTWORK = (
     / ".omegaflow"
     / "tutorial"
     / "sunset-beach"
-    / "artwork.svg"
+    / "sunset-study.svg"
 )
 SVG_NAMESPACE = "{http://www.w3.org/2000/svg}"
 

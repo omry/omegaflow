@@ -887,6 +887,8 @@ class VisualizationShowConfig:
 class PaneActionConfig(RecordingActionConfig):
     show: VisualizationShowConfig | None = None
     browser_handoff: bool | BrowserHandoffConfig = False
+    pre_command_pause: float | None = None
+    pre_enter_pause: float | None = None
 
 
 @dataclass

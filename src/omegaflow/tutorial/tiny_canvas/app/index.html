@@ -12,15 +12,14 @@
       <p class="eyebrow">OmegaFlow tutorial app</p>
       <h1>Tiny Canvas</h1>
     </div>
-    <p id="status" role="status">Loading artwork…</p>
+    <p id="status" data-testid="status" role="status">Loading artwork…</p>
   </header>
   <main>
     <aside>
       <label for="artwork-title">Artwork title</label>
-      <input id="artwork-title" value="Sunset Study" autocomplete="off">
+      <input id="artwork-title" data-testid="artwork-title" value="Sunset Study" autocomplete="off">
       <p class="hint">Drag the sun and coconut tree to refine the composition.</p>
-      <button id="save-artwork" type="button">Save artwork</button>
-      <button id="export-artwork" type="button" class="secondary">Export SVG</button>
+      <button id="export-artwork" data-testid="export-artwork" type="button">Save as sunset-study.svg</button>
     </aside>
     <section class="canvas-shell" aria-label="Artwork editor">
       <div id="canvas" tabindex="0" aria-label="Sunset beach canvas"></div>

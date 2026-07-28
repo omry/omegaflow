@@ -13,16 +13,28 @@
     </linearGradient>
   </defs>
   <rect width="720" height="720" fill="url(#sky-gradient)"/>
-  <rect y="430" width="720" height="290" fill="url(#sea-gradient)"/>
+
+  <g id="sun" data-testid="sun" data-draggable="true" transform="translate(0 0)">
+    <circle cx="225" cy="285" r="82" fill="#ffdc72"/>
+    <circle cx="225" cy="285" r="60" fill="#fff0ad"/>
+    <g id="sun-glasses" fill="#171923" stroke="#171923" stroke-width="7" stroke-linejoin="round">
+      <path d="M177 264 L219 260 L217 286 Q198 298 181 283Z"/>
+      <path d="M231 260 L273 264 L269 283 Q252 298 233 286Z"/>
+      <path d="M216 269 Q225 263 234 269" fill="none"/>
+      <path d="M179 268 L165 262 M271 268 L285 262" fill="none" stroke-linecap="round"/>
+    </g>
+    <g fill="#ffffff" opacity="0.72">
+      <path d="M185 269 L202 266 L194 276 L183 278Z"/>
+      <path d="M239 266 L256 269 L244 278 L235 276Z"/>
+    </g>
+    <path id="sun-smile" d="M198 307 Q225 330 252 307" fill="none" stroke="#7f4735" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <rect id="sea" y="430" width="720" height="290" fill="url(#sea-gradient)"/>
   <path d="M0 630 Q210 570 410 635 T720 610 V720 H0Z" fill="#f1d58b"/>
   <text id="poster-title" x="36" y="60" fill="#fff8e8" font-family="system-ui, sans-serif" font-size="30" font-weight="700">Sunset Study</text>
 
-  <g id="sun" data-draggable="true" transform="translate(0 0)">
-    <circle cx="225" cy="285" r="82" fill="#ffdc72"/>
-    <circle cx="225" cy="285" r="60" fill="#fff0ad"/>
-  </g>
-
-  <g id="coconut-tree" data-draggable="true" transform="translate(0 0)">
+  <g id="coconut-tree" data-testid="coconut-tree" data-draggable="true" transform="translate(0 0)">
     <path d="M500 720 C472 610 480 480 515 344" fill="none" stroke="#4a3124" stroke-width="34" stroke-linecap="round"/>
     <path class="palm-leaf" d="M515 352 C430 286 350 292 286 333 C381 340 449 372 510 388Z" fill="#286c4a"/>
     <path class="palm-leaf" d="M518 350 C439 240 440 168 468 108 C500 196 515 277 529 352Z" fill="#397b51"/>
@@ -35,6 +47,6 @@
     <circle cx="536" cy="367" r="13" fill="#523326"/>
   </g>
 
-  <circle id="sunset-target" cx="405" cy="250" r="48" fill="transparent" pointer-events="none"/>
-  <circle id="tree-target" cx="565" cy="385" r="48" fill="transparent" pointer-events="none"/>
+  <circle id="sunset-target" data-testid="sunset-target" cx="405" cy="390" r="48" fill="transparent" pointer-events="none"/>
+  <circle id="tree-target" data-testid="tree-target" cx="565" cy="385" r="48" fill="transparent" pointer-events="none"/>
 </svg>

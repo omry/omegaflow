@@ -759,6 +759,7 @@ TUTORIAL_BOOTSTRAP_RESOURCE_FILES = (
     "index.md",
     "scripts/inspect_artwork.py",
     "scripts/reset_artwork.py",
+    "scripts/tiny_canvas.py",
 )
 
 

@@ -1,7 +1,6 @@
 const canvas = document.querySelector("#canvas");
 const titleInput = document.querySelector("#artwork-title");
 const status = document.querySelector("#status");
-const saveButton = document.querySelector("#save-artwork");
 const exportButton = document.querySelector("#export-artwork");
 
 let artwork = null;
@@ -9,6 +8,20 @@ let drag = null;
 
 function setStatus(message) {
   status.textContent = message;
+}
+
+function filenameForTitle(title) {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${slug || "untitled-artwork"}.svg`;
+}
+
+function updateExportButton() {
+  exportButton.textContent = `Save as ${filenameForTitle(titleInput.value)}`;
 }
 
 function svgPoint(event) {
@@ -61,6 +74,7 @@ function updateTitle() {
   const title = titleInput.value.trim() || "Untitled artwork";
   artwork.querySelector("#svg-title").textContent = title;
   artwork.querySelector("#poster-title").textContent = title;
+  updateExportButton();
   setStatus("Unsaved changes");
 }
 
@@ -77,18 +91,13 @@ async function postArtwork(path) {
   if (!response.ok) {
     throw new Error(await response.text());
   }
-}
-
-async function saveArtwork() {
-  setStatus("Saving…");
-  await postArtwork("/api/artwork");
-  setStatus("Artwork saved");
+  return response.json();
 }
 
 async function exportArtwork() {
-  setStatus("Exporting…");
-  await postArtwork("/api/export");
-  setStatus("Exported sunset-beach.svg");
+  setStatus("Saving a new file…");
+  const result = await postArtwork("/api/export");
+  setStatus(`Saved ${result.filename}`);
 }
 
 async function loadArtwork() {
@@ -103,6 +112,7 @@ async function loadArtwork() {
   artwork = documentNode.documentElement;
   canvas.replaceChildren(artwork);
   titleInput.value = artwork.querySelector("#svg-title").textContent;
+  updateExportButton();
   artwork.addEventListener("pointerdown", beginDrag);
   artwork.addEventListener("pointermove", moveDrag);
   artwork.addEventListener("pointerup", endDrag);
@@ -111,6 +121,5 @@ async function loadArtwork() {
 }
 
 titleInput.addEventListener("input", updateTitle);
-saveButton.addEventListener("click", () => saveArtwork().catch((error) => setStatus(error.message)));
 exportButton.addEventListener("click", () => exportArtwork().catch((error) => setStatus(error.message)));
 loadArtwork().catch((error) => setStatus(error.message));

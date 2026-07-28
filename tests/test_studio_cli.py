@@ -5038,6 +5038,7 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
         "index.md",
         "scripts/inspect_artwork.py",
         "scripts/reset_artwork.py",
+        "scripts/tiny_canvas.py",
     ]
 
     recording = (tutorial_root / "index.md").read_text(encoding="utf-8")
@@ -5056,20 +5057,51 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     )
     assert "Tiny Canvas" in application
     assert 'id="artwork-title"' in application
+    assert 'data-testid="artwork-title"' in application
     assert 'id="canvas"' in application
-    assert 'id="save-artwork"' in application
+    assert 'id="save-artwork"' not in application
     assert 'id="export-artwork"' in application
+    assert 'data-testid="export-artwork"' in application
+    app_script = (tutorial_root / "app" / "app.js").read_text(encoding="utf-8")
+    assert "function filenameForTitle(title)" in app_script
+    assert "Save as ${filenameForTitle(titleInput.value)}" in app_script
+    assert "Saved ${result.filename}" in app_script
+    server = (tutorial_root / "app" / "server.py").read_text(encoding="utf-8")
+    assert "filename_for_title" in server
+    assert 'ARTWORK = STATE_DIR / filename_for_title("Sunset Study")' in server
+    launcher = (tutorial_root / "scripts" / "tiny_canvas.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"--view"' in launcher
+    assert 'f"/files/{filename}"' in launcher
 
     draft = (tutorial_root / "app" / "draft.svg").read_text(encoding="utf-8")
     assert 'id="sun"' in draft
+    assert 'data-testid="sun"' in draft
+    assert 'id="sun-glasses"' in draft
+    assert 'id="sun-smile"' in draft
+    assert 'id="sea"' in draft
+    assert draft.index('id="sun"') < draft.index('id="sea"')
     assert 'id="coconut-tree"' in draft
+    assert 'data-testid="coconut-tree"' in draft
     assert 'id="sunset-target"' in draft
+    assert 'data-testid="sunset-target"' in draft
+    assert 'cx="405" cy="390"' in draft
     assert 'id="tree-target"' in draft
+    assert 'data-testid="tree-target"' in draft
     assert draft.count('class="palm-leaf"') >= 6
-    assert not (tutorial_root / "artwork.svg").exists()
+    assert not (tutorial_root / "sunset-study.svg").exists()
 
     output = capsys.readouterr().out
     assert "next    omegaflow recording=sunset-beach action=build" in output
+
+
+def test_tiny_canvas_filename_is_derived_from_the_artwork_title() -> None:
+    from omegaflow.tutorial.tiny_canvas.app.server import filename_for_title
+
+    assert filename_for_title("Sunset Study") == "sunset-study.svg"
+    assert filename_for_title("Coconut Sunset") == "coconut-sunset.svg"
+    assert filename_for_title("  Étude: Sea & Sky  ") == "etude-sea-sky.svg"
 
 
 def test_tutorial_bootstrap_preserves_user_owned_files_until_forced(
@@ -5160,8 +5192,134 @@ def test_tutorial_runtime_state_does_not_invalidate_the_recording_source(
         / ".omegaflow"
         / "tutorial"
         / "sunset-beach"
-        / "artwork.svg"
+        / "sunset-study.svg"
     ).is_file()
+
+
+def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
+    tmp_path: Path,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "sunset-beach"
+    recording_dir.mkdir(parents=True)
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "tutorial"
+        / "sunset-beach-complete.md"
+    )
+    shutil.copyfile(fixture, recording_dir / "index.md")
+
+    plan = normalize_recording_plan(
+        recording_from_script("sunset-beach", recording_dir=recordings_dir)
+    )
+
+    assert [pane.id for pane in plan.panes] == ["before", "after", "terminal"]
+    assert [beat.id for beat in plan.beats] == [
+        "launch-editor",
+        "edit-artwork",
+        "compare-files",
+    ]
+    launch, edit, compare = plan.beats
+    assert launch.layout.areas == (("terminal",),)
+    assert edit.layout.areas == (("after",),)
+    assert compare.layout.areas == (
+        ("before", "after"),
+        ("before", "after"),
+        ("terminal", "terminal"),
+    )
+    launch_tracks = {track.pane_id: track for track in launch.pane_tracks}
+    edit_tracks = {track.pane_id: track for track in edit.pane_tracks}
+    compare_tracks = {track.pane_id: track for track in compare.pane_tracks}
+    assert [item.id for item in launch_tracks["terminal"].beats] == [
+        "launch-editor"
+    ]
+    assert len(launch_tracks["terminal"].beats[0].actions) == 1
+    assert [item.id for item in edit_tracks["after"].beats] == ["editor"]
+    assert [item.id for item in compare_tracks["before"].beats] == [
+        "original-file"
+    ]
+    assert [item.id for item in compare_tracks["after"].beats] == [
+        "saved-file"
+    ]
+    assert [item.id for item in compare_tracks["terminal"].beats] == [
+        "open-original",
+        "open-saved",
+    ]
+    assert len(plan.setup) == 1
+    assert (
+        edit_tracks["after"].beats[0].actions[0].config["open_page"]["handoff"]
+        == "edit-file"
+    )
+    browser_actions = edit_tracks["after"].beats[0].actions
+    assert browser_actions[1].kind == "fill"
+    assert browser_actions[1].config["fill"]["target"]["test_id"] == "artwork-title"
+    assert browser_actions[2].kind == "drag"
+    assert browser_actions[2].config["drag"]["from"]["target"]["test_id"] == "sun"
+    assert browser_actions[3].kind == "drag"
+    assert (
+        browser_actions[3].config["drag"]["from"]["target"]["test_id"]
+        == "coconut-tree"
+    )
+    assert compare_tracks["before"].beats[0].actions[0].config[
+        "open_page"
+    ]["handoff"] == "open-original"
+    assert compare_tracks["after"].beats[0].actions[0].config[
+        "open_page"
+    ]["handoff"] == "open-saved"
+    assert [handoff.target_pane_id for handoff in plan.browser_handoffs] == [
+        "after",
+        "before",
+        "after",
+    ]
+    assert (
+        launch_tracks["terminal"].beats[0]
+        .actions[-1]
+        .config["commands"][0]["browser_handoff"]["target"]
+        == "after"
+    )
+    assert (
+        launch_tracks["terminal"].beats[0]
+        .actions[-1]
+        .config["commands"][0]["pre_enter_pause"]
+        == 1.0
+    )
+    assert (
+        compare_tracks["terminal"].beats[0]
+        .actions[-1]
+        .config["commands"][0]["browser_handoff"]["target"]
+        == "before"
+    )
+    assert (
+        compare_tracks["terminal"].beats[0]
+        .actions[-1]
+        .config["commands"][0]["pre_command_pause"]
+        == 0.6
+    )
+    assert (
+        compare_tracks["terminal"].beats[0]
+        .actions[-1]
+        .config["commands"][0]["pre_enter_pause"]
+        == 1.0
+    )
+    assert (
+        compare_tracks["terminal"].beats[1]
+        .actions[-1]
+        .config["commands"][0]["pre_command_pause"]
+        == 0.6
+    )
+    assert (
+        compare_tracks["terminal"].beats[1]
+        .actions[-1]
+        .config["commands"][0]["pre_enter_pause"]
+        == 1.0
+    )
+    assert (
+        "coconut-sunset.svg"
+        in compare_tracks["terminal"].beats[1]
+        .actions[0]
+        .config["commands"][0]["run"]
+    )
 
 
 def test_success_followups_show_user_facing_actions(capsys) -> None:

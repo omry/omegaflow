@@ -8,11 +8,13 @@ import shutil
 RECORDING_DIR = Path(__file__).resolve().parents[1]
 SOURCE = RECORDING_DIR / "app" / "draft.svg"
 STATE_DIR = RECORDING_DIR.parent / ".omegaflow" / "tutorial" / "sunset-beach"
-DESTINATION = STATE_DIR / "artwork.svg"
+DESTINATION = STATE_DIR / "sunset-study.svg"
 
 
 def main() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    for artwork in STATE_DIR.glob("*.svg"):
+        artwork.unlink()
     shutil.copyfile(SOURCE, DESTINATION)
     print("Restored the Tiny Canvas draft.")
 

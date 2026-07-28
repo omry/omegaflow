@@ -574,22 +574,24 @@ learner's workspace; the learner authors the recording rather than building the
 sample application.
 
 Tiny Canvas opens a nearly finished artsy sunset-beach SVG containing a sky,
-sea, beach, sun, and one compound coconut-tree group. The tutorial changes the
-title, moves the sun toward a semantic horizon target, repositions the tree,
-saves the artwork, and exports `sunset-beach.svg`. The application uses a
+sea, beach, sun, and one compound coconut-tree group. The tutorial opens
+`sunset-study.svg`, changes its title to **Coconut Sunset**, moves the sun
+toward a semantic horizon target, repositions the tree, and saves the edited
+artwork as the title-derived `coconut-sunset.svg`. The application uses a
 deterministic standard-library local server, DOM-backed SVG objects, semantic
 targets and destination anchors, disposable state, and no external network,
 account, framework, or secret.
 
 The finished learner-authored video has three beats:
 
-1. **Inspect the draft** in the terminal and prove the known starting state.
+1. **Open the artwork** from the terminal, handing the editor launch to a
+   browser pane.
 2. **Refine the artwork** in the browser by changing the title and dragging the
-   sun and tree before saving.
-3. **Verify the result** in the terminal by exporting and checking the finished
-   SVG.
+   sun and tree before saving a new, title-derived file.
+3. **Compare before and after** by opening the original and saved SVGs into two
+   browser panes above the terminal commands that launched them.
 
-This is a terminal-browser-terminal story with a visible before/after result.
+This is a terminal-browser-multipane story with a visible before/after result.
 Browser primitives are taught once while constructing the second beat; later
 milestones reuse that beat to teach narration, guidance, and publishing.
 
@@ -682,7 +684,7 @@ merely to present source excerpts.
 
 ### Milestone 3: Automate and review the artwork edit
 
-Add the browser beat and final terminal verification beat. Teach browser
+Add the browser edit beat and final multipane comparison beat. Teach browser
 primitives once as one coherent operation:
 
 - open Tiny Canvas with an explicit readiness boundary
@@ -692,12 +694,14 @@ primitives once as one coherent operation:
   without destination elements
 - show a brief click indication and a persistent pressed-pointer state during
   each drag
-- save and check the visible result
-- export and verify the resulting SVG from the terminal
+- save and check the visible result under its title-derived filename
+- launch the original and saved SVGs from the terminal into side-by-side
+  browser panes
 
 Build and play the complete silent three-beat video before adding TTS. Show the
-original state, the browser edit, and the verified result. This is a required
-working gate: narration cannot hide or compensate for an incorrect workflow.
+original state, the browser edit, and the side-by-side result. This is a
+required working gate: narration cannot hide or compensate for an incorrect
+workflow.
 
 Add beat-targeted watch so the learner and supporting walkthrough can open the
 changed beat directly instead of replaying the whole video. Beat ids must be
@@ -732,9 +736,9 @@ current silent dynamic-fragment implementation is insufficient.
 
 ### Milestone 5: Guide the viewer
 
-Attach the existing textual guide/checkpoint card to the final terminal beat.
-In guided mode it pauses after verification and shows the commands for
-exporting the completed SVG and opening it in a browser. Multiple commands use
+Attach the existing textual guide/checkpoint card to the final comparison beat.
+In guided mode it pauses after the comparison and shows the commands for
+opening the original and edited SVGs in browser panes. Multiple commands use
 the plural **Copy commands** label. The same video remains coherent when guided
 mode is disabled.
 
@@ -808,7 +812,7 @@ These topics remain available through Concepts, Guides, and Reference.
 ### Decision D4: tutorial project and curriculum
 
 **Resolution:** approved after feedback consolidation. Use the packaged Tiny
-Canvas sunset-beach application, a three-beat terminal-browser-terminal learner
+Canvas sunset-beach application, a three-beat terminal-browser-multipane learner
 artifact, one cumulative written tutorial, and one continuous supporting
 walkthrough. Introduce browser primitives once, prove silent playback before
 TTS, expose and fix narration timing, add one practical guide, and end with
