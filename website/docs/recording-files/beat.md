@@ -148,6 +148,41 @@ The pane declaration is authoring structure, not recording configuration. It
 cannot be placed in frontmatter, inherited from `recordings/config.yaml`, or
 changed with a `rec.*` override.
 
+### Presentation And Realtime Timing
+
+Actions use `timing: presentation` by default. Presentation timing reconstructs
+captured states and lets OmegaFlow pace them with narration. Use
+`timing: realtime` when the observed duration and motion are part of the result,
+such as a terminal progress display or a browser animation.
+
+Timing can be set on an outer beat, a pane beat, or an executable action. The
+nearest explicit value wins:
+
+```yaml
+beat:
+  id: compare-timing
+  timing: realtime
+  panes:
+    preview:
+    - id: presentation-preview
+      timing: presentation
+      actions:
+      - id: open
+        open_page: {url: /preview}
+      - id: animate
+        timing: realtime
+        click:
+          target: {role: button, name: Animate}
+        until:
+          visible: {text: Complete, exact: true}
+```
+
+A terminal action containing `commands` supplies their timing default; an
+explicit timing value on one command overrides it. Browser actions with
+asynchronous work can add `until` only when their resolved timing is realtime.
+The condition uses the same typed shape as `wait_for` and bounds the captured
+interval through observable completion.
+
 ## Synchronizing Narration And Commands
 
 The mental model is:
@@ -578,9 +613,10 @@ Add normalized `position` coordinates to choose a point within that element;
 ```
 
 Pointer moves use the same deterministic motion as the movement before a
-click. The common action fields `after`, `hold_before_ms`, and `hold_after_ms`
-can synchronize the move with narration, pause before it starts, and keep the
-pointer at its destination.
+click. The common action fields `timing`, `after`, `hold_before_ms`, and
+`hold_after_ms` can choose presentation or realtime behavior, synchronize the
+move with narration, pause before it starts, and keep the pointer at its
+destination.
 
 Use `drag.from` and `drag.to` to resolve the source and destination elements.
 Each endpoint defaults to the element center and accepts the same normalized
@@ -629,14 +665,20 @@ loading stage in the presentation; the default `hide` starts the visible action
 at the ready state. `display_url` changes only the safe URL shown in browser
 chrome and never changes navigation.
 
-Actions use short automatic transitions by default. Set
-`transition: captured` when the recorded browser motion itself should remain in
-the video. On a `wait_for` action, the captured segment continues until the
-authored condition succeeds. Automatic dynamic segments retain a three-second
-safety limit, including any final-frame alignment. Explicit captured segments
-use the action's timeout for the authored condition, then may retain additional
-video through the rendered frame where that condition completed.
-All captured segments remain subject to the encoded-size limit.
+Actions use presentation timing by default: OmegaFlow reconstructs their
+visible state and can retime it with narration. Set `timing: realtime` when the
+recorded browser motion itself must remain in the video. For asynchronous page
+work, add `until` to the triggering action using the same condition shape as
+`wait_for`; capture then continues until that bounded condition succeeds.
+A standalone realtime `wait_for` uses its own condition and does not also
+define `until`.
+
+Automatic dynamic segments retain a three-second safety limit, including any
+final-frame alignment. Explicit realtime segments use the action's completion
+and optional `until` timeout as their authored boundary, then may retain
+additional video through the rendered frame where that condition completed.
+All realtime segments remain subject to the encoded-size limit. `transition`
+controls only the change between stable states and accepts `cut` or `fade`.
 
 ### Narration takes across beats
 
@@ -784,7 +826,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
     browser_handoff: bool | BrowserHandoffConfig = False
     with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
-    timing: str = "presentation"
+    timing: ActionTiming = ActionTiming.presentation
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
@@ -932,6 +974,8 @@ class BrowserActionConfig:
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
+    until: BrowserConditionConfig | None = None
+    timing: ActionTiming = ActionTiming.presentation
     after: str | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
@@ -963,6 +1007,7 @@ class RecordingActionConfig(RecordingStepConfig):
     """Structured YAML envelope for terminal and browser actions."""
 
     id: str = ""
+    timing: ActionTiming | None = None
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
@@ -973,6 +1018,7 @@ class RecordingActionConfig(RecordingStepConfig):
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
+    until: BrowserConditionConfig | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
     transition: str | None = None
@@ -1068,7 +1114,6 @@ class VisualizationShowConfig:
 
 @dataclass
 class PaneActionConfig(RecordingActionConfig):
-    timing: str = "presentation"
     show: VisualizationShowConfig | None = None
     browser_handoff: bool | BrowserHandoffConfig = False
 
@@ -1077,6 +1122,7 @@ class PaneActionConfig(RecordingActionConfig):
 class PaneBeatConfig:
     id: str = ""
     after: str | None = None
+    timing: ActionTiming | None = None
     transition: PaneTransitionConfig = field(default_factory=PaneTransitionConfig)
     pointer: BrowserPointerPresentationConfig | None = None
     window: BrowserWindowModeConfig | None = None
@@ -1095,6 +1141,7 @@ class OuterBeatPaneTrackConfig:
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
+    timing: ActionTiming | None = None
     heading: str = ""
     narration: str = ""
     narration_take: str | None = None

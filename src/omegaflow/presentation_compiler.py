@@ -2271,6 +2271,7 @@ def compile_browser_beat(
                 "action_id": action.id,
                 "at_ms": end_ms,
                 "end_ms": end_ms,
+                "timing": config.get("timing", "presentation"),
             }
         )
         display_url = config.get("display_url_after")
@@ -2458,7 +2459,7 @@ def _compile_browser_action(
                 )
                 for coordinate in ("x1", "y1", "x2", "y2")
             }
-        if config.get("transition") == "captured" and clip_asset is not None:
+        if config.get("timing") == "realtime" and clip_asset is not None:
             drag_duration = min(
                 drag_duration,
                 _positive_integer(
@@ -2597,11 +2598,6 @@ def _compile_browser_action(
         state = _mapping_value(visual.get("state"), field="browser visual state")
         asset = _register_state_asset(state, assets)
         transition = config.get("transition") or default_transition
-        if transition == "captured":
-            raise PresentationCompileError(
-                "PRESENTATION_SCHEMA",
-                f"action {action.id!r} requested captured motion but has a static state",
-            )
         if transition not in {"cut", "fade"}:
             raise PresentationCompileError(
                 "PRESENTATION_SCHEMA", f"action {action.id!r} transition is invalid"
@@ -2625,16 +2621,35 @@ def _compile_browser_action(
                 f"captured clip for action {action.id!r} is unavailable",
             )
         asset_id, clip_duration = _register_clip_asset(clip_asset, assets)
-        clip_start_ms, clip_end_ms = (
-            captured_visual_interval
-            if captured_visual_interval is not None
-            else (cursor, cursor + clip_duration)
-        )
-        trim_end_ms = (
-            min(clip_duration, clip_end_ms - clip_start_ms)
-            if captured_visual_interval is not None
-            else clip_duration
-        )
+        if captured_visual_interval is not None:
+            clip_start_ms, clip_end_ms = captured_visual_interval
+        elif config.get("timing") == "realtime":
+            request = _mapping_value(
+                visual.get("request"),
+                field=f"browser clip {action.id} request",
+            )
+            source_start_ms = _duration_value(
+                request.get("source_start_ms"),
+                field=f"browser clip {action.id} source start",
+            )
+            source_end_ms = _duration_value(
+                request.get("source_end_ms"),
+                field=f"browser clip {action.id} source end",
+            )
+            if source_end_ms <= source_start_ms:
+                raise PresentationCompileError(
+                    "PRESENTATION_SCHEMA",
+                    f"realtime browser action {action.id!r} has an invalid "
+                    "observed interval",
+                )
+            clip_start_ms = cursor
+            clip_end_ms = cursor + min(
+                clip_duration,
+                source_end_ms - source_start_ms,
+            )
+        else:
+            clip_start_ms, clip_end_ms = cursor, cursor + clip_duration
+        trim_end_ms = min(clip_duration, clip_end_ms - clip_start_ms)
         events.append(
             {
                 "kind": "clip",
@@ -2660,11 +2675,6 @@ def _compile_browser_action(
                 "asset": end_asset,
                 "transition": "cut",
             }
-        )
-    elif visual_kind == "deferred":
-        _required_string(
-            visual.get("owner_action_id"),
-            field=f"deferred browser visual owner for {action.id}",
         )
     elif visual_kind != "state":
         raise PresentationCompileError(

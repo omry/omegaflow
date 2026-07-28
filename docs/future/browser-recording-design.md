@@ -259,7 +259,8 @@ Every browser action has:
 
 - a recording-wide unique `id`
 - exactly one action-kind key
-- optional `after`, `hold_after_ms`, `transition`, and `display_url_after`
+- optional `timing`, `until`, `after`, `hold_after_ms`, `transition`, and
+  `display_url_after`
 
 The action-kind keys are `open_page`, `click`, `fill`, `type_keys`, `press`,
 `scroll`, and `wait_for`. Unknown keys fail source validation.
@@ -273,14 +274,15 @@ Authors who need an intentionally blank initial page use
 remain beat-scoped for compatibility with current terminal recordings, so an
 action resolves `after` only against narration authored in the same beat.
 `hold_after_ms` is a non-negative presentation hold and does not sleep during
-capture. `transition` is one of `cut`, `fade`, or `captured`; `captured`
-retains the action's dynamic fragment through action completion. On a
-`wait_for` action, that means capture continues until the authored condition
-succeeds; the condition itself is bounded by its timeout. The final screenshot
-synchronizes the retained video boundary with the completed browser frame.
-Automatically selected dynamic fragments retain the short safety limit;
-explicitly captured fragments may exceed it and remain subject to the
-encoded-size budget.
+capture. `timing` is `presentation` or `realtime`; a realtime action retains
+its observed dynamic fragment through completion. An optional `until`
+condition extends a realtime action through an authored, bounded completion
+condition. A standalone realtime `wait_for` uses its own condition and does
+not also define `until`. The final screenshot synchronizes the retained video
+boundary with the completed browser frame. Automatically selected dynamic
+fragments retain the short safety limit; explicit realtime fragments may
+exceed it and remain subject to the encoded-size budget. `transition` controls
+only presentation between stable states and is `cut` or `fade`.
 
 `display_url_after` is optional public presentation metadata for an action that
 changes the visible application route, such as a click that navigates. It does
@@ -822,10 +824,11 @@ fast-start metadata for broad player and embedded-webview compatibility. CDP
 JPEG screencast frames are diagnostic-only: the reference capture used about 8
 MB for roughly 130 JPEG frames versus about 230 KB for the trimmed, seekable
 1.4-second Playwright video. Phase 1 limits automatically selected clips to 3
-seconds and every clip to 2 MB encoded. An explicit `transition: captured` may
-exceed 3 seconds because its action completion and timeout provide the primary
-duration bound. Capturing the synchronized final frame may extend the retained
-boundary beyond action completion. The compiler interface remains:
+seconds and every clip to 2 MB encoded. An explicit `timing: realtime` interval
+may exceed 3 seconds because its action completion and optional `until`
+condition provide the primary duration bound. Capturing the synchronized final
+frame may extend the retained boundary beyond action completion. The compiler
+interface remains:
 
 ```text
 ClipAsset

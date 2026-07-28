@@ -71,7 +71,7 @@ beat:
   - id: drag-sun
     hold_before_ms: 700
     hold_after_ms: 900
-    transition: captured
+    timing: realtime
     drag:
       from:
         target: {test_id: sun}

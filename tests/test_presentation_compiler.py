@@ -1301,7 +1301,7 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
                                 "key": "Control+K",
                                 "target": {"label": "Project name"},
                             },
-                            "transition": "captured",
+                            "timing": "realtime",
                         },
                     ],
                 }
@@ -1313,12 +1313,14 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         {
             "action_id": "open",
             "kind": "open_page",
+            "timing": "presentation",
             "completion": {"kind": "navigation"},
             "visual": {"kind": "state", "state": state_asset("1")},
         },
         {
             "action_id": "click",
             "kind": "click",
+            "timing": "presentation",
             "target": {"bounds": bounds, "point": {"x": 120, "y": 36}},
             "completion": {"kind": "action"},
             "visual": {"kind": "state", "state": state_asset("2")},
@@ -1326,6 +1328,7 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         {
             "action_id": "name",
             "kind": "fill",
+            "timing": "presentation",
             "target": {
                 "bounds": bounds,
                 "point": {"x": 120, "y": 36},
@@ -1340,6 +1343,7 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         {
             "action_id": "scroll",
             "kind": "scroll",
+            "timing": "presentation",
             "target": {
                 "bounds": {"x": 0, "y": 100, "width": 500, "height": 300},
                 "point": {"x": 250, "y": 250},
@@ -1356,11 +1360,15 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         {
             "action_id": "shortcut",
             "kind": "press",
+            "timing": "realtime",
             "target": {"bounds": bounds, "point": {"x": 120, "y": 36}},
             "completion": {"kind": "action"},
             "visual": {
                 "kind": "clip",
-                "request": {},
+                "request": {
+                    "source_start_ms": 1000,
+                    "source_end_ms": 1400,
+                },
                 "end_state": state_asset("5"),
             },
         },
@@ -1371,7 +1379,9 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         "media_type": "video/mp4",
         "width": 1440,
         "height": 900,
-        "duration_ms": 400,
+        # The aligned source asset may retain a stable tail beyond the authored
+        # realtime interval.
+        "duration_ms": 550,
         "encoded_bytes": 200,
     }
 
@@ -1403,6 +1413,18 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
     assert compiled.payload["duration_ms"] == compiled.action_completions_ms[
         "shortcut"
     ]
+    complete_timing = {
+        event["action_id"]: event["timing"]
+        for event in compiled.payload["events"]
+        if event["kind"] == "complete"
+    }
+    assert complete_timing == {
+        "open": "presentation",
+        "click": "presentation",
+        "name": "presentation",
+        "scroll": "presentation",
+        "shortcut": "realtime",
+    }
     assert compiled.action_starts_ms["name"] == compiled.action_completions_ms[
         "click"
     ]
@@ -1419,6 +1441,8 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         if event["action_id"] == "shortcut" and event["kind"] in {"clip", "state"}
     ]
     assert [event["kind"] for event in shortcut_visuals] == ["clip", "state"]
+    assert shortcut_visuals[0]["end_ms"] - shortcut_visuals[0]["at_ms"] == 400
+    assert shortcut_visuals[0]["trim_end_ms"] == 400
     assert shortcut_visuals[1] == {
         "kind": "state",
         "action_id": "shortcut",
@@ -1739,7 +1763,7 @@ def test_captured_drag_motion_plays_during_the_pressed_pointer_interval() -> Non
                                 "from": {"target": {"test_id": "sun"}},
                                 "to": {"target": {"test_id": "sky"}},
                             },
-                            "transition": "captured",
+                            "timing": "realtime",
                         }
                     ],
                 }

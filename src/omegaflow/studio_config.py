@@ -229,6 +229,11 @@ class RecordingMedium(str, Enum):
     browser = "browser"
 
 
+class ActionTiming(str, Enum):
+    presentation = "presentation"
+    realtime = "realtime"
+
+
 class PaneKind(str, Enum):
     visualization = "visualization"
     terminal = "terminal"
@@ -597,7 +602,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
     browser_handoff: bool | BrowserHandoffConfig = False
     with_env: list[str] = field(default_factory=list)
     show_prompt_after: bool = True
-    timing: str = "presentation"
+    timing: ActionTiming = ActionTiming.presentation
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     post_enter_pause: float | None = None
@@ -610,6 +615,11 @@ class RecordingStepConfig(RecordingInvocationConfig):
     name: str | None = None
     progress: list[str] = field(default_factory=list)
     commands: list[RecordingCommandConfig] | None = None
+
+
+@dataclass
+class TerminalActionConfig(RecordingStepConfig):
+    timing: ActionTiming | None = None
 
 
 @dataclass
@@ -737,6 +747,8 @@ class BrowserActionConfig:
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
+    until: BrowserConditionConfig | None = None
+    timing: ActionTiming = ActionTiming.presentation
     after: str | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
@@ -768,6 +780,7 @@ class RecordingActionConfig(RecordingStepConfig):
     """Structured YAML envelope for terminal and browser actions."""
 
     id: str = ""
+    timing: ActionTiming | None = None
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
@@ -778,6 +791,7 @@ class RecordingActionConfig(RecordingStepConfig):
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
+    until: BrowserConditionConfig | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
     transition: str | None = None
@@ -865,7 +879,6 @@ class VisualizationShowConfig:
 
 @dataclass
 class PaneActionConfig(RecordingActionConfig):
-    timing: str = "presentation"
     show: VisualizationShowConfig | None = None
     browser_handoff: bool | BrowserHandoffConfig = False
 
@@ -874,6 +887,7 @@ class PaneActionConfig(RecordingActionConfig):
 class PaneBeatConfig:
     id: str = ""
     after: str | None = None
+    timing: ActionTiming | None = None
     transition: PaneTransitionConfig = field(default_factory=PaneTransitionConfig)
     pointer: BrowserPointerPresentationConfig | None = None
     window: BrowserWindowModeConfig | None = None
@@ -897,6 +911,7 @@ class RecordingNarrationConfig:
 class RecordingBeatConfig:
     id: str = ""
     medium: RecordingMedium = RecordingMedium.terminal
+    timing: ActionTiming | None = None
     heading: str = ""
     narration: str = ""
     narration_take: str | None = None
@@ -1029,6 +1044,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     TerminalInputStepConfig,
     RecordingCommandConfig,
     RecordingStepConfig,
+    TerminalActionConfig,
     BrowserUrlMatcherConfig,
     BrowserResponseMatcherConfig,
     BrowserStateMatcherConfig,

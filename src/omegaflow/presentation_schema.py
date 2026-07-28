@@ -170,7 +170,7 @@ class BrowserDisplayUrlEventV1(BrowserEventV1):
 
 @dataclass
 class BrowserCompleteEventV1(BrowserEventV1):
-    pass
+    timing: str = "presentation"
 
 
 BROWSER_EVENT_SCHEMAS_V1: dict[str, type[BrowserEventV1]] = {

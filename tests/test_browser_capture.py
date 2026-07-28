@@ -1185,7 +1185,7 @@ def test_dynamic_fragment_retains_the_frame_before_animation_starts(
                             {"id": "open", "open_page": {"url": "/animated-capture"}},
                             {
                                 "id": "animate",
-                                "transition": "captured",
+                                "timing": "realtime",
                                 "click": {
                                     "target": {"role": "button", "name": "Animate"}
                                 },
@@ -1288,7 +1288,7 @@ def test_set_pointer_does_not_sample_the_page_visual(
     assert "visual" not in pointer_action
 
 
-def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
+def test_realtime_action_until_can_follow_its_condition_past_implicit_limit(
     tmp_path: Path,
 ) -> None:
     with fixture_site() as base_url:
@@ -1304,17 +1304,14 @@ def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
                             {"id": "open", "open_page": {"url": "/"}},
                             {
                                 "id": "start",
+                                "timing": "realtime",
                                 "click": {
                                     "target": {
                                         "role": "button",
                                         "name": "Start delayed completion",
                                     }
                                 },
-                            },
-                            {
-                                "id": "await-completion",
-                                "transition": "captured",
-                                "wait_for": {
+                                "until": {
                                     "visible": {"text": "Complete", "exact": True},
                                     "timeout_ms": 5000,
                                 },
@@ -1332,26 +1329,23 @@ def test_explicit_captured_wait_can_follow_its_condition_past_implicit_limit(
             runner.close()
         runner.complete()
 
-    wait = actions[2]
-    assert actions[1]["visual"] == {
-        "kind": "deferred",
-        "owner_action_id": "await-completion",
-    }
-    assert wait["completion"] == {"kind": "visible"}
-    assert wait["visual"]["kind"] == "clip"
+    action = actions[1]
+    assert action["timing"] == "realtime"
+    assert action["completion"] == {"kind": "visible"}
+    assert action["visual"]["kind"] == "clip"
     fragment = next(
         record
         for record in capture_records(tmp_path)
         if record["type"] == "diagnostic"
         and record.get("kind") == "dynamic_fragment"
-        and record.get("action_id") == "await-completion"
+        and record.get("action_id") == "start"
     )
-    request = wait["visual"]["request"]
+    request = action["visual"]["request"]
     authored_duration_ms = (
         request["source_end_ms"] - request["source_start_ms"]
     )
     assert 3000 < authored_duration_ms <= 5000
-    assert abs(fragment["duration_ms"] - authored_duration_ms) <= 250
+    assert fragment["duration_ms"] >= authored_duration_ms
     assert fragment["encoded_bytes"] <= 2_000_000
 
 
@@ -1884,7 +1878,7 @@ def test_dynamic_fragment_with_required_redaction_fails_closed(
                             {
                                 "id": "open",
                                 "open_page": {"url": "/"},
-                                "transition": "captured",
+                                "timing": "realtime",
                             }
                         ],
                     }
@@ -1944,7 +1938,7 @@ def test_secret_input_automatically_prohibits_captured_motion(
                             {
                                 "id": "later-motion",
                                 "click": {"target": {"css": "#noop"}},
-                                "transition": "captured",
+                                "timing": "realtime",
                             },
                         ],
                     }

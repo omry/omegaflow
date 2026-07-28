@@ -1192,6 +1192,27 @@ process exit; a realtime browser action uses an authored completion condition
 such as `until`. The compiler may position a realtime interval but not stretch,
 compress, or reorder it.
 
+The authoring contract is:
+
+- `timing: presentation|realtime` is accepted on an outer beat, a pane beat,
+  and an executable action. The nearest explicit value wins; omitted values
+  resolve to `presentation`.
+- A terminal action containing several commands supplies their timing default;
+  an explicit command value still wins.
+- A browser action may add `until` using the same typed condition shape as
+  `wait_for`. The condition extends that action's realtime interval through
+  observable completion. `until` is invalid on presentation-timed actions and
+  redundant on `wait_for`.
+- Realtime browser actions preserve the observed visual interval. Actions with
+  intrinsic completion, such as a drag, do not require `until`; asynchronous
+  page work should supply it.
+- `transition` remains a state-presentation choice with only `cut` and `fade`.
+  The former `transition: captured` timing shortcut is removed rather than
+  retained as a parallel timing model.
+- Generated browser action metadata records the resolved timing mode. Joins may
+  relocate either mode, but realtime media keeps its captured duration and
+  ordering. Realtime browser audio remains a separate prerequisite.
+
 Demonstration: place a presentation-timed browser action beside a bounded
 realtime browser animation, seek through both, and show their fixed versus
 retimeable durations in generated metadata and playback.

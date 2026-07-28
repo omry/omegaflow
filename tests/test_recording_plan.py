@@ -901,6 +901,84 @@ def test_normalizes_browser_actions_checks_and_references() -> None:
     assert beat.waits[0].gap_ms == 300
 
 
+def test_beat_timing_defaults_terminal_commands_and_browser_actions() -> None:
+    terminal = normalize_recording_plan(
+        {
+            "id": "terminal-timing-default",
+            "beats": [
+                {
+                    "id": "terminal",
+                    "timing": "realtime",
+                    "actions": [
+                        {
+                            "timing": "presentation",
+                            "commands": [
+                                {"id": "first", "run": "printf first"},
+                                {
+                                    "id": "second",
+                                    "run": "printf second",
+                                    "timing": "realtime",
+                                },
+                            ],
+                        },
+                        {"run": "printf inherited"},
+                    ],
+                }
+            ],
+        }
+    )
+    first_action = terminal.beats[0].actions[0].config
+    assert [command["timing"] for command in first_action["commands"]] == [
+        "presentation",
+        "realtime",
+    ]
+    assert terminal.beats[0].actions[1].config["timing"] == "realtime"
+
+    browser = browser_spec()
+    browser["beats"][0]["timing"] = "realtime"
+    browser["beats"][0]["actions"][1]["timing"] = "presentation"
+    plan = normalize_recording_plan(browser)
+    assert [action.config["timing"] for action in plan.beats[0].actions] == [
+        "realtime",
+        "presentation",
+    ]
+
+
+def test_browser_until_requires_realtime_non_wait_action() -> None:
+    condition = {"visible": {"text": "Complete", "exact": True}, "timeout_ms": 5000}
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1]["until"] = condition
+    with pytest.raises(RecordingPlanError, match="until requires timing: realtime"):
+        normalize_recording_plan(spec)
+
+    spec["beats"][0]["actions"][1]["timing"] = "realtime"
+    plan = normalize_recording_plan(spec)
+    assert plan.beats[0].actions[1].config["until"]["timeout_ms"] == 5000
+
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append(
+        {
+            "id": "wait",
+            "timing": "realtime",
+            "wait_for": condition,
+            "until": condition,
+        }
+    )
+    with pytest.raises(RecordingPlanError, match="wait_for cannot also define until"):
+        normalize_recording_plan(spec)
+
+
+def test_captured_transition_is_rejected_in_favor_of_realtime_timing() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1]["transition"] = "captured"
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="transition must be cut or fade; use timing: realtime",
+    ):
+        normalize_recording_plan(spec)
+
+
 def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
     plan = normalize_recording_plan(
         {
@@ -1841,6 +1919,26 @@ def test_explicit_terminal_and_browser_actions_normalize_cross_stream_joins() ->
     assert browser.beats[0].actions[0].start_join.event.qualified_id == (
         "terminal.session.start-app.ended"
     )
+
+
+def test_nested_pane_beat_timing_inherits_and_overrides_outer_default() -> None:
+    spec = cross_capture_spec()
+    outer = spec["beats"][0]
+    outer["timing"] = "realtime"
+    outer["panes"]["browser"][0]["timing"] = "presentation"
+    outer["panes"]["browser"][0]["actions"][1]["timing"] = "realtime"
+
+    plan = normalize_recording_plan(spec)
+
+    terminal, browser = plan.beats[0].pane_tracks
+    assert [
+        action.config["commands"][0]["timing"]
+        for action in terminal.beats[0].actions
+    ] == ["realtime", "realtime"]
+    assert [action.config["timing"] for action in browser.beats[0].actions] == [
+        "presentation",
+        "realtime",
+    ]
 
 
 def test_explicit_multi_pane_authoring_accepts_two_terminal_pane_streams() -> None:

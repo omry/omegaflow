@@ -42,6 +42,7 @@ from .studio_config import (
     RecordingPresentationConfig,
     RecordingRequirementsConfig,
     RecordingStepConfig,
+    TerminalActionConfig,
     StudioConfigError,
     BeatEffectConfig,
     narration_text_and_anchors,
@@ -118,11 +119,12 @@ TERMINAL_INPUT_KEYS = frozenset(
     }
 )
 TERMINAL_STEP_FIELDS = {item.name for item in fields(RecordingStepConfig)}
+TERMINAL_ACTION_FIELDS = {item.name for item in fields(TerminalActionConfig)}
 BROWSER_ACTION_FIELDS = {item.name for item in fields(BrowserActionConfig)}
 BROWSER_CHECK_FIELDS = {item.name for item in fields(BrowserCheckConfig)}
-BROWSER_ACTION_ONLY_FIELDS = BROWSER_ACTION_FIELDS - {"after"}
+BROWSER_ACTION_ONLY_FIELDS = BROWSER_ACTION_FIELDS - {"after", "timing"}
 BROWSER_CHECK_ONLY_FIELDS = BROWSER_CHECK_FIELDS - {"name"}
-TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"after"}
+TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_ACTION_FIELDS - {"after", "timing"}
 TERMINAL_CHECK_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"name"}
 
 
@@ -172,6 +174,21 @@ def _positive_int(value: object, *, field: str, allow_zero: bool = False) -> int
         qualifier = "non-negative" if allow_zero else "positive"
         raise RecordingPlanError(f"{field} must be {qualifier}")
     return value
+
+
+def _resolved_action_timing(
+    value: object,
+    *,
+    field: str,
+    default: str = "presentation",
+) -> str:
+    if value is None:
+        value = default
+    if isinstance(value, Enum):
+        value = value.value
+    if value not in {"presentation", "realtime"}:
+        raise RecordingPlanError(f"{field} must be presentation or realtime")
+    return str(value)
 
 
 def _normalized_point(value: object, *, field: str) -> dict[str, Any]:
@@ -366,14 +383,14 @@ def validate_terminal_command(value: object, *, field: str) -> None:
             f"{field}.with_env name {unsupported[0]!r} is not an allowlisted "
             "OmegaFlow service environment name"
         )
-    if mapping.get("timing", "presentation") not in {"presentation", "realtime"}:
-        raise RecordingPlanError(
-            f"{field}.timing must be presentation or realtime"
-        )
+    timing = _resolved_action_timing(
+        mapping.get("timing"),
+        field=f"{field}.timing",
+    )
     input_steps = mapping.get("input", [])
     if not isinstance(input_steps, list):
         raise RecordingPlanError(f"{field}.input must be a list")
-    if input_steps and mapping.get("timing", "presentation") != "realtime":
+    if input_steps and timing != "realtime":
         raise RecordingPlanError(f"{field}.input requires timing: realtime")
     if (
         input_steps
@@ -397,7 +414,12 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     validate_terminal_expectation(mapping.get("expect", {}), field=f"{field}.expect")
 
 
-def validate_terminal_step(value: object, *, field: str) -> RecordingStepConfig:
+def validate_terminal_step(
+    value: object,
+    *,
+    field: str,
+    action: bool = False,
+) -> RecordingStepConfig:
     mapping = _mapping(value, field=field)
     commands = mapping.get("commands")
     if commands is None:
@@ -423,7 +445,8 @@ def validate_terminal_step(value: object, *, field: str) -> RecordingStepConfig:
         not isinstance(item, str) or not item for item in progress
     ):
         raise RecordingPlanError(f"{field}.progress must be a list of non-empty strings")
-    return _typed(mapping, RecordingStepConfig, field=field)
+    schema = TerminalActionConfig if action else RecordingStepConfig
+    return _typed(mapping, schema, field=field)
 
 
 def validate_requirements(value: object, *, field: str = "requirements") -> None:
@@ -637,6 +660,8 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
         "hold_after_ms",
         "transition",
         "display_url_after",
+        "timing",
+        "until",
     }
     unexpected = sorted(set(mapping) - allowed)
     if unexpected:
@@ -805,6 +830,17 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
     else:
         validate_condition(payload, field=f"{field}.wait_for")
 
+    timing = _resolved_action_timing(
+        mapping.get("timing"),
+        field=f"{field}.timing",
+    )
+    until = mapping.get("until")
+    if until is not None:
+        if kind == "wait_for":
+            raise RecordingPlanError(f"{field}.wait_for cannot also define until")
+        if timing != "realtime":
+            raise RecordingPlanError(f"{field}.until requires timing: realtime")
+        validate_condition(until, field=f"{field}.until")
     after = mapping.get("after")
     if after is not None and (not isinstance(after, str) or not ANCHOR_RE.fullmatch(after)):
         raise RecordingPlanError(f"{field}.after must contain exactly one @anchor@")
@@ -815,8 +851,13 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
                 field=f"{field}.{hold_field}",
                 allow_zero=True,
             )
-    if mapping.get("transition") not in {None, "cut", "fade", "captured"}:
-        raise RecordingPlanError(f"{field}.transition must be cut, fade, or captured")
+    if mapping.get("transition") == "captured":
+        raise RecordingPlanError(
+            f"{field}.transition must be cut or fade; use timing: realtime "
+            "to preserve observed motion"
+        )
+    if mapping.get("transition") not in {None, "cut", "fade"}:
+        raise RecordingPlanError(f"{field}.transition must be cut or fade")
     if mapping.get("display_url_after") is not None:
         validate_display_url(
             mapping["display_url_after"], field=f"{field}.display_url_after"
@@ -963,12 +1004,50 @@ def _resolve_terminal_run_files(
     return replace(step, run_file=resolved(step.run_file), commands=commands)
 
 
+def _terminal_action_with_timing_default(
+    value: object,
+    *,
+    default_timing: str,
+    field: str,
+) -> dict[str, Any]:
+    action = dict(_mapping(value, field=field))
+    action_timing = _resolved_action_timing(
+        action.get("timing"),
+        field=f"{field}.timing",
+        default=default_timing,
+    )
+    action["timing"] = action_timing
+    commands = action.get("commands")
+    if commands is None:
+        return action
+    if not isinstance(commands, list):
+        return action
+    normalized_commands: list[dict[str, Any]] = []
+    for command_index, raw_command in enumerate(commands):
+        command_field = f"{field}.commands.{command_index}"
+        command = dict(_mapping(raw_command, field=command_field))
+        command["timing"] = _resolved_action_timing(
+            command.get("timing"),
+            field=f"{command_field}.timing",
+            default=action_timing,
+        )
+        normalized_commands.append(command)
+    action["commands"] = normalized_commands
+    return action
+
+
 def normalize_beat_actions(
     beat: dict[str, Any],
     *,
     index: int,
+    default_timing: str | None = None,
 ) -> NormalizedBeatActions:
     field = f"beats.{index}"
+    beat_timing = _resolved_action_timing(
+        beat.get("timing"),
+        field=f"{field}.timing",
+        default=default_timing or "presentation",
+    )
     raw_medium = beat.get("medium", RecordingMedium.terminal.value)
     try:
         medium = RecordingMedium(raw_medium)
@@ -1001,16 +1080,29 @@ def normalize_beat_actions(
                     f"{field}.actions.{action_index} browser action "
                     f"{browser_kinds[0]} is invalid for a terminal beat"
                 )
+        for check_index, check in enumerate(checks):
+            check_mapping = _mapping(
+                check, field=f"{field}.checks.{check_index}"
+            )
+            if check_mapping.get("timing") is not None:
+                raise RecordingPlanError(
+                    f"{field}.checks.{check_index}.timing is valid only for actions"
+                )
         return NormalizedBeatActions(
             terminal_actions=tuple(
                 validate_terminal_step(
                     _project_envelope(
-                        _mapping(action, field=f"{field}.actions.{action_index}"),
-                        fields_to_keep=TERMINAL_STEP_FIELDS,
+                        _terminal_action_with_timing_default(
+                            action,
+                            default_timing=beat_timing,
+                            field=f"{field}.actions.{action_index}",
+                        ),
+                        fields_to_keep=TERMINAL_ACTION_FIELDS,
                         fields_to_reject=BROWSER_ACTION_ONLY_FIELDS,
                         field=f"{field}.actions.{action_index}",
                     ),
                     field=f"{field}.actions.{action_index}",
+                    action=True,
                 )
                 for action_index, action in enumerate(actions)
             ),
@@ -1031,7 +1123,20 @@ def normalize_beat_actions(
         browser_actions=tuple(
             validate_browser_action(
                 _project_envelope(
-                    _mapping(action, field=f"{field}.actions.{action_index}"),
+                    {
+                        **_mapping(
+                            action,
+                            field=f"{field}.actions.{action_index}",
+                        ),
+                        "timing": _resolved_action_timing(
+                            _mapping(
+                                action,
+                                field=f"{field}.actions.{action_index}",
+                            ).get("timing"),
+                            field=f"{field}.actions.{action_index}.timing",
+                            default=beat_timing,
+                        ),
+                    },
                     fields_to_keep=BROWSER_ACTION_FIELDS,
                     fields_to_reject=TERMINAL_ACTION_ONLY_FIELDS,
                     field=f"{field}.actions.{action_index}",
@@ -2305,6 +2410,7 @@ def _terminal_pane_beat(
     narration_id: str,
     pane_id: str,
     pane_kinds: Mapping[str, PaneKind],
+    default_timing: str,
 ) -> PaneBeatPlan:
     pane_beat = _typed(raw, PaneBeatConfig, field=field)
     if not ACTION_ID_RE.fullmatch(pane_beat.id):
@@ -2347,6 +2453,11 @@ def _terminal_pane_beat(
             "checks": raw.get("checks", []),
         },
         index=beat_index,
+        default_timing=_resolved_action_timing(
+            raw.get("timing"),
+            field=f"{field}.timing",
+            default=default_timing,
+        ),
     )
     actions = tuple(
         TerminalActionPlan(
@@ -2397,6 +2508,7 @@ def _browser_pane_beat(
     pane_kinds: Mapping[str, PaneKind],
     browser_config: BrowserRecordingConfig | None,
     default_chrome_mode: str,
+    default_timing: str,
 ) -> PaneBeatPlan:
     pane_beat = _typed(raw, PaneBeatConfig, field=field)
     if not ACTION_ID_RE.fullmatch(pane_beat.id):
@@ -2418,6 +2530,11 @@ def _browser_pane_beat(
             "checks": raw.get("checks", []),
         },
         index=beat_index,
+        default_timing=_resolved_action_timing(
+            raw.get("timing"),
+            field=f"{field}.timing",
+            default=default_timing,
+        ),
     )
     actions = tuple(
         BrowserActionPlan(
@@ -2567,6 +2684,10 @@ def _explicit_outer_beat(
     browser_config: BrowserRecordingConfig | None,
     default_browser_chrome_mode: str,
 ) -> OuterBeatPlan:
+    outer_timing = _resolved_action_timing(
+        beat.get("timing"),
+        field=f"beats.{index}.timing",
+    )
     forbidden = [
         name
         for name in (
@@ -2648,6 +2769,7 @@ def _explicit_outer_beat(
                     narration_id=narration_id,
                     pane_id=pane_id,
                     pane_kinds=pane_kinds,
+                    default_timing=outer_timing,
                 )
             elif kind is PaneKind.browser:
                 pane_beat = _browser_pane_beat(
@@ -2659,6 +2781,7 @@ def _explicit_outer_beat(
                     pane_kinds=pane_kinds,
                     browser_config=browser_config,
                     default_chrome_mode=default_browser_chrome_mode,
+                    default_timing=outer_timing,
                 )
             else:  # pragma: no cover - guarded by PaneKind
                 raise RecordingPlanError(f"{track_field} pane kind is unsupported")

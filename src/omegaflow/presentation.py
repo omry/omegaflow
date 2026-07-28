@@ -340,6 +340,9 @@ def validate_browser_event(
             raise PresentationValidationError(f"{field} trim interval is invalid")
     elif kind == "display_url":
         _display_url(mapping["value"], field=f"{field}.value")
+    elif kind == "complete":
+        if mapping["timing"] not in {"presentation", "realtime"}:
+            raise PresentationValidationError(f"{field}.timing is invalid")
 
     result = _typed(mapping, schema, field=field)
     if result.action_id != action_id:
