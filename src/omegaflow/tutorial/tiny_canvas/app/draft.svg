@@ -48,5 +48,5 @@
   </g>
 
   <circle id="sunset-target" data-testid="sunset-target" cx="405" cy="390" r="48" fill="transparent" pointer-events="none"/>
-  <circle id="tree-target" data-testid="tree-target" cx="565" cy="385" r="48" fill="transparent" pointer-events="none"/>
+  <circle id="tree-target" data-testid="tree-target" cx="565" cy="425" r="48" fill="transparent" pointer-events="none"/>
 </svg>

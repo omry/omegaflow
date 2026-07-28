@@ -21,6 +21,8 @@ function filenameForTitle(title) {
 }
 
 function updateExportButton() {
+  delete exportButton.dataset.state;
+  exportButton.disabled = false;
   exportButton.textContent = `Save as ${filenameForTitle(titleInput.value)}`;
 }
 
@@ -95,9 +97,22 @@ async function postArtwork(path) {
 }
 
 async function exportArtwork() {
+  exportButton.dataset.state = "saving";
+  exportButton.disabled = true;
+  exportButton.textContent = "Saving…";
   setStatus("Saving a new file…");
-  const result = await postArtwork("/api/export");
-  setStatus(`Saved ${result.filename}`);
+  try {
+    const result = await postArtwork("/api/export");
+    exportButton.dataset.state = "saved";
+    exportButton.textContent = `Saved ${result.filename} ✓`;
+    setStatus(`Saved ${result.filename}`);
+  } catch (error) {
+    exportButton.dataset.state = "error";
+    exportButton.textContent = "Save failed — try again";
+    setStatus(error.message);
+  } finally {
+    exportButton.disabled = false;
+  }
 }
 
 async function loadArtwork() {
@@ -121,5 +136,5 @@ async function loadArtwork() {
 }
 
 titleInput.addEventListener("input", updateTitle);
-exportButton.addEventListener("click", () => exportArtwork().catch((error) => setStatus(error.message)));
+exportButton.addEventListener("click", exportArtwork);
 loadArtwork().catch((error) => setStatus(error.message));

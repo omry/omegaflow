@@ -11,10 +11,14 @@
 
 body {
   margin: 0;
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at top left, #28223d 0, transparent 38rem),
     #10121a;
+  display: flex;
+  flex-direction: column;
 }
 
 header {
@@ -52,6 +56,9 @@ main {
   display: grid;
   grid-template-columns: minmax(13rem, 18rem) minmax(24rem, 1fr);
   gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   max-width: 75rem;
   margin: 0 auto;
   padding: 1.5rem;
@@ -99,6 +106,32 @@ button {
   color: #0d0e15;
   cursor: pointer;
   font-weight: 900;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 100ms ease;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button[data-state="saving"] {
+  background: #f5c85b;
+  cursor: wait;
+}
+
+button[data-state="saved"] {
+  background: #71e49b;
+  box-shadow: 0 0 0 3px #71e49b33;
+}
+
+button[data-state="error"] {
+  background: #ff8d84;
+}
+
+button:disabled {
+  opacity: 1;
 }
 
 button.secondary {
@@ -107,7 +140,11 @@ button.secondary {
 }
 
 .canvas-shell {
+  container-type: size;
+  display: grid;
+  min-height: 0;
   min-width: 0;
+  place-items: center;
   padding: 1rem;
   border: 1px solid #41475c;
   border-radius: 1rem;
@@ -117,8 +154,8 @@ button.secondary {
 
 #canvas {
   overflow: hidden;
-  max-width: 44rem;
-  margin: 0 auto;
+  width: min(44rem, 100cqw, 100cqh);
+  aspect-ratio: 1;
   border-radius: 0.75rem;
   background: #242838;
   box-shadow: 0 0 0 1px #ffffff19;

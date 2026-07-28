@@ -526,6 +526,87 @@ def test_checked_in_visualization_fixture_composes_with_terminal() -> None:
         browser.close()
 
 
+def test_tiny_canvas_artwork_fits_short_browser_viewport(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    app_root = REPO_ROOT / "src/omegaflow/tutorial/tiny_canvas/app"
+    shutil.copy2(app_root / "styles.css", tmp_path / "styles.css")
+    artwork = (app_root / "draft.svg").read_text(encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head><link rel="stylesheet" href="/styles.css"></head>
+<body>
+  <header>
+    <div><p class="eyebrow">OmegaFlow tutorial app</p><h1>Tiny Canvas</h1></div>
+    <p id="status">Ready</p>
+  </header>
+  <main>
+    <aside><label>Artwork title</label><input value="Sunset Study"></aside>
+    <section class="canvas-shell"><div id="canvas">{artwork}</div></section>
+  </main>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 700})
+        page.goto(base_url)
+
+        canvas = page.locator("#canvas").bounding_box()
+        artwork_box = page.locator("#canvas svg").bounding_box()
+        assert canvas is not None and artwork_box is not None
+        assert canvas["y"] + canvas["height"] <= 700
+        assert artwork_box["y"] + artwork_box["height"] <= 700
+        assert abs(canvas["width"] - canvas["height"]) <= 1
+        assert abs(artwork_box["width"] - artwork_box["height"]) <= 1
+        browser.close()
+
+
+def test_tiny_canvas_save_button_shows_saved_feedback(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    app_root = REPO_ROOT / "src/omegaflow/tutorial/tiny_canvas/app"
+    for name in ("app.js", "index.html", "styles.css"):
+        shutil.copy2(app_root / name, tmp_path / name)
+    artwork = (app_root / "draft.svg").read_text(encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.route(
+            "**/api/artwork",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="image/svg+xml",
+                body=artwork,
+            ),
+        )
+        page.route(
+            "**/api/export",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"filename":"coconut-sunset.svg"}',
+            ),
+        )
+        page.goto(base_url)
+        sync_api.expect(page.get_by_test_id("status")).to_have_text("Ready")
+        page.get_by_test_id("artwork-title").fill("Coconut Sunset")
+
+        button = page.get_by_test_id("export-artwork")
+        button.click()
+
+        sync_api.expect(button).to_have_text("Saved coconut-sunset.svg ✓")
+        sync_api.expect(button).to_have_attribute("data-state", "saved")
+        page.wait_for_timeout(200)
+        assert button.evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        ) == "rgb(113, 228, 155)"
+        browser.close()
+
+
 def test_browser_player_fixture_has_valid_payload_signature(tmp_path: Path) -> None:
     write_browser_player_fixture(tmp_path)
 
