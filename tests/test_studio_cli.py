@@ -4993,6 +4993,177 @@ def test_project_bootstrap_rejects_recording_before_writing(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_tutorial_bootstrap_requires_an_existing_project_before_writing(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = compose_studio_config(None, ("bootstrap=tutorial",))
+
+    with pytest.raises(
+        studio.StudioError,
+        match=(
+            r"bootstrap=tutorial requires an OmegaFlow project; "
+            r"run `omegaflow bootstrap=project` first"
+        ),
+    ):
+        studio.run_tool_from_hydra_cfg(OmegaConf.create(config))
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    project = compose_studio_config(None, ("bootstrap=project",))
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(project)) == 0
+    capsys.readouterr()
+
+    tutorial = compose_studio_config(None, ("bootstrap=tutorial",))
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(tutorial)) == 0
+
+    tutorial_root = tmp_path / "recordings" / "sunset-beach"
+    files = sorted(
+        path.relative_to(tutorial_root).as_posix()
+        for path in tutorial_root.rglob("*")
+        if path.is_file()
+    )
+    assert files == [
+        ".nanorc",
+        "app/app.js",
+        "app/draft.svg",
+        "app/index.html",
+        "app/server.py",
+        "app/styles.css",
+        "index.md",
+        "scripts/inspect_artwork.py",
+        "scripts/reset_artwork.py",
+    ]
+
+    recording = (tutorial_root / "index.md").read_text(encoding="utf-8")
+    assert "id: sunset-beach" in recording
+    assert "title: Refine a Sunset Beach Poster" in recording
+    assert "id: inspect-draft" in recording
+    assert (
+        "run: python recordings/sunset-beach/scripts/reset_artwork.py" in recording
+    )
+    assert (
+        "run: python recordings/sunset-beach/scripts/inspect_artwork.py" in recording
+    )
+
+    application = (tutorial_root / "app" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Tiny Canvas" in application
+    assert 'id="artwork-title"' in application
+    assert 'id="canvas"' in application
+    assert 'id="save-artwork"' in application
+    assert 'id="export-artwork"' in application
+
+    draft = (tutorial_root / "app" / "draft.svg").read_text(encoding="utf-8")
+    assert 'id="sun"' in draft
+    assert 'id="coconut-tree"' in draft
+    assert 'id="sunset-target"' in draft
+    assert 'id="tree-target"' in draft
+    assert draft.count('class="palm-leaf"') >= 6
+    assert not (tutorial_root / "artwork.svg").exists()
+
+    output = capsys.readouterr().out
+    assert "next    omegaflow recording=sunset-beach action=build" in output
+
+
+def test_tutorial_bootstrap_preserves_user_owned_files_until_forced(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    for mode in ("project", "tutorial"):
+        config = compose_studio_config(None, (f"bootstrap={mode}",))
+        assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+    capsys.readouterr()
+
+    tutorial_root = tmp_path / "recordings" / "sunset-beach"
+    recording = tutorial_root / "index.md"
+    application = tutorial_root / "app" / "index.html"
+    recording.write_text("user recording\n", encoding="utf-8")
+    application.write_text("user application\n", encoding="utf-8")
+
+    tutorial = compose_studio_config(None, ("bootstrap=tutorial",))
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(tutorial)) == 0
+    output = capsys.readouterr().out
+
+    assert recording.read_text(encoding="utf-8") == "user recording\n"
+    assert application.read_text(encoding="utf-8") == "user application\n"
+    assert "exists recordings/sunset-beach/index.md" in output
+    assert "exists recordings/sunset-beach/app/index.html" in output
+
+    forced = compose_studio_config(
+        None,
+        ("bootstrap=tutorial", "force=true"),
+    )
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(forced)) == 0
+    output = capsys.readouterr().out
+
+    assert "id: sunset-beach" in recording.read_text(encoding="utf-8")
+    assert "Tiny Canvas" in application.read_text(encoding="utf-8")
+    assert "updated recordings/sunset-beach/index.md" in output
+    assert "updated recordings/sunset-beach/app/index.html" in output
+
+
+def test_tutorial_bootstrap_uses_the_configured_recording_path(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    project = compose_studio_config(
+        None,
+        ("bootstrap=project", "workspace=media/recordings"),
+    )
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(project)) == 0
+
+    tutorial = compose_studio_config(None, ("bootstrap=tutorial",))
+    assert studio.run_tool_from_hydra_cfg(OmegaConf.create(tutorial)) == 0
+
+    recording = (
+        tmp_path / "media" / "recordings" / "sunset-beach" / "index.md"
+    ).read_text(encoding="utf-8")
+    assert (
+        "run: python media/recordings/sunset-beach/scripts/reset_artwork.py"
+        in recording
+    )
+    assert "{{ tutorial_path }}" not in recording
+
+
+def test_tutorial_runtime_state_does_not_invalidate_the_recording_source(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    for mode in ("project", "tutorial"):
+        config = compose_studio_config(None, (f"bootstrap={mode}",))
+        assert studio.run_tool_from_hydra_cfg(OmegaConf.create(config)) == 0
+
+    recording_root = tmp_path / "recordings" / "sunset-beach"
+    roots = (tmp_path / "recordings" / "config.yaml", recording_root)
+    before = studio.watch_source_fingerprint(roots)
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(recording_root / "scripts" / "reset_artwork.py"),
+        ],
+        check=True,
+    )
+
+    assert studio.watch_source_fingerprint(roots) == before
+    assert not (recording_root / "artwork.svg").exists()
+    assert (
+        tmp_path
+        / "recordings"
+        / ".omegaflow"
+        / "tutorial"
+        / "sunset-beach"
+        / "artwork.svg"
+    ).is_file()
+
+
 def test_success_followups_show_user_facing_actions(capsys) -> None:
     cfg = OmegaConf.create(
         {

@@ -25,6 +25,7 @@ from collections.abc import Callable, Mapping
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from importlib import resources
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, unquote, urlparse
@@ -746,6 +747,18 @@ BOOTSTRAP_TOOL_GITIGNORE = "/omegaflow-secret.env\n"
 BOOTSTRAP_TOOL_SECRET_ENV = "# OPENAI_OMEGAFLOW_API_KEY=\n"
 BOOTSTRAP_RECORDINGS_GITIGNORE = "**/app.secret.env\n"
 PROJECT_BOOTSTRAP_RECORDING_ID = "test-video"
+TUTORIAL_BOOTSTRAP_RECORDING_ID = "sunset-beach"
+TUTORIAL_BOOTSTRAP_RESOURCE_FILES = (
+    ".nanorc",
+    "app/app.js",
+    "app/draft.svg",
+    "app/index.html",
+    "app/server.py",
+    "app/styles.css",
+    "index.md",
+    "scripts/inspect_artwork.py",
+    "scripts/reset_artwork.py",
+)
 
 
 @dataclass(frozen=True)
@@ -1114,6 +1127,71 @@ def colorize_unified_diff(diff: str, *, enabled: bool | None = None) -> str:
     return "".join(colored)
 
 
+def execute_bootstrap_files(
+    *,
+    writes: list[BootstrapFile],
+    workspace: Path,
+    label: str,
+    next_recording: str,
+    dry_run_mode: str | None,
+) -> int:
+    for item in writes:
+        validate_bootstrap_file_target(item.path)
+
+    if dry_run_mode is not None:
+        if dry_run_mode == "diff":
+            print(f"Bootstrap dry run diff: {label}")
+            print()
+            print(f"Recording workspace: {display_path(workspace)}")
+            print()
+            use_color = color_enabled()
+            for item in writes:
+                if item.private:
+                    status = "preserve" if item.path.exists() else "create"
+                    print(
+                        f"{status:>8} {display_path(item.path)} "
+                        "(private content hidden)"
+                    )
+                    continue
+                diff = bootstrap_file_diff(item.path, item.text)
+                if diff:
+                    diff = colorize_unified_diff(diff, enabled=use_color)
+                    print(diff, end="" if diff.endswith("\n") else "\n")
+            print()
+            print("No files were written.")
+            return 0
+
+        print(f"Bootstrap dry run: {label}")
+        print()
+        print(f"Recording workspace: {display_path(workspace)}")
+        print()
+        print("Files:")
+        for item in writes:
+            if item.private and item.path.exists():
+                status = "preserve"
+            elif item.path.exists():
+                status = "update" if item.overwrite else "exists"
+            else:
+                status = "create"
+            print(f"  {status:>8} {display_path(item.path)}")
+        print()
+        print("No files were written.")
+        return 0
+
+    print(f"workspace {display_path(workspace)}")
+    for item in writes:
+        status = write_bootstrap_file(
+            item.path,
+            item.text,
+            force=item.overwrite,
+            mode=item.mode,
+        )
+        print(f"{status:>7} {display_path(item.path)}")
+    print()
+    print(f"next    omegaflow recording={next_recording} action=build")
+    return 0
+
+
 def run_bootstrap(config: dict[str, Any]) -> int:
     workspace = bootstrap_workspace_path(config)
     root = (
@@ -1176,61 +1254,71 @@ def run_bootstrap(config: dict[str, Any]) -> int:
             overwrite=force,
         ),
     ]
-    for item in writes:
-        validate_bootstrap_file_target(item.path)
+    return execute_bootstrap_files(
+        writes=writes,
+        workspace=workspace,
+        label=recording_id,
+        next_recording=recording_id,
+        dry_run_mode=dry_run_mode,
+    )
 
-    if dry_run_mode is not None:
-        if dry_run_mode == "diff":
-            print(f"Bootstrap dry run diff: {recording_id}")
-            print()
-            print(f"Recording workspace: {display_path(workspace)}")
-            print()
-            use_color = color_enabled()
-            for item in writes:
-                if item.private:
-                    status = "preserve" if item.path.exists() else "create"
-                    print(
-                        f"{status:>8} {display_path(item.path)} "
-                        "(private content hidden)"
-                    )
-                    continue
-                diff = bootstrap_file_diff(item.path, item.text)
-                if diff:
-                    diff = colorize_unified_diff(diff, enabled=use_color)
-                    print(diff, end="" if diff.endswith("\n") else "\n")
-            print()
-            print("No files were written.")
-            return 0
 
-        print(f"Bootstrap dry run: {recording_id}")
-        print()
-        print(f"Recording workspace: {display_path(workspace)}")
-        print()
-        print("Files:")
-        for item in writes:
-            if item.private and item.path.exists():
-                status = "preserve"
-            elif item.path.exists():
-                status = "update" if item.overwrite else "exists"
-            else:
-                status = "create"
-            print(f"  {status:>8} {display_path(item.path)}")
-        print()
-        print("No files were written.")
-        return 0
-
-    print(f"workspace {display_path(workspace)}")
-    for item in writes:
-        status = write_bootstrap_file(
-            item.path,
-            item.text,
-            force=item.overwrite,
-            mode=item.mode,
+def validate_tutorial_bootstrap_project(*, root: Path, workspace: Path) -> None:
+    project_config = root / ".omegaflow" / "config.yaml"
+    recording_config = workspace / "config.yaml"
+    if (
+        project_config.is_symlink()
+        or not project_config.is_file()
+        or recording_config.is_symlink()
+        or not recording_config.is_file()
+    ):
+        raise StudioError(
+            "bootstrap=tutorial requires an OmegaFlow project; "
+            "run `omegaflow bootstrap=project` first"
         )
-        print(f"{status:>7} {display_path(item.path)}")
-    print()
-    print(f"next    omegaflow recording={recording_id} action=build")
-    return 0
+
+
+def tutorial_bootstrap_resource_text(relative_path: str) -> str:
+    resource = (
+        resources.files("omegaflow.tutorial")
+        .joinpath("tiny_canvas")
+        .joinpath(relative_path)
+    )
+    try:
+        return resource.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError) as exc:
+        raise StudioError(
+            f"packaged tutorial resource is unavailable: {relative_path}"
+        ) from exc
+
+
+def run_tutorial_bootstrap(config: dict[str, Any]) -> int:
+    workspace = bootstrap_workspace_path(config)
+    root = studio_config_module.project_root(config)
+    validate_tutorial_bootstrap_project(root=root, workspace=workspace)
+    force = bool_config(config, "force")
+    dry_run_mode = bootstrap_dry_run_mode(config.get("dry_run", False))
+    tutorial_root = workspace / TUTORIAL_BOOTSTRAP_RECORDING_ID
+    tutorial_path = bootstrap_config_path_text(tutorial_root, root=root)
+    writes = []
+    for relative_path in TUTORIAL_BOOTSTRAP_RESOURCE_FILES:
+        text = tutorial_bootstrap_resource_text(relative_path)
+        if relative_path == "index.md":
+            text = text.replace("{{ tutorial_path }}", tutorial_path)
+        writes.append(
+            BootstrapFile(
+                tutorial_root / relative_path,
+                text,
+                overwrite=force,
+            )
+        )
+    return execute_bootstrap_files(
+        writes=writes,
+        workspace=workspace,
+        label="tutorial",
+        next_recording=TUTORIAL_BOOTSTRAP_RECORDING_ID,
+        dry_run_mode=dry_run_mode,
+    )
 
 
 def as_mapping(value: object, *, field: str) -> dict[str, Any]:
@@ -3595,7 +3683,9 @@ def run_tool_from_hydra_cfg(cfg: DictConfig) -> int:
             raise StudioError("bootstrap does not accept recording")
         if bootstrap == BootstrapMode.project.value:
             return run_bootstrap(config)
-        raise StudioError("bootstrap=tutorial is not implemented yet")
+        if bootstrap == BootstrapMode.tutorial.value:
+            return run_tutorial_bootstrap(config)
+        raise StudioError(f"unknown bootstrap mode: {bootstrap}")
 
     if step is None and action == "list":
         return print_available_recording_scripts(

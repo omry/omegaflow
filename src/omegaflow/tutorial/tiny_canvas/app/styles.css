@@ -1,0 +1,141 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #10121a;
+  color: #f7f3ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, #28223d 0, transparent 38rem),
+    #10121a;
+}
+
+header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid #3b4051;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.65rem;
+}
+
+.eyebrow {
+  margin-bottom: 0.25rem;
+  color: #9b8aff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+#status {
+  color: #8de3b1;
+  font-weight: 700;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(13rem, 18rem) minmax(24rem, 1fr);
+  gap: 1.5rem;
+  max-width: 75rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+aside {
+  align-self: start;
+  padding: 1.25rem;
+  border: 1px solid #40465b;
+  border-radius: 1rem;
+  background: #191c27;
+  box-shadow: 0 1rem 3rem #0005;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-weight: 800;
+}
+
+input,
+button {
+  width: 100%;
+  border: 1px solid #505770;
+  border-radius: 0.65rem;
+  font: inherit;
+}
+
+input {
+  padding: 0.75rem;
+  background: #10131c;
+  color: #fff;
+}
+
+.hint {
+  margin: 1rem 0 1.35rem;
+  color: #c5cada;
+  line-height: 1.5;
+}
+
+button {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  background: #8874ff;
+  color: #0d0e15;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+button.secondary {
+  background: #242838;
+  color: #f7f3ff;
+}
+
+.canvas-shell {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #41475c;
+  border-radius: 1rem;
+  background: #171a24;
+  box-shadow: 0 1rem 3rem #0005;
+}
+
+#canvas {
+  overflow: hidden;
+  max-width: 44rem;
+  margin: 0 auto;
+  border-radius: 0.75rem;
+  background: #242838;
+  box-shadow: 0 0 0 1px #ffffff19;
+  touch-action: none;
+}
+
+#canvas svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+[data-draggable="true"] {
+  cursor: grab;
+}
+
+[data-draggable="true"].dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 0 9px #fff6);
+}

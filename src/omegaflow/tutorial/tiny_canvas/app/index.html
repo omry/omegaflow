@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tiny Canvas</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">OmegaFlow tutorial app</p>
+      <h1>Tiny Canvas</h1>
+    </div>
+    <p id="status" role="status">Loading artwork…</p>
+  </header>
+  <main>
+    <aside>
+      <label for="artwork-title">Artwork title</label>
+      <input id="artwork-title" value="Sunset Study" autocomplete="off">
+      <p class="hint">Drag the sun and coconut tree to refine the composition.</p>
+      <button id="save-artwork" type="button">Save artwork</button>
+      <button id="export-artwork" type="button" class="secondary">Export SVG</button>
+    </aside>
+    <section class="canvas-shell" aria-label="Artwork editor">
+      <div id="canvas" tabindex="0" aria-label="Sunset beach canvas"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

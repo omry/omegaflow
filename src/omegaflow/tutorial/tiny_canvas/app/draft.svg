@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" role="img" aria-labelledby="svg-title artwork-description">
+  <title id="svg-title">Sunset Study</title>
+  <desc id="artwork-description">A warm sunset above a beach with a coconut tree.</desc>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7956b5"/>
+      <stop offset="0.48" stop-color="#de8296"/>
+      <stop offset="1" stop-color="#ffd27e"/>
+    </linearGradient>
+    <linearGradient id="sea-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4d96b3"/>
+      <stop offset="1" stop-color="#83c7cc"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="720" fill="url(#sky-gradient)"/>
+  <rect y="430" width="720" height="290" fill="url(#sea-gradient)"/>
+  <path d="M0 630 Q210 570 410 635 T720 610 V720 H0Z" fill="#f1d58b"/>
+  <text id="poster-title" x="36" y="60" fill="#fff8e8" font-family="system-ui, sans-serif" font-size="30" font-weight="700">Sunset Study</text>
+
+  <g id="sun" data-draggable="true" transform="translate(0 0)">
+    <circle cx="225" cy="285" r="82" fill="#ffdc72"/>
+    <circle cx="225" cy="285" r="60" fill="#fff0ad"/>
+  </g>
+
+  <g id="coconut-tree" data-draggable="true" transform="translate(0 0)">
+    <path d="M500 720 C472 610 480 480 515 344" fill="none" stroke="#4a3124" stroke-width="34" stroke-linecap="round"/>
+    <path class="palm-leaf" d="M515 352 C430 286 350 292 286 333 C381 340 449 372 510 388Z" fill="#286c4a"/>
+    <path class="palm-leaf" d="M518 350 C439 240 440 168 468 108 C500 196 515 277 529 352Z" fill="#397b51"/>
+    <path class="palm-leaf" d="M520 350 C526 235 562 154 610 116 C604 218 577 292 537 363Z" fill="#2d704b"/>
+    <path class="palm-leaf" d="M523 356 C620 285 681 300 720 336 C643 351 585 381 531 396Z" fill="#4d8963"/>
+    <path class="palm-leaf" d="M516 365 C615 382 674 429 704 476 C619 447 559 420 512 389Z" fill="#397b51"/>
+    <path class="palm-leaf" d="M506 360 C428 375 367 426 329 487 C414 456 468 418 521 381Z" fill="#2f7350"/>
+    <path class="palm-leaf" d="M511 354 C456 292 397 258 338 257 C411 307 454 351 508 385Z" fill="#4b8b64"/>
+    <circle cx="515" cy="359" r="15" fill="#40291e"/>
+    <circle cx="536" cy="367" r="13" fill="#523326"/>
+  </g>
+
+  <circle id="sunset-target" cx="405" cy="250" r="48" fill="transparent" pointer-events="none"/>
+  <circle id="tree-target" cx="565" cy="385" r="48" fill="transparent" pointer-events="none"/>
+</svg>
