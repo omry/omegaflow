@@ -113,9 +113,10 @@ beat:
               exact: true
       - id: rename-artwork
         hold_after_ms: 500
-        fill:
+        type_text:
           target: {test_id: artwork-title}
           text: Coconut Sunset
+          interval_ms: 90
       - id: move-sun
         timing: realtime
         hold_before_ms: 500

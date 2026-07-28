@@ -787,7 +787,7 @@ class PersistentBrowserRunner:
                 # not the live page. Do not sample the page here: it may already
                 # be moving, and the following captured action owns that motion.
                 pass
-            elif action.kind in {"fill", "type_keys"}:
+            elif action.kind in {"fill", "type_text"}:
                 locator, target_fact = self._strict_target(
                     payload.get("target"), beat_id=beat_id, action_id=action.id
                 )
@@ -799,8 +799,11 @@ class PersistentBrowserRunner:
                 if action.kind == "fill":
                     locator.fill(value)
                 else:
-                    delay = payload.get("capture_delay_ms")
-                    locator.press_sequentially(value, delay=0 if delay is None else delay)
+                    locator.select_text()
+                    locator.press_sequentially(
+                        value,
+                        delay=payload.get("interval_ms", 50),
+                    )
                 completion["input"] = presentation
             elif action.kind == "press":
                 target = payload.get("target")
@@ -852,6 +855,8 @@ class PersistentBrowserRunner:
                 execution_ended_ms = self._beat_elapsed_ms()
                 explicit_dynamic = config.get("timing") == "realtime"
                 force_dynamic = explicit_dynamic or (
+                    action.kind == "type_text"
+                ) or (
                     action.kind == "open_page"
                     and payload.get("loading", "hide") == "show"
                 ) or (
@@ -875,7 +880,7 @@ class PersistentBrowserRunner:
                     extra_redactions=extra_redactions,
                     force_dynamic=force_dynamic,
                     explicit_dynamic=explicit_dynamic,
-                    preserve_start=explicit_dynamic,
+                    preserve_start=explicit_dynamic or action.kind == "type_text",
                     trim_confirmed_start=action.kind == "drag",
                 )
                 if audio_capture_started:
@@ -1122,7 +1127,7 @@ class PersistentBrowserRunner:
     def _current_secret_redaction(
         self, kind: str, payload: Mapping[str, Any]
     ) -> tuple[Mapping[str, Any], ...]:
-        if kind not in {"fill", "type_keys"} or payload.get("secret") is None:
+        if kind not in {"fill", "type_text"} or payload.get("secret") is None:
             return ()
         return (_mapping(payload.get("target"), field="browser secret target"),)
 

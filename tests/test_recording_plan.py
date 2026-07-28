@@ -1067,10 +1067,10 @@ def test_internal_narration_supplies_heading_and_viewer_hold() -> None:
         },
         {
             "id": "type",
-            "type_keys": {
+            "type_text": {
                 "target": {"placeholder": "Search"},
                 "text": "query",
-                "capture_delay_ms": 0,
+                "interval_ms": 40,
             },
         },
         {

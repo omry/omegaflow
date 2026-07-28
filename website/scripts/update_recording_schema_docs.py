@@ -63,7 +63,7 @@ SCHEMA_GROUPS = {
         "BrowserDragEndpointConfig",
         "BrowserSecretConfig",
         "BrowserFillConfig",
-        "BrowserTypeKeysConfig",
+        "BrowserTypeTextConfig",
         "BrowserPressConfig",
         "BrowserScrollOffsetConfig",
         "BrowserScrollConfig",

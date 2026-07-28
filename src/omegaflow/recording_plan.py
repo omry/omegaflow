@@ -79,7 +79,7 @@ ACTION_KINDS = (
     "drag",
     "set_pointer",
     "fill",
-    "type_keys",
+    "type_text",
     "press",
     "scroll",
     "wait_for",
@@ -789,7 +789,7 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
                 for axis in ("x", "y")
             ):
                 raise RecordingPlanError(f"{field}.click.position values must be numbers")
-    elif kind in {"fill", "type_keys"}:
+    elif kind in {"fill", "type_text"}:
         validate_target(payload.get("target"), field=f"{field}.{kind}.target")
         content_kind = _one_present(payload, ("text", "secret"), field=f"{field}.{kind}")
         if content_kind == "text":
@@ -797,10 +797,10 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
                 raise RecordingPlanError(f"{field}.{kind}.text must be a string")
         else:
             _validate_secret(payload["secret"], field=f"{field}.{kind}.secret")
-        if kind == "type_keys" and payload.get("capture_delay_ms") is not None:
+        if kind == "type_text" and payload.get("interval_ms") is not None:
             _positive_int(
-                payload["capture_delay_ms"],
-                field=f"{field}.type_keys.capture_delay_ms",
+                payload["interval_ms"],
+                field=f"{field}.type_text.interval_ms",
                 allow_zero=True,
             )
     elif kind == "press":

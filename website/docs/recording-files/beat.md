@@ -576,13 +576,14 @@ Each action has an `id` and exactly one operation:
 | `drag` | Hold the primary pointer button while moving between two semantic targets. |
 | `set_pointer` | Show or hide the recorded pointer without moving it. |
 | `fill` | Set a field efficiently; this is the default for text entry. |
-| `type_keys` | Fall back to physical key events when a site rejects fill or paste. |
+| `type_text` | Replace a field by visibly typing text, including the page's response to each character. |
 | `press` | Send a key or shortcut, optionally to a target. |
 | `scroll` | Scroll the page, a target, or a container. |
 | `wait_for` | Synchronize with a visible, hidden, URL, or network-response condition. |
 
-`fill` and `type_keys` produce the same terminal typing visualization. Their
-difference affects capture semantics, not playback pacing.
+Use `fill` when only the resulting value matters. Use `type_text` when the
+edit itself belongs in the video. `type_text.interval_ms` controls the delay
+between characters and defaults to 50 milliseconds.
 
 Use `move_pointer.viewport` for a stable location relative to the browser
 viewport. Both coordinates are normalized from `0` to `1`:
@@ -954,8 +955,8 @@ class BrowserFillConfig:
 
 
 @dataclass
-class BrowserTypeKeysConfig(BrowserFillConfig):
-    capture_delay_ms: int | None = None
+class BrowserTypeTextConfig(BrowserFillConfig):
+    interval_ms: int = 50
 
 
 @dataclass
@@ -992,7 +993,7 @@ class BrowserActionConfig:
     drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
-    type_keys: BrowserTypeKeysConfig | None = None
+    type_text: BrowserTypeTextConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
@@ -1038,7 +1039,7 @@ class RecordingActionConfig(RecordingStepConfig):
     drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
-    type_keys: BrowserTypeKeysConfig | None = None
+    type_text: BrowserTypeTextConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None

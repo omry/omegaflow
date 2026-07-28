@@ -709,8 +709,8 @@ class BrowserFillConfig:
 
 
 @dataclass
-class BrowserTypeKeysConfig(BrowserFillConfig):
-    capture_delay_ms: int | None = None
+class BrowserTypeTextConfig(BrowserFillConfig):
+    interval_ms: int = 50
 
 
 @dataclass
@@ -747,7 +747,7 @@ class BrowserActionConfig:
     drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
-    type_keys: BrowserTypeKeysConfig | None = None
+    type_text: BrowserTypeTextConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
@@ -793,7 +793,7 @@ class RecordingActionConfig(RecordingStepConfig):
     drag: dict[str, BrowserDragEndpointConfig] | None = None
     set_pointer: BrowserSetPointerConfig | None = None
     fill: BrowserFillConfig | None = None
-    type_keys: BrowserTypeKeysConfig | None = None
+    type_text: BrowserTypeTextConfig | None = None
     press: BrowserPressConfig | None = None
     scroll: BrowserScrollConfig | None = None
     wait_for: BrowserWaitForConfig | None = None
@@ -1065,7 +1065,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     BrowserSetPointerConfig,
     BrowserSecretConfig,
     BrowserFillConfig,
-    BrowserTypeKeysConfig,
+    BrowserTypeTextConfig,
     BrowserPressConfig,
     BrowserScrollOffsetConfig,
     BrowserScrollConfig,

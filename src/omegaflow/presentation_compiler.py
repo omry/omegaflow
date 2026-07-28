@@ -2526,7 +2526,7 @@ def _compile_browser_action(
         captured_visual_interval = (drag_start_ms, drag_end_ms)
         cursor = drag_end_ms
         resolved_pointer.update(destination_point)
-    elif action.kind in {"fill", "type_keys"}:
+    elif action.kind in {"fill", "type_text"}:
         bounds = _target_bounds(target, action.id)
         events.append(
             {
@@ -2539,7 +2539,11 @@ def _compile_browser_action(
         )
         cursor += FOCUS_DURATION_MS
         overlay = target.get("text_overlay") if target is not None else None
-        if isinstance(overlay, Mapping) and overlay.get("eligible") is True:
+        if (
+            action.kind == "fill"
+            and isinstance(overlay, Mapping)
+            and overlay.get("eligible") is True
+        ):
             presentation = _safe_input_presentation(capture)
             if presentation is not None:
                 mode, initial, final = presentation

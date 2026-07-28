@@ -49,7 +49,7 @@ FIXTURE_HTML = b"""<!doctype html>
     <label>Project name <input id="project"></label>
     <label>Password <input id="password" type="password"></label>
   </div>
-  <input placeholder="Search">
+  <input placeholder="Search" value="Original query">
   <p data-testid="status">Idle</p>
   <div class="item">One</div><div class="item">Two</div>
   <div data-testid="drag-source" style="position:absolute;left:700px;top:20px;width:80px;height:40px">Sun</div>
@@ -646,10 +646,10 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
                             },
                             {
                                 "id": "search",
-                                "type_keys": {
+                                "type_text": {
                                     "target": {"placeholder": "Search"},
                                     "text": "query",
-                                    "capture_delay_ms": 0,
+                                    "interval_ms": 40,
                                 },
                             },
                             {
@@ -767,12 +767,14 @@ def test_executes_browser_actions_checks_and_response_scopes(tmp_path: Path) -> 
             assert runner.page.get_by_test_id("scrollbox").evaluate(
                 "element => element.scrollTop"
             ) > 0
+            assert runner.page.get_by_placeholder("Search").input_value() == "query"
             assert all(check["passed"] for check in metadata["checks"])
             assert runner.secrets.values == {"private-password"}
             assert "private-password" not in json.dumps(dict(metadata))
             assert metadata["runner_initial_state"]["media_type"] == "image/png"
             assert actions_by_id["name"]["target"]["text_overlay"]["eligible"]
             assert actions_by_id["password"]["target"]["text_overlay"]["eligible"]
+            assert actions_by_id["search"]["visual"]["kind"] == "clip"
             assert actions_by_id["scroll"]["target"]["scroll"]["eligible"]
             assert actions_by_id["scroll-bottom"]["visual"]["kind"] == "clip"
             runner.page.evaluate(
