@@ -1,0 +1,253 @@
+{
+  "anchors": [
+    {
+      "beat_id": "install",
+      "id": "install",
+      "source_ms": 1040,
+      "text_offset": 8
+    }
+  ],
+  "duration_ms": 8808,
+  "members": [
+    {
+      "beat_id": "install",
+      "source_end_ms": 8808,
+      "source_start_ms": 0,
+      "text_end": 136,
+      "text_start": 0
+    }
+  ],
+  "take_id": "__beat__:install",
+  "version": 1,
+  "waits": [
+    {
+      "beat_id": "install",
+      "gap_ms": 200,
+      "source_ms": 4440,
+      "target": "install_command",
+      "text_offset": 63
+    }
+  ],
+  "words": [
+    {
+      "end_ms": 600,
+      "raw_word_end": 1,
+      "raw_word_start": 0,
+      "start_ms": 0,
+      "text": "Start",
+      "text_end": 5,
+      "text_start": 0,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 1040,
+      "raw_word_end": 2,
+      "raw_word_start": 1,
+      "start_ms": 600,
+      "text": "by",
+      "text_end": 8,
+      "text_start": 6,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 1360,
+      "raw_word_end": 3,
+      "raw_word_start": 2,
+      "start_ms": 1040,
+      "text": "adding",
+      "text_end": 15,
+      "text_start": 9,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 2100,
+      "raw_word_end": 4,
+      "raw_word_start": 3,
+      "start_ms": 1360,
+      "text": "OmegaFlow",
+      "text_end": 25,
+      "text_start": 16,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 2460,
+      "raw_word_end": 5,
+      "raw_word_start": 4,
+      "start_ms": 2100,
+      "text": "to",
+      "text_end": 28,
+      "text_start": 26,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 2660,
+      "raw_word_end": 6,
+      "raw_word_start": 5,
+      "start_ms": 2460,
+      "text": "your",
+      "text_end": 33,
+      "text_start": 29,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 3560,
+      "raw_word_end": 7,
+      "raw_word_start": 6,
+      "start_ms": 2660,
+      "text": "project's",
+      "text_end": 43,
+      "text_start": 34,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 3561,
+      "raw_word_end": 8,
+      "raw_word_start": 7,
+      "start_ms": 3560,
+      "text": "Python",
+      "text_end": 50,
+      "text_start": 44,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 4120,
+      "raw_word_end": 9,
+      "raw_word_start": 8,
+      "start_ms": 3561,
+      "text": "environment.",
+      "text_end": 63,
+      "text_start": 51,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 4820,
+      "raw_word_end": 10,
+      "raw_word_start": 9,
+      "start_ms": 4760,
+      "text": "When",
+      "text_end": 68,
+      "text_start": 64,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 5300,
+      "raw_word_end": 11,
+      "raw_word_start": 10,
+      "start_ms": 4820,
+      "text": "installation",
+      "text_end": 81,
+      "text_start": 69,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 5840,
+      "raw_word_end": 12,
+      "raw_word_start": 11,
+      "start_ms": 5300,
+      "text": "finishes,",
+      "text_end": 91,
+      "text_start": 82,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 6340,
+      "raw_word_end": 13,
+      "raw_word_start": 12,
+      "start_ms": 6300,
+      "text": "you",
+      "text_end": 95,
+      "text_start": 92,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 6580,
+      "raw_word_end": 14,
+      "raw_word_start": 13,
+      "start_ms": 6340,
+      "text": "can",
+      "text_end": 99,
+      "text_start": 96,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 6760,
+      "raw_word_end": 15,
+      "raw_word_start": 14,
+      "start_ms": 6580,
+      "text": "run",
+      "text_end": 103,
+      "text_start": 100,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 7380,
+      "raw_word_end": 16,
+      "raw_word_start": 15,
+      "start_ms": 6760,
+      "text": "omegaflow",
+      "text_end": 113,
+      "text_start": 104,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 7660,
+      "raw_word_end": 17,
+      "raw_word_start": 16,
+      "start_ms": 7380,
+      "text": "from",
+      "text_end": 118,
+      "text_start": 114,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 7840,
+      "raw_word_end": 18,
+      "raw_word_start": 17,
+      "start_ms": 7660,
+      "text": "the",
+      "text_end": 122,
+      "text_start": 119,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 8100,
+      "raw_word_end": 19,
+      "raw_word_start": 18,
+      "start_ms": 7840,
+      "text": "command",
+      "text_end": 130,
+      "text_start": 123,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    },
+    {
+      "end_ms": 8380,
+      "raw_word_end": 20,
+      "raw_word_start": 19,
+      "start_ms": 8100,
+      "text": "line.",
+      "text_end": 136,
+      "text_start": 131,
+      "timing_confidence": "high",
+      "timing_source": "transcription"
+    }
+  ]
+}

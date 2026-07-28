@@ -1,5 +1,5 @@
 {
-  "duration_ms": 88824,
+  "duration_ms": 91296,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,13 +12,13 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 26400,
-      "playback_src": "audio/__beat__-introduction.mp3",
+      "playback_end_ms": 27912,
+      "playback_src": "audio/__beat__~3aintroduction.mp3",
       "playback_start_ms": 0,
-      "source_end_ms": 26400,
+      "source_end_ms": 27912,
       "source_start_ms": 0,
-      "src": "audio/__beat__-introduction.mp3",
-      "timestamps": "timestamps/__beat__-introduction.json"
+      "src": "audio/__beat__~3aintroduction.mp3",
+      "timestamps": "timestamps/__beat__~3aintroduction.json"
     },
     {
       "id": "__beat__:install",
@@ -30,13 +30,13 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 34320,
-      "playback_src": "audio/__beat__-install.mp3",
-      "playback_start_ms": 26400,
-      "source_end_ms": 34320,
-      "source_start_ms": 26400,
-      "src": "audio/__beat__-install.mp3",
-      "timestamps": "timestamps/__beat__-install.json"
+      "playback_end_ms": 36720,
+      "playback_src": "audio/__beat__~3ainstall.mp3",
+      "playback_start_ms": 27912,
+      "source_end_ms": 36720,
+      "source_start_ms": 27912,
+      "src": "audio/__beat__~3ainstall.mp3",
+      "timestamps": "timestamps/__beat__~3ainstall.json"
     },
     {
       "id": "__beat__:bootstrap",
@@ -48,13 +48,13 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 53403,
-      "playback_src": "audio/__beat__-bootstrap-playback.mp3",
-      "playback_start_ms": 34320,
-      "source_end_ms": 52320,
-      "source_start_ms": 34320,
-      "src": "audio/__beat__-bootstrap.mp3",
-      "timestamps": "timestamps/__beat__-bootstrap.json"
+      "playback_end_ms": 56037,
+      "playback_src": "audio/__beat__~3abootstrap-playback.mp3",
+      "playback_start_ms": 36720,
+      "source_end_ms": 55080,
+      "source_start_ms": 36720,
+      "src": "audio/__beat__~3abootstrap.mp3",
+      "timestamps": "timestamps/__beat__~3abootstrap.json"
     },
     {
       "id": "build-and-browser",
@@ -72,11 +72,11 @@
           "text_start": 186
         }
       ],
-      "playback_end_ms": 90954,
+      "playback_end_ms": 93618,
       "playback_src": "audio/build-and-browser-playback.mp3",
-      "playback_start_ms": 53403,
-      "source_end_ms": 88824,
-      "source_start_ms": 52320,
+      "playback_start_ms": 56037,
+      "source_end_ms": 91296,
+      "source_start_ms": 55080,
       "src": "audio/build-and-browser.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }

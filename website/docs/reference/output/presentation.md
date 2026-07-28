@@ -1,0 +1,62 @@
+---
+sidebar_position: 4
+sidebar_label: Video
+slug: /reference/output/presentation/
+---
+
+# Video Output
+
+Video output is the generated, website-ready media built from an OmegaFlow
+script.
+
+Every recording uses a semantic presentation manifest. Each beat has its own
+zero-based payload and the manifest assigns its offset in the whole recording.
+Terminal beats use text-based asciinema payloads. Browser beats contain a
+deterministic event timeline plus lossless WebP page states and, only when a
+stable state cannot reproduce motion, muted H.264 MP4 fragments. This is not a
+live DOM replay and not one opaque full-video recording.
+
+## Asset contract
+
+Every build publishes an atomic bundle under `<asset_dir>/presentation/`:
+
+```text
+presentation/
+  recording.presentation.json
+  recording.recording.json
+  signatures.json          # hashes and byte sizes for every other file
+  beats/*.cast
+  beats/*.browser.json
+  media/browser-state-*.webp
+  media/browser-clip-*.mp4 # only when captured motion is required
+  audio/<take-id>.*        # one stable file per narration take
+  audio.json
+  timestamps/*.json
+```
+
+Presentation filenames stay stable across rebuilds. `signatures.json` is the
+canonical integrity index and supplies cache keys for the player, so changed
+media is refreshed without putting content hashes in filenames.
+
+The Docusaurus embed points at the manifest for terminal, browser, and mixed
+recordings alike:
+
+```mdx
+<VideoPlayer
+  title="Quickstart Demo"
+  manifest="/omegaflow-videos/quickstart-demo/presentation/recording.presentation.json"
+/>
+```
+
+The publisher validates every reference, hash, path, media stream, and allowed
+file class before atomically replacing the previous bundle. Private capture
+logs, diagnostics, authentication state, and raw Playwright video are never
+publish candidates.
+
+## Player behavior
+
+The embedded player supports normal playback controls, seeking, playback-rate
+changes, beat markers, guide text, and optional voiceover. It switches terminal
+and browser renderers on one global clock. Browser payloads scale into the
+available player area without reflowing the recorded viewport and can add
+browser chrome, a mocked display URL, and a Windows/KDE-style window frame.

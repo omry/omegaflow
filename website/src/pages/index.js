@@ -16,7 +16,7 @@ export default function Home() {
                 <span>Scripted. Synchronized. Rebuildable.</span>
               </div>
               <div className="homeHero__headline">
-                <h1>Rebuildable product demos.</h1>
+                <h1>Scripted workflows. Rebuildable videos.</h1>
                 <img
                   className="homeHero__mascot"
                   src="/img/omegaflow-mascot-camera.svg"
@@ -25,14 +25,14 @@ export default function Home() {
               </div>
               <p className="homeHero__lede">
                 Script terminal and browser workflows once, then rebuild synchronized videos
-                whenever your product or documentation changes. To learn more, start the
-                tutorial or read the docs.
+                whenever the workflow or explanation changes. Use them for demonstrations,
+                tutorials, simulations, and technical stories.
               </p>
               <div className="homeHero__actions">
-                <Link className="button button--primary button--lg" to="/tutorial/quickstart">
-                  Start the tutorial
+                <Link className="button button--primary button--lg" to="/getting-started/first-video/">
+                  Build your first video
                 </Link>
-                <Link className="button button--lg homeHero__docsButton" to="/intro">
+                <Link className="button button--lg homeHero__docsButton" to="/getting-started/">
                   Read the docs
                 </Link>
               </div>
@@ -59,7 +59,7 @@ export default function Home() {
             </article>
             <article>
               <h2>Publish</h2>
-              <p>Embed the generated asset in the docs.</p>
+              <p>Embed a validated player on a website or publish standalone HTML.</p>
             </article>
           </div>
         </section>

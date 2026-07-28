@@ -3842,7 +3842,7 @@ beat:
 def test_terminal_highlight_demo_combines_exact_and_multiline_regex_targets() -> None:
     recordings_dir = Path(__file__).resolve().parents[1] / "recordings"
     spec = recording_from_script(
-        "terminal-highlight-ranges-demo",
+        "reference/terminal-highlights",
         recording_dir=recordings_dir,
     )
 
@@ -3851,7 +3851,7 @@ def test_terminal_highlight_demo_combines_exact_and_multiline_regex_targets() ->
         "Highlight will start @exact_start@ now, and will end now.@exact_end@"
     )
     source = (
-        recordings_dir / "terminal-highlight-ranges-demo" / "index.md"
+        recordings_dir / "reference" / "terminal-highlights" / "index.md"
     ).read_text(encoding="utf-8")
     assert source.count(demonstrated_narration) == 2
 

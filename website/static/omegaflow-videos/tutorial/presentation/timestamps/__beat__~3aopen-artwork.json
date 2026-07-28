@@ -3,21 +3,21 @@
     {
       "beat_id": "open-artwork",
       "id": "guided_mode",
-      "source_ms": 4380,
+      "source_ms": 4880,
       "text_offset": 74
     },
     {
       "beat_id": "open-artwork",
       "id": "launch",
-      "source_ms": 14320,
+      "source_ms": 14600,
       "text_offset": 246
     }
   ],
-  "duration_ms": 21960,
+  "duration_ms": 22752,
   "members": [
     {
       "beat_id": "open-artwork",
-      "source_end_ms": 21960,
+      "source_end_ms": 22752,
       "source_start_ms": 0,
       "text_end": 365,
       "text_start": 0
@@ -28,7 +28,7 @@
   "waits": [],
   "words": [
     {
-      "end_ms": 360,
+      "end_ms": 420,
       "raw_word_end": 1,
       "raw_word_start": 0,
       "start_ms": 0,
@@ -39,10 +39,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 840,
+      "end_ms": 900,
       "raw_word_end": 2,
       "raw_word_start": 1,
-      "start_ms": 360,
+      "start_ms": 420,
       "text": "walkthrough",
       "text_end": 16,
       "text_start": 5,
@@ -50,10 +50,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 1240,
+      "end_ms": 1420,
       "raw_word_end": 3,
       "raw_word_start": 2,
-      "start_ms": 840,
+      "start_ms": 900,
       "text": "follows",
       "text_end": 24,
       "text_start": 17,
@@ -61,10 +61,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 1480,
+      "end_ms": 1700,
       "raw_word_end": 4,
       "raw_word_start": 3,
-      "start_ms": 1240,
+      "start_ms": 1420,
       "text": "the",
       "text_end": 28,
       "text_start": 25,
@@ -72,10 +72,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 1800,
+      "end_ms": 2040,
       "raw_word_end": 5,
       "raw_word_start": 4,
-      "start_ms": 1480,
+      "start_ms": 1700,
       "text": "same",
       "text_end": 33,
       "text_start": 29,
@@ -83,10 +83,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 2080,
+      "end_ms": 2320,
       "raw_word_end": 6,
       "raw_word_start": 5,
-      "start_ms": 1800,
+      "start_ms": 2040,
       "text": "path",
       "text_end": 38,
       "text_start": 34,
@@ -94,10 +94,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 2300,
+      "end_ms": 2540,
       "raw_word_end": 7,
       "raw_word_start": 6,
-      "start_ms": 2080,
+      "start_ms": 2320,
       "text": "as",
       "text_end": 41,
       "text_start": 39,
@@ -105,10 +105,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 2480,
+      "end_ms": 2720,
       "raw_word_end": 8,
       "raw_word_start": 7,
-      "start_ms": 2300,
+      "start_ms": 2540,
       "text": "the",
       "text_end": 45,
       "text_start": 42,
@@ -116,10 +116,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 2660,
+      "end_ms": 2920,
       "raw_word_end": 9,
       "raw_word_start": 8,
-      "start_ms": 2480,
+      "start_ms": 2720,
       "text": "written",
       "text_end": 53,
       "text_start": 46,
@@ -127,10 +127,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 3040,
+      "end_ms": 3260,
       "raw_word_end": 10,
       "raw_word_start": 9,
-      "start_ms": 2660,
+      "start_ms": 2920,
       "text": "tutorial.",
       "text_end": 63,
       "text_start": 54,
@@ -138,10 +138,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 3760,
+      "end_ms": 4120,
       "raw_word_end": 11,
       "raw_word_start": 10,
-      "start_ms": 3660,
+      "start_ms": 3960,
       "text": "It",
       "text_end": 66,
       "text_start": 64,
@@ -149,10 +149,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 3940,
+      "end_ms": 4340,
       "raw_word_end": 12,
       "raw_word_start": 11,
-      "start_ms": 3760,
+      "start_ms": 4120,
       "text": "runs",
       "text_end": 71,
       "text_start": 67,
@@ -160,10 +160,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 4380,
+      "end_ms": 4880,
       "raw_word_end": 13,
       "raw_word_start": 12,
-      "start_ms": 3940,
+      "start_ms": 4340,
       "text": "in",
       "text_end": 74,
       "text_start": 72,
@@ -171,10 +171,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 4381,
+      "end_ms": 4881,
       "raw_word_end": 14,
       "raw_word_start": 13,
-      "start_ms": 4380,
+      "start_ms": 4880,
       "text": "guided",
       "text_end": 81,
       "text_start": 75,
@@ -182,10 +182,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 4660,
+      "end_ms": 5200,
       "raw_word_end": 15,
       "raw_word_start": 14,
-      "start_ms": 4381,
+      "start_ms": 4881,
       "text": "mode,",
       "text_end": 87,
       "text_start": 82,
@@ -193,10 +193,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 5400,
+      "end_ms": 5860,
       "raw_word_end": 16,
       "raw_word_start": 15,
-      "start_ms": 4840,
+      "start_ms": 5260,
       "text": "which",
       "text_end": 93,
       "text_start": 88,
@@ -204,10 +204,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 5480,
+      "end_ms": 5920,
       "raw_word_end": 17,
       "raw_word_start": 16,
-      "start_ms": 5400,
+      "start_ms": 5860,
       "text": "pauses",
       "text_end": 100,
       "text_start": 94,
@@ -215,10 +215,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 5860,
+      "end_ms": 6220,
       "raw_word_end": 18,
       "raw_word_start": 17,
-      "start_ms": 5480,
+      "start_ms": 5920,
       "text": "after",
       "text_end": 106,
       "text_start": 101,
@@ -226,10 +226,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 6300,
+      "end_ms": 6620,
       "raw_word_end": 19,
       "raw_word_start": 18,
-      "start_ms": 5860,
+      "start_ms": 6220,
       "text": "each",
       "text_end": 111,
       "text_start": 107,
@@ -237,10 +237,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 6460,
+      "end_ms": 6740,
       "raw_word_end": 20,
       "raw_word_start": 19,
-      "start_ms": 6300,
+      "start_ms": 6620,
       "text": "beat.",
       "text_end": 117,
       "text_start": 112,
@@ -248,10 +248,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 7380,
+      "end_ms": 7680,
       "raw_word_end": 21,
       "raw_word_start": 20,
-      "start_ms": 7340,
+      "start_ms": 7640,
       "text": "Turn",
       "text_end": 122,
       "text_start": 118,
@@ -259,10 +259,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 7720,
+      "end_ms": 8020,
       "raw_word_end": 22,
       "raw_word_start": 21,
-      "start_ms": 7380,
+      "start_ms": 7680,
       "text": "Guided",
       "text_end": 129,
       "text_start": 123,
@@ -270,10 +270,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 7980,
+      "end_ms": 8260,
       "raw_word_end": 23,
       "raw_word_start": 22,
-      "start_ms": 7720,
+      "start_ms": 8020,
       "text": "mode",
       "text_end": 134,
       "text_start": 130,
@@ -281,10 +281,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 8280,
+      "end_ms": 8560,
       "raw_word_end": 24,
       "raw_word_start": 23,
-      "start_ms": 7980,
+      "start_ms": 8260,
       "text": "off",
       "text_end": 138,
       "text_start": 135,
@@ -292,10 +292,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 8420,
+      "end_ms": 8720,
       "raw_word_end": 25,
       "raw_word_start": 24,
-      "start_ms": 8280,
+      "start_ms": 8560,
       "text": "in",
       "text_end": 141,
       "text_start": 139,
@@ -303,10 +303,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 8580,
+      "end_ms": 8860,
       "raw_word_end": 26,
       "raw_word_start": 25,
-      "start_ms": 8420,
+      "start_ms": 8720,
       "text": "the",
       "text_end": 145,
       "text_start": 142,
@@ -314,10 +314,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 8820,
+      "end_ms": 9060,
       "raw_word_end": 27,
       "raw_word_start": 26,
-      "start_ms": 8580,
+      "start_ms": 8860,
       "text": "player",
       "text_end": 152,
       "text_start": 146,
@@ -325,10 +325,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 9200,
+      "end_ms": 9440,
       "raw_word_end": 28,
       "raw_word_start": 27,
-      "start_ms": 8820,
+      "start_ms": 9060,
       "text": "controls",
       "text_end": 161,
       "text_start": 153,
@@ -336,10 +336,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 9660,
+      "end_ms": 9900,
       "raw_word_end": 29,
       "raw_word_start": 28,
-      "start_ms": 9200,
+      "start_ms": 9440,
       "text": "to",
       "text_end": 164,
       "text_start": 162,
@@ -347,10 +347,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 9920,
+      "end_ms": 10180,
       "raw_word_end": 30,
       "raw_word_start": 29,
-      "start_ms": 9660,
+      "start_ms": 9900,
       "text": "watch",
       "text_end": 170,
       "text_start": 165,
@@ -358,10 +358,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 10540,
+      "end_ms": 10820,
       "raw_word_end": 31,
       "raw_word_start": 30,
-      "start_ms": 9920,
+      "start_ms": 10180,
       "text": "continuously.",
       "text_end": 184,
       "text_start": 171,
@@ -369,10 +369,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 11480,
+      "end_ms": 11760,
       "raw_word_end": 32,
       "raw_word_start": 31,
-      "start_ms": 11320,
+      "start_ms": 11580,
       "text": "The",
       "text_end": 188,
       "text_start": 185,
@@ -380,10 +380,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 11900,
+      "end_ms": 12200,
       "raw_word_end": 33,
       "raw_word_start": 32,
-      "start_ms": 11480,
+      "start_ms": 11760,
       "text": "tutorial",
       "text_end": 197,
       "text_start": 189,
@@ -391,10 +391,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 12420,
+      "end_ms": 12680,
       "raw_word_end": 34,
       "raw_word_start": 33,
-      "start_ms": 11900,
+      "start_ms": 12200,
       "text": "workspace",
       "text_end": 207,
       "text_start": 198,
@@ -402,10 +402,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 12860,
+      "end_ms": 13100,
       "raw_word_end": 35,
       "raw_word_start": 34,
-      "start_ms": 12420,
+      "start_ms": 12680,
       "text": "begins",
       "text_end": 214,
       "text_start": 208,
@@ -413,10 +413,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 13060,
+      "end_ms": 13320,
       "raw_word_end": 36,
       "raw_word_start": 35,
-      "start_ms": 12860,
+      "start_ms": 13100,
       "text": "with",
       "text_end": 219,
       "text_start": 215,
@@ -424,10 +424,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 13360,
+      "end_ms": 13580,
       "raw_word_end": 37,
       "raw_word_start": 36,
-      "start_ms": 13060,
+      "start_ms": 13320,
       "text": "a",
       "text_end": 221,
       "text_start": 220,
@@ -435,10 +435,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 13640,
+      "end_ms": 13920,
       "raw_word_end": 38,
       "raw_word_start": 37,
-      "start_ms": 13360,
+      "start_ms": 13580,
       "text": "generated",
       "text_end": 231,
       "text_start": 222,
@@ -446,10 +446,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 14040,
+      "end_ms": 14320,
       "raw_word_end": 39,
       "raw_word_start": 38,
-      "start_ms": 13640,
+      "start_ms": 13920,
       "text": "terminal",
       "text_end": 240,
       "text_start": 232,
@@ -457,10 +457,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 14320,
+      "end_ms": 14600,
       "raw_word_end": 40,
       "raw_word_start": 39,
-      "start_ms": 14040,
+      "start_ms": 14320,
       "text": "beat.",
       "text_end": 246,
       "text_start": 241,
@@ -468,10 +468,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 15220,
+      "end_ms": 15620,
       "raw_word_end": 41,
       "raw_word_start": 40,
-      "start_ms": 15200,
+      "start_ms": 15600,
       "text": "Run",
       "text_end": 250,
       "text_start": 247,
@@ -479,10 +479,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 15660,
+      "end_ms": 16060,
       "raw_word_end": 42,
       "raw_word_start": 41,
-      "start_ms": 15220,
+      "start_ms": 15620,
       "text": "Tiny",
       "text_end": 255,
       "text_start": 251,
@@ -490,10 +490,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 15820,
+      "end_ms": 16280,
       "raw_word_end": 43,
       "raw_word_start": 42,
-      "start_ms": 15660,
+      "start_ms": 16060,
       "text": "Canvas",
       "text_end": 262,
       "text_start": 256,
@@ -501,10 +501,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 16220,
+      "end_ms": 16860,
       "raw_word_end": 44,
       "raw_word_start": 43,
-      "start_ms": 15820,
+      "start_ms": 16280,
       "text": "with",
       "text_end": 267,
       "text_start": 263,
@@ -512,10 +512,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 16400,
+      "end_ms": 17040,
       "raw_word_end": 45,
       "raw_word_start": 44,
-      "start_ms": 16220,
+      "start_ms": 16860,
       "text": "the",
       "text_end": 271,
       "text_start": 268,
@@ -523,10 +523,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 16840,
+      "end_ms": 17480,
       "raw_word_end": 46,
       "raw_word_start": 45,
-      "start_ms": 16400,
+      "start_ms": 17040,
       "text": "original",
       "text_end": 280,
       "text_start": 272,
@@ -534,10 +534,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 17220,
+      "end_ms": 17860,
       "raw_word_end": 47,
       "raw_word_start": 46,
-      "start_ms": 16840,
+      "start_ms": 17480,
       "text": "Sunset",
       "text_end": 287,
       "text_start": 281,
@@ -545,10 +545,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 17580,
+      "end_ms": 18220,
       "raw_word_end": 48,
       "raw_word_start": 47,
-      "start_ms": 17220,
+      "start_ms": 17860,
       "text": "Study",
       "text_end": 293,
       "text_start": 288,
@@ -556,10 +556,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 18020,
+      "end_ms": 18660,
       "raw_word_end": 49,
       "raw_word_start": 48,
-      "start_ms": 17580,
+      "start_ms": 18220,
       "text": "artwork.",
       "text_end": 302,
       "text_start": 294,
@@ -567,10 +567,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 18820,
+      "end_ms": 19540,
       "raw_word_end": 50,
       "raw_word_start": 49,
-      "start_ms": 18560,
+      "start_ms": 19100,
       "text": "The",
       "text_end": 306,
       "text_start": 303,
@@ -578,10 +578,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 19160,
+      "end_ms": 19800,
       "raw_word_end": 51,
       "raw_word_start": 50,
-      "start_ms": 18820,
+      "start_ms": 19540,
       "text": "command",
       "text_end": 314,
       "text_start": 307,
@@ -589,10 +589,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 19500,
+      "end_ms": 20120,
       "raw_word_end": 52,
       "raw_word_start": 51,
-      "start_ms": 19160,
+      "start_ms": 19800,
       "text": "hands",
       "text_end": 320,
       "text_start": 315,
@@ -600,10 +600,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 19960,
+      "end_ms": 20560,
       "raw_word_end": 53,
       "raw_word_start": 52,
-      "start_ms": 19500,
+      "start_ms": 20120,
       "text": "the",
       "text_end": 324,
       "text_start": 321,
@@ -611,10 +611,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 19961,
+      "end_ms": 20561,
       "raw_word_end": 54,
       "raw_word_start": 53,
-      "start_ms": 19960,
+      "start_ms": 20560,
       "text": "editor",
       "text_end": 331,
       "text_start": 325,
@@ -622,10 +622,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 20240,
+      "end_ms": 21000,
       "raw_word_end": 55,
       "raw_word_start": 54,
-      "start_ms": 19961,
+      "start_ms": 20561,
       "text": "to",
       "text_end": 334,
       "text_start": 332,
@@ -633,10 +633,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 20460,
+      "end_ms": 21260,
       "raw_word_end": 56,
       "raw_word_start": 55,
-      "start_ms": 20240,
+      "start_ms": 21000,
       "text": "the",
       "text_end": 338,
       "text_start": 335,
@@ -644,10 +644,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 20680,
+      "end_ms": 21400,
       "raw_word_end": 57,
       "raw_word_start": 56,
-      "start_ms": 20460,
+      "start_ms": 21260,
       "text": "browser",
       "text_end": 346,
       "text_start": 339,
@@ -655,10 +655,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 21000,
+      "end_ms": 21680,
       "raw_word_end": 58,
       "raw_word_start": 57,
-      "start_ms": 20680,
+      "start_ms": 21400,
       "text": "beat",
       "text_end": 351,
       "text_start": 347,
@@ -666,10 +666,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 21300,
+      "end_ms": 21860,
       "raw_word_end": 59,
       "raw_word_start": 58,
-      "start_ms": 21000,
+      "start_ms": 21680,
       "text": "you",
       "text_end": 355,
       "text_start": 352,
@@ -677,10 +677,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 21480,
+      "end_ms": 22020,
       "raw_word_end": 60,
       "raw_word_start": 59,
-      "start_ms": 21300,
+      "start_ms": 21860,
       "text": "will",
       "text_end": 360,
       "text_start": 356,
@@ -688,10 +688,10 @@
       "timing_source": "transcription"
     },
     {
-      "end_ms": 21720,
+      "end_ms": 22240,
       "raw_word_end": 61,
       "raw_word_start": 60,
-      "start_ms": 21480,
+      "start_ms": 22020,
       "text": "add.",
       "text_end": 365,
       "text_start": 361,

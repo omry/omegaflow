@@ -1,0 +1,25 @@
+{
+  "duration_ms": 37512,
+  "recording": "reference/terminal-highlights",
+  "takes": [
+    {
+      "id": "__beat__:highlight-targets",
+      "members": [
+        {
+          "beat_id": "highlight-targets",
+          "text": "The first example shows the relevant part of one beat: its narration and highlight effect. The first anchor marks where the highlight begins. The second anchor marks where it ends. The highlight remains active for the text between those two anchors. Now the beat plays that narration, and the effect follows its anchors. Highlight will start now, and will end now. Next, one regular expression highlights the label and changing timer as a single multi-line match. The regex highlight is now off. Finally, one effect combines the exact target and the multi-line expression, highlighting all three lines together.",
+          "text_end": 611,
+          "text_start": 0
+        }
+      ],
+      "playback_end_ms": 37512,
+      "playback_src": "audio/__beat__~3ahighlight-targets.mp3",
+      "playback_start_ms": 0,
+      "source_end_ms": 37512,
+      "source_start_ms": 0,
+      "src": "audio/__beat__~3ahighlight-targets.mp3",
+      "timestamps": "timestamps/__beat__~3ahighlight-targets.json"
+    }
+  ],
+  "version": 1
+}

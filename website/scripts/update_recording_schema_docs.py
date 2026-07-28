@@ -99,21 +99,21 @@ SCHEMA_GROUPS = {
 DOC_TARGETS = [
     {
         "group": "config",
-        "path": ("website", "docs", "recording-files", "config.md"),
+        "path": ("website", "docs", "reference", "configuration", "recordings.md"),
         "start": "<!-- recording-config-schema:start -->",
         "end": "<!-- recording-config-schema:end -->",
         "summary": "<summary>Config schema</summary>\n\n",
     },
     {
         "group": "beat",
-        "path": ("website", "docs", "recording-files", "beat.md"),
+        "path": ("website", "docs", "reference", "recording-files", "schema.md"),
         "start": "<!-- recording-beat-schema:start -->",
         "end": "<!-- recording-beat-schema:end -->",
         "summary": "<summary>Beat schema</summary>\n\n",
     },
     {
         "group": "publishing",
-        "path": ("website", "docs", "recording-files", "publishing-runtime.md"),
+        "path": ("website", "docs", "reference", "output", "index.md"),
         "start": "<!-- recording-publishing-schema:start -->",
         "end": "<!-- recording-publishing-schema:end -->",
         "summary": "<summary>Publishing schema</summary>\n\n",

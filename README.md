@@ -67,8 +67,8 @@ Watch the generated terminal video and optional narration locally:
 omegaflow recording=test-video action=watch
 ```
 
-Continue with the [quickstart guide](https://omegaflow.dev/docs/tutorial/quickstart)
-or browse the [full documentation](https://omegaflow.dev/docs/intro).
+Continue with [Build your first video](https://omegaflow.dev/getting-started/first-video/)
+or browse the [full documentation](https://omegaflow.dev/getting-started/).
 
 ## Development
 

@@ -2,7 +2,7 @@
 
 const config = {
   title: 'OmegaFlow',
-  tagline: 'Scripted terminal walkthroughs you can rebuild',
+  tagline: 'Scripted workflows you can rebuild as video',
   favicon: 'img/favicon.svg',
   url: 'https://omegaflow.dev',
   baseUrl: '/',
@@ -49,24 +49,29 @@ const config = {
       },
       items: [
         {
-          to: '/intro',
-          label: 'Docs',
+          to: '/getting-started/',
+          label: 'Get Started',
           position: 'left',
         },
         {
-          to: '/tutorial',
+          to: '/tutorial/',
           label: 'Tutorial',
           position: 'left',
         },
         {
-          to: '/omegaflow',
-          label: 'OmegaFlow CLI',
+          to: '/guides/',
+          label: 'Guides',
+          position: 'left',
+        },
+        {
+          to: '/reference/',
+          label: 'Reference',
           position: 'left',
         },
         {
           href: 'https://github.com/omry/omegaflow',
-          label: 'OmegaFlow@GitHub',
-          position: 'left',
+          label: 'GitHub',
+          position: 'right',
         },
       ],
     },

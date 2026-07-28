@@ -1,5 +1,5 @@
 {
-  "duration_ms": 47424,
+  "duration_ms": 48072,
   "recording": "tutorial",
   "takes": [
     {
@@ -12,10 +12,10 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 21960,
+      "playback_end_ms": 22752,
       "playback_src": "audio/__beat__~3aopen-artwork.mp3",
       "playback_start_ms": 0,
-      "source_end_ms": 21960,
+      "source_end_ms": 22752,
       "source_start_ms": 0,
       "src": "audio/__beat__~3aopen-artwork.mp3",
       "timestamps": "timestamps/__beat__~3aopen-artwork.json"
@@ -30,11 +30,11 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 47424,
+      "playback_end_ms": 48072,
       "playback_src": "audio/__beat__~3aedit-artwork.mp3",
-      "playback_start_ms": 21960,
-      "source_end_ms": 47424,
-      "source_start_ms": 21960,
+      "playback_start_ms": 22752,
+      "source_end_ms": 48072,
+      "source_start_ms": 22752,
       "src": "audio/__beat__~3aedit-artwork.mp3",
       "timestamps": "timestamps/__beat__~3aedit-artwork.json"
     }

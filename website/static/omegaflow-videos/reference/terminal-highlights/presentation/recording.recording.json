@@ -1,0 +1,17 @@
+{
+  "capture_fingerprint": "b44a91334f1fa612e75c8682e1089bd979369670c7ba3eb296e20100d0b116b1",
+  "dependencies": [
+    {
+      "path": "recordings/reference/terminal-highlights/index.md",
+      "sha256": "8cc5511274007e97207074221be9a109d2c9eb529720088bc8ad86af6f5af084"
+    }
+  ],
+  "presentation_fingerprint": "eb7c2cd5ff2ff8f6b73be1ce4a94c672f3ef64dd6b2fe2279049eb9f9231018a",
+  "recording": "reference/terminal-highlights",
+  "version": 1,
+  "versions": {
+    "compiler": "presentation-v1",
+    "renderer": "payload-v1"
+  },
+  "warnings": []
+}

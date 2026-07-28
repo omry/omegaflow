@@ -1,0 +1,141 @@
+{
+  "assets": {},
+  "audio": {
+    "intervals": [
+      {
+        "presentation_end_ms": 37512,
+        "presentation_start_ms": 0,
+        "source_end_ms": 37512,
+        "source_start_ms": 0
+      }
+    ],
+    "metadata": "audio.json"
+  },
+  "beats": [
+    {
+      "duration_ms": 45047,
+      "guide": null,
+      "heading": "Highlight Exact Text And Patterns",
+      "id": "highlight-targets",
+      "layout": {
+        "areas": [
+          [
+            "definition"
+          ],
+          [
+            "terminal"
+          ]
+        ]
+      },
+      "offset_ms": 0,
+      "pane_tracks": [
+        {
+          "beats": [
+            {
+              "browser": null,
+              "duration_ms": 21880,
+              "id": "exact-overview",
+              "offset_ms": 0,
+              "payload": "beats/highlight-targets--definition--exact-overview.visualization.json",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            },
+            {
+              "browser": null,
+              "duration_ms": 8600,
+              "id": "regex-target",
+              "offset_ms": 21880,
+              "payload": "beats/highlight-targets--definition--regex-target.visualization.json",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            },
+            {
+              "browser": null,
+              "duration_ms": 14567,
+              "id": "combined-targets",
+              "offset_ms": 30480,
+              "payload": "beats/highlight-targets--definition--combined-targets.visualization.json",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "definition"
+        },
+        {
+          "beats": [
+            {
+              "browser": null,
+              "duration_ms": 45047,
+              "id": "target-results",
+              "offset_ms": 0,
+              "payload": "beats/highlight-targets--terminal--target-results.cast",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "terminal"
+        }
+      ],
+      "player": null,
+      "transition_in": null
+    }
+  ],
+  "manifest_version": 1,
+  "panes": [
+    {
+      "id": "definition",
+      "renderer": "visualization",
+      "title": {
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+        "text": "Beat definition",
+        "visible": true
+      }
+    },
+    {
+      "id": "terminal",
+      "renderer": "terminal",
+      "title": {
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+        "text": "Live output",
+        "visible": true
+      }
+    }
+  ],
+  "presentation": {
+    "browser": null,
+    "guided": false,
+    "pane_chrome": {
+      "style": "framed"
+    }
+  },
+  "recording": {
+    "duration_ms": 45047,
+    "id": "reference/terminal-highlights",
+    "title": "Highlight Terminal Output"
+  },
+  "renderers": {
+    "terminal": {
+      "payload_version": 1
+    },
+    "visualization": {
+      "payload_version": 1
+    }
+  },
+  "signatures": "signatures.json"
+}

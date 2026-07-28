@@ -1,60 +1,97 @@
 module.exports = {
   docs: [
-    'intro',
-    'quick-start',
     {
       type: 'category',
-      label: 'Tutorial',
+      label: 'Getting Started',
+      collapsed: false,
       link: {
         type: 'doc',
-        id: 'tutorial/overview',
+        id: 'getting-started/index',
       },
       items: [
-        'tutorial/quickstart',
-        'tutorial/recording-file',
-        'tutorial/beat',
-        'tutorial/publishing',
+        'getting-started/install',
+        'getting-started/first-video',
+        'getting-started/next-steps',
       ],
     },
+    'tutorial/index',
+    'concepts/index',
     {
       type: 'category',
-      label: 'Recording Files',
+      label: 'Guides',
+      collapsed: true,
       link: {
         type: 'doc',
-        id: 'recording-files/overview',
+        id: 'guides/index',
       },
       items: [
-        'recording-files/config',
-        'recording-files/beat',
-        'recording-files/publishing-runtime',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'OmegaFlow CLI',
-      link: {
-        type: 'doc',
-        id: 'omegaflow',
-      },
-      items: [
-        'cli/command-syntax',
         {
           type: 'category',
-          label: 'Actions',
+          label: 'Authoring',
           items: [
-            'cli/actions/build-check',
-            'cli/actions/bootstrap',
-            'cli/actions/watch',
-            'cli/actions/list-clean',
-            'cli/actions/runs-inspect-output',
+            'guides/terminal-workflows',
+            'guides/browser-workflows',
+            'guides/narration-synchronization',
+            'guides/guided-playback',
+            'guides/presentation-effects',
           ],
         },
-        'configuration',
-        'cli/overrides-parameters',
-        'cli/runs-troubleshooting',
-        'cli/option-reference',
+        'guides/publishing',
+        'guides/troubleshooting',
       ],
     },
-    'video-output',
+    {
+      type: 'category',
+      label: 'Reference',
+      collapsed: true,
+      link: {
+        type: 'doc',
+        id: 'reference/index',
+      },
+      items: [
+        {
+          type: 'category',
+          label: 'CLI',
+          collapsed: true,
+          items: [
+            'reference/cli/syntax',
+            'reference/cli/build-check',
+            'reference/cli/bootstrap',
+            'reference/cli/watch',
+            'reference/cli/list-maintenance',
+            'reference/cli/runs',
+            'reference/cli/options',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Configuration',
+          collapsed: true,
+          items: [
+            'reference/configuration/project',
+            'reference/configuration/recordings',
+            'reference/configuration/overrides',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Recording Files',
+          collapsed: true,
+          items: [
+            'reference/recording-files/index',
+            'reference/recording-files/schema',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Output',
+          collapsed: true,
+          items: [
+            'reference/output/index',
+            'reference/output/presentation',
+          ],
+        },
+      ],
+    },
   ],
 };

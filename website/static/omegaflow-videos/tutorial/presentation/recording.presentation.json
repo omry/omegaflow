@@ -1,16 +1,16 @@
 {
   "assets": {
-    "clip-315d806f7acb0c6cda1909266cbc9d0d11970221e6b91c2d9fe297d85ae612cb": {
+    "clip-905fd1a1781b2776f7866d2e0a1a6913e377076aa9867811c33483c26ecf9e80": {
+      "media_type": "video/mp4",
+      "path": "media/browser-clip-001.mp4"
+    },
+    "clip-a44ef3bb90b7e48f2355400f6a3e70c004f9eeae2df699d3f39d1e13fe0cf3d0": {
       "media_type": "video/mp4",
       "path": "media/browser-clip-003.mp4"
     },
-    "clip-443482fb17c234d89c56bffea3dc0a6398ecd1dc677100cc76360323be7316e9": {
+    "clip-be1eab2e693784f20a483971ae47f7b1b6af70b432460af094fd0f28547d634d": {
       "media_type": "video/mp4",
       "path": "media/browser-clip-002.mp4"
-    },
-    "clip-cdb3acd2527e3a00f4f10b6bae4ea82f3b5f626da0309c282d07c958d801e875": {
-      "media_type": "video/mp4",
-      "path": "media/browser-clip-001.mp4"
     },
     "state-24bcee70548648b504ca54097a8c52c6cf89bd27c512e346726c0703e9f5a173": {
       "media_type": "image/webp",
@@ -40,23 +40,23 @@
   "audio": {
     "intervals": [
       {
-        "presentation_end_ms": 21960,
+        "presentation_end_ms": 22752,
         "presentation_start_ms": 0,
-        "source_end_ms": 21960,
+        "source_end_ms": 22752,
         "source_start_ms": 0
       },
       {
-        "presentation_end_ms": 47424,
-        "presentation_start_ms": 21960,
-        "source_end_ms": 47424,
-        "source_start_ms": 21960
+        "presentation_end_ms": 48072,
+        "presentation_start_ms": 22752,
+        "source_end_ms": 48072,
+        "source_start_ms": 22752
       }
     ],
     "metadata": "audio.json"
   },
   "beats": [
     {
-      "duration_ms": 21960,
+      "duration_ms": 22752,
       "guide": {
         "commands": [],
         "success_hint": "Continue when you are ready to watch the browser edit.",
@@ -77,7 +77,7 @@
           "beats": [
             {
               "browser": null,
-              "duration_ms": 21960,
+              "duration_ms": 22752,
               "id": "open-artwork",
               "offset_ms": 0,
               "payload": "beats/open-artwork.cast",
@@ -94,14 +94,14 @@
       "player": {
         "highlight": {
           "control": "guided",
-          "end_ms": 21960,
-          "start_ms": 4380
+          "end_ms": 22752,
+          "start_ms": 4880
         }
       },
       "transition_in": null
     },
     {
-      "duration_ms": 25464,
+      "duration_ms": 25320,
       "guide": {
         "commands": [],
         "success_hint": "Use the build and watch commands from the written tutorial.",
@@ -116,13 +116,13 @@
           ]
         ]
       },
-      "offset_ms": 21960,
+      "offset_ms": 22752,
       "pane_tracks": [
         {
           "beats": [
             {
               "browser": null,
-              "duration_ms": 25464,
+              "duration_ms": 25320,
               "id": "edit-artwork",
               "offset_ms": 0,
               "payload": "beats/edit-artwork.browser.json",
@@ -185,7 +185,7 @@
     }
   },
   "recording": {
-    "duration_ms": 47424,
+    "duration_ms": 48072,
     "id": "tutorial",
     "title": "Build a Tiny Canvas Video"
   },

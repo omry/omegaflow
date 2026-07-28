@@ -2,35 +2,35 @@
   "files": {
     "audio.json": {
       "bytes": 1890,
-      "sha256": "898cf60d56bc7682f5d60c30b3839d16176be6cdec336c0ab73ecd1da029c0be"
+      "sha256": "d4cefc010a5eb069f40742ca85d0e68daf2a92d96809ad18c43eac535944f5bf"
     },
     "audio/__beat__~3aedit-artwork.mp3": {
-      "bytes": 407424,
-      "sha256": "32136b8bc0ca3a05b3e2f9332074944c6d9af1a84bb574a11557fbe628c6f521"
+      "bytes": 405120,
+      "sha256": "6696b977703809c8a30eec6a7c417b8e09ce5476819f479ed7890a3060329f21"
     },
     "audio/__beat__~3aopen-artwork.mp3": {
-      "bytes": 351360,
-      "sha256": "afce1507a90a03e6477ecbe1a069de27bb37b8d623fd1342b6256f12b2093922"
+      "bytes": 364032,
+      "sha256": "cfd0c79d29d2ed7cabaddd958d2ffebef7ff9f64c06cff05357fead20357303a"
     },
     "beats/edit-artwork.browser.json": {
       "bytes": 4167,
-      "sha256": "6b42eacbbb3b09387e875054b0cd5f2fa8f2f3ce2b8bf9be227f24f9de406763"
+      "sha256": "d1d3516e4fb56bd54291378f02afeefe210906f1bb78402ff45ebcbeb5d8a119"
     },
     "beats/open-artwork.cast": {
       "bytes": 917,
-      "sha256": "55813d3edb0b86e3a20bfc23311a523a4bc0691757030e6210ef3057ec92e7e1"
+      "sha256": "dbf51508cae3a622ae76fbce50b3765ebd4fee3621ef69543a253b2965997072"
     },
     "media/browser-clip-001.mp4": {
-      "bytes": 81724,
-      "sha256": "cdb3acd2527e3a00f4f10b6bae4ea82f3b5f626da0309c282d07c958d801e875"
+      "bytes": 80403,
+      "sha256": "905fd1a1781b2776f7866d2e0a1a6913e377076aa9867811c33483c26ecf9e80"
     },
     "media/browser-clip-002.mp4": {
-      "bytes": 109261,
-      "sha256": "443482fb17c234d89c56bffea3dc0a6398ecd1dc677100cc76360323be7316e9"
+      "bytes": 85459,
+      "sha256": "be1eab2e693784f20a483971ae47f7b1b6af70b432460af094fd0f28547d634d"
     },
     "media/browser-clip-003.mp4": {
-      "bytes": 124116,
-      "sha256": "315d806f7acb0c6cda1909266cbc9d0d11970221e6b91c2d9fe297d85ae612cb"
+      "bytes": 153311,
+      "sha256": "a44ef3bb90b7e48f2355400f6a3e70c004f9eeae2df699d3f39d1e13fe0cf3d0"
     },
     "media/browser-state-001.webp": {
       "bytes": 88,
@@ -58,19 +58,19 @@
     },
     "recording.presentation.json": {
       "bytes": 5237,
-      "sha256": "72f50e2ae84d8cb1583830bcefd89dbae51928ca4c5a1dd435975633e5542088"
+      "sha256": "644a5be8d2a24a6972b907fb0fe6f5f161b1be22624b5d6d6f980a38b4ac81e0"
     },
     "recording.recording.json": {
       "bytes": 506,
-      "sha256": "3a5d6b2f558ef5e46bd307f296edd85dfad0fca4828c5c98d920e09a030b6eb3"
+      "sha256": "540bf7201690db49696ad21b69fa328779e736bc923650da2d1b6710c40b0f44"
     },
     "timestamps/__beat__~3aedit-artwork.json": {
-      "bytes": 18606,
-      "sha256": "34b185e6e83742c9442fff7b23da4a7276ff870ef7da3815e3cae390ba7ff80b"
+      "bytes": 18605,
+      "sha256": "25e5b53fbd1925ecbe793e46fe0fbe26e581f6b583205b28f8ba127d51ca16bc"
     },
     "timestamps/__beat__~3aopen-artwork.json": {
-      "bytes": 16278,
-      "sha256": "c61c6dc089c14289f378e07990dc57e09cd6eaf7dda3c93359f2042004bac233"
+      "bytes": 16280,
+      "sha256": "2c46a7584bd885b9bb427c420d617f94f22ede31143021c02b8638c45216f0d2"
     }
   },
   "version": 1

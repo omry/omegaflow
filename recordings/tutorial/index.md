@@ -18,7 +18,7 @@ publish:
   surfaces:
     docusaurus:
       type: docusaurus_mdx
-      file: website/docs/tutorial/overview.md
+      file: website/docs/tutorial/index.md
       placeholder: tutorial
       component: VideoPlayer
 browser:

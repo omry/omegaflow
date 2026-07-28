@@ -21,7 +21,7 @@ publish:
   surfaces:
     docusaurus:
       type: docusaurus_mdx
-      file: website/docs/quick-start.md
+      file: website/docs/getting-started/first-video.md
       placeholder: quickstart-demo
       component: VideoPlayer
 timing:

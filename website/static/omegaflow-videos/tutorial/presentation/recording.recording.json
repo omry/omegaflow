@@ -1,12 +1,12 @@
 {
-  "capture_fingerprint": "76a2fb1ff34eeaa174066a11bccc29c362e8a72d8e468fe2f38eb435ee7b5069",
+  "capture_fingerprint": "6ec2b0a4ac7052a28edb126acca5047781e4cc6bb5d9600174ffe6f9c40fc378",
   "dependencies": [
     {
       "path": "recordings/tutorial/index.md",
-      "sha256": "ab03a02e410de0b8c942c23514ec6ea6a9b4790300f020622445cbc83db01bb8"
+      "sha256": "669350f34f7609935b4a914a0df3af549ffd6ed138bb2ee53b21bf28e0a0a11d"
     }
   ],
-  "presentation_fingerprint": "9fe531ed1f4fc4010ec8a80af7c440d2b839ffee71b7376ce83a4ff887ac51b0",
+  "presentation_fingerprint": "b74184ffd84bd5f8033e7c4eedf18e051520609234bf5438bd3ebd7d6417a196",
   "recording": "tutorial",
   "version": 1,
   "versions": {
