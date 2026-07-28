@@ -257,6 +257,7 @@ class PresentationWindowV1:
     mode: str = "none"
     theme: str = "kde-breeze"
     title: str | None = None
+    opening_transition: str = "cut"
 
 
 @dataclass

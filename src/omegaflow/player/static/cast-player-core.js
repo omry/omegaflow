@@ -1613,6 +1613,8 @@
     let clipPreloads = new Map();
     let clipsWithDecodedFrames = new Set();
     let entryTransitionStartMs = 0;
+    let entryTransitionDurationMs = 300;
+    let entryTransition = 'cut';
     let windowDecoration = {};
     let resizeObserver = null;
     let lastScene = null;
@@ -1974,14 +1976,16 @@
     }
 
     function applyEntryTransition(scene) {
-      const transition = context.beat.transition_in;
+      const transition = entryTransition;
       const animatedEntry = transition === 'fade' || transition === 'window-open';
       if (animatedEntry && scene.localMs < entryTransitionStartMs) {
         elements.layout.style.opacity = '0';
         elements.layout.style.transform = 'none';
         return;
       }
-      const progress = clampUnit((scene.localMs - entryTransitionStartMs) / 300);
+      const progress = clampUnit(
+        (scene.localMs - entryTransitionStartMs) / entryTransitionDurationMs,
+      );
       if (reducedMotion() || transition === null || transition === 'cut') {
         elements.layout.style.opacity = '1';
         elements.layout.style.transform = 'none';
@@ -2028,6 +2032,10 @@
           (event) => ['state', 'clip', 'scroll'].includes(event.kind),
         );
         entryTransitionStartMs = firstVisualEvent ? firstVisualEvent.at_ms : 0;
+        entryTransitionDurationMs = Math.max(
+          1,
+          Math.min(300, nextContext.payload.duration_ms - entryTransitionStartMs),
+        );
         const viewportConfig = nextContext.payload.viewport;
         const scale = viewportConfig.device_scale_factor || 1;
         decodedAssetBytes = Math.round(
@@ -2038,6 +2046,11 @@
         );
         const windowConfig = browserPresentation.window || {mode: 'none'};
         const chromeConfig = browserPresentation.chrome || {mode: 'hidden'};
+        entryTransition = (
+          nextContext.beat.transition_in
+          ?? windowConfig.opening_transition
+          ?? 'cut'
+        );
         windowDecoration = {
           borderWidth: windowConfig.mode === 'framed' ? 1 : 0,
           titlebarHeight: windowConfig.mode === 'framed' ? 30 : 0,
@@ -2237,6 +2250,8 @@
         clipPreloads.clear();
         clipsWithDecodedFrames.clear();
         entryTransitionStartMs = 0;
+        entryTransitionDurationMs = 300;
+        entryTransition = 'cut';
         windowDecoration = {};
         resizeObserver = null;
         lastScene = null;

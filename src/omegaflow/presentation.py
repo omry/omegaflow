@@ -946,6 +946,14 @@ def _validate_browser_presentation_header(
     title = window.get("title")
     if title is not None and not isinstance(title, str):
         raise PresentationValidationError(f"{field}.window.title must be a string")
+    if window.get("opening_transition", "cut") not in {
+        "cut",
+        "fade",
+        "window-open",
+    }:
+        raise PresentationValidationError(
+            f"{field}.window.opening_transition is invalid"
+        )
     chrome = _mapping(browser_mapping["chrome"], field=f"{field}.chrome")
     _reject_unknown(chrome, PresentationChromeV1, field=f"{field}.chrome")
     if chrome.get("mode") not in {"hidden", "minimal", "full"}:

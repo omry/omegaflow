@@ -199,7 +199,12 @@ def multi_pane_manifest() -> dict:
             "guided": False,
             "pane_chrome": {"style": "framed"},
             "browser": {
-                "window": {"mode": "none", "theme": "kde-breeze", "title": None},
+                "window": {
+                    "mode": "none",
+                    "theme": "kde-breeze",
+                    "title": None,
+                    "opening_transition": "cut",
+                },
                 "chrome": {"mode": "hidden"},
             },
         },
@@ -252,6 +257,7 @@ def multi_pane_manifest() -> dict:
                                         "mode": "none",
                                         "theme": "kde-breeze",
                                         "title": None,
+                                        "opening_transition": "cut",
                                     },
                                     "chrome": {"mode": "hidden"},
                                 },

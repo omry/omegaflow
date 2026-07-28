@@ -364,7 +364,7 @@ def test_cross_stream_action_events_retime_both_captured_panes() -> None:
     assert timing.beats[0].duration_ms == 800
 
 
-def test_explicit_browser_handoff_orders_target_after_producer_start() -> None:
+def test_explicit_browser_handoff_opens_target_after_terminal_publishes_url() -> None:
     plan = normalize_recording_plan(
         {
             "id": "handoff-timing",
@@ -438,10 +438,99 @@ def test_explicit_browser_handoff_orders_target_after_producer_start() -> None:
         for action in timing.pane_actions
     }
     assert action_intervals == {
-        ("terminal", "watch"): (500, 1200),
-        ("preview", "open"): (500, 700),
-        ("preview", "inspect"): (800, 1200),
+        ("terminal", "watch"): (500, 1300),
+        ("preview", "open"): (600, 800),
+        ("preview", "inspect"): (900, 1300),
     }
+
+
+def test_explicit_browser_handoff_can_transition_between_outer_beats() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "handoff-transition",
+            "browser": {},
+            "panes": [
+                {"id": "terminal", "kind": "terminal"},
+                {"id": "preview", "kind": "browser"},
+            ],
+            "beats": [
+                {
+                    "id": "launch",
+                    "layout": {"areas": [["terminal"]]},
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "session",
+                                "actions": [
+                                    {
+                                        "id": "open-editor",
+                                        "run": "open-editor",
+                                        "browser_handoff": {
+                                            "target": "preview",
+                                        },
+                                        "timing": "realtime",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                },
+                {
+                    "id": "edit",
+                    "layout": {"areas": [["preview"]]},
+                    "panes": {
+                        "preview": [
+                            {
+                                "id": "editor",
+                                "actions": [
+                                    {
+                                        "id": "open",
+                                        "open_page": {
+                                            "handoff": "open-editor",
+                                        },
+                                    },
+                                    {
+                                        "id": "inspect",
+                                        "wait_for": {
+                                            "visible": {"role": "main"},
+                                        },
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={},
+        pane_action_intervals_ms={
+            ("launch", "terminal", "session", "open-editor"): (0, 600),
+            ("edit", "preview", "editor", "open"): (0, 200),
+            ("edit", "preview", "editor", "inspect"): (300, 700),
+        },
+        pane_beat_visual_durations_ms={
+            ("launch", "terminal", "session"): 600,
+            ("edit", "preview", "editor"): 700,
+        },
+    )
+
+    actions = {
+        (action.outer_beat_id, action.pane_id, action.action_id): (
+            action.local_start_ms,
+            action.local_end_ms,
+        )
+        for action in timing.pane_actions
+    }
+    assert actions == {
+        ("launch", "terminal", "open-editor"): (0, 600),
+        ("edit", "preview", "open"): (0, 200),
+        ("edit", "preview", "inspect"): (300, 700),
+    }
+    assert [beat.offset_ms for beat in timing.beats] == [0, 600]
 
 
 def cross_beat_terminal_plan(*, viewer_hold: float | None = None) -> object:

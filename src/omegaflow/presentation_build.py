@@ -1474,6 +1474,7 @@ def _browser_presentation_header(
             mode=window["mode"],
             theme=window["theme"],
             title=window.get("title"),
+            opening_transition=window.get("opening_transition", "cut"),
         ),
         chrome=PresentationChromeV1(mode=chrome["mode"]),
     )

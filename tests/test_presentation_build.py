@@ -600,6 +600,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
             "mode": "framed",
             "theme": "kde-breeze",
             "title": "Default",
+            "opening_transition": "cut",
         },
         "chrome": {"mode": "full"},
     }
@@ -608,6 +609,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
             "mode": "none",
             "theme": "kde-breeze",
             "title": "Default",
+            "opening_transition": "cut",
         },
         "chrome": {"mode": "hidden"},
     }
@@ -860,7 +862,11 @@ def test_terminal_and_browser_panes_compile_browser_presentation_overrides(
         "browser": {},
         "presentation": {
             "browser": {
-                "window": {"mode": "framed", "title": "Default"},
+                "window": {
+                    "mode": "framed",
+                    "title": "Default",
+                    "opening_transition": "window-open",
+                },
                 "chrome": {"mode": "full"},
             }
         },
@@ -914,6 +920,7 @@ def test_terminal_and_browser_panes_compile_browser_presentation_overrides(
             "mode": "none",
             "theme": "kde-breeze",
             "title": "Default",
+            "opening_transition": "window-open",
         },
         "chrome": {"mode": "hidden"},
     }

@@ -955,6 +955,16 @@ def _add_explicit_pane_constraints(
     pending_joins: list[tuple[JoinPlan, str, str]] = []
     visual_end_nodes: dict[str, str] = {}
     pane_end_nodes: dict[tuple[str, str, str], str] = {}
+    handoffs_by_producer = {
+        (
+            handoff.producer_outer_beat_id,
+            handoff.producer_pane_id,
+            handoff.producer_pane_beat_id,
+            handoff.id,
+        ): handoff
+        for handoff in plan.browser_handoffs
+    }
+    handoff_ready_nodes: dict[str, str] = {}
 
     for outer in plan.beats:
         outer_start = beat_start_nodes[outer.id]
@@ -1074,15 +1084,46 @@ def _add_explicit_pane_constraints(
                             f"{track.pane_id}/{pane_beat.id}/{action_id}"
                         ),
                     )
-                    graph.constrain(
-                        action_start,
-                        action_end,
-                        gap_ms=observed_end - observed_start,
-                        reason=(
-                            f"captured action duration for "
-                            f"{track.pane_id}/{pane_beat.id}/{action_id}"
-                        ),
-                    )
+                    handoff = handoffs_by_producer.get(key)
+                    if (
+                        handoff is not None
+                        and handoff.producer_outer_beat_id
+                        == handoff.consumer_outer_beat_id
+                    ):
+                        handoff_ready = (
+                            f"pane:{outer.id}:{track.pane_id}:{pane_beat.id}:"
+                            f"action:{action_id}:handoff-ready"
+                        )
+                        graph.constrain(
+                            action_start,
+                            handoff_ready,
+                            gap_ms=observed_end - observed_start,
+                            reason=(
+                                f"captured browser handoff publication for "
+                                f"{track.pane_id}/{pane_beat.id}/{action_id}"
+                            ),
+                        )
+                        graph.constrain(
+                            handoff_ready,
+                            action_end,
+                            reason=(
+                                f"browser handoff {action_id} remains active "
+                                "after publication"
+                            ),
+                        )
+                        handoff_ready_nodes[handoff.id] = handoff_ready
+                    else:
+                        graph.constrain(
+                            action_start,
+                            action_end,
+                            gap_ms=observed_end - observed_start,
+                            reason=(
+                                f"captured action duration for "
+                                f"{track.pane_id}/{pane_beat.id}/{action_id}"
+                            ),
+                        )
+                        if handoff is not None:
+                            handoff_ready_nodes[handoff.id] = action_end
                     event_prefix = f"{track.pane_id}.{pane_beat.id}.{action_id}"
                     event_nodes[f"{event_prefix}.started"] = action_start
                     event_nodes[f"{event_prefix}.ended"] = action_end
@@ -1160,8 +1201,8 @@ def _add_explicit_pane_constraints(
             f"{handoff.consumer_pane_beat_id}."
             f"{handoff.consumer_action_id}"
         )
-        producer_start = event_nodes.get(f"{producer_prefix}.started")
         producer_end = event_nodes.get(f"{producer_prefix}.ended")
+        producer_ready = handoff_ready_nodes.get(handoff.id)
         consumer_start = event_nodes.get(f"{consumer_prefix}.started")
         consumer_end = pane_end_nodes.get(
             (
@@ -1171,8 +1212,8 @@ def _add_explicit_pane_constraints(
             )
         )
         if (
-            producer_start is None
-            or producer_end is None
+            producer_end is None
+            or producer_ready is None
             or consumer_start is None
             or consumer_end is None
         ):
@@ -1181,21 +1222,22 @@ def _add_explicit_pane_constraints(
                 f"browser handoff {handoff.id!r} has incomplete timing events",
             )
         graph.constrain(
-            producer_start,
+            producer_ready,
             consumer_start,
             reason=(
-                f"browser handoff {handoff.id} is published by "
+                f"browser handoff {handoff.id} is opened after publication by "
                 f"{handoff.producer_pane_id}"
             ),
         )
-        graph.constrain(
-            consumer_end,
-            producer_end,
-            reason=(
-                f"browser handoff {handoff.id} remains open through "
-                f"{handoff.target_pane_id}/{handoff.consumer_action_id}"
-            ),
-        )
+        if handoff.producer_outer_beat_id == handoff.consumer_outer_beat_id:
+            graph.constrain(
+                consumer_end,
+                producer_end,
+                reason=(
+                    f"browser handoff {handoff.id} remains open through "
+                    f"{handoff.target_pane_id}/{handoff.consumer_action_id}"
+                ),
+            )
 
     for join, target_node, label in pending_joins:
         event_id = join.event.qualified_id

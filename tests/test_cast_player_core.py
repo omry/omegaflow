@@ -918,6 +918,71 @@ global.ResizeObserver = class {
     console.error(JSON.stringify({layoutBox, frame}));
     process.exit(1);
   }
+  const configuredContainer = node('container');
+  const configuredRenderer = core.createBrowserDomRenderer({document});
+  await configuredRenderer.load({
+    assets, beat: {id: 'configured', transition_in: null},
+    container: configuredContainer, payload,
+    presentation: {browser: {
+      window: {
+        mode: 'framed',
+        theme: 'kde-breeze',
+        title: 'Demo',
+        opening_transition: 'window-open',
+      },
+      chrome: {mode: 'full'},
+    }},
+  });
+  configuredRenderer.renderAt(50);
+  const configuredLayout = find(
+    configuredContainer.children[0],
+    'browser-window-layout',
+  );
+  if (
+    configuredLayout.style.opacity !== '0' ||
+    configuredLayout.style.transform !== 'none'
+  ) {
+    console.error(JSON.stringify({configuredLayout}));
+    process.exit(1);
+  }
+  configuredRenderer.dispose();
+  const shortContainer = node('container');
+  const shortRenderer = core.createBrowserDomRenderer({document});
+  await shortRenderer.load({
+    assets,
+    beat: {id: 'short', transition_in: null},
+    container: shortContainer,
+    payload: {
+      ...payload,
+      duration_ms: 280,
+      events: [
+        {
+          kind: 'state',
+          action_id: 'a',
+          at_ms: 100,
+          end_ms: 280,
+          asset: 'final',
+          transition: 'fade',
+        },
+      ],
+    },
+    presentation: {browser: {
+      window: {
+        mode: 'framed',
+        theme: 'kde-breeze',
+        title: 'Demo',
+        opening_transition: 'window-open',
+      },
+      chrome: {mode: 'full'},
+    }},
+  });
+  shortRenderer.renderAt(280);
+  const shortLayout = find(shortContainer.children[0], 'browser-window-layout');
+  if (shortLayout.style.opacity !== '1') {
+    console.error(JSON.stringify({shortLayout}));
+    process.exit(1);
+  }
+  shortRenderer.dispose();
   renderer.renderAt(200);
   const primary = find(root, 'browser-state-primary');
   const secondary = find(root, 'browser-state-secondary');
@@ -1184,7 +1249,7 @@ global.ResizeObserver = class {
   }
   renderer.dispose();
   cutRenderer.dispose();
-  if (!firstResizeObserver.disconnected || !resizeObservers[1].disconnected) {
+  if (!resizeObservers.every((observer) => observer.disconnected)) {
     console.error(JSON.stringify({resizeObservers}));
     process.exit(1);
   }
