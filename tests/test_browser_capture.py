@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import math
+import re
 import shutil
+import struct
 import subprocess
 import threading
 import time
+import wave
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -122,6 +127,77 @@ html, body { margin: 0; width: 100%; height: 100%; background: rgb(255, 0, 0); }
   </script>
 </body></html>"""
 
+AUDIO_CAPTURE_HTML = b"""<!doctype html>
+<html><body>
+  <button id="play-audio">Play tone</button>
+  <p data-testid="audio-status">Ready</p>
+  <script>
+    document.querySelector('#play-audio').addEventListener('click', () => {
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      gain.gain.value = 0.15;
+      oscillator.frequency.value = 440;
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start();
+      setTimeout(() => gain.disconnect(context.destination), 350);
+      setTimeout(() => {
+        oscillator.stop();
+        document.querySelector('[data-testid=audio-status]').textContent =
+          'Complete';
+      }, 1000);
+    });
+  </script>
+</body></html>"""
+
+
+MEDIA_ELEMENT_AUDIO_CAPTURE_HTML = b"""<!doctype html>
+<html><body>
+  <audio src="/tone.wav" preload="auto"></audio>
+  <button id="play-audio">Play tone</button>
+  <p data-testid="audio-status">Ready</p>
+  <script>
+    document.querySelector('#play-audio').addEventListener('click', async () => {
+      const audio = document.querySelector('audio');
+      audio.currentTime = 0;
+      await audio.play();
+    });
+    document.querySelector('audio').addEventListener('ended', () => {
+      const audio = document.querySelector('audio');
+      try {
+        const context = new AudioContext();
+        context.createMediaElementSource(audio);
+        document.querySelector('[data-testid=audio-status]').textContent =
+          'Complete';
+      } catch (error) {
+        document.querySelector('[data-testid=audio-status]').textContent =
+          `Capture changed the page: ${error.name}`;
+      }
+    });
+  </script>
+</body></html>"""
+
+
+def _tone_wav() -> bytes:
+    output = io.BytesIO()
+    with wave.open(output, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(48_000)
+        audio.writeframes(
+            b"".join(
+                struct.pack(
+                    "<h",
+                    round(4_000 * math.sin(2 * math.pi * 440 * index / 48_000)),
+                )
+                for index in range(48_000)
+            )
+        )
+    return output.getvalue()
+
+
+TONE_WAV = _tone_wav()
+
 PNG_1X1 = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c02"
     "0000000b4944415478da6364f80f00010501012718e3660000000049454e44ae426082"
@@ -157,6 +233,29 @@ class FixtureHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(ANIMATED_CAPTURE_HTML)))
             self.end_headers()
             self.wfile.write(ANIMATED_CAPTURE_HTML)
+            return
+        if self.path == "/audio-capture":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(AUDIO_CAPTURE_HTML)))
+            self.end_headers()
+            self.wfile.write(AUDIO_CAPTURE_HTML)
+            return
+        if self.path == "/media-audio-capture":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header(
+                "Content-Length", str(len(MEDIA_ELEMENT_AUDIO_CAPTURE_HTML))
+            )
+            self.end_headers()
+            self.wfile.write(MEDIA_ELEMENT_AUDIO_CAPTURE_HTML)
+            return
+        if self.path == "/tone.wav":
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Content-Length", str(len(TONE_WAV)))
+            self.end_headers()
+            self.wfile.write(TONE_WAV)
             return
         if self.path == "/delayed.png":
             time.sleep(0.15)
@@ -1169,6 +1268,182 @@ def test_retained_loading_is_trimmed_to_muted_content_addressed_mp4(
     )
 
 
+@pytest.mark.parametrize(
+    "fixture_path",
+    ["/audio-capture", "/media-audio-capture"],
+)
+def test_realtime_browser_audio_is_captured_and_muxed_once(
+    tmp_path: Path,
+    fixture_path: str,
+) -> None:
+    with fixture_site() as base_url:
+        plan = normalize_recording_plan(
+            {
+                "id": "browser-audio",
+                "browser": {"base_url": base_url},
+                "beats": [
+                    {
+                        "id": "audio",
+                        "medium": "browser",
+                        "actions": [
+                            {
+                                "id": "open",
+                                "open_page": {"url": fixture_path},
+                            },
+                            {
+                                "id": "play",
+                                "timing": "realtime",
+                                "audio": "capture",
+                                "click": {
+                                    "target": {
+                                        "role": "button",
+                                        "name": "Play tone",
+                                    }
+                                },
+                                "until": {
+                                    "visible": {
+                                        "text": "Complete",
+                                        "exact": True,
+                                    },
+                                    "timeout_ms": 3000,
+                                },
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        runner = PersistentBrowserRunner(plan.browser)
+        runner.start(capture_context(tmp_path))
+        try:
+            runner.capture_beat(plan.beats[0])
+        finally:
+            runner.close()
+        runner.complete()
+
+    fragment = next(
+        record
+        for record in capture_records(tmp_path)
+        if record["type"] == "diagnostic"
+        and record.get("kind") == "dynamic_fragment"
+        and record.get("action_id") == "play"
+    )
+    assert fragment["has_audio"] is True
+    path = tmp_path / "run" / fragment["path"]
+    media = browser_visuals.require_browser_media_runtime(require_h264=True)
+    probe = subprocess.run(
+        [
+            media.ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_name,codec_type",
+            "-of",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    streams = json.loads(probe.stdout)["streams"]
+    assert [stream["codec_type"] for stream in streams].count("video") == 1
+    assert [stream["codec_type"] for stream in streams].count("audio") == 1
+    assert {(stream["codec_type"], stream["codec_name"]) for stream in streams} == {
+        ("video", "h264"),
+        ("audio", "aac"),
+    }
+    levels = subprocess.run(
+        [
+            media.ffmpeg,
+            "-hide_banner",
+            "-i",
+            str(path),
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert "max_volume: -inf dB" not in levels.stderr
+    if fixture_path == "/audio-capture":
+        silence = subprocess.run(
+            [
+                media.ffmpeg,
+                "-hide_banner",
+                "-i",
+                str(path),
+                "-af",
+                "silencedetect=noise=-50dB:d=0.3",
+                "-f",
+                "null",
+                "-",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        match = re.search(r"silence_start: ([0-9.]+)", silence.stderr)
+        assert match is not None
+        assert 0.2 <= float(match.group(1)) <= 0.7
+
+
+def test_browser_audio_capture_reports_the_start_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with fixture_site() as base_url:
+        plan = normalize_recording_plan(
+            {
+                "id": "browser-audio-failure",
+                "browser": {"base_url": base_url},
+                "beats": [
+                    {
+                        "id": "audio",
+                        "medium": "browser",
+                        "actions": [
+                            {"id": "open", "open_page": {"url": "/audio-capture"}},
+                            {
+                                "id": "play",
+                                "timing": "realtime",
+                                "audio": "capture",
+                                "click": {
+                                    "target": {
+                                        "role": "button",
+                                        "name": "Play tone",
+                                    }
+                                },
+                            },
+                        ],
+                    }
+                ],
+            }
+        )
+        runner = PersistentBrowserRunner(plan.browser)
+        runner.start(capture_context(tmp_path))
+        monkeypatch.setattr(
+            "omegaflow.browser_capture.start_page_audio_capture",
+            lambda _page: (_ for _ in ()).throw(
+                RuntimeError("Opus MediaRecorder is unsupported")
+            ),
+        )
+        try:
+            with pytest.raises(
+                BrowserCaptureError,
+                match=(
+                    "could not start page audio capture: "
+                    "Opus MediaRecorder is unsupported"
+                ),
+            ):
+                runner.capture_beat(plan.beats[0])
+        finally:
+            runner.close()
+
+
 def test_dynamic_fragment_retains_the_frame_before_animation_starts(
     tmp_path: Path,
 ) -> None:
@@ -1345,7 +1620,7 @@ def test_realtime_action_until_can_follow_its_condition_past_implicit_limit(
         request["source_end_ms"] - request["source_start_ms"]
     )
     assert 3000 < authored_duration_ms <= 5000
-    assert fragment["duration_ms"] >= authored_duration_ms
+    assert abs(fragment["duration_ms"] - authored_duration_ms) <= 120
     assert fragment["encoded_bytes"] <= 2_000_000
 
 
@@ -1699,6 +1974,42 @@ def test_dynamic_fragment_aligns_states_when_video_lags_authored_interval(
     # because the player already displays that state before starting the clip.
     assert 1000 <= asset.source_start_ms <= 1040
     assert 1000 <= asset.source_end_ms <= 1080
+
+
+def test_realtime_fragment_preserves_observed_duration_when_video_clock_lags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ffmpeg, source, end_state = write_color_transition_video(tmp_path)
+    visuals = BrowserVisualCapture(
+        object(),
+        run_dir=tmp_path,
+        states_dir=tmp_path / "states",
+        fragments_dir=tmp_path / "fragments",
+        diagnostics_dir=tmp_path / "diagnostics",
+        redaction_targets=(),
+        locator_factory=lambda _target: None,
+    )
+    visuals.dynamic_requests.append(
+        DynamicFragmentRequest(
+            beat_id="dynamic",
+            action_id="realtime",
+            source_start_ms=0,
+            source_end_ms=1000,
+            end_state_path=end_state,
+            explicit_dynamic=True,
+            preserve_start=True,
+        )
+    )
+    monkeypatch.setattr(
+        browser_visuals,
+        "_matching_end_frame_ms",
+        lambda *_args, **_kwargs: 800,
+    )
+
+    (asset,) = visuals.finalize_dynamic_fragments(source)
+
+    assert asset.source_end_ms == 800
+    assert abs(asset.duration_ms - 1000) <= 120
 
 
 def test_adjacent_dynamic_fragments_preserve_continuous_source_video(

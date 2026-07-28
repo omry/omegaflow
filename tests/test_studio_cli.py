@@ -3187,6 +3187,29 @@ beat:
         studio_directive_blocks(script)
 
 
+def test_studio_directive_schema_accepts_realtime_browser_audio_capture() -> None:
+    script = """
+```yaml studio-directive
+beat:
+  id: browser
+  medium: browser
+  heading: Play preview
+  narration: Play the preview.
+  actions:
+  - id: play
+    timing: realtime
+    audio: capture
+    click:
+      target: {role: button, name: Play}
+```
+""".lstrip()
+
+    action = studio_directive_blocks(script)[0]["beat"]["actions"][0]
+
+    assert action["timing"] == "realtime"
+    assert action["audio"] == "capture"
+
+
 @pytest.mark.parametrize("generated_field", ["script", "studio"])
 def test_recording_frontmatter_rejects_non_user_fields(
     tmp_path: Path,

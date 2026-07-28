@@ -234,6 +234,10 @@ class ActionTiming(str, Enum):
     realtime = "realtime"
 
 
+class BrowserAudioMode(str, Enum):
+    capture = "capture"
+
+
 class PaneKind(str, Enum):
     visualization = "visualization"
     terminal = "terminal"
@@ -749,6 +753,7 @@ class BrowserActionConfig:
     wait_for: BrowserWaitForConfig | None = None
     until: BrowserConditionConfig | None = None
     timing: ActionTiming = ActionTiming.presentation
+    audio: BrowserAudioMode | None = None
     after: str | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
@@ -781,6 +786,7 @@ class RecordingActionConfig(RecordingStepConfig):
 
     id: str = ""
     timing: ActionTiming | None = None
+    audio: BrowserAudioMode | None = None
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None

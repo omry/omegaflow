@@ -108,7 +108,7 @@ def validate_public_staging(
     referenced = {manifest_path, metadata_path, signatures_path}
     expected_dimensions: dict[str, set[tuple[int, int]]] = {}
     expected_media_suffixes: dict[str, set[str]] = {}
-    clip_requirements: dict[str, tuple[int, int, int]] = {}
+    clip_requirements: dict[str, tuple[int, bool]] = {}
     pane_renderers = {
         pane["id"]: pane["renderer"] for pane in manifest["panes"]
     }
@@ -159,10 +159,19 @@ def validate_public_staging(
                             event["end_asset"], set()
                         ).add(".webp")
                     if kind == "clip":
-                        clip_requirements[event["asset"]] = (
-                            width,
-                            height,
-                            event["trim_end_ms"],
+                        asset_id = event["asset"]
+                        required_audio = event["has_audio"]
+                        previous = clip_requirements.get(asset_id)
+                        if previous is not None and previous[1] != required_audio:
+                            raise PublicBundleError(
+                                f"clip asset {asset_id!r} has conflicting audio requirements"
+                            )
+                        clip_requirements[asset_id] = (
+                            max(
+                                previous[0] if previous is not None else 0,
+                                event["trim_end_ms"],
+                            ),
+                            required_audio,
                         )
                 for asset_id in asset_ids:
                     expected_dimensions.setdefault(asset_id, set()).add(
@@ -187,16 +196,21 @@ def validate_public_staging(
             if (probe["width"], probe["height"]) != next(iter(dimensions)):
                 raise PublicBundleError(f"asset {asset_id!r} dimensions do not match its viewport")
             if asset_path.suffix.lower() == ".mp4":
+                required_duration, required_audio = clip_requirements[asset_id]
+                if probe["has_audio"] != required_audio:
+                    raise PublicBundleError(
+                        f"clip asset {asset_id!r} audio does not match its browser event"
+                    )
                 if (
-                    probe["has_audio"]
-                    or probe["codec"] != "h264"
+                    probe["codec"] != "h264"
                     or "mp4" not in probe["format_name"].split(",")
                     or probe["pixel_format"] != "yuv420p"
+                    or (required_audio and probe["audio_codec"] != "aac")
                 ):
                     raise PublicBundleError(
-                        f"clip asset {asset_id!r} must be muted H.264 MP4"
+                        f"clip asset {asset_id!r} must be H.264 MP4"
+                        + (" with AAC audio" if required_audio else "")
                     )
-                required_duration = clip_requirements.get(asset_id, (0, 0, 0))[2]
                 if probe["duration_ms"] < required_duration:
                     raise PublicBundleError(
                         f"clip asset {asset_id!r} is shorter than its presentation trim"
@@ -685,6 +699,10 @@ def _probe_public_media(path: Path, *, ffprobe: str | None) -> dict[str, Any]:
         payload = json.loads(process.stdout)
         streams = payload["streams"]
         visual = next(stream for stream in streams if stream.get("codec_type") == "video")
+        audio = next(
+            (stream for stream in streams if stream.get("codec_type") == "audio"),
+            None,
+        )
         raw_duration = payload.get("format", {}).get("duration")
         duration_ms = round(float(raw_duration) * 1000) if raw_duration is not None else 0
         return {
@@ -694,7 +712,8 @@ def _probe_public_media(path: Path, *, ffprobe: str | None) -> dict[str, Any]:
             "width": int(visual["width"]),
             "height": int(visual["height"]),
             "duration_ms": duration_ms,
-            "has_audio": any(stream.get("codec_type") == "audio" for stream in streams),
+            "has_audio": audio is not None,
+            "audio_codec": audio.get("codec_name") if audio is not None else None,
         }
     except (KeyError, StopIteration, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise PublicBundleError(f"public media probe is invalid: {path.name}") from exc

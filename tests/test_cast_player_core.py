@@ -204,6 +204,7 @@ function factory() {
     renderAt(localMs) { calls.push(`render:${beat.id}:${localMs}`); },
     setPlaybackRate(rate) { calls.push(`rate:${beat ? beat.id : 'new'}:${rate}`); },
     setPlaying(playing) { calls.push(`playing:${beat ? beat.id : 'new'}:${playing}`); },
+    setMuted(muted) { calls.push(`muted:${beat ? beat.id : 'new'}:${muted}`); },
     async preload() { calls.push(`preload:${beat.id}`); },
     dispose() { calls.push(`dispose:${beat.id}`); },
   };
@@ -214,14 +215,17 @@ function factory() {
     rendererFactories: {terminal: factory},
     loadPayload: async (beat) => beat.payload,
   });
+  shell.setMuted(true);
   await shell.renderAt(500);
   shell.setPlaying(true);
   await shell.renderAt(1200);
   shell.setPlaybackRate(1.5);
+  shell.setMuted(false);
   shell.dispose();
   const required = [
     'load:one', 'render:one:500', 'load:two', 'preload:two',
     'playing:one:true', 'playing:two:true',
+    'muted:one:true', 'muted:two:true', 'muted:two:false',
     'render:two:200', 'rate:two:1.5',
     'dispose:one', 'dispose:two',
   ];
@@ -878,7 +882,8 @@ const payload = {
     {kind: 'scroll', action_id: 'b', at_ms: 400, end_ms: 600,
       start_asset: 'final', end_asset: 'scrolled', container: {x: 0, y: 0, width: 200, height: 100},
       start: {x: 0, y: 0}, end: {x: 0, y: 80}},
-    {kind: 'clip', action_id: 'c', at_ms: 600, end_ms: 800, asset: 'clip', trim_start_ms: 100, trim_end_ms: 500},
+    {kind: 'clip', action_id: 'c', at_ms: 600, end_ms: 800, asset: 'clip',
+      trim_start_ms: 100, trim_end_ms: 500, has_audio: true},
   ],
 };
 const assets = {
@@ -999,10 +1004,11 @@ global.ResizeObserver = class {
     process.exit(1);
   }
   renderer.setPlaybackRate(1.5);
+  renderer.setMuted(false);
   renderer.renderAt(700);
   const clip = find(root, 'browser-clip');
   if (
-    clip.hidden || !clip.muted || clip.playbackRate !== 1.5 ||
+    clip.hidden || clip.muted || clip.playbackRate !== 1.5 ||
     Math.abs(clip.currentTime - 0.3) > 0.001 || primary.hidden ||
     primary.getAttribute('src') !== 'scrolled.webp' || clip.style.opacity !== '1'
   ) {
@@ -1013,6 +1019,13 @@ global.ResizeObserver = class {
     }));
     process.exit(1);
   }
+  renderer.setMuted(true);
+  renderer.renderAt(700);
+  if (!clip.muted) {
+    console.error(JSON.stringify({phase: 'muted-audible-clip', muted: clip.muted}));
+    process.exit(1);
+  }
+  renderer.setMuted(false);
   renderer.renderAt(700);
   if (clip.style.opacity !== '1') {
     console.error(JSON.stringify({

@@ -680,6 +680,28 @@ additional video through the rendered frame where that condition completed.
 All realtime segments remain subject to the encoded-size limit. `transition`
 controls only the change between stable states and accepts `cut` or `fade`.
 
+Add `audio: capture` to a realtime browser action when audio produced by the
+page is part of the observed result:
+
+```yaml
+- id: play-preview
+  timing: realtime
+  audio: capture
+  click:
+    target: {role: button, name: Play}
+  until:
+    visible: {text: Complete, exact: true}
+```
+
+OmegaFlow captures media-element and Web Audio output from the active top-level
+document inside its isolated browser, then muxes it into the action's video
+fragment. The player therefore uses one media clock for play, pause, seek,
+playback speed, and mute. Audio capture is explicit, is unavailable on
+`open_page` because navigation replaces the document-local recorder, and is
+unavailable on the reconstruction-only `set_pointer` action because it creates
+no realtime fragment. Capture failures stop the build rather than silently
+publishing a muted fragment.
+
 ### Narration takes across beats
 
 Omitting `narration_take` keeps the common case local to one beat. Give adjacent
@@ -976,6 +998,7 @@ class BrowserActionConfig:
     wait_for: BrowserWaitForConfig | None = None
     until: BrowserConditionConfig | None = None
     timing: ActionTiming = ActionTiming.presentation
+    audio: BrowserAudioMode | None = None
     after: str | None = None
     hold_before_ms: int | None = None
     hold_after_ms: int | None = None
@@ -1008,6 +1031,7 @@ class RecordingActionConfig(RecordingStepConfig):
 
     id: str = ""
     timing: ActionTiming | None = None
+    audio: BrowserAudioMode | None = None
     open_page: BrowserOpenPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None

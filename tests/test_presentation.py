@@ -493,6 +493,29 @@ def test_browser_payload_bounds_events(monkeypatch: pytest.MonkeyPatch) -> None:
         presentation_module.validate_browser_payload(payload)
 
 
+def test_browser_clip_audio_flag_must_be_boolean() -> None:
+    event = {
+        "kind": "clip",
+        "action_id": "play",
+        "at_ms": 0,
+        "end_ms": 500,
+        "asset": "clip",
+        "trim_start_ms": 0,
+        "trim_end_ms": 500,
+        "has_audio": "true",
+    }
+
+    with pytest.raises(
+        PresentationValidationError,
+        match=r"browser\.events\.0\.has_audio must be boolean",
+    ):
+        presentation_module.validate_browser_event(
+            event,
+            index=0,
+            duration_ms=500,
+        )
+
+
 def test_terminal_cast_bounds_events(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

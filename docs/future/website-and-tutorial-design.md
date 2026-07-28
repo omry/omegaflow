@@ -1225,6 +1225,40 @@ seek, playback-rate, failure, and publication behavior. Tests use deterministic
 local audio; the public demonstration uses a nested OmegaFlow player with a
 voice distinct from the outer narrator.
 
+The authoring contract is explicit and action-scoped:
+
+```yaml
+- id: play-preview
+  timing: realtime
+  audio: capture
+  click:
+    target:
+      role: button
+      name: Play
+  until:
+    visible:
+      test_id: playback-complete
+```
+
+- `audio: capture` is valid only on `timing: realtime` browser actions. Omission
+  preserves the existing silent browser-fragment behavior.
+- Capture begins before the action and ends with its observed realtime
+  interval. Navigation actions reject audio capture because replacing the
+  document would destroy the portable in-page recorder before its result can be
+  collected. The reconstruction-only `set_pointer` action also rejects it
+  because that action has no realtime fragment.
+- OmegaFlow captures media-element and Web Audio output from the active
+  top-level document inside Chromium before the muted host sink. It does not
+  depend on speakers, PulseAudio, a display server, or a visible browser.
+- Captured audio is muxed into the action's H.264 fragment as AAC. The fragment
+  is the single playback owner: play, pause, seek, rate, mute, replay, and
+  disposal apply to its video and audio together.
+- A requested capture that cannot start, cannot be collected, or cannot be
+  muxed fails the build. OmegaFlow does not silently publish a muted fragment.
+- Outer narration and captured page audio may overlap when authored to overlap.
+  The player emits each stream once; joins remain the authoring mechanism for
+  making the outer narration wait.
+
 Demonstration: play a short narrated recording inside a realtime browser beat,
 pause outer narration until the authored completion boundary, seek and replay,
 and verify audibly and through media inspection that only one synchronized

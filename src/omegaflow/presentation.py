@@ -336,6 +336,10 @@ def validate_browser_event(
             mapping["trim_start_ms"], field=f"{field}.trim_start_ms"
         )
         trim_end = _integer(mapping["trim_end_ms"], field=f"{field}.trim_end_ms")
+        if not isinstance(mapping["has_audio"], bool):
+            raise PresentationValidationError(
+                f"{field}.has_audio must be boolean"
+            )
         if trim_end < trim_start:
             raise PresentationValidationError(f"{field} trim interval is invalid")
     elif kind == "display_url":

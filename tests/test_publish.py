@@ -429,14 +429,16 @@ def test_public_staging_rejects_sidecar_asset_hash_mismatch(tmp_path: Path) -> N
         validate_public_staging(root)
 
 
-def test_public_staging_probes_valid_browser_state_and_muted_clip(
-    tmp_path: Path,
-) -> None:
+def write_browser_media_bundle(
+    root: Path,
+    *,
+    event_has_audio: bool,
+    media_has_audio: bool,
+) -> tuple[Path, str]:
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
     if ffmpeg is None or ffprobe is None:
         pytest.skip("ffmpeg and ffprobe are required for browser media validation")
-    root = tmp_path / "browser-media"
     (root / "beats").mkdir(parents=True)
     (root / "media").mkdir()
     state = root / "media/state.webp"
@@ -456,16 +458,30 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
         ],
         check=True,
     )
-    subprocess.run(
+    clip_command = [
+        ffmpeg,
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=red:s=32x18:d=0.5",
+    ]
+    if media_has_audio:
+        clip_command.extend(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000:duration=0.5",
+                "-c:a",
+                "aac",
+            ]
+        )
+    else:
+        clip_command.append("-an")
+    clip_command.extend(
         [
-            ffmpeg,
-            "-v",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            "color=c=red:s=32x18:d=0.5",
-            "-an",
             "-c:v",
             "libx264",
             "-crf",
@@ -474,10 +490,11 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
             "yuv420p",
             "-movflags",
             "+faststart",
+            "-shortest",
             str(clip),
-        ],
-        check=True,
+        ]
     )
+    subprocess.run(clip_command, check=True)
     payload = {
         "payload_version": 1,
         "beat_id": "browser",
@@ -496,6 +513,7 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
                 "asset": "clip",
                 "trim_start_ms": 0,
                 "trim_end_ms": 400,
+                "has_audio": event_has_audio,
             }
         ],
     }
@@ -553,8 +571,40 @@ def test_public_staging_probes_valid_browser_state_and_muted_clip(
         json.dumps(recording_metadata()), encoding="utf-8"
     )
     write_presentation_signatures(root)
+    return root, ffprobe
+
+
+@pytest.mark.parametrize("has_audio", [False, True])
+def test_public_staging_probes_valid_browser_clip(
+    tmp_path: Path,
+    has_audio: bool,
+) -> None:
+    root, ffprobe = write_browser_media_bundle(
+        tmp_path / f"browser-media-{has_audio}",
+        event_has_audio=has_audio,
+        media_has_audio=has_audio,
+    )
 
     validate_public_staging(root, ffprobe=ffprobe)
+
+
+@pytest.mark.parametrize(
+    ("event_has_audio", "media_has_audio"),
+    [(False, True), (True, False)],
+)
+def test_public_staging_rejects_browser_clip_audio_contract_mismatch(
+    tmp_path: Path,
+    event_has_audio: bool,
+    media_has_audio: bool,
+) -> None:
+    root, ffprobe = write_browser_media_bundle(
+        tmp_path / f"browser-media-mismatch-{event_has_audio}-{media_has_audio}",
+        event_has_audio=event_has_audio,
+        media_has_audio=media_has_audio,
+    )
+
+    with pytest.raises(PublicBundleError, match="audio does not match"):
+        validate_public_staging(root, ffprobe=ffprobe)
 
 
 def test_atomic_publish_replaces_valid_bundle_and_rolls_back_failure(

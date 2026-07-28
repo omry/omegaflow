@@ -161,6 +161,7 @@ class BrowserClipEventV1(BrowserEventV1):
     asset: str = ""
     trim_start_ms: int = 0
     trim_end_ms: int = 0
+    has_audio: bool = False
 
 
 @dataclass

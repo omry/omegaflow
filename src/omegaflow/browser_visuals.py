@@ -8,7 +8,7 @@ import struct
 import subprocess
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +52,9 @@ class DynamicFragmentRequest:
     explicit_dynamic: bool = False
     preserve_start: bool = False
     trim_confirmed_start: bool = False
+    audio_path: Path | None = None
+    audio_source_start_ms: int | None = None
+    audio_source_end_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -218,6 +221,40 @@ class BrowserVisualCapture:
             },
         }
 
+    def attach_dynamic_audio(
+        self,
+        *,
+        beat_id: str,
+        action_id: str,
+        path: Path,
+        source_start_ms: int,
+        source_end_ms: int,
+    ) -> None:
+        """Attach captured page audio to its pending realtime fragment."""
+
+        matches = [
+            index
+            for index, request in enumerate(self.dynamic_requests)
+            if request.beat_id == beat_id and request.action_id == action_id
+        ]
+        if len(matches) != 1:
+            raise BrowserVisualError(
+                "BROWSER_UNSUPPORTED_AUDIO",
+                f"action {action_id!r} has no unique dynamic fragment for audio",
+            )
+        if source_end_ms <= source_start_ms:
+            raise BrowserVisualError(
+                "BROWSER_UNSUPPORTED_AUDIO",
+                f"action {action_id!r} has an invalid audio interval",
+            )
+        index = matches[0]
+        self.dynamic_requests[index] = replace(
+            self.dynamic_requests[index],
+            audio_path=path,
+            audio_source_start_ms=source_start_ms,
+            audio_source_end_ms=source_end_ms,
+        )
+
     def finalize_dynamic_fragments(
         self, source_video: Path
     ) -> tuple[DynamicFragmentAsset, ...]:
@@ -279,11 +316,21 @@ class BrowserVisualCapture:
                     exc.code,
                     f"beat {request.beat_id!r}, action {request.action_id!r}: {detail}",
                 ) from exc
-            duration_ms = source_end_ms - source_start_ms
-            if duration_ms <= 0:
+            source_duration_ms = source_end_ms - source_start_ms
+            if source_duration_ms <= 0:
                 raise BrowserVisualError(
                     "BROWSER_UNSUPPORTED_MOTION",
                     f"action {request.action_id!r} has no aligned dynamic frames",
+                )
+            duration_ms = (
+                request.source_end_ms - request.source_start_ms
+                if request.preserve_start
+                else source_duration_ms
+            )
+            if duration_ms <= 0:
+                raise BrowserVisualError(
+                    "BROWSER_UNSUPPORTED_MOTION",
+                    f"action {request.action_id!r} has an invalid realtime interval",
                 )
             if (
                 not request.explicit_dynamic
@@ -299,20 +346,64 @@ class BrowserVisualCapture:
                 raise BrowserVisualError(
                     "BROWSER_SCHEMA", "temporary dynamic fragment path is unsafe"
                 )
-            result = subprocess.run(
+            command = [
+                ffmpeg,
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{source_start_ms / 1000:.3f}",
+                "-i",
+                str(source_video),
+            ]
+            video_pts_scale = duration_ms / source_duration_ms
+            video_filter = f"setpts={video_pts_scale:.9f}*PTS"
+            has_audio = request.audio_path is not None
+            if has_audio:
+                if (
+                    request.audio_source_start_ms is None
+                    or request.audio_source_end_ms is None
+                ):
+                    raise BrowserVisualError(
+                        "BROWSER_UNSUPPORTED_AUDIO",
+                        f"action {request.action_id!r} audio metadata is incomplete",
+                    )
+                timeline_start_ms = (
+                    request.source_start_ms
+                    if request.preserve_start
+                    else source_start_ms
+                )
+                audio_trim_ms = max(
+                    0, timeline_start_ms - request.audio_source_start_ms
+                )
+                audio_delay_ms = max(
+                    0, request.audio_source_start_ms - timeline_start_ms
+                )
+                command.extend(
+                    [
+                        "-i",
+                        str(request.audio_path),
+                        "-filter_complex",
+                        (
+                            f"[0:v]{video_filter}[video];"
+                            f"[1:a]atrim=start={audio_trim_ms / 1000:.3f},"
+                            "asetpts=PTS-STARTPTS,"
+                            f"adelay={audio_delay_ms}:all=1,apad,"
+                            f"atrim=duration={duration_ms / 1000:.3f}[audio]"
+                        ),
+                        "-map",
+                        "[video]",
+                        "-map",
+                        "[audio]",
+                    ]
+                )
+            else:
+                command.extend(["-vf", video_filter, "-an"])
+            command.extend(
                 [
-                    ffmpeg,
-                    "-y",
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-ss",
-                    f"{source_start_ms / 1000:.3f}",
-                    "-i",
-                    str(source_video),
                     "-t",
                     f"{duration_ms / 1000:.3f}",
-                    "-an",
                     "-c:v",
                     "libx264",
                     "-preset",
@@ -323,10 +414,19 @@ class BrowserVisualCapture:
                     "baseline",
                     "-pix_fmt",
                     "yuv420p",
+                ]
+            )
+            if has_audio:
+                command.extend(["-c:a", "aac", "-b:a", "128k"])
+            command.extend(
+                [
                     "-movflags",
                     "+faststart",
                     str(temporary),
-                ],
+                ]
+            )
+            result = subprocess.run(
+                command,
                 capture_output=True,
                 text=True,
                 check=False,
@@ -341,7 +441,7 @@ class BrowserVisualCapture:
                 probe["codec"] != "h264"
                 or "mp4" not in probe["format_name"].split(",")
                 or probe["pixel_format"] != "yuv420p"
-                or probe["has_audio"]
+                or probe["has_audio"] is not has_audio
             ):
                 raise BrowserVisualError(
                     "BROWSER_UNSUPPORTED_MOTION",
@@ -388,7 +488,7 @@ class BrowserVisualCapture:
                     duration_ms=actual_duration_ms,
                     encoded_bytes=encoded_bytes,
                     codec=probe["codec"],
-                    has_audio=False,
+                    has_audio=has_audio,
                     source_start_ms=source_start_ms,
                     source_end_ms=source_end_ms,
                 )
@@ -556,9 +656,10 @@ def _matching_start_frame_ms(
         raise BrowserVisualError(
             "BROWSER_UNSUPPORTED_MOTION",
             "could not inspect a dynamic fragment start state",
-        )
+    )
     match_index: int | None = None
     match_distance_ms: int | None = None
+    match_is_after_reference: bool | None = None
     consecutive_matches = 0
     index = 0
     while True:
@@ -595,13 +696,22 @@ def _matching_start_frame_ms(
                     search_start_ms + candidate_index * FRAME_MATCH_DURATION_MS
                 )
                 candidate_distance_ms = abs(candidate_ms - reference_ms)
+                candidate_is_after_reference = candidate_ms > reference_ms
                 if (
                     not prefer_reference
                     or match_distance_ms is None
-                    or candidate_distance_ms < match_distance_ms
+                    or (
+                        match_is_after_reference is True
+                        and not candidate_is_after_reference
+                    )
+                    or (
+                        match_is_after_reference == candidate_is_after_reference
+                        and candidate_distance_ms < match_distance_ms
+                    )
                 ):
                     match_index = candidate_index
                     match_distance_ms = candidate_distance_ms
+                    match_is_after_reference = candidate_is_after_reference
         else:
             consecutive_matches = 0
         index += 1

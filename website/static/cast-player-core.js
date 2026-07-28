@@ -620,6 +620,7 @@
     const loading = new Map();
     let playbackRate = 1;
     let playing = false;
+    let muted = false;
     let disposed = false;
     let currentIndex = null;
     let renderGeneration = 0;
@@ -713,6 +714,9 @@
             }
             if (typeof renderer.setPlaying === 'function') {
               renderer.setPlaying(playing);
+            }
+            if (typeof renderer.setMuted === 'function') {
+              renderer.setMuted(muted);
             }
             renderer.__presentationEntry = entry;
             loaded.set(entry.key, renderer);
@@ -940,6 +944,15 @@
       }
     }
 
+    function setMuted(nextMuted) {
+      muted = Boolean(nextMuted);
+      for (const renderer of loaded.values()) {
+        if (typeof renderer.setMuted === 'function') {
+          renderer.setMuted(muted);
+        }
+      }
+    }
+
     function dispose() {
       if (disposed) {
         return;
@@ -970,6 +983,7 @@
         playbackWindowEntries(0, 0, {firstOnly: true}),
       ),
       renderAt,
+      setMuted,
       setPlaybackRate,
       setPlaying,
       state: () => ({
@@ -977,6 +991,7 @@
         decodedAssetBudgetBytes: decodedAssetBudget,
         decodedAssetBytes: decodedResidencyBytes(),
         disposed,
+        muted,
         playbackRate,
         playing,
       }),
@@ -1446,6 +1461,7 @@
           asset: event.asset,
           previousAsset: previousState,
           mediaMs: event.trim_start_ms + (trimDuration * progress),
+          hasAudio: event.has_audio === true,
           progress,
         };
       } else if (event.kind === 'scroll') {
@@ -1514,6 +1530,7 @@
     let payload = null;
     let playbackRate = 1;
     let playing = false;
+    let muted = true;
     let disposed = false;
 
     return {
@@ -1552,6 +1569,12 @@
           options.setPlaying(playing);
         }
       },
+      setMuted(nextMuted) {
+        muted = Boolean(nextMuted);
+        if (typeof options.setMuted === 'function') {
+          options.setMuted(muted);
+        }
+      },
       async preload() {
         if (typeof options.preload === 'function') {
           await options.preload({...context, payload});
@@ -1570,7 +1593,7 @@
       },
       state() {
         const extra = typeof options.state === 'function' ? options.state() : {};
-        return {disposed, playbackRate, playing, ...extra};
+        return {disposed, muted, playbackRate, playing, ...extra};
       },
     };
   }
@@ -1584,6 +1607,7 @@
     let elements = null;
     let playbackRate = 1;
     let playing = false;
+    let muted = true;
     let decodedAssetBytes = 0;
     let preloadedImages = [];
     let clipPreloads = new Map();
@@ -1850,7 +1874,7 @@
         if (!clip) {
           throw new Error(`browser clip ${visual.asset} is unavailable`);
         }
-        clip.muted = true;
+        clip.muted = muted || !visual.hasAudio;
         clip.playsInline = true;
         clip.playbackRate = playbackRate;
         if (!Number.isFinite(clip.readyState) || clip.readyState >= 2) {
@@ -2116,6 +2140,14 @@
         if (elements) {
           for (const clip of elements.clips.values()) {
             clip.playbackRate = rate;
+          }
+        }
+      },
+      setMuted(nextMuted) {
+        muted = Boolean(nextMuted);
+        if (elements) {
+          for (const clip of elements.clips.values()) {
+            clip.muted = muted;
           }
         }
       },

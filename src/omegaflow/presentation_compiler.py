@@ -2620,7 +2620,9 @@ def _compile_browser_action(
                 "PRESENTATION_SCHEMA",
                 f"captured clip for action {action.id!r} is unavailable",
             )
-        asset_id, clip_duration = _register_clip_asset(clip_asset, assets)
+        asset_id, clip_duration, has_audio = _register_clip_asset(
+            clip_asset, assets
+        )
         if captured_visual_interval is not None:
             clip_start_ms, clip_end_ms = captured_visual_interval
         elif config.get("timing") == "realtime":
@@ -2659,6 +2661,7 @@ def _compile_browser_action(
                 "asset": asset_id,
                 "trim_start_ms": 0,
                 "trim_end_ms": trim_end_ms,
+                "has_audio": has_audio,
             }
         )
         cursor = max(cursor, clip_end_ms)
@@ -2744,13 +2747,18 @@ def _register_state_asset(
 
 def _register_clip_asset(
     value: Mapping[str, Any], assets: dict[str, CompiledAssetSource]
-) -> tuple[str, int]:
+) -> tuple[str, int, bool]:
     digest = value.get("sha256")
     if not _is_sha256(digest):
         raise PresentationCompileError(
             "PRESENTATION_SCHEMA", "browser clip hash is invalid"
         )
     duration = _positive_integer(value.get("duration_ms"), field="browser clip duration")
+    has_audio = value.get("has_audio")
+    if not isinstance(has_audio, bool):
+        raise PresentationCompileError(
+            "PRESENTATION_SCHEMA", "browser clip audio metadata is invalid"
+        )
     asset_id = f"clip-{digest}"
     asset = CompiledAssetSource(
         id=asset_id,
@@ -2767,7 +2775,7 @@ def _register_clip_asset(
         duration_ms=duration,
     )
     _deduplicate_asset(asset, assets)
-    return asset_id, duration
+    return asset_id, duration, has_audio
 
 
 def _deduplicate_asset(

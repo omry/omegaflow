@@ -1419,6 +1419,7 @@
       let presentationManifest = null;
       let presentationShell = null;
       let presentationAudioController = null;
+      let hasCapturedAudio = false;
       let playbackReady = false;
       let playerDisposed = false;
       let lastPresentationBeatIndex = null;
@@ -3100,7 +3101,7 @@
         restartButton.disabled = !ready;
         prevSectionButton.disabled = !ready || !hasPreviousSection(clamped);
         nextSectionButton.disabled = !ready || !hasNextSection(clamped);
-        muteButton.disabled = !audioReady;
+        muteButton.disabled = !(audioReady || hasCapturedAudio);
       }
 
       function setVoiceStatus(text, state = '', label = text) {
@@ -3819,6 +3820,9 @@
         if (audio) {
           audio.muted = muted;
         }
+        if (presentationShell) {
+          presentationShell.setMuted(muted);
+        }
         updateTransportButtons();
       }
 
@@ -4311,7 +4315,20 @@
               if (!response.ok) {
                 throw new Error(`could not load ${pane.renderer} payload: ${response.status}`);
               }
-              return pane.renderer === 'terminal' ? response.text() : response.json();
+              if (pane.renderer === 'terminal') {
+                return response.text();
+              }
+              const payload = await response.json();
+              if (
+                pane.renderer === 'browser' &&
+                Array.isArray(payload.events) &&
+                payload.events.some(
+                  (event) => event.kind === 'clip' && event.has_audio === true,
+                )
+              ) {
+                hasCapturedAudio = true;
+              }
+              return payload;
             },
             createRendererContainer({pane, outerIndex, paneBeatIndex, trackIndex}) {
               if (pane.renderer === 'visualization') {
@@ -4422,6 +4439,7 @@
               return presentationAssetUrl(asset.path);
             },
           });
+          presentationShell.setMuted(muted);
           presentationShell.setPlaybackRate(playbackRate);
           castSeconds = presentationManifest.recording.duration_ms / 1000;
           audioPlaybackSegments = presentationManifest.audio

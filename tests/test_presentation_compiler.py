@@ -1383,6 +1383,7 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
         # realtime interval.
         "duration_ms": 550,
         "encoded_bytes": 200,
+        "has_audio": True,
     }
 
     compiled = compile_browser_beat(
@@ -1443,6 +1444,7 @@ def test_browser_payload_compiles_all_selected_event_policies() -> None:
     assert [event["kind"] for event in shortcut_visuals] == ["clip", "state"]
     assert shortcut_visuals[0]["end_ms"] - shortcut_visuals[0]["at_ms"] == 400
     assert shortcut_visuals[0]["trim_end_ms"] == 400
+    assert shortcut_visuals[0]["has_audio"] is True
     assert shortcut_visuals[1] == {
         "kind": "state",
         "action_id": "shortcut",
@@ -1811,6 +1813,7 @@ def test_captured_drag_motion_plays_during_the_pressed_pointer_interval() -> Non
         "height": 900,
         "duration_ms": 1000,
         "encoded_bytes": 200,
+        "has_audio": False,
     }
 
     compiled = compile_browser_beat(

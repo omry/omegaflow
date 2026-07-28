@@ -968,6 +968,56 @@ def test_browser_until_requires_realtime_non_wait_action() -> None:
         normalize_recording_plan(spec)
 
 
+def test_browser_audio_capture_requires_realtime_non_navigation_action() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1]["audio"] = "capture"
+    with pytest.raises(
+        RecordingPlanError,
+        match="audio capture requires timing: realtime",
+    ):
+        normalize_recording_plan(spec)
+
+    spec["beats"][0]["actions"][1]["timing"] = "realtime"
+    plan = normalize_recording_plan(spec)
+    assert plan.beats[0].actions[1].config["audio"] == "capture"
+
+    spec = browser_spec()
+    spec["beats"][0]["actions"][0].update(
+        {"audio": "capture", "timing": "realtime"}
+    )
+    with pytest.raises(
+        RecordingPlanError,
+        match="open_page does not support audio capture",
+    ):
+        normalize_recording_plan(spec)
+
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1] = {
+        "id": "done",
+        "timing": "realtime",
+        "audio": "capture",
+        "set_pointer": {"visible": True},
+    }
+    with pytest.raises(
+        RecordingPlanError,
+        match="set_pointer does not support audio capture",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_browser_audio_rejects_unknown_mode() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"][1].update(
+        {"audio": "record", "timing": "realtime"}
+    )
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="audio must be capture",
+    ):
+        normalize_recording_plan(spec)
+
+
 def test_captured_transition_is_rejected_in_favor_of_realtime_timing() -> None:
     spec = browser_spec()
     spec["beats"][0]["actions"][1]["transition"] = "captured"

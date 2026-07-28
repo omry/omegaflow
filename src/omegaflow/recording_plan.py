@@ -661,6 +661,7 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
         "transition",
         "display_url_after",
         "timing",
+        "audio",
         "until",
     }
     unexpected = sorted(set(mapping) - allowed)
@@ -834,6 +835,18 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
         mapping.get("timing"),
         field=f"{field}.timing",
     )
+    audio = mapping.get("audio")
+    if audio not in {None, "capture"}:
+        raise RecordingPlanError(f"{field}.audio must be capture")
+    if audio == "capture":
+        if timing != "realtime":
+            raise RecordingPlanError(
+                f"{field}.audio capture requires timing: realtime"
+            )
+        if kind in {"open_page", "set_pointer"}:
+            raise RecordingPlanError(
+                f"{field}.{kind} does not support audio capture"
+            )
     until = mapping.get("until")
     if until is not None:
         if kind == "wait_for":

@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit
 
+from .browser_audio import (
+    PAGE_AUDIO_CAPTURE_INIT_SCRIPT,
+    start_page_audio_capture,
+    stop_page_audio_capture,
+)
 from .browser_runtime import (
     BrowserRuntimeError,
     actionable_playwright_error,
@@ -430,6 +435,9 @@ class PersistentBrowserRunner:
                     ),
                 },
             )
+            self.browser_context.add_init_script(
+                script=PAGE_AUDIO_CAPTURE_INIT_SCRIPT
+            )
             self.page = self.browser_context.new_page()
             self.video = self.page.video
             self._calibrate_video_origin()
@@ -620,6 +628,9 @@ class PersistentBrowserRunner:
         completion: dict[str, Any] = {"kind": "action"}
         before_state: dict[str, Any] | None = None
         visual: dict[str, Any] | None = None
+        audio_capture_started = False
+        audio_capture_stopped = False
+        audio_source_start_ms = 0
         extra_redactions = self._action_redactions(action.kind, payload)
         document_origin = self._document_time_origin()
         try:
@@ -628,6 +639,17 @@ class PersistentBrowserRunner:
                     action_id=action.id,
                     extra_redactions=extra_redactions,
                 )
+            if config.get("audio") == "capture":
+                try:
+                    start_page_audio_capture(self.page)
+                except BaseException as exc:
+                    raise BrowserCaptureError(
+                        "BROWSER_UNSUPPORTED_AUDIO",
+                        f"browser action {action.id!r} could not start page audio capture: "
+                        f"{self._sanitize(str(exc))}",
+                    ) from exc
+                audio_capture_started = True
+                audio_source_start_ms = self._video_elapsed_ms()
             if action.kind == "open_page":
                 completion = self._open_page(
                     payload, beat_id=beat_id, action_id=action.id
@@ -856,6 +878,30 @@ class PersistentBrowserRunner:
                     preserve_start=explicit_dynamic,
                     trim_confirmed_start=action.kind == "drag",
                 )
+                if audio_capture_started:
+                    audio_source_end_ms = self._video_elapsed_ms()
+                    try:
+                        captured_audio = stop_page_audio_capture(
+                            self.page,
+                            fragments_dir=self.capture_context.runner_capture
+                            / "fragments",
+                            source_start_ms=audio_source_start_ms,
+                            source_end_ms=audio_source_end_ms,
+                        )
+                        audio_capture_stopped = True
+                        self._require_visuals().attach_dynamic_audio(
+                            beat_id=beat_id,
+                            action_id=action.id,
+                            path=captured_audio.path,
+                            source_start_ms=captured_audio.source_start_ms,
+                            source_end_ms=captured_audio.source_end_ms,
+                        )
+                    except BaseException as exc:
+                        raise BrowserCaptureError(
+                            "BROWSER_UNSUPPORTED_AUDIO",
+                            f"browser action {action.id!r} could not collect page audio: "
+                            f"{self._sanitize(str(exc))}",
+                        ) from exc
                 current_secret = self._current_secret_redaction(action.kind, payload)
                 if current_secret:
                     active = [dict(target) for target in self._active_secret_redactions]
@@ -877,6 +923,21 @@ class PersistentBrowserRunner:
                 "BROWSER_SCHEMA",
                 f"browser action {action.id!r} failed: {self._sanitize(str(exc))}",
             ) from exc
+        finally:
+            if audio_capture_started and not audio_capture_stopped:
+                try:
+                    stop_page_audio_capture(
+                        self.page,
+                        fragments_dir=self.capture_context.runner_capture
+                        / "fragments",
+                        source_start_ms=audio_source_start_ms,
+                        source_end_ms=max(
+                            audio_source_start_ms + 1,
+                            self._video_elapsed_ms(),
+                        ),
+                    )
+                except BaseException:
+                    pass
         result: dict[str, Any] = {
             "action_id": action.id,
             "kind": action.kind,
