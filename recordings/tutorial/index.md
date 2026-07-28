@@ -3,8 +3,8 @@ kind: video
 id: tutorial
 title: Build a Tiny Canvas Video
 description: >-
-  Follow a terminal-to-browser OmegaFlow workflow from its first command to a
-  side-by-side visual result.
+  Follow one generated terminal beat into a learner-authored browser edit and
+  finish with a guided, rebuildable video.
 capture:
   window_size: 90x24
   headless: true
@@ -32,7 +32,9 @@ browser:
     color_scheme: dark
     reduced_motion: reduce
 presentation:
-  guided: false
+  guided: true
+  pane_chrome:
+    style: none
   browser:
     window:
       mode: framed
@@ -78,191 +80,118 @@ cleanup:
 
 # Build a Tiny Canvas Video
 
-This continuous walkthrough supports the written tutorial with the completed
-Tiny Canvas workflow.
+This guided walkthrough follows the same terminal-to-browser path as the
+written tutorial.
 
 ```yaml studio-directive
 scene: Build a Tiny Canvas Video
-panes:
-- id: before
-  kind: browser
-  title: Before
-- id: after
-  kind: browser
-  title: After
-- id: terminal
-  kind: terminal
-  title: Tiny Canvas workflow
 ```
 
 ```yaml studio-directive
 beat:
-  id: launch-editor
-  heading: Open The Artwork
+  id: open-artwork
+  heading: Start With The Generated Beat
   narration: >-
-    OmegaFlow organizes a video into beats. In this first terminal beat,
-    @launch@ run Tiny Canvas with the original Sunset Study artwork.
-    The command opens the editor in the browser for the next beat.
-  caption: Launch Tiny Canvas from a terminal beat.
-  layout:
-    areas:
-    - [terminal]
-  panes:
-    terminal:
-    - id: launch-editor
-      actions:
-      - id: edit-file
-        run: >-
-          python "$TUTORIAL_RECORDING_ROOT/scripts/tiny_canvas.py"
-          sunset-study.svg
-        display: python scripts/tiny_canvas.py sunset-study.svg
-        after: voiceover.launch.started
-        browser_handoff: {target: after}
-        timing: realtime
-        pre_enter_pause: 0.8
+    This walkthrough follows the same path as the written tutorial. It runs in
+    @guided_mode@ guided mode, which pauses after each beat. Turn Guided mode
+    off in the player controls to watch continuously. The tutorial workspace
+    begins with a generated terminal beat. @launch@ Run Tiny Canvas with the
+    original Sunset Study artwork. The command hands the editor to the browser
+    beat you will add.
+  caption: Start from the generated terminal beat.
+  player:
+    highlight:
+      control: guided
+      start: "@guided_mode@"
+  actions:
+  - commands:
+    - id: edit-file
+      run: >-
+        python "$TUTORIAL_RECORDING_ROOT/scripts/tiny_canvas.py"
+        sunset-study.svg
+      display: python scripts/tiny_canvas.py sunset-study.svg
+      after: "@launch@"
+      browser_handoff: true
+      timing: realtime
+      pre_enter_pause: 0.8
+      show_prompt_after: false
+  guide:
+    summary: The generated terminal beat opens the real tutorial application.
+    success_hint: Continue when you are ready to watch the browser edit.
 ```
 
 ```yaml studio-directive
 beat:
   id: edit-artwork
-  heading: Script The Browser Edit
+  medium: browser
+  heading: Add One Browser Beat
   narration: >-
-    The second beat scripts the browser through semantic page elements.
-    @rename@ Rename the artwork Coconut Sunset.
-    @sun@ Drag the sun toward the horizon, where the tree partly covers it.
-    @tree@ Reposition the coconut tree, then @save@ save the edited artwork as
-    a new, title-derived file.
-  caption: Target meaningful controls and artwork objects.
-  layout:
-    areas:
-    - [after]
-  panes:
-    after:
-    - id: editor
-      actions:
-      - id: open-editor
-        open_page:
-          handoff: edit-file
-          ready:
-            visible:
-              text: Ready
-              exact: true
-      - id: rename-artwork
-        after: voiceover.rename.started
-        hold_after_ms: 500
-        type_text:
-          target: {test_id: artwork-title}
-          text: Coconut Sunset
-          interval_ms: 90
-      - id: move-sun
-        after: voiceover.sun.started
-        timing: realtime
-        hold_before_ms: 400
-        hold_after_ms: 700
-        drag:
-          from:
-            target: {test_id: sun}
-            position: {x: 0.5, y: 0.5}
-          to:
-            target: {test_id: sunset-target}
-            position: {x: 0.5, y: 0.5}
-      - id: move-tree
-        after: voiceover.tree.started
-        timing: realtime
-        hold_before_ms: 400
-        hold_after_ms: 700
-        drag:
-          from:
-            target: {test_id: coconut-tree}
-            position: {x: 0.5, y: 0.5}
-          to:
-            target: {test_id: tree-target}
-            position: {x: 0.5, y: 0.5}
-      - id: save-new-file
-        after: voiceover.save.started
-        click:
-          target: {test_id: export-artwork}
-      - id: saved-new-file
-        wait_for:
-          visible:
-            text: Saved coconut-sunset.svg
-            exact: true
-      checks:
-      - name: title retained
-        value:
-          target: {test_id: artwork-title}
-          equals: Coconut Sunset
-      - name: new artwork saved
-        text:
-          target: {test_id: status}
-          equals: Saved coconut-sunset.svg
-```
-
-```yaml studio-directive
-beat:
-  id: compare-files
-  heading: Compare Before And After
-  narration: >-
-    A beat can compose more than one pane. In the final layout, the terminal
-    remains visible below two browser panes. @original@ Open the untouched
-    Sunset Study on the left. @edited@ Then open Coconut Sunset on the right
-    to compare the saved result.
-  caption: Combine terminal and browser panes in one beat.
-  layout:
-    areas:
-    - [before, after]
-    - [before, after]
-    - [terminal, terminal]
-  panes:
-    before:
-    - id: original-file
-      actions:
-      - id: show-original
-        open_page:
-          handoff: open-original
-          ready:
-            response:
-              contains: /files/sunset-study.svg
-              status: 200
-    after:
-    - id: saved-file
-      actions:
-      - id: show-saved
-        open_page:
-          handoff: open-saved
-          ready:
-            response:
-              contains: /files/coconut-sunset.svg
-              status: 200
-    terminal:
-    - id: open-original
-      actions:
-      - id: open-original
-        run: >-
-          python "$TUTORIAL_RECORDING_ROOT/scripts/tiny_canvas.py"
-          --view sunset-study.svg
-        display: python scripts/tiny_canvas.py --view sunset-study.svg
-        after: voiceover.original.started
-        browser_handoff: {target: before}
-        timing: realtime
-        pre_command_pause: 0.5
-        pre_enter_pause: 0.8
-    - id: open-saved
-      actions:
-      - id: open-saved
-        run: >-
-          python "$TUTORIAL_RECORDING_ROOT/scripts/tiny_canvas.py"
-          --view coconut-sunset.svg
-        display: python scripts/tiny_canvas.py --view coconut-sunset.svg
-        after: voiceover.edited.started
-        browser_handoff: {target: after}
-        timing: realtime
-        pre_command_pause: 0.5
-        pre_enter_pause: 0.8
+    The learner writes one complete browser beat and then improves that same
+    beat throughout the tutorial. @rename@ Rename the artwork Coconut Sunset.
+    @sun@ Move the sun toward the horizon, where the tree partly covers it.
+    @tree@ Reposition the coconut tree on the beach, then @save@ save the edited
+    artwork as a new file. The finished two-beat video can now be extended with
+    narration anchors and this guided checkpoint without authoring another
+    complete beat.
+  caption: Script one semantic browser workflow and keep refining it.
+  actions:
+  - id: open-editor
+    open_page:
+      handoff: edit-file
+      ready:
+        visible:
+          text: Ready
+          exact: true
+  - id: rename-artwork
+    after: "@rename@"
+    hold_after_ms: 500
+    type_text:
+      target: {test_id: artwork-title}
+      text: Coconut Sunset
+      interval_ms: 90
+  - id: move-sun
+    after: "@sun@"
+    timing: realtime
+    hold_before_ms: 400
+    hold_after_ms: 700
+    drag:
+      from:
+        target: {test_id: sun}
+        position: {x: 0.5, y: 0.5}
+      to:
+        target: {test_id: sunset-target}
+        position: {x: 0.5, y: 0.5}
+  - id: move-tree
+    after: "@tree@"
+    timing: realtime
+    hold_before_ms: 400
+    hold_after_ms: 700
+    drag:
+      from:
+        target: {test_id: coconut-tree}
+        position: {x: 0.5, y: 0.5}
+      to:
+        target: {test_id: tree-target}
+        position: {x: 0.5, y: 0.5}
+  - id: save-new-file
+    after: "@save@"
+    click:
+      target: {test_id: export-artwork}
+  - id: saved-new-file
+    wait_for:
+      visible:
+        text: Saved coconut-sunset.svg
+        exact: true
+  checks:
+  - name: title retained
+    value:
+      target: {test_id: artwork-title}
+      equals: Coconut Sunset
+  - name: new artwork saved
+    text:
+      target: {test_id: status}
+      equals: Saved coconut-sunset.svg
   guide:
-    summary: Compare the original and edited artwork.
-    commands:
-    - python scripts/tiny_canvas.py --view sunset-study.svg
-    - python scripts/tiny_canvas.py --view coconut-sunset.svg
-    success_hint: Both SVG files are open in their browser panes.
+    summary: The two-beat Tiny Canvas recording is ready to build and review.
+    success_hint: Use the build and watch commands from the written tutorial.
 ```

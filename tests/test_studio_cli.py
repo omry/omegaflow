@@ -5046,6 +5046,11 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert "id: sunset-beach" in recording
     assert "title: Refine a Sunset Beach Poster" in recording
     assert "id: inspect-draft" in recording
+    assert "base_url: http://127.0.0.1:18476" in recording
+    assert "presentation:\n  guided: true" in recording
+    assert "pane_chrome:\n    style: none" in recording
+    assert "name: start Tiny Canvas" in recording
+    assert "name: stop Tiny Canvas" in recording
     assert (
         "run: python recordings/sunset-beach/scripts/reset_artwork.py" in recording
     )
@@ -5198,7 +5203,7 @@ def test_tutorial_runtime_state_does_not_invalidate_the_recording_source(
     ).is_file()
 
 
-def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
+def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     tmp_path: Path,
 ) -> None:
     recordings_dir = tmp_path / "recordings"
@@ -5216,44 +5221,22 @@ def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
         recording_from_script("sunset-beach", recording_dir=recordings_dir)
     )
 
-    assert [pane.id for pane in plan.panes] == ["before", "after", "terminal"]
-    assert [beat.id for beat in plan.beats] == [
-        "launch-editor",
-        "edit-artwork",
-        "compare-files",
-    ]
-    launch, edit, compare = plan.beats
-    assert launch.layout.areas == (("terminal",),)
-    assert edit.layout.areas == (("after",),)
-    assert compare.layout.areas == (
-        ("before", "after"),
-        ("before", "after"),
-        ("terminal", "terminal"),
-    )
+    assert plan.panes == ()
+    assert [beat.id for beat in plan.beats] == ["open-artwork", "edit-artwork"]
+    launch, edit = plan.beats
+    assert launch.layout.areas == (("main",),)
+    assert edit.layout.areas == (("main",),)
     launch_tracks = {track.pane_id: track for track in launch.pane_tracks}
     edit_tracks = {track.pane_id: track for track in edit.pane_tracks}
-    compare_tracks = {track.pane_id: track for track in compare.pane_tracks}
-    assert [item.id for item in launch_tracks["terminal"].beats] == [
-        "launch-editor"
-    ]
-    assert len(launch_tracks["terminal"].beats[0].actions) == 1
-    assert [item.id for item in edit_tracks["after"].beats] == ["editor"]
-    assert [item.id for item in compare_tracks["before"].beats] == [
-        "original-file"
-    ]
-    assert [item.id for item in compare_tracks["after"].beats] == [
-        "saved-file"
-    ]
-    assert [item.id for item in compare_tracks["terminal"].beats] == [
-        "open-original",
-        "open-saved",
-    ]
+    assert [item.id for item in launch_tracks["main"].beats] == ["open-artwork"]
+    assert len(launch_tracks["main"].beats[0].actions) == 1
+    assert [item.id for item in edit_tracks["main"].beats] == ["edit-artwork"]
     assert len(plan.setup) == 1
     assert (
-        edit_tracks["after"].beats[0].actions[0].config["open_page"]["handoff"]
+        edit_tracks["main"].beats[0].actions[0].config["open_page"]["handoff"]
         == "edit-file"
     )
-    browser_actions = edit_tracks["after"].beats[0].actions
+    browser_actions = edit_tracks["main"].beats[0].actions
     assert [action.kind for action in browser_actions[:2]] == [
         "open_page",
         "type_text",
@@ -5274,65 +5257,25 @@ def test_complete_tiny_canvas_tutorial_has_three_pane_handoff_flow(
         browser_actions[3].config["drag"]["from"]["target"]["test_id"]
         == "coconut-tree"
     )
-    assert compare_tracks["before"].beats[0].actions[0].config[
-        "open_page"
-    ]["handoff"] == "open-original"
-    assert compare_tracks["after"].beats[0].actions[0].config[
-        "open_page"
-    ]["handoff"] == "open-saved"
     assert [handoff.target_pane_id for handoff in plan.browser_handoffs] == [
-        "after",
-        "before",
-        "after",
+        "main",
     ]
     assert (
-        launch_tracks["terminal"].beats[0]
+        launch_tracks["main"].beats[0]
         .actions[-1]
-        .config["commands"][0]["browser_handoff"]["target"]
-        == "after"
+        .config["commands"][0]["browser_handoff"]
+        is True
     )
     assert (
-        launch_tracks["terminal"].beats[0]
-        .actions[-1]
-        .config["commands"][0]["pre_enter_pause"]
-        == 1.0
-    )
-    assert (
-        compare_tracks["terminal"].beats[0]
-        .actions[-1]
-        .config["commands"][0]["browser_handoff"]["target"]
-        == "before"
-    )
-    assert (
-        compare_tracks["terminal"].beats[0]
-        .actions[-1]
-        .config["commands"][0]["pre_command_pause"]
-        == 0.6
-    )
-    assert (
-        compare_tracks["terminal"].beats[0]
+        launch_tracks["main"].beats[0]
         .actions[-1]
         .config["commands"][0]["pre_enter_pause"]
         == 1.0
     )
-    assert (
-        compare_tracks["terminal"].beats[1]
-        .actions[-1]
-        .config["commands"][0]["pre_command_pause"]
-        == 0.6
-    )
-    assert (
-        compare_tracks["terminal"].beats[1]
-        .actions[-1]
-        .config["commands"][0]["pre_enter_pause"]
-        == 1.0
-    )
-    assert (
-        "coconut-sunset.svg"
-        in compare_tracks["terminal"].beats[1]
-        .actions[0]
-        .config["commands"][0]["run"]
-    )
+    assert plan.presentation["guided"] is True
+    assert plan.presentation["pane_chrome"]["style"] == "none"
+    assert launch.guide["summary"] == "The generated terminal beat opens Tiny Canvas."
+    assert edit.guide["summary"] == "The two-beat Tiny Canvas recording is ready."
 
 
 def test_repository_tutorial_is_one_continuous_tiny_canvas_video() -> None:
@@ -5345,14 +5288,12 @@ def test_repository_tutorial_is_one_continuous_tiny_canvas_video() -> None:
         )
     )
 
-    assert [pane.id for pane in plan.panes] == ["before", "after", "terminal"]
-    assert [beat.id for beat in plan.beats] == [
-        "launch-editor",
-        "edit-artwork",
-        "compare-files",
-    ]
+    assert plan.panes == ()
+    assert [beat.id for beat in plan.beats] == ["open-artwork", "edit-artwork"]
+    assert plan.presentation["guided"] is True
+    assert plan.presentation["pane_chrome"]["style"] == "none"
     edit_tracks = {track.pane_id: track for track in plan.beats[1].pane_tracks}
-    actions = edit_tracks["after"].beats[0].actions
+    actions = edit_tracks["main"].beats[0].actions
     assert actions[1].kind == "type_text"
     assert actions[1].id == "rename-artwork"
     assert actions[1].config["type_text"]["interval_ms"] == 90

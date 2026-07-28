@@ -1,0 +1,17 @@
+{
+  "capture_fingerprint": "76a2fb1ff34eeaa174066a11bccc29c362e8a72d8e468fe2f38eb435ee7b5069",
+  "dependencies": [
+    {
+      "path": "recordings/tutorial/index.md",
+      "sha256": "ab03a02e410de0b8c942c23514ec6ea6a9b4790300f020622445cbc83db01bb8"
+    }
+  ],
+  "presentation_fingerprint": "9fe531ed1f4fc4010ec8a80af7c440d2b839ffee71b7376ce83a4ff887ac51b0",
+  "recording": "tutorial",
+  "version": 1,
+  "versions": {
+    "compiler": "presentation-v1",
+    "renderer": "payload-v1"
+  },
+  "warnings": []
+}

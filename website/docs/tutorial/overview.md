@@ -6,26 +6,17 @@ slug: /tutorial
 
 import VideoPlayer from "@site/src/components/VideoPlayer";
 
-# Build a Rebuildable Tiny Canvas Demo
+# Build a Rebuildable Tiny Canvas Video
 
-In this tutorial, you will build one OmegaFlow video from source to published
-output. The video starts in a terminal, edits a sunset poster in the supplied
-Tiny Canvas browser app, and finishes with the original and edited artwork
-side by side.
+This tutorial takes one small recording from generated starter to published
+video. You will begin with a reliable terminal beat, add one browser beat that
+edits a sunset poster, synchronize that beat with narration, and add a guided
+checkpoint.
 
-Along the way you will learn how to:
-
-- bootstrap an OmegaFlow project and tutorial workspace;
-- describe a video as a sequence of beats;
-- make a terminal beat reproducible with setup and checks;
-- script semantic browser actions such as fill, drag, click, and wait;
-- compose terminal and browser panes in one video;
-- synchronize actions with narration anchors;
-- add a guided checkpoint; and
-- build, review, check, and publish the result.
-
-The written steps are complete on their own. The supporting walkthrough
-demonstrates the same workflow without replacing the commands or source below.
+The written steps are complete on their own. The walkthrough follows the same
+terminal-to-browser path and runs in **Guided mode**, which pauses after each
+beat. Turn Guided mode off in the player controls if you prefer uninterrupted
+playback.
 
 <!-- studio:tutorial:start -->
 <VideoPlayer
@@ -42,63 +33,42 @@ Use a Python environment with OmegaFlow installed:
 python -m pip install omegaflow
 ```
 
-Browser capture also requires the browser dependencies described in the
-[installation guide](../intro.md). Narration requires an OpenAI API key. You
-can complete the silent video first and add narration later.
+Browser capture also requires the browser dependencies described in
+[Getting Started](../intro.md). You can build the silent workflow before
+configuring narration.
 
-## 1. Create the project and tutorial workspace
+## 1. Prepare the project
 
-From an empty project directory, bootstrap OmegaFlow:
+Start in the repository where you want to keep your recording sources:
 
 ```bash
 omegaflow bootstrap=project
+```
+
+This creates project settings, recording defaults, a private OmegaFlow service
+environment placeholder, and a small `test-video`. Build and watch that video
+to verify the installation:
+
+```bash
+omegaflow recording=test-video action=build
+omegaflow recording=test-video action=watch
+```
+
+Now add the tutorial workspace:
+
+```bash
 omegaflow bootstrap=tutorial
 ```
 
-The first command creates project configuration, recording defaults, a private
-OmegaFlow service environment placeholder, and a small test video. The second
-command adds Tiny Canvas and a starter `sunset-beach` recording.
+`bootstrap=tutorial` requires the project bootstrap. It adds the supplied Tiny
+Canvas application and an editable starter recording at
+`recordings/sunset-beach/`.
 
-The relevant files are:
+## 2. Read the generated terminal beat
 
-```text
-.omegaflow/
-  .gitignore
-  config.yaml
-  omegaflow-secret.env
-recordings/
-  config.yaml
-  sunset-beach/
-    app/
-    scripts/
-    index.md
-```
-
-`.omegaflow/omegaflow-secret.env` is ignored by the generated `.gitignore`.
-When you are ready to generate narration, uncomment its
-`OPENAI_OMEGAFLOW_API_KEY` entry and provide your key. OmegaFlow does not pass
-that service credential to recorded commands.
-
-## 2. Read the starter recording
-
-Open `recordings/sunset-beach/index.md` in your editor. Its frontmatter names
-the recording and configures standalone HTML output:
-
-```yaml
----
-id: sunset-beach
-title: Refine a Sunset Beach Poster
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${outputs.asset_dir}/index.html
----
-```
-
-The Markdown body contains `studio-directive` blocks. A `scene` names the
-presentation, and each `beat` defines one recorded unit:
+Open `recordings/sunset-beach/index.md`. Its frontmatter already configures the
+local Tiny Canvas server, browser capture, Guided mode, and standalone HTML
+publishing. The Markdown body starts with a scene and one terminal beat:
 
 ```yaml
 scene: Refine a Sunset Beach Poster
@@ -112,11 +82,11 @@ beat:
   caption: Confirm the Tiny Canvas draft before editing it.
   actions:
   - commands:
-    - run: python scripts/reset_artwork.py
+    - run: python recordings/sunset-beach/scripts/reset_artwork.py
       expect:
         output_contains:
         - Restored the Tiny Canvas draft.
-    - run: python scripts/inspect_artwork.py
+    - run: python recordings/sunset-beach/scripts/inspect_artwork.py
       expect:
         output_contains:
         - "Title: Sunset Study"
@@ -124,188 +94,111 @@ beat:
         - "Status: ready"
 ```
 
-A beat may record terminal or browser behavior. `terminal` is the default
-medium, so the starter does not repeat it.
-
-### See typed validation fail early
-
-Temporarily add an invalid medium to the beat:
-
-```yaml
-beat:
-  id: inspect-draft
-  medium: shell
-```
-
-Then validate the recording:
+The frontmatter and each `studio-directive` block are typed. To see validation
+before capture, temporarily add `medium: shell` to the beat and run:
 
 ```bash
 omegaflow recording=sunset-beach action=check
 ```
 
-OmegaFlow rejects `shell` before capture and reports that the supported values
-are `terminal` and `browser`. Change it to `terminal`, or remove the field to
-use the default.
+OmegaFlow identifies the invalid field and lists `terminal` and `browser` as
+the supported values. Remove the field afterward; terminal is the default.
 
-## 3. Build a repeatable terminal beat
+## 3. Build the starter
 
-Build and watch the starter:
+Build and watch the generated beat:
 
 ```bash
 omegaflow recording=sunset-beach action=build
 omegaflow recording=sunset-beach action=watch
 ```
 
-This small beat already has three reliability layers:
+The beat is reliable for three separate reasons:
 
-1. setup restores the immutable packaged draft;
-2. the action inspects the real working SVG; and
-3. expectations fail the build if the title or semantic objects are wrong.
+1. the first command restores an immutable packaged draft;
+2. the second command inspects the real working SVG; and
+3. its expectations fail the build if the title or semantic objects are wrong.
 
-That distinction matters. A plausible terminal transcript is not enough; a
-rebuildable video must prove that its visible state came from the expected
-application state.
+The transcript is therefore evidence from a repeatable workflow rather than
+plausible prerecorded output.
 
-## 4. Add the browser workflow
+## 4. Add one browser beat
 
-The completed silent workflow uses three globally named panes:
-
-```yaml
-scene: Refine a Sunset Beach Poster
-panes:
-- id: before
-  kind: browser
-  title: Before
-- id: after
-  kind: browser
-  title: After
-- id: terminal
-  kind: terminal
-  title: Tiny Canvas workflow
-```
-
-Pane declarations appear once, before every beat. The first beat launches Tiny
-Canvas from the terminal and hands the resulting browser session to the
-`after` pane:
+First extend the existing terminal beat with the command that opens Tiny Canvas.
+The handoff lets the following browser beat take control of that exact browser
+session:
 
 ```yaml
-beat:
-  id: launch-editor
-  heading: Open The Artwork
-  layout:
-    areas:
-    - [terminal]
-  panes:
-    terminal:
-    - id: launch-editor
-      actions:
-      - id: edit-file
-        run: python scripts/tiny_canvas.py sunset-study.svg
-        browser_handoff: {target: after}
-        timing: realtime
-        pre_enter_pause: 1.0
+- id: open-editor
+  run: python recordings/sunset-beach/scripts/tiny_canvas.py sunset-study.svg
+  display: python scripts/tiny_canvas.py sunset-study.svg
+  browser_handoff: true
+  timing: realtime
+  show_prompt_after: false
 ```
 
-The browser beat consumes that handoff, waits for the editor, changes the title,
-drags semantic SVG objects, and saves a new file:
+Then add one complete browser beat after the terminal beat:
 
 ```yaml
 beat:
   id: edit-artwork
+  medium: browser
   heading: Edit And Save A Copy
-  layout:
-    areas:
-    - [after]
-  panes:
-    after:
-    - id: editor
-      actions:
-      - id: open-editor
-        open_page:
-          handoff: edit-file
-          ready:
-            visible: {text: Ready, exact: true}
-      - id: rename-artwork
-        type_text:
-          target: {test_id: artwork-title}
-          text: Coconut Sunset
-          interval_ms: 90
-      - id: move-sun
-        drag:
-          from: {target: {test_id: sun}}
-          to: {target: {test_id: sunset-target}}
-      - id: move-tree
-        drag:
-          from: {target: {test_id: coconut-tree}}
-          to: {target: {test_id: tree-target}}
-      - id: save-new-file
-        click:
-          target: {test_id: export-artwork}
-      - id: saved-new-file
-        wait_for:
-          visible: {text: Saved coconut-sunset.svg, exact: true}
+  caption: Script one semantic browser workflow.
+  actions:
+  - id: open-editor
+    open_page:
+      handoff: open-editor
+      ready:
+        visible: {text: Ready, exact: true}
+  - id: rename-artwork
+    type_text:
+      target: {test_id: artwork-title}
+      text: Coconut Sunset
+      interval_ms: 90
+  - id: move-sun
+    timing: realtime
+    drag:
+      from: {target: {test_id: sun}}
+      to: {target: {test_id: sunset-target}}
+  - id: move-tree
+    timing: realtime
+    drag:
+      from: {target: {test_id: coconut-tree}}
+      to: {target: {test_id: tree-target}}
+  - id: save-new-file
+    click:
+      target: {test_id: export-artwork}
+  - id: saved-new-file
+    wait_for:
+      visible: {text: Saved coconut-sunset.svg, exact: true}
+  checks:
+  - name: title retained
+    value:
+      target: {test_id: artwork-title}
+      equals: Coconut Sunset
+  - name: new artwork saved
+    text:
+      target: {test_id: status}
+      equals: Saved coconut-sunset.svg
 ```
 
-Semantic targets make the script resilient to layout and viewport changes.
-Component-relative percentages are available when an application does not
-provide a meaningful destination element; absolute screen pixels are not
-required here.
+The targets describe application elements rather than screen pixels.
+`type_text` records the visible edit, each drag uses semantic SVG objects, and
+`wait_for` proves that the application finished saving.
 
-The final beat opens the original and saved SVGs into two browser panes above
-the terminal:
-
-```yaml
-beat:
-  id: compare-files
-  heading: Compare Before And After
-  layout:
-    areas:
-    - [before, after]
-    - [before, after]
-    - [terminal, terminal]
-  panes:
-    before:
-    - id: original-file
-      actions:
-      - open_page:
-          handoff: open-original
-          ready:
-            response: {contains: /files/sunset-study.svg, status: 200}
-    after:
-    - id: saved-file
-      actions:
-      - open_page:
-          handoff: open-saved
-          ready:
-            response: {contains: /files/coconut-sunset.svg, status: 200}
-    terminal:
-    - id: open-original
-      actions:
-      - id: open-original
-        run: python scripts/tiny_canvas.py --view sunset-study.svg
-        browser_handoff: {target: before}
-        timing: realtime
-    - id: open-saved
-      actions:
-      - id: open-saved
-        run: python scripts/tiny_canvas.py --view coconut-sunset.svg
-        browser_handoff: {target: after}
-        timing: realtime
-```
-
-Build the silent three-beat recording before adding narration:
+Build the silent two-beat video and review the changed beat directly:
 
 ```bash
 omegaflow recording=sunset-beach action=build
 omegaflow recording=sunset-beach action=watch beat=edit-artwork
 ```
 
-`beat=edit-artwork` starts review at that top-level beat. It does not make the
-nested `editor` pane beat an independent video section.
+## 5. Add narration and synchronize the edit
 
-## 5. Synchronize narration and actions
-
-Enable narration in frontmatter:
+Add your OpenAI API key to the ignored
+`.omegaflow/omegaflow-secret.env`, then enable narration in the recording
+frontmatter:
 
 ```yaml
 audio:
@@ -314,15 +207,24 @@ audio:
   voice: ash
 ```
 
-If you add narration but leave the browser actions unscheduled, the short edits
-will run ahead of the words describing them. Narration anchors give meaningful
-moments stable names, and `after` joins an action to one of those moments:
+First add this narration to `edit-artwork` without scheduling its actions:
 
 ```yaml
 narration: >-
-  Rename the poster @rename@ Coconut Sunset. Move the @sun@ sun toward the
-  horizon, reposition the @tree@ coconut tree, and @save@ save a new copy.
+  Rename the poster Coconut Sunset. Move the sun toward the horizon,
+  reposition the coconut tree, and save a new copy.
 ```
+
+Build and watch the beat. The short browser actions race ahead of the words
+that describe them. Name the useful moments with narration anchors:
+
+```yaml
+narration: >-
+  @rename@ Rename the poster Coconut Sunset. @sun@ Move the sun toward the
+  horizon, @tree@ reposition the coconut tree, and @save@ save a new copy.
+```
+
+Then join each existing action to the corresponding narration event:
 
 ```yaml
 - id: rename-artwork
@@ -333,11 +235,13 @@ narration: >-
     interval_ms: 90
 - id: move-sun
   after: "@sun@"
+  timing: realtime
   drag:
     from: {target: {test_id: sun}}
     to: {target: {test_id: sunset-target}}
 - id: move-tree
   after: "@tree@"
+  timing: realtime
   drag:
     from: {target: {test_id: coconut-tree}}
     to: {target: {test_id: tree-target}}
@@ -347,39 +251,43 @@ narration: >-
     target: {test_id: export-artwork}
 ```
 
-Use `step=narration` while revising spoken text without rebuilding capture:
+Regenerate only narration while revising spoken text:
 
 ```bash
-omegaflow recording=sunset-beach step=narration
+omegaflow recording=sunset-beach action=build step=narration
 ```
 
-Presentation-time actions may move on the compiled timeline so they line up
-with narration. Realtime actions preserve their internal elapsed behavior and
-may be positioned, but not stretched or reordered. A narration wait is a
-different tool: it pauses speech until an event completes. This tutorial has no
-long browser operation, so it does not add a fake wait.
+Presentation-time actions can move on the compiled timeline to align with
+narration. Realtime actions preserve their internal elapsed behavior and can be
+positioned, but not stretched or reordered. Narration waits are for
+asynchronous work that speech must wait for; this short browser workflow does
+not need an artificial wait.
 
-## 6. Add a guided checkpoint
+## 6. Add guided checkpoints
 
-A guide pauses at a beat boundary when Guided mode is enabled. Add this to the
-comparison beat:
+The generated recording already enables Guided mode. Add a guide to the
+terminal beat:
 
 ```yaml
 guide:
-  summary: Compare the original and edited artwork.
-  commands:
-  - python scripts/tiny_canvas.py --view sunset-study.svg
-  - python scripts/tiny_canvas.py --view coconut-sunset.svg
-  success_hint: Both SVG files are open in their browser panes.
+  summary: The generated terminal beat opens Tiny Canvas.
+  success_hint: Continue when you are ready to watch the browser edit.
 ```
 
-The player labels the action **Copy commands** because the checkpoint contains
-more than one command. With Guided mode disabled, the same video continues
-without stopping.
+Add another to `edit-artwork`:
+
+```yaml
+guide:
+  summary: The two-beat Tiny Canvas recording is ready.
+  success_hint: Build and watch the finished video from the terminal.
+```
+
+Guided playback pauses at these beat boundaries. Turning Guided mode off only
+changes whether playback pauses; it does not hide or alter the guide content.
 
 ## 7. Check and publish
 
-Build the finished recording, review it, and run the non-mutating check:
+Build the completed recording, review it, and run the non-mutating check:
 
 ```bash
 omegaflow recording=sunset-beach action=build
@@ -393,21 +301,17 @@ The configured standalone player is written under:
 recordings/.omegaflow/videos/sunset-beach/
 ```
 
-Commit the recording source, Tiny Canvas support files, and project
-configuration. Do not commit ignored runtime runs or secret environment files.
-
-Change the narration or one browser action and build again. OmegaFlow behaves
-like a compiler: it fingerprints source inputs, reuses unchanged capture and
-narration intermediates, and rebuilds the affected presentation and publish
-surfaces.
+Commit the recording source, Tiny Canvas files, and project configuration. Do
+not commit ignored runtime runs or secret environment files. On later builds,
+OmegaFlow fingerprints its inputs and reuses unchanged capture and narration
+instead of recreating every intermediate.
 
 ## Where to go next
 
-- [Recording files](../recording-files/overview.md) explains the complete source
-  model.
-- [Build and check](../cli/actions/build-check.md) covers focused authoring
-  steps and CI validation.
-- [Watch](../cli/actions/watch.md) covers beat links, collections, and local
-  playback.
-- [Video output](../video-output.md) explains generated and published
-  artifacts.
+The tutorial deliberately follows one path. Focused reference pages and videos
+cover individual capabilities in greater depth:
+
+- [Recording files](../recording-files/overview.md)
+- [Build and check](../cli/actions/build-check.md)
+- [Watch](../cli/actions/watch.md)
+- [Video output](../video-output.md)

@@ -1,0 +1,201 @@
+{
+  "assets": {
+    "clip-315d806f7acb0c6cda1909266cbc9d0d11970221e6b91c2d9fe297d85ae612cb": {
+      "media_type": "video/mp4",
+      "path": "media/browser-clip-003.mp4"
+    },
+    "clip-443482fb17c234d89c56bffea3dc0a6398ecd1dc677100cc76360323be7316e9": {
+      "media_type": "video/mp4",
+      "path": "media/browser-clip-002.mp4"
+    },
+    "clip-cdb3acd2527e3a00f4f10b6bae4ea82f3b5f626da0309c282d07c958d801e875": {
+      "media_type": "video/mp4",
+      "path": "media/browser-clip-001.mp4"
+    },
+    "state-24bcee70548648b504ca54097a8c52c6cf89bd27c512e346726c0703e9f5a173": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-006.webp"
+    },
+    "state-29e176b6517571d351b71732e16076d8f16dd9f6bc9e3336e102cc742162b0c2": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-003.webp"
+    },
+    "state-602a8762740bf581412f90918259059c217cb2a8a53c10c694f9e00ff6921593": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-001.webp"
+    },
+    "state-6412a09f8d38f7329e3e5f762e01a41dcf1cf103f62f0bad053f85fd1f6dfcf6": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-004.webp"
+    },
+    "state-c8fa5805f5aa023d893148e63fc6933ab8b5dccd976c2ad6c0a5a8728a1476e2": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-002.webp"
+    },
+    "state-cd70999b6a5b64b5294b0dccc5a7a86c7a99c57f4898d59f32fbbe04feb07323": {
+      "media_type": "image/webp",
+      "path": "media/browser-state-005.webp"
+    }
+  },
+  "audio": {
+    "intervals": [
+      {
+        "presentation_end_ms": 21960,
+        "presentation_start_ms": 0,
+        "source_end_ms": 21960,
+        "source_start_ms": 0
+      },
+      {
+        "presentation_end_ms": 47424,
+        "presentation_start_ms": 21960,
+        "source_end_ms": 47424,
+        "source_start_ms": 21960
+      }
+    ],
+    "metadata": "audio.json"
+  },
+  "beats": [
+    {
+      "duration_ms": 21960,
+      "guide": {
+        "commands": [],
+        "success_hint": "Continue when you are ready to watch the browser edit.",
+        "summary": "The generated terminal beat opens the real tutorial application."
+      },
+      "heading": "Start With The Generated Beat",
+      "id": "open-artwork",
+      "layout": {
+        "areas": [
+          [
+            "main-open-artwork"
+          ]
+        ]
+      },
+      "offset_ms": 0,
+      "pane_tracks": [
+        {
+          "beats": [
+            {
+              "browser": null,
+              "duration_ms": 21960,
+              "id": "open-artwork",
+              "offset_ms": 0,
+              "payload": "beats/open-artwork.cast",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "main-open-artwork"
+        }
+      ],
+      "player": {
+        "highlight": {
+          "control": "guided",
+          "end_ms": 21960,
+          "start_ms": 4380
+        }
+      },
+      "transition_in": null
+    },
+    {
+      "duration_ms": 25464,
+      "guide": {
+        "commands": [],
+        "success_hint": "Use the build and watch commands from the written tutorial.",
+        "summary": "The two-beat Tiny Canvas recording is ready to build and review."
+      },
+      "heading": "Add One Browser Beat",
+      "id": "edit-artwork",
+      "layout": {
+        "areas": [
+          [
+            "main-edit-artwork"
+          ]
+        ]
+      },
+      "offset_ms": 21960,
+      "pane_tracks": [
+        {
+          "beats": [
+            {
+              "browser": null,
+              "duration_ms": 25464,
+              "id": "edit-artwork",
+              "offset_ms": 0,
+              "payload": "beats/edit-artwork.browser.json",
+              "transition": {
+                "duration_ms": 0,
+                "kind": "cut"
+              }
+            }
+          ],
+          "initial": "first",
+          "pane_id": "main-edit-artwork"
+        }
+      ],
+      "player": null,
+      "transition_in": "window-open"
+    }
+  ],
+  "manifest_version": 1,
+  "panes": [
+    {
+      "id": "main-open-artwork",
+      "renderer": "terminal",
+      "title": {
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+        "text": null,
+        "visible": true
+      }
+    },
+    {
+      "id": "main-edit-artwork",
+      "renderer": "browser",
+      "title": {
+        "alignment_x": "right",
+        "alignment_y": "top",
+        "position_x": "0.25rem",
+        "position_y": "0.25rem",
+        "text": null,
+        "visible": true
+      }
+    }
+  ],
+  "presentation": {
+    "browser": {
+      "chrome": {
+        "mode": "minimal"
+      },
+      "window": {
+        "mode": "framed",
+        "opening_transition": "window-open",
+        "theme": "kde-breeze",
+        "title": "Tiny Canvas"
+      }
+    },
+    "guided": true,
+    "pane_chrome": {
+      "style": "none"
+    }
+  },
+  "recording": {
+    "duration_ms": 47424,
+    "id": "tutorial",
+    "title": "Build a Tiny Canvas Video"
+  },
+  "renderers": {
+    "browser": {
+      "payload_version": 1
+    },
+    "terminal": {
+      "payload_version": 1
+    }
+  },
+  "signatures": "signatures.json"
+}
