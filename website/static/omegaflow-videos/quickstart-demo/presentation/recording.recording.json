@@ -1,9 +1,9 @@
 {
-  "capture_fingerprint": "6677c0c289dd819e1fb4b71375b66d27ca3eb9c5e118e1ac23321a3352e7dad6",
+  "capture_fingerprint": "2677f2ac3b066b36f01f5fb838c268a73aeda6841e66ef13fb210d9b65cc4686",
   "dependencies": [
     {
       "path": "recordings/quickstart-demo/index.md",
-      "sha256": "321b876b9437645c2f4181ea988ce477fa4af442d359e79dad517c660d046194"
+      "sha256": "7495cc44f4b34693ff6a93c5a3a97dcc4da3e08fe9e89b3d77359e7d8d6cde9f"
     },
     {
       "path": "recordings/quickstart-demo/scripts/cleanup-demo-project.sh",
@@ -14,14 +14,12 @@
       "sha256": "0031a66fe576a4497f2673d3106f53d552aac4570aca9a7b4e7b87ccf03343b9"
     }
   ],
-  "presentation_fingerprint": "6079358ebd15b3edb560215d68b067b314926048e762b74402608de06c65c99d",
+  "presentation_fingerprint": "b624ff8ca91dab574e27bb8624121703397b96ba222deb70ccafa0d5f128a441",
   "recording": "quickstart-demo",
   "version": 1,
   "versions": {
     "compiler": "presentation-v1",
     "renderer": "payload-v1"
   },
-  "warnings": [
-    "NARRATION_TIMING_LOW_CONFIDENCE"
-  ]
+  "warnings": []
 }

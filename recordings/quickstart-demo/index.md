@@ -245,7 +245,7 @@ beat:
     Video Beat. Hover over either beat in the timeline to preview it.
     @point_at_speed@ You can also use the
     @playback_speed_start@ playback speed control. @playback_speed_end@
-    To learn more, start the tutorial or read the docs.
+    To learn more, explore the guides or read the docs.
   marker: play-in-browser
   caption: Script browser interaction with the generated player.
   pointer:
@@ -302,5 +302,5 @@ beat:
       visible: false
   guide:
     summary: This beat demonstrated beat previews and playback speed.
-    success_hint: To learn more, start the tutorial or read the docs.
+    success_hint: To learn more, explore the guides or read the docs.
 ```

@@ -2,51 +2,51 @@
   "files": {
     "audio.json": {
       "bytes": 3669,
-      "sha256": "eb45132a5f58db2653d23e361f2b6abfe6155c0c76e091aaa9fdcf888629138f"
+      "sha256": "0119ab302b88d45ec43f48a40146fac0ad223ae9a4a00ea46195d6ea0ede338a"
     },
     "audio/__beat__~3abootstrap-playback.mp3": {
-      "bytes": 310317,
-      "sha256": "e2bf54c0e17c89efe50c8eb85f01b2c2a6ed0a21049aa03ca12f0b765c2e5d85"
+      "bytes": 334893,
+      "sha256": "fb7686e808b50374e11b2f87ca861abfb28301a711c97aa69750d192b54c6d79"
     },
     "audio/__beat__~3abootstrap.mp3": {
-      "bytes": 293760,
-      "sha256": "3282562876b610cc2cbd0268c467f601141d7e4a776c641a68b37789d4396469"
+      "bytes": 318720,
+      "sha256": "e6f87e6b628cc079a7550b326acee20bb854cc161776d1d66b80c667c66581da"
     },
     "audio/__beat__~3ainstall.mp3": {
-      "bytes": 140928,
-      "sha256": "16ec036709f1c20ae3cd8acef5552a89c76e03fb353994130bc72917df7f18f8"
+      "bytes": 144000,
+      "sha256": "9bfb9218ab3879961cecceda3d6a4509d8394eb7fc388c4ba0e64b5158dfc267"
     },
     "audio/__beat__~3aintroduction.mp3": {
-      "bytes": 446592,
-      "sha256": "1e1a9331697b01d102df1f8622efe11481d4ce0a6805f80988b6b7b9ff4e2a84"
+      "bytes": 400896,
+      "sha256": "188b38c5b741d586b354588a9b06a7d25781465c1301076aac31aa220241b227"
     },
     "audio/build-and-browser-playback.mp3": {
-      "bytes": 602541,
-      "sha256": "2f1abe039deb16efee18c6a5c288c4442464d3cf0ce2ae98375dca449c896792"
+      "bytes": 617901,
+      "sha256": "70d548bae56c593fad8ed4d7242ca7aa491d758abc07145e6bfa28ae7bb8bdc6"
     },
     "audio/build-and-browser.mp3": {
-      "bytes": 579456,
-      "sha256": "85c1f968db931c342b4d5a2ef578051fc153a6bea24e08d8ccfcdc2439c4db66"
+      "bytes": 586368,
+      "sha256": "247f3347a676654e97dce4ea108aef56299fe90fb167a22cb410fb3b46dc461a"
     },
     "beats/bootstrap.cast": {
-      "bytes": 1732,
-      "sha256": "a3bb7d5dfc817fa59d7164181477e83c6059ec816060c7a3de5d9cd065050289"
+      "bytes": 1736,
+      "sha256": "7f642fe64a131812ebcce82e91e26653c338626bea189d806f6ee6bdacd0317c"
     },
     "beats/build.cast": {
-      "bytes": 13272,
-      "sha256": "1f9ec7745707d59fe3da24249f630390107e5668af9e367be3c6fc608f069782"
+      "bytes": 13252,
+      "sha256": "e1229d22e866d22cb730e7df3ef4f451d1cf026b7d65288f0a7cb2cb36a1769c"
     },
     "beats/install.cast": {
-      "bytes": 755,
-      "sha256": "8a9b718a775976b87bb76836ba1e6a95a92870606872fa0a2a353b209da699d2"
+      "bytes": 753,
+      "sha256": "c16cf1b8eeb2592a91d830e175c7d5d9bea058cb13bfbc4d08729466ad1f0f05"
     },
     "beats/introduction.cast": {
       "bytes": 121,
-      "sha256": "0ad0696b8de37ee43094dee3d7b87dbedb896b2b0a004f33582d229ab5b7e25b"
+      "sha256": "2dd8ac14226ae2db5566ec9a95eeee155019532a11b2fd2648a89bef6eb399f5"
     },
     "beats/play-in-browser.browser.json": {
-      "bytes": 4108,
-      "sha256": "b39d07ec625a26b2a6b720ee61f8c3fb37b91e846c62ec2701657068775d60ea"
+      "bytes": 4099,
+      "sha256": "ae8268cfc622658789dad3839c1bff5aa80e06e296a58b3aad2b1e30be387722"
     },
     "media/browser-state-001.webp": {
       "bytes": 60,
@@ -54,47 +54,47 @@
     },
     "media/browser-state-002.webp": {
       "bytes": 5600,
-      "sha256": "55b4a0307067178c03cd92f27fcba685f4431f89b734b96b912ae69a61b0d896"
+      "sha256": "c36129ce2893256991e7ebcab71bed1676eefb3fb5f9e82525d61f04e5d6c908"
     },
     "media/browser-state-003.webp": {
-      "bytes": 7836,
-      "sha256": "31a78e9b1999ef7a8dc227665292970a2c93274736957397e322242862ee0f2f"
+      "bytes": 7784,
+      "sha256": "44310fb0a5c5a2aaab0a5b2cada42239fc2d8e185a888947405d7bcf27c640ea"
     },
     "media/browser-state-004.webp": {
-      "bytes": 8044,
-      "sha256": "470ecabbaf67ed69d4e3057c260c847fbefad37e2dd7cc44bb7b216376929548"
+      "bytes": 8070,
+      "sha256": "bde0ab621ff5e45103867767ae3a03a273d92d567c66a91b3d6f38569432c997"
     },
     "media/browser-state-005.webp": {
-      "bytes": 10690,
-      "sha256": "743d2371b626d91d04886fa5c721982841f9f5a6be6ee3f00f4c56b582a0c3ca"
+      "bytes": 10712,
+      "sha256": "628a5fad82861b728aa8350dc65d3e2870075259e39bae6352ab9ef9f327bf73"
     },
     "media/browser-state-006.webp": {
-      "bytes": 11370,
-      "sha256": "001a0a670d4dad1775a8d7d8779887428dfe29800493beccdec628c67c0324dd"
+      "bytes": 11360,
+      "sha256": "139ca75143063b79db88a3ff2a0eead19803c2575e01deeb2d43f21850311775"
     },
     "recording.presentation.json": {
       "bytes": 9303,
-      "sha256": "98f24f3d9868ae7fc997394467e583d01e034723c1f450967b7089ad007f3745"
+      "sha256": "9b27ce92b3930c1ecb7fdb974b78fc16e5a4eae93e8792c4407da603f00cbcc1"
     },
     "recording.recording.json": {
-      "bytes": 907,
-      "sha256": "81400b454564c41a1990a9f5edfe10b4ffabc63b25b4a1c910c831814cb9e369"
+      "bytes": 866,
+      "sha256": "259a597d5f9b1d6980aef67e13099d09ccc93783dd38623da9fc4d8532f5251c"
     },
     "timestamps/__beat__~3abootstrap.json": {
-      "bytes": 14003,
-      "sha256": "cda830fdf3dafa453096e800f9a47a1a85770ff743833dd1562aebd787bf8276"
+      "bytes": 14008,
+      "sha256": "80cb4d4ca7e870e082c7c17319a307f3b3c3ef5bbd50c31030200216fc8a115c"
     },
     "timestamps/__beat__~3ainstall.json": {
       "bytes": 5668,
-      "sha256": "b7029f5433cc43b84613128cae86eecf534db2ad05020770783c7e11e88ca715"
+      "sha256": "840160e1f7f2084690439bf972f757b52decbdbec336bf40fb992150a7d4a0f7"
     },
     "timestamps/__beat__~3aintroduction.json": {
-      "bytes": 18295,
-      "sha256": "f8025dd2481b80738c8288b1ee424c06e16a83030aaccbef621b9c5b4d93e88c"
+      "bytes": 18282,
+      "sha256": "10d3eee7b6c72604a83e60a6b2ab300f262c73608594a23066f720cb7fdea2a1"
     },
     "timestamps/build-and-browser.json": {
-      "bytes": 27093,
-      "sha256": "38e4effda61a00ace6511015990272629187ef72057c222238a701367daebdcb"
+      "bytes": 27085,
+      "sha256": "dd859416673d0b98465b5a3bab7137640225e6a0c87ea6273705c684810d8840"
     }
   },
   "version": 1

@@ -1,5 +1,5 @@
 {
-  "duration_ms": 91296,
+  "duration_ms": 90624,
   "recording": "quickstart-demo",
   "takes": [
     {
@@ -12,10 +12,10 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 27912,
+      "playback_end_ms": 25056,
       "playback_src": "audio/__beat__~3aintroduction.mp3",
       "playback_start_ms": 0,
-      "source_end_ms": 27912,
+      "source_end_ms": 25056,
       "source_start_ms": 0,
       "src": "audio/__beat__~3aintroduction.mp3",
       "timestamps": "timestamps/__beat__~3aintroduction.json"
@@ -30,11 +30,11 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 36720,
+      "playback_end_ms": 34056,
       "playback_src": "audio/__beat__~3ainstall.mp3",
-      "playback_start_ms": 27912,
-      "source_end_ms": 36720,
-      "source_start_ms": 27912,
+      "playback_start_ms": 25056,
+      "source_end_ms": 34056,
+      "source_start_ms": 25056,
       "src": "audio/__beat__~3ainstall.mp3",
       "timestamps": "timestamps/__beat__~3ainstall.json"
     },
@@ -48,11 +48,11 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 56037,
+      "playback_end_ms": 54909,
       "playback_src": "audio/__beat__~3abootstrap-playback.mp3",
-      "playback_start_ms": 36720,
-      "source_end_ms": 55080,
-      "source_start_ms": 36720,
+      "playback_start_ms": 34056,
+      "source_end_ms": 53976,
+      "source_start_ms": 34056,
       "src": "audio/__beat__~3abootstrap.mp3",
       "timestamps": "timestamps/__beat__~3abootstrap.json"
     },
@@ -67,16 +67,16 @@
         },
         {
           "beat_id": "play-in-browser",
-          "text": "OmegaFlow scripts and records browser workflows just as it does terminal workflows. Here, the watch command opens the video we just created, and this script explores its player. The test video contains First Video Beat and Second Video Beat. Hover over either beat in the timeline to preview it. You can also use the playback speed control. To learn more, start the tutorial or read the docs.",
+          "text": "OmegaFlow scripts and records browser workflows just as it does terminal workflows. Here, the watch command opens the video we just created, and this script explores its player. The test video contains First Video Beat and Second Video Beat. Hover over either beat in the timeline to preview it. You can also use the playback speed control. To learn more, explore the guides or read the docs.",
           "text_end": 578,
           "text_start": 186
         }
       ],
-      "playback_end_ms": 93618,
+      "playback_end_ms": 93443,
       "playback_src": "audio/build-and-browser-playback.mp3",
-      "playback_start_ms": 56037,
-      "source_end_ms": 91296,
-      "source_start_ms": 55080,
+      "playback_start_ms": 54909,
+      "source_end_ms": 90624,
+      "source_start_ms": 53976,
       "src": "audio/build-and-browser.mp3",
       "timestamps": "timestamps/build-and-browser.json"
     }
