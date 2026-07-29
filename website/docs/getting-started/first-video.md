@@ -53,6 +53,6 @@ Before publishing a recording, check its generated artifacts:
 omegaflow recording=test-video action=check
 ```
 
-You now have the core loop: **author, build, watch, and check**. Continue with
-the [project tutorial](/tutorial/) to add a browser beat, narration, timing,
-and guided playback.
+You now have the core loop: **author, build, watch, and check**. Use
+[Next steps](./next-steps.md) to add browser capture, narration, timing, or
+guided playback.

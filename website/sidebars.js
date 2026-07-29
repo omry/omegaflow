@@ -14,7 +14,6 @@ module.exports = {
         'getting-started/next-steps',
       ],
     },
-    'tutorial/index',
     'concepts/index',
     {
       type: 'category',

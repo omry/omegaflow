@@ -54,11 +54,6 @@ const config = {
           position: 'left',
         },
         {
-          to: '/tutorial/',
-          label: 'Tutorial',
-          position: 'left',
-        },
-        {
           to: '/guides/',
           label: 'Guides',
           position: 'left',

@@ -7,7 +7,7 @@ slug: /reference/
 
 Use Reference when you need the exact command, configuration, source, or output
 contract. Start with [Getting Started](/getting-started/) for a first result or
-the [tutorial](/tutorial/) for a cumulative explanation.
+use the [Guides](/guides/) for task-oriented explanations.
 
 Most commands have this shape:
 

@@ -6,9 +6,8 @@ slug: /guides/
 # Guides
 
 Guides solve a specific authoring or operational task. Complete
-[Getting Started](/getting-started/) first, or follow the
-[tutorial](/tutorial/) when you want the concepts introduced as one cumulative
-project.
+[Getting Started](/getting-started/) first, then choose the guide that matches
+what you want to add to a recording.
 
 ## Authoring
 

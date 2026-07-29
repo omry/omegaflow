@@ -62,9 +62,6 @@ ffmpeg -hide_banner -encoders | grep -E 'libwebp|libx264'
 ffprobe -version
 ```
 
-The tutorial uses `nano` for a reproducible editor recording. Install it only
-if you plan to follow that tutorial; it is not an OmegaFlow dependency.
-
 ## Supported platforms
 
 | Environment | Terminal recording | Browser recording | Local watch |
@@ -104,5 +101,5 @@ omegaflow recording=test-video action=build
 omegaflow recording=test-video action=watch
 ```
 
-Continue with [Build your first video](./first-video.md), then the
-[project tutorial](/tutorial/).
+Continue with [Build your first video](./first-video.md), then choose a focused
+workflow from [Next steps](./next-steps.md).

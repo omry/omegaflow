@@ -29,9 +29,8 @@ work before you begin authoring a larger workflow.
 
 ## Where that leads
 
-Continue with the [Tiny Canvas tutorial](/tutorial/) to build one cumulative
-terminal-to-browser recording, or use [Next steps](./next-steps.md) to choose a
-focused guide.
+Use [Next steps](./next-steps.md) to choose a focused guide for terminal or
+browser authoring, narration, presentation, and publishing.
 
 OmegaFlow currently supports Linux and macOS directly, plus WSL using a host
 browser for playback. See [Install and supported platforms](./install.md) for

@@ -8,8 +8,6 @@ slug: /getting-started/next-steps/
 
 After the generated test video works, choose the path that matches your goal:
 
-- Follow the [Tiny Canvas tutorial](/tutorial/) to learn how terminal and
-  browser beats, checks, narration, timing, and guided playback fit together.
 - Use the [terminal authoring guide](/guides/terminal-workflows/) for a
   command-line workflow.
 - Use the [browser authoring guide](/guides/browser-workflows/) for a local

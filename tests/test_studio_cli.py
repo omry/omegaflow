@@ -2594,7 +2594,6 @@ def test_audio_uses_private_omegaflow_service_environment_without_mutation(
     [
         "quickstart-demo",
         "internal/browser-narration-smoke",
-        "tutorial",
     ],
 )
 def test_repository_recordings_use_the_private_tts_service_environment(
@@ -5371,27 +5370,6 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     assert browser_actions[2].config["after"] == "@sun@"
     assert browser_actions[3].config["after"] == "@tree@"
     assert browser_actions[4].config["after"] == "@save@"
-
-
-def test_repository_tutorial_is_one_continuous_tiny_canvas_video() -> None:
-    repository = Path(__file__).resolve().parents[1]
-
-    plan = normalize_recording_plan(
-        recording_from_script(
-            "tutorial",
-            recording_dir=repository / "recordings",
-        )
-    )
-
-    assert plan.panes == ()
-    assert [beat.id for beat in plan.beats] == ["open-artwork", "edit-artwork"]
-    assert plan.presentation["guided"] is True
-    assert plan.presentation["pane_chrome"]["style"] == "none"
-    edit_tracks = {track.pane_id: track for track in plan.beats[1].pane_tracks}
-    actions = edit_tracks["main"].beats[0].actions
-    assert actions[1].kind == "type_text"
-    assert actions[1].id == "rename-artwork"
-    assert actions[1].config["type_text"]["interval_ms"] == 90
 
 
 def test_success_followups_show_user_facing_actions(capsys) -> None:
