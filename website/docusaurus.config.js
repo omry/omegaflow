@@ -77,6 +77,17 @@ const config = {
     },
     footer: {
       style: 'dark',
+      links: [
+        {
+          title: 'Project',
+          items: [
+            {
+              label: 'MPL 2.0 License',
+              href: 'https://github.com/omry/omegaflow/blob/main/LICENSE',
+            },
+          ],
+        },
+      ],
       copyright: `Copyright © ${new Date().getFullYear()} OmegaFlow.`,
     },
   },

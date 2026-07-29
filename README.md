@@ -74,3 +74,10 @@ or browse the [full documentation](https://omegaflow.dev/getting-started/).
 
 See the [maintainer guide](MAINTAINERS.md) for development setup, local website
 instructions, and validation.
+
+## License
+
+OmegaFlow is available under the [Mozilla Public License 2.0](LICENSE). Source
+for released versions is available from the
+[OmegaFlow repository](https://github.com/omry/omegaflow). See
+[NOTICE.md](NOTICE.md) for relicensing and third-party notices.
