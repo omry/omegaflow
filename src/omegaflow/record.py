@@ -86,6 +86,9 @@ def asciinema_command(source: dict[str, Any] | None = None) -> str:
     bundled = bundled_asciinema_path()
     if bundled is not None:
         return bundled
+    resolved = shutil.which("asciinema")
+    if resolved is not None:
+        return str(Path(resolved).resolve())
     return "asciinema"
 
 

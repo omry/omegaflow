@@ -934,6 +934,24 @@ def test_asciinema_command_prefers_bundled_path(monkeypatch) -> None:
     assert record.asciinema_command({"studio": {}}) == "/bundle/asciinema"
 
 
+def test_asciinema_command_resolves_host_fallback_before_environment_isolation(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(record, "bundled_asciinema_path", lambda: None)
+    monkeypatch.setattr(
+        record.shutil,
+        "which",
+        lambda command: "tools/asciinema" if command == "asciinema" else None,
+    )
+
+    assert (
+        record.asciinema_command({"studio": {}})
+        == str(tmp_path / "tools/asciinema")
+    )
+
+
 def test_check_asciinema_reports_missing_command(monkeypatch) -> None:
     def fake_run(*_args, **_kwargs):
         raise FileNotFoundError("missing")
