@@ -1,11 +1,11 @@
 ---
 kind: video
-id: browser-recording-reference
-title: Browser Recording Reference
+id: internal/browser-narration-smoke
+title: Internal Browser Narration Smoke Test
 outputs:
   dir: website/static/omegaflow-videos
 environment:
-  working_directory: recordings/browser-recording-reference
+  working_directory: recordings/internal/browser-narration-smoke
 browser:
   base_url: http://127.0.0.1:18473
   viewport:
@@ -21,14 +21,15 @@ presentation:
     window:
       mode: framed
       theme: kde-breeze
-      title: OmegaFlow Reference
+      title: OmegaFlow Narration Smoke Test
       opening_transition: window-open
     chrome:
       mode: minimal
     transitions:
       default: fade
 audio:
-  enabled: false
+  enabled: true
+  env: OPENAI_OMEGAFLOW_API_KEY
 publish:
   default: html
   surfaces:
@@ -39,7 +40,7 @@ setup:
 - name: start local reference application
   run: >-
     rm -f .reference-server-ready reference-state.json;
-    python scripts/reference_server.py --port 18473 >reference-server.log 2>&1 &
+    python3 scripts/reference_server.py --port 18473 >reference-server.log 2>&1 &
     export REFERENCE_SERVER_PID=$!;
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
       test -f .reference-server-ready && break;
@@ -54,24 +55,26 @@ cleanup:
     rm -f .reference-server-ready reference-state.json reference-server.log
 ---
 
-# Browser Recording Reference
+# Internal Browser Narration Smoke Test
 
-This recording is the end-to-end fixture for a single environment shared by
-terminal and browser beats.
+This opt-in recording verifies narration continuity across a terminal-to-browser
+beat boundary. It is separate from the API-free reference fixture so automated
+capture remains deterministic and does not require credentials.
 
 ```yaml studio-directive
-scene: Mixed terminal and browser capture
+scene: Mixed capture with continuous narration
 ```
 
 ```yaml studio-directive
 beat:
   id: prepare
   heading: Prepare application state
-  narration: The terminal prepares state that the browser will consume.
+  narration_take: terminal-browser-handoff
+  narration: First, the terminal prepares application state,
   viewer_hold: 0.4
   actions:
   - run: >-
-      python scripts/set_state.py terminal-ready &&
+      python3 scripts/set_state.py terminal-ready &&
       printf 'terminal-ready\n'
     expect:
       file_exists:
@@ -83,7 +86,10 @@ beat:
   id: browser
   medium: browser
   heading: Operate the browser
-  narration: Open the application, advance its state, and enter a project name.
+  narration_take: terminal-browser-handoff
+  narration: >-
+    then the browser consumes it, advances the shared state, and enters a
+    project name.
   viewer_hold: 0.3
   actions:
   - id: open
@@ -133,10 +139,10 @@ beat:
 beat:
   id: verify
   heading: Verify shared state
-  narration: The terminal verifies the state produced by the browser.
+  narration: Finally, the terminal verifies the state produced by the browser.
   viewer_hold: 0.5
   actions:
-  - run: python scripts/check_state.py browser-updated
+  - run: python3 scripts/check_state.py browser-updated
     expect:
       output_contains:
       - browser-updated

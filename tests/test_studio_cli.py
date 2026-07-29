@@ -2523,7 +2523,7 @@ def test_audio_uses_private_omegaflow_service_environment_without_mutation(
     "recording_id",
     [
         "quickstart-demo",
-        "browser-recording-narration-smoke",
+        "internal/browser-narration-smoke",
         "tutorial",
     ],
 )

@@ -942,8 +942,8 @@ but each receives content appropriate to its page type.
 | `recordings/tutorial/index.md` | Replace the collection with one linear continuous supporting walkthrough using the materialized Tiny Canvas workspace |
 | `recordings/tutorial/*/index.md` | Remove all placeholder and micro-video members after the continuous walkthrough passes validation |
 | `website/static/omegaflow-videos/tutorial` | Regenerate only from the completed continuous walkthrough; do not preserve placeholder output |
-| `recordings/browser-recording-reference` | Evaluate during reference-video curation as either public browser reference material or an internal integration fixture |
-| `recordings/browser-recording-narration-smoke` | Retain as an internal smoke fixture, outside public navigation |
+| `recordings/internal/browser-narration-smoke` | Retain as the private-TTS browser integration fixture, outside public navigation |
+| Unreferenced browser-audio, timing-parity, browser-reference, and realtime-terminal-input demonstrations | Remove after their capabilities are covered by automated tests and the retained tutorial/reference recordings |
 
 The learner's generated `sunset-beach` recording remains distinct from the
 repository-owned supporting tutorial walkthrough.
