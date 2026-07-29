@@ -26,14 +26,7 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-- [ ] `P0` Make the final OmegaFlow artifacts installable from public package
-      indexes. OmegaFlow requires `omegaconf>=2.4.0.dev14`, but PyPI currently
-      provides only through `2.4.0.dev13`, so a clean wheel installation cannot
-      resolve its dependencies. Acceptance checks: publish a compatible
-      OmegaConf release or intentionally revise OmegaFlow's requirement and
-      schema usage; rebuild the final OmegaFlow artifacts; and smoke-install
-      both the base package and browser extra in clean environments using only
-      public package indexes.
+No active release blockers.
 
 ## Release backlog
 
@@ -224,6 +217,14 @@ server, client, plugin, deployment, and product-security work.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P0` Make the final OmegaFlow artifacts installable from public package
+      indexes. Completed: `2026-07-29`. Published OmegaConf `2.4.0.dev14`, then
+      installed the final OmegaFlow `0.9.0` Linux wheel and its browser extra
+      in separate clean environments using only public PyPI dependencies.
+      Both installations passed dependency checks and imported OmegaFlow with
+      OmegaConf `2.4.0.dev14`; the browser environment also imported
+      Playwright.
 
 - [x] `P1` Relicense OmegaFlow from MIT to MPL 2.0 before release.
       Completed: `2026-07-29`. Verified sole authorship of covered OmegaFlow
