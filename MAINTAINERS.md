@@ -2,7 +2,7 @@
 
 This guide covers repository development and validation. For installation and
 product usage, see the [README](README.md) and
-[documentation](https://omegaflow.dev/docs/intro).
+[documentation](https://omegaflow.dev/getting-started/).
 
 ## Python development
 
@@ -79,6 +79,13 @@ has passed CI and a maintainer has explicitly approved publication.
    to pass. Review the package artifacts, changelog, public documentation, and
    affected recordings. Stop here until a maintainer explicitly approves the
    tag and external publication.
+
+   For the initial `0.9.0` release only, replace the complete repository
+   history with one reviewed release-root commit after the candidate tree is
+   final. Remove all consumed news fragments, rerun the complete local release
+   checks against that root, obtain explicit approval for the destructive
+   force-push, force-push `main`, and wait for the replacement commit's required
+   CI checks before creating the tag.
 6. Create and push an annotated tag whose name is exactly `vVERSION`:
 
    ```bash
