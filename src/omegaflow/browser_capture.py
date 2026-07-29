@@ -7,6 +7,8 @@ import json
 import math
 import os
 import re
+import shutil
+import tempfile
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
@@ -100,6 +102,8 @@ class BrowserCaptureError(RuntimeError):
 def browser_runtime_environment(
     context: CaptureContext,
     host_environment: Mapping[str, str] | None = None,
+    *,
+    temporary_directory: Path | None = None,
 ) -> dict[str, str]:
     """Add only host values required to launch a headed graphical runtime."""
 
@@ -109,6 +113,8 @@ def browser_runtime_environment(
         value = host.get(name)
         if value:
             environment[name] = value
+    if temporary_directory is not None:
+        environment["TMPDIR"] = str(temporary_directory)
     return environment
 
 
@@ -337,6 +343,7 @@ class PersistentBrowserRunner:
         self._completed = False
         self._capture_failed = False
         self._handoff_urls: dict[str, str] = {}
+        self.runtime_temporary_directory: Path | None = None
 
     def set_handoff_url(self, handoff_id: str, url: str) -> None:
         if not handoff_id or handoff_id in self._handoff_urls:
@@ -385,33 +392,50 @@ class PersistentBrowserRunner:
 
         self.capture_context = context
         self.authentication = authentication
-        self.secrets.register_storage_state(authentication.storage_state)
-        self.capture_log_path = context.runner_capture / "browser.capture.jsonl"
-        self.console_log_path = context.runner_diagnostics / "console.jsonl"
-        self.network_log_path = context.runner_diagnostics / "network.jsonl"
-        self.page_error_log_path = context.runner_diagnostics / "page-errors.jsonl"
-        for path in (
-            self.capture_log_path,
-            self.console_log_path,
-            self.network_log_path,
-            self.page_error_log_path,
-        ):
-            if path.exists() or path.is_symlink():
-                raise BrowserCaptureError(
-                    "BROWSER_SCHEMA",
-                    f"private browser artifact already exists: {path.name}",
-                )
-            path.open("x", encoding="utf-8").close()
-            path.chmod(0o600)
+        try:
+            self.runtime_temporary_directory = (
+                _create_short_browser_runtime_directory()
+            )
+            self.secrets.register_storage_state(authentication.storage_state)
+            self.capture_log_path = context.runner_capture / "browser.capture.jsonl"
+            self.console_log_path = context.runner_diagnostics / "console.jsonl"
+            self.network_log_path = context.runner_diagnostics / "network.jsonl"
+            self.page_error_log_path = (
+                context.runner_diagnostics / "page-errors.jsonl"
+            )
+            for path in (
+                self.capture_log_path,
+                self.console_log_path,
+                self.network_log_path,
+                self.page_error_log_path,
+            ):
+                if path.exists() or path.is_symlink():
+                    raise BrowserCaptureError(
+                        "BROWSER_SCHEMA",
+                        f"private browser artifact already exists: {path.name}",
+                    )
+                path.open("x", encoding="utf-8").close()
+                path.chmod(0o600)
+        except BaseException:
+            self._close_resources()
+            raise
         try:
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(
                 headless=self.headless,
+                executable_path=(
+                    str(runtime.executable_path)
+                    if runtime.executable_path is not None
+                    else None
+                ),
                 args=[
                     "--autoplay-policy=no-user-gesture-required",
                     "--mute-audio",
                 ],
-                env=browser_runtime_environment(context),
+                env=browser_runtime_environment(
+                    context,
+                    temporary_directory=self.runtime_temporary_directory,
+                ),
             )
             self.browser_context = self.browser.new_context(
                 viewport={
@@ -1773,7 +1797,34 @@ class PersistentBrowserRunner:
         self.authentication = None
         self.capture_context = None
         self._active_secret_redactions = ()
+        runtime_temporary_directory = self.runtime_temporary_directory
+        self.runtime_temporary_directory = None
+        if runtime_temporary_directory is not None:
+            try:
+                shutil.rmtree(runtime_temporary_directory)
+            except FileNotFoundError:
+                pass
+            except BaseException as exc:
+                errors.append(("browser runtime temporary directory", exc))
         return errors
+
+
+def _create_short_browser_runtime_directory() -> Path:
+    root = Path("/tmp")
+    if not root.is_dir():
+        root = Path(tempfile.gettempdir())
+    path: Path | None = None
+    try:
+        path = Path(tempfile.mkdtemp(prefix="of-browser-", dir=root))
+        path.chmod(0o700)
+    except OSError as exc:
+        if path is not None:
+            shutil.rmtree(path, ignore_errors=True)
+        raise BrowserCaptureError(
+            "BROWSER_SCHEMA",
+            "could not create private browser runtime directory",
+        ) from exc
+    return path
 
 
 def _prepare_private_browser_directory(path: Path) -> None:

@@ -1030,7 +1030,9 @@ class TerminalControlSession:
             )
         except (OSError, subprocess.SubprocessError) as exc:
             self._remove_control_streams()
-            raise TerminalCaptureError("could not start persistent terminal session") from exc
+            raise TerminalCaptureError(
+                f"could not start persistent terminal session: {exc}"
+            ) from exc
         finally:
             if output_handle is not None:
                 output_handle.close()

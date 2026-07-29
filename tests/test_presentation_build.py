@@ -10,6 +10,7 @@ import sys
 import wave
 import zlib
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -310,6 +311,7 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
             self.browser_runner_factory = browser_runner_factory
 
         def capture(self, *_args, **_kwargs):
+            observed["capture_environment"] = _kwargs["environment"]
             self.terminal_runner_factory()
             assert self.browser_runner_factory is not None
             self.browser_runner_factory()
@@ -318,10 +320,29 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
     monkeypatch.setattr(presentation_build, "PersistentTerminalRunner", FakeTerminalRunner)
     monkeypatch.setattr(presentation_build, "PersistentBrowserRunner", FakeBrowserRunner)
     monkeypatch.setattr(presentation_build, "CaptureCoordinator", FakeCoordinator)
+    monkeypatch.setattr(
+        presentation_build,
+        "pinned_browser_runtime",
+        lambda: SimpleNamespace(
+            executable_path=Path(
+                "/host-cache/ms-playwright/chromium-1228/chrome-linux64/chrome"
+            ),
+            browsers_path=Path("/host-cache/ms-playwright"),
+        ),
+        raising=False,
+    )
 
     result = capture_recording(spec, plan, tmp_path / "run", headed=True)
 
     assert result is not None
+    assert observed["capture_environment"][
+        presentation_build.CHROMIUM_EXECUTABLE_ENV
+    ] == (
+        "/host-cache/ms-playwright/chromium-1228/chrome-linux64/chrome"
+    )
+    assert observed["capture_environment"][
+        presentation_build.PLAYWRIGHT_BROWSERS_PATH_ENV
+    ] == "/host-cache/ms-playwright"
     assert observed["terminal"]["headless"] is False
     assert observed["terminal"]["color"] is True
     assert observed["terminal"]["typing"] is True
@@ -402,6 +423,32 @@ def test_capture_environment_constructs_deterministic_command_environment(
     ]
     assert "HOST_ONLY_APPLICATION_VALUE" not in context.environment
     assert "/host-only/bin" not in context.environment["PATH"]
+
+
+def test_capture_environment_propagates_only_resolved_asciinema_dependency(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HOST_ONLY_APPLICATION_VALUE", "must-not-leak")
+    monkeypatch.setattr(
+        presentation_build.record,
+        "asciinema_command",
+        lambda _spec=None: "/host-tools/asciinema",
+    )
+
+    working_directory, environment = _capture_environment(
+        {"environment": {"working_directory": str(tmp_path)}}
+    )
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+        working_directory=working_directory,
+        environment=environment,
+    )
+
+    assert context.environment["OMEGAFLOW_ASCIINEMA_PATH"] == (
+        "/host-tools/asciinema"
+    )
+    assert "HOST_ONLY_APPLICATION_VALUE" not in context.environment
 
 
 def test_capture_environment_includes_only_declared_application_secrets(

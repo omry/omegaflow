@@ -934,6 +934,20 @@ def test_asciinema_command_prefers_bundled_path(monkeypatch) -> None:
     assert record.asciinema_command({"studio": {}}) == "/bundle/asciinema"
 
 
+def test_asciinema_command_uses_parent_resolved_path_inside_isolated_capture(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        record,
+        "bundled_asciinema_path",
+        lambda: "/bundle/asciinema",
+    )
+    monkeypatch.setenv(record.ASCIINEMA_PATH_ENV, "/host-tools/asciinema")
+    monkeypatch.setattr(record.shutil, "which", lambda _command: None)
+
+    assert record.asciinema_command({"studio": {}}) == "/host-tools/asciinema"
+
+
 def test_asciinema_command_resolves_host_fallback_before_environment_isolation(
     monkeypatch,
     tmp_path,

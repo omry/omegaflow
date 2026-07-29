@@ -29,10 +29,13 @@ from .application_environment import (
 from .browser_capture import PersistentBrowserRunner
 from .browser_runtime import (
     CHROMIUM_BROWSER_VERSION,
+    CHROMIUM_EXECUTABLE_ENV,
     CHROMIUM_REVISION,
+    PLAYWRIGHT_BROWSERS_PATH_ENV,
     PLAYWRIGHT_PACKAGE_VERSION,
     BrowserMediaRuntime,
     BrowserRuntimeError,
+    pinned_browser_runtime,
     require_browser_media_runtime,
 )
 from .capture import (
@@ -500,6 +503,10 @@ def _capture_environment(
     if sys.prefix != sys.base_prefix:
         resolved["VIRTUAL_ENV"] = sys.prefix
     resolved["OMEGAFLOW_VERSION"] = __version__
+    resolved_asciinema = record.asciinema_command(dict(spec))
+    resolved[record.ASCIINEMA_PATH_ENV] = (
+        resolved_asciinema if resolved_asciinema != "asciinema" else None
+    )
     style = spec.get("style", {})
     color = style.get("color", True) if isinstance(style, Mapping) else True
     if color:
@@ -607,6 +614,19 @@ def capture_recording(
     ):
         raise PresentationBuildError("capture.timeout must be positive")
     working_directory, environment = _capture_environment(spec)
+    if plan.browser is not None:
+        try:
+            browser_runtime = pinned_browser_runtime()
+        except BrowserRuntimeError as exc:
+            raise PresentationBuildError(str(exc)) from exc
+        if browser_runtime.executable_path is not None:
+            environment[CHROMIUM_EXECUTABLE_ENV] = str(
+                browser_runtime.executable_path
+            )
+        if browser_runtime.browsers_path is not None:
+            environment[PLAYWRIGHT_BROWSERS_PATH_ENV] = str(
+                browser_runtime.browsers_path
+            )
     try:
         application_names = application_secret_names(spec)
     except ApplicationEnvironmentError as exc:

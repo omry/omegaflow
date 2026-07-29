@@ -2,18 +2,84 @@ from __future__ import annotations
 
 import importlib.metadata
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from omegaflow.browser_runtime import (
     CHROMIUM_BROWSER_VERSION,
+    CHROMIUM_EXECUTABLE_ENV,
     CHROMIUM_REVISION,
+    PLAYWRIGHT_BROWSERS_PATH_ENV,
     PLAYWRIGHT_PACKAGE_VERSION,
     BrowserRuntimeError,
     actionable_playwright_error,
     pinned_browser_runtime,
     require_browser_media_runtime,
 )
+
+
+def test_browser_runtime_uses_parent_resolved_chromium_inside_isolated_capture(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        CHROMIUM_EXECUTABLE_ENV,
+        "/host-cache/ms-playwright/chromium-1228/chrome-linux64/chrome",
+    )
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda _package: PLAYWRIGHT_PACKAGE_VERSION,
+    )
+    monkeypatch.setattr(
+        "omegaflow.browser_runtime._playwright_browser_manifest",
+        lambda: {
+            "browsers": [
+                {
+                    "name": "chromium",
+                    "revision": CHROMIUM_REVISION,
+                    "browserVersion": CHROMIUM_BROWSER_VERSION,
+                }
+            ]
+        },
+    )
+
+    runtime = pinned_browser_runtime()
+
+    assert runtime.executable_path == Path(
+        "/host-cache/ms-playwright/chromium-1228/chrome-linux64/chrome"
+    )
+
+
+def test_browser_runtime_derives_shared_playwright_cache_from_chromium(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        CHROMIUM_EXECUTABLE_ENV,
+        "/host-cache/ms-playwright/chromium-1228/chrome-linux64/chrome",
+    )
+    monkeypatch.delenv(PLAYWRIGHT_BROWSERS_PATH_ENV, raising=False)
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda _package: PLAYWRIGHT_PACKAGE_VERSION,
+    )
+    monkeypatch.setattr(
+        "omegaflow.browser_runtime._playwright_browser_manifest",
+        lambda: {
+            "browsers": [
+                {
+                    "name": "chromium",
+                    "revision": CHROMIUM_REVISION,
+                    "browserVersion": CHROMIUM_BROWSER_VERSION,
+                }
+            ]
+        },
+    )
+
+    runtime = pinned_browser_runtime()
+
+    assert runtime.browsers_path == Path("/host-cache/ms-playwright")
 
 
 def test_browser_runtime_matches_pinned_playwright_metadata() -> None:
@@ -35,6 +101,10 @@ def test_playwright_launch_errors_have_actionable_remedies() -> None:
     )
     assert "playwright install-deps chromium" in actionable_playwright_error(
         "Host system is missing dependencies to run browsers"
+    )
+    assert "playwright install ffmpeg" in actionable_playwright_error(
+        "Executable doesn't exist at /private/.cache/ms-playwright/"
+        "ffmpeg-1011/ffmpeg-linux"
     )
 
 

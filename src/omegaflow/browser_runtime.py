@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from typing import Any
 PLAYWRIGHT_PACKAGE_VERSION = "1.61.0"
 CHROMIUM_REVISION = "1228"
 CHROMIUM_BROWSER_VERSION = "149.0.7827.55"
+CHROMIUM_EXECUTABLE_ENV = "OMEGAFLOW_CHROMIUM_EXECUTABLE"
+PLAYWRIGHT_BROWSERS_PATH_ENV = "PLAYWRIGHT_BROWSERS_PATH"
 
 
 class BrowserRuntimeError(RuntimeError):
@@ -27,6 +30,7 @@ class BrowserRuntime:
     chromium_revision: str
     chromium_version: str
     executable_path: Path | None = None
+    browsers_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,14 @@ def actionable_playwright_error(message: str) -> str:
     """Turn Playwright launch failures into stable installation guidance."""
 
     lower = message.lower()
+    if "ffmpeg" in lower and (
+        "executable doesn't exist" in lower
+        or "video rendering requires" in lower
+    ):
+        return (
+            "pinned Playwright FFmpeg is not installed; run "
+            "`python -m playwright install ffmpeg`"
+        )
     if "executable doesn't exist" in lower or "browser was not found" in lower:
         return (
             "pinned Chromium is not installed; run "
@@ -145,6 +157,45 @@ def _playwright_browser_manifest() -> dict[str, Any]:
     return value
 
 
+def _resolved_chromium_executable() -> Path:
+    inherited = os.environ.get(CHROMIUM_EXECUTABLE_ENV)
+    if inherited:
+        path = Path(inherited)
+        if not path.is_absolute():
+            raise BrowserRuntimeError(
+                f"{CHROMIUM_EXECUTABLE_ENV} must contain an absolute path"
+            )
+        return path
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise BrowserRuntimeError(
+            "browser recording requires the 'browser' extra: "
+            "install OmegaFlow with `pip install 'omegaflow[browser]'`"
+        ) from exc
+    playwright = sync_playwright().start()
+    try:
+        return Path(playwright.chromium.executable_path)
+    finally:
+        playwright.stop()
+
+
+def _resolved_playwright_browsers_path(executable_path: Path) -> Path:
+    inherited = os.environ.get(PLAYWRIGHT_BROWSERS_PATH_ENV)
+    if inherited and inherited != "0":
+        path = Path(inherited)
+        if path.is_absolute():
+            return path
+    revision_directory = f"chromium-{CHROMIUM_REVISION}"
+    for parent in executable_path.parents:
+        if parent.name == revision_directory:
+            return parent.parent
+    raise BrowserRuntimeError(
+        "could not resolve the pinned Playwright browser cache from Chromium "
+        f"executable: {executable_path}"
+    )
+
+
 def pinned_browser_runtime() -> BrowserRuntime:
     try:
         installed_version = importlib.metadata.version("playwright")
@@ -179,8 +230,11 @@ def pinned_browser_runtime() -> BrowserRuntime:
             f"expected revision {CHROMIUM_REVISION} ({CHROMIUM_BROWSER_VERSION}), "
             f"found revision {revision} ({version})"
         )
+    executable_path = _resolved_chromium_executable()
     return BrowserRuntime(
         playwright_version=installed_version,
         chromium_revision=revision,
         chromium_version=version,
+        executable_path=executable_path,
+        browsers_path=_resolved_playwright_browsers_path(executable_path),
     )

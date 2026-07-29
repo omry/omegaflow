@@ -13,6 +13,7 @@ import pytest
 
 import omegaflow.terminal_capture as terminal_capture
 from omegaflow import presentation_build
+from omegaflow.browser_runtime import CHROMIUM_EXECUTABLE_ENV
 from omegaflow.capture import CaptureContext, CaptureCoordinator, CaptureFailed
 from omegaflow.record import asciinema_command
 from omegaflow.recording_plan import normalize_recording_plan
@@ -87,6 +88,73 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
             "duration_ms": 200,
         }
     ]
+
+
+def test_terminal_session_launch_error_names_the_missing_dependency(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context = CaptureContext.create(
+        tmp_path / "run",
+        workspace=tmp_path,
+        environment={"PATH": "/usr/bin:/bin"},
+    )
+    monkeypatch.setattr(
+        terminal_capture,
+        "asciinema_command",
+        lambda: "/missing/asciinema",
+    )
+    session = TerminalControlSession(context)
+
+    with pytest.raises(
+        TerminalCaptureError,
+        match=r"could not start persistent terminal session: .*asciinema",
+    ):
+        session.start()
+
+
+def test_persistent_recorded_shell_preserves_internal_browser_runtime(
+    tmp_path: Path,
+) -> None:
+    observed = tmp_path / "chromium-path"
+    executable = "/host-cache/ms-playwright/chromium/chrome"
+    plan = normalize_recording_plan(
+        {
+            "id": "internal-browser-runtime",
+            "beats": [
+                {
+                    "id": "probe",
+                    "actions": [
+                        {
+                            "run": (
+                                f"printf %s \"${CHROMIUM_EXECUTABLE_ENV}\" "
+                                f"> {shlex.quote(str(observed))}"
+                            )
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=True,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=5.0,
+    )
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+            environment={CHROMIUM_EXECUTABLE_ENV: executable},
+        )
+    )
+    try:
+        runner.capture_beat(plan.beats[0])
+    finally:
+        runner.close()
+
+    assert observed.read_text(encoding="utf-8") == executable
 
 
 def test_terminal_action_gate_runs_before_the_command(tmp_path: Path) -> None:

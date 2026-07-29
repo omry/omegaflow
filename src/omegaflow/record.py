@@ -42,6 +42,7 @@ from .terminal_style import (
 
 
 RUN_ID_DATETIME_FORMAT = "%Y%m%d-%H%M%S"
+ASCIINEMA_PATH_ENV = "OMEGAFLOW_ASCIINEMA_PATH"
 RUN_SINCE_UNITS = {
     "s": 1,
     "m": 60,
@@ -83,6 +84,9 @@ def asciinema_command(source: dict[str, Any] | None = None) -> str:
     configured = configured_asciinema_path(source)
     if configured is not None:
         return configured
+    inherited = os.environ.get(ASCIINEMA_PATH_ENV)
+    if inherited and Path(inherited).is_absolute():
+        return inherited
     bundled = bundled_asciinema_path()
     if bundled is not None:
         return bundled

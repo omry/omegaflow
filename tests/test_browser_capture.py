@@ -14,6 +14,7 @@ import wave
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -423,12 +424,61 @@ def test_browser_runtime_environment_allows_only_graphical_host_values(
             "WAYLAND_DISPLAY": "wayland-0",
             "HOST_ONLY_VALUE": "must-not-leak",
         },
+        temporary_directory=tmp_path / "short-runtime",
     )
 
     assert environment["EXPLICIT_APPLICATION_VALUE"] == "visible"
     assert environment["DISPLAY"] == ":0"
     assert environment["WAYLAND_DISPLAY"] == "wayland-0"
+    assert environment["TMPDIR"] == str(tmp_path / "short-runtime")
     assert "HOST_ONLY_VALUE" not in environment
+
+
+def test_browser_runner_removes_short_runtime_directory_on_close(
+    tmp_path: Path,
+) -> None:
+    runtime_directory = tmp_path / "short-runtime"
+    runtime_directory.mkdir()
+    runner = PersistentBrowserRunner({})
+    runner.runtime_temporary_directory = runtime_directory
+
+    runner.close()
+
+    assert not runtime_directory.exists()
+
+
+def test_browser_runner_removes_short_runtime_directory_after_early_start_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context = capture_context(tmp_path)
+    runtime_directory = tmp_path / "short-runtime"
+    runtime_directory.mkdir()
+    (context.runner_capture / "browser.capture.jsonl").write_text(
+        "collision\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "omegaflow.browser_capture.pinned_browser_runtime",
+        lambda: SimpleNamespace(
+            chromium_revision="1228",
+            chromium_version="149.0.7827.55",
+            executable_path=None,
+        ),
+    )
+    monkeypatch.setattr(
+        "omegaflow.browser_capture._create_short_browser_runtime_directory",
+        lambda: runtime_directory,
+    )
+    runner = PersistentBrowserRunner({})
+
+    with pytest.raises(
+        BrowserCaptureError,
+        match="private browser artifact already exists",
+    ):
+        runner.start(context)
+
+    assert not runtime_directory.exists()
 
 
 def capture_records(tmp_path: Path) -> list[dict]:
