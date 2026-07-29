@@ -30,6 +30,22 @@ No active release blockers.
 
 ## Release backlog
 
+- [ ] `P1` Investigate slow repeat builds and verify incremental caching.
+      Rebuilding an unchanged tutorial recording appears to repeat expensive
+      work instead of reusing all eligible capture, narration, assembly, and
+      publishing intermediates. Acceptance checks: measure an initial build and
+      an immediately repeated non-forced build of the same recording; identify
+      every stage that reruns and the fingerprint or dependency that invalidated
+      it; verify cache reuse for unchanged terminal and browser capture,
+      narration takes, assembly, and publish surfaces; retain explicit
+      `force=true` invalidation; and add a regression that makes an unexpectedly
+      expensive unchanged rebuild fail.
+
+- [ ] `P1` Investigate slow scrubbing in the tutorial player. Seeking across
+      the tutorial is noticeably sluggish. Determine whether replaying a dense
+      sequence of repeated events during seek is the bottleneck and identify
+      which event classes dominate the work before choosing a fix.
+
 - [ ] `P1` Remove all news fragments and replace the complete repository history
       with one reviewed release root before release. This intentionally includes
       already pushed history and requires force-pushing the replacement.
@@ -39,6 +55,19 @@ No active release blockers.
       history; and rerun the complete local CI suite.
 
 ## Post-release
+
+- [ ] `P2` Add nonlinear guided flows with conditional remediation branches.
+      A presentation should be able to ask the viewer to verify a condition,
+      follow a branch for each unmet prerequisite, and rejoin the main path
+      after the condition passes. Use tutorial dependency setup as the first
+      motivating case: check required capabilities, skip instructions for
+      dependencies already present, enter focused remediation for missing
+      dependencies, then confirm readiness. Acceptance checks: define authored
+      branch and join semantics; keep navigation, progress, replay, seeking, and
+      direct links understandable; preserve a usable linear fallback; prevent
+      cycles or unresolved joins; support several independently missing
+      dependencies; and demonstrate the complete flow with the tutorial
+      dependency checker.
 
 - [ ] `P2` Add narration-synchronized highlighting for browser beats.
       Authors should be able to call attention to one or several elements in a
