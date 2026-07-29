@@ -1793,7 +1793,6 @@ def narration_from_script(
         for value in beat_values_from_directive(block):
             beat_id = value["id"]
             heading = value["heading"]
-            narration = value.get("narration", "")
             if not beat_id.strip():
                 raise StudioConfigError(
                     "studio-directive beat.id must be a non-empty string"
@@ -1802,6 +1801,9 @@ def narration_from_script(
                 raise StudioConfigError(
                     "studio-directive beat.heading must be a non-empty string"
                 )
+            if "narration" not in value:
+                continue
+            narration = value["narration"]
             if not narration.strip():
                 raise StudioConfigError(
                     "studio-directive beat.narration must be a non-empty string"
@@ -1831,10 +1833,6 @@ def narration_from_script(
             beats.append(beat)
     if not scene_title:
         raise StudioConfigError(f"recording script must define a scene: {script_path}")
-    if not beats:
-        raise StudioConfigError(
-            f"recording script must define narrated beats: {script_path}"
-        )
     return {
         "source_script": display_path(script_path),
         "source_sha256": sha256(script_path.read_bytes()).hexdigest(),

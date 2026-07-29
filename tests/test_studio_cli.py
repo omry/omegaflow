@@ -1852,7 +1852,44 @@ beat:
     assert spec["description"] == "Learn how to make a narrated terminal video."
 
 
-def test_recording_beat_without_narration_reports_public_config_error(
+def test_recording_beat_without_narration_is_a_valid_silent_beat(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+kind: video
+id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+scene: Hello Video
+beat:
+  id: hello
+  heading: Say Hello
+  actions:
+  - commands:
+    - run: printf hello
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_from_script("hello", recording_dir=recordings_dir)
+    plan = normalize_recording_plan(spec)
+
+    assert spec["beats"][0]["id"] == "hello"
+    assert spec["narration"]["beats"] == []
+    assert [beat.id for beat in plan.beats] == ["hello"]
+    assert plan.beats[0].narration_text == ""
+    assert plan.beats[0].actions[0].config["commands"][0]["run"] == "printf hello"
+    assert plan.narration_stream.segments == ()
+    assert plan.narration_takes == ()
+
+
+def test_recording_beat_with_explicit_empty_narration_reports_public_config_error(
     tmp_path,
 ) -> None:
     recordings_dir = tmp_path / "recordings"
@@ -1871,6 +1908,7 @@ scene: Hello Video
 beat:
   id: hello
   heading: Say Hello
+  narration: ""
 ```
 """.lstrip(),
         encoding="utf-8",

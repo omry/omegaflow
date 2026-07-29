@@ -263,6 +263,8 @@ def extract_directive_narration(script_text: str) -> ScriptNarration:
                 raise AudioError("duplicate studio-directive scene")
             scene_title = scene_title_from_directive(block["scene"])
         for beat_value in beat_values_from_directive(block):
+            if "narration" not in beat_value:
+                continue
             segment = beat_from_directive(beat_value)
             if segment.segment_id in seen_ids:
                 raise AudioError(f"duplicate narration beat id: {segment.segment_id}")
