@@ -1,13 +1,19 @@
 ---
 id: sunset-beach
 title: Refine a Sunset Beach Poster
-environment:
-  working_directory: .
+publish:
+  default: html
+  surfaces:
+    html:
+      type: standalone_html
+      file: recordings/.omegaflow/videos/sunset-beach/index.html
+audio:
+  enabled: true
+  env: OPENAI_OMEGAFLOW_API_KEY
+  voice: ash
 browser:
   base_url: http://127.0.0.1:18476
-  viewport:
-    width: 1280
-    height: 800
+  viewport: {width: 1280, height: 800}
   context:
     locale: en-US
     timezone: UTC
@@ -15,46 +21,34 @@ browser:
     reduced_motion: reduce
 presentation:
   guided: true
-  pane_chrome:
-    style: none
   browser:
     window:
       mode: framed
       theme: kde-breeze
       title: Tiny Canvas
       opening_transition: window-open
-    chrome:
-      mode: minimal
-    transitions:
-      default: fade
-audio:
-  enabled: false
+    chrome: {mode: minimal}
+    transitions: {default: fade}
 setup:
+- name: restore the Tiny Canvas draft
+  run: python recordings/sunset-beach/scripts/reset_artwork.py
 - name: start Tiny Canvas
   run: >-
-    python recordings/sunset-beach/scripts/reset_artwork.py;
     export TINY_CANVAS_URL=http://127.0.0.1:18476;
+    export TINY_CANVAS_LOG="$OMEGAFLOW_RUN_DIR/tiny-canvas.log";
     python recordings/sunset-beach/app/server.py --port 18476
-    > recordings/.omegaflow/tutorial/sunset-beach/server.log 2>&1 &
+    > "$TINY_CANVAS_LOG" 2>&1 &
     export TINY_CANVAS_PID=$!;
     for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-      if grep -q "Tiny Canvas ready" recordings/.omegaflow/tutorial/sunset-beach/server.log; then
-        break;
-      fi;
+      grep -q "Tiny Canvas ready" "$TINY_CANVAS_LOG" && break;
       sleep 0.1;
     done;
-    grep -q "Tiny Canvas ready" recordings/.omegaflow/tutorial/sunset-beach/server.log
+    grep -q "Tiny Canvas ready" "$TINY_CANVAS_LOG"
 cleanup:
 - name: stop Tiny Canvas
   run: >-
     kill "$TINY_CANVAS_PID" 2>/dev/null || true;
     wait "$TINY_CANVAS_PID" 2>/dev/null || true
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${outputs.asset_dir}/index.html
 ---
 
 # Refine a Sunset Beach Poster
@@ -65,22 +59,32 @@ scene: Refine a Sunset Beach Poster
 
 ```yaml studio-directive
 beat:
-  id: open-artwork
-  heading: Open The Artwork
-  narration: Open the original artwork in Tiny Canvas.
-  caption: Launch the editor from the generated terminal beat.
+  id: inspect-draft
+  medium: terminal
+  heading: Inspect The Draft
+  caption: Confirm the Tiny Canvas draft before editing it.
   actions:
   - commands:
-    - id: edit-file
+    - run: python recordings/sunset-beach/scripts/inspect_artwork.py
+      display: python scripts/inspect_artwork.py
+      expect:
+        output_contains:
+        - "Title: Sunset Study"
+        - "Objects: sun, coconut-tree"
+        - "Status: ready"
+    - id: open-editor
       run: python recordings/sunset-beach/scripts/tiny_canvas.py sunset-study.svg
       display: python scripts/tiny_canvas.py sunset-study.svg
       browser_handoff: true
       timing: realtime
-      pre_enter_pause: 1.0
       show_prompt_after: false
   guide:
-    summary: The generated terminal beat opens Tiny Canvas.
-    success_hint: Continue when you are ready to watch the browser edit.
+    summary: The Tiny Canvas workflow is ready to validate and publish.
+    commands:
+    - omegaflow recording=sunset-beach action=check
+    - omegaflow recording=sunset-beach action=build
+    - omegaflow recording=sunset-beach action=watch
+    success_hint: Run the commands to review the finished video.
 ```
 
 ```yaml studio-directive
@@ -88,52 +92,42 @@ beat:
   id: edit-artwork
   medium: browser
   heading: Edit And Save A Copy
-  narration: Rename the artwork, adjust the composition, and save a new file.
-  caption: Script one semantic browser workflow.
+  narration: >-
+    @rename@ Rename the poster Coconut Sunset. @sun@ Move the sun toward
+    the horizon, @tree@ reposition the coconut tree, and @save@ save a
+    new copy.
+  caption: Script and reuse one semantic browser workflow.
   actions:
   - id: open-editor
     open_page:
-      handoff: edit-file
+      handoff: open-editor
       ready:
-        visible:
-          text: Ready
-          exact: true
+        visible: {text: Ready, exact: true}
   - id: rename-artwork
-    hold_after_ms: 500
+    after: "@rename@"
     type_text:
       target: {test_id: artwork-title}
       text: Coconut Sunset
       interval_ms: 90
   - id: move-sun
+    after: "@sun@"
     timing: realtime
-    hold_before_ms: 500
-    hold_after_ms: 700
     drag:
-      from:
-        target: {test_id: sun}
-        position: {x: 0.5, y: 0.5}
-      to:
-        target: {test_id: sunset-target}
-        position: {x: 0.5, y: 0.5}
+      from: {target: {test_id: sun}}
+      to: {target: {test_id: sunset-target}}
   - id: move-tree
+    after: "@tree@"
     timing: realtime
-    hold_before_ms: 500
-    hold_after_ms: 700
     drag:
-      from:
-        target: {test_id: coconut-tree}
-        position: {x: 0.5, y: 0.5}
-      to:
-        target: {test_id: tree-target}
-        position: {x: 0.5, y: 0.5}
+      from: {target: {test_id: coconut-tree}}
+      to: {target: {test_id: tree-target}}
   - id: save-new-file
+    after: "@save@"
     click:
       target: {test_id: export-artwork}
   - id: saved-new-file
     wait_for:
-      visible:
-        text: Saved coconut-sunset.svg
-        exact: true
+      visible: {text: Saved coconut-sunset.svg, exact: true}
   checks:
   - name: title retained
     value:
@@ -143,7 +137,4 @@ beat:
     text:
       target: {test_id: status}
       equals: Saved coconut-sunset.svg
-  guide:
-    summary: The two-beat Tiny Canvas recording is ready.
-    success_hint: Build and watch the finished video from the terminal.
 ```

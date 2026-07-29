@@ -5116,17 +5116,34 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert "id: sunset-beach" in recording
     assert "title: Refine a Sunset Beach Poster" in recording
     assert "id: inspect-draft" in recording
-    assert "base_url: http://127.0.0.1:18476" in recording
-    assert "presentation:\n  guided: true" in recording
-    assert "pane_chrome:\n    style: none" in recording
-    assert "name: start Tiny Canvas" in recording
-    assert "name: stop Tiny Canvas" in recording
+    assert "medium: terminal" in recording
+    assert "name: restore the Tiny Canvas draft" in recording
+    assert "base_url:" not in recording
+    assert "presentation:" not in recording
+    assert "publish:" not in recording
+    assert "narration:" not in recording
     assert (
         "run: python recordings/sunset-beach/scripts/reset_artwork.py" in recording
     )
     assert (
         "run: python recordings/sunset-beach/scripts/inspect_artwork.py" in recording
     )
+
+    starter_plan = normalize_recording_plan(
+        recording_from_script(
+            "sunset-beach",
+            recording_dir=tmp_path / "recordings",
+        )
+    )
+    assert [beat.id for beat in starter_plan.beats] == ["inspect-draft"]
+    starter_beat = starter_plan.beats[0]
+    assert starter_beat.medium.value == "terminal"
+    assert (
+        starter_beat.actions[0].config["commands"][0]["run"]
+        == "python recordings/sunset-beach/scripts/inspect_artwork.py"
+    )
+    assert starter_plan.narration_stream.segments == ()
+    assert starter_plan.narration_takes == ()
 
     application = (tutorial_root / "app" / "index.html").read_text(
         encoding="utf-8"
@@ -5292,19 +5309,19 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     )
 
     assert plan.panes == ()
-    assert [beat.id for beat in plan.beats] == ["open-artwork", "edit-artwork"]
+    assert [beat.id for beat in plan.beats] == ["inspect-draft", "edit-artwork"]
     launch, edit = plan.beats
     assert launch.layout.areas == (("main",),)
     assert edit.layout.areas == (("main",),)
     launch_tracks = {track.pane_id: track for track in launch.pane_tracks}
     edit_tracks = {track.pane_id: track for track in edit.pane_tracks}
-    assert [item.id for item in launch_tracks["main"].beats] == ["open-artwork"]
+    assert [item.id for item in launch_tracks["main"].beats] == ["inspect-draft"]
     assert len(launch_tracks["main"].beats[0].actions) == 1
     assert [item.id for item in edit_tracks["main"].beats] == ["edit-artwork"]
-    assert len(plan.setup) == 1
+    assert len(plan.setup) == 2
     assert (
         edit_tracks["main"].beats[0].actions[0].config["open_page"]["handoff"]
-        == "edit-file"
+        == "open-editor"
     )
     browser_actions = edit_tracks["main"].beats[0].actions
     assert [action.kind for action in browser_actions[:2]] == [
@@ -5331,21 +5348,29 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
         "main",
     ]
     assert (
-        launch_tracks["main"].beats[0]
+        launch_tracks["main"]
+        .beats[0]
         .actions[-1]
-        .config["commands"][0]["browser_handoff"]
+        .config["commands"][-1]["browser_handoff"]
         is True
     )
-    assert (
-        launch_tracks["main"].beats[0]
-        .actions[-1]
-        .config["commands"][0]["pre_enter_pause"]
-        == 1.0
-    )
     assert plan.presentation["guided"] is True
-    assert plan.presentation["pane_chrome"]["style"] == "none"
-    assert launch.guide["summary"] == "The generated terminal beat opens Tiny Canvas."
-    assert edit.guide["summary"] == "The two-beat Tiny Canvas recording is ready."
+    assert (
+        launch.guide["summary"]
+        == "The Tiny Canvas workflow is ready to validate and publish."
+    )
+    assert edit.guide is None
+    assert edit.narration_text.startswith("Rename the poster Coconut Sunset.")
+    assert [anchor.id for anchor in edit.anchors] == [
+        "rename",
+        "sun",
+        "tree",
+        "save",
+    ]
+    assert browser_actions[1].config["after"] == "@rename@"
+    assert browser_actions[2].config["after"] == "@sun@"
+    assert browser_actions[3].config["after"] == "@tree@"
+    assert browser_actions[4].config["after"] == "@save@"
 
 
 def test_repository_tutorial_is_one_continuous_tiny_canvas_video() -> None:

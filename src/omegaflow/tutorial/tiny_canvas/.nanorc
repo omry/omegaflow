@@ -3,7 +3,7 @@ set constantshow
 set minibar
 set tabsize 2
 
-syntax "OmegaFlow recording" "index\.md$"
+syntax "OmegaFlow-recording" "index\.md$"
 color brightcyan "^(---|```yaml studio-directive|```)$"
 color brightmagenta "^[[:space:]]*(scene|beat|id|heading|narration|actions|commands|run_file|display|expect):"
 color brightgreen "@[A-Za-z0-9_.:-]+@"
