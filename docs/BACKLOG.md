@@ -26,7 +26,14 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-No active release blockers.
+- [ ] `P0` Make the final OmegaFlow artifacts installable from public package
+      indexes. OmegaFlow requires `omegaconf>=2.4.0.dev14`, but PyPI currently
+      provides only through `2.4.0.dev13`, so a clean wheel installation cannot
+      resolve its dependencies. Acceptance checks: publish a compatible
+      OmegaConf release or intentionally revise OmegaFlow's requirement and
+      schema usage; rebuild the final OmegaFlow artifacts; and smoke-install
+      both the base package and browser extra in clean environments using only
+      public package indexes.
 
 ## Release backlog
 
@@ -37,39 +44,6 @@ No active release blockers.
       verify that no news fragments remain; review the resulting release root;
       verify that the canonical remote branch contains only the replacement
       history; and rerun the complete local CI suite.
-
-- [ ] `P1` Relicense OmegaFlow from MIT to MPL 2.0 before release.
-      Keep distributed modifications to OmegaFlow source files available under
-      the same license while allowing a separately implemented hosted service
-      to remain proprietary. Acceptance checks: verify that the project has the
-      rights needed to relicense all covered code; replace the repository
-      license and update package metadata, source notices, and documentation;
-      document that recipients who already obtained revisions under MIT retain
-      their MIT license rights; and verify package, documentation, and release
-      builds with the new license metadata.
-
-- [ ] `P1` Replace the placeholder website tutorial with a complete guided
-      tutorial. The website currently links prominently to a tutorial, but its
-      chapter pages are skeletal, the checked-in tutorial recordings are
-      placeholder terminal beats with narration disabled, and their generated
-      artifacts are not embedded in the corresponding pages. Acceptance
-      checks: define a coherent path from quickstart through recording files,
-      beats, and publishing; replace placeholder copy and recordings with
-      useful instruction; build and publish each recording into a predictable
-      asset location; embed the relevant video in every chapter; keep written
-      steps usable without video; verify navigation, production website build,
-      and playback from the published site; and remove or relabel any tutorial
-      entry point that still leads to incomplete content.
-
-- [ ] `P1` Curate the recordings directory before release. Separate durable
-      product examples and documentation recordings from implementation proofs
-      of concept, remove obsolete POC recordings, and associate each retained
-      documentation recording with the page or collection that owns it.
-      Acceptance checks: inventory every recording; classify it as retained,
-      reorganized, or removed; keep stable recording identifiers where they
-      remain user-facing; make collection and page ownership explicit; update
-      references and generated assets; and verify all retained collections,
-      website embeds, and recording builds after the cleanup.
 
 ## Post-release
 
@@ -250,6 +224,29 @@ No active release blockers.
       such as browser capture or ffmpeg; and validate that output is playable.
 
 ## Done
+
+- [x] `P1` Relicense OmegaFlow from MIT to MPL 2.0 before release.
+      Completed: `2026-07-29`. Verified sole authorship of covered OmegaFlow
+      code, replaced the repository license and package metadata, added source
+      and prior-license notices, preserved the separately licensed `re2js`
+      component, and verified MPL metadata and notices in a built wheel and
+      source distribution.
+
+- [x] `P1` Curate the recordings directory before release.
+      Completed: `2026-07-29`. Retained three documentation-owned public
+      recordings, consolidated the private-TTS browser smoke fixture under
+      `recordings/internal/`, removed unreferenced implementation
+      demonstrations, preserved every public recording identifier, and checked
+      each retained recording.
+
+- [x] `P1` Replace the placeholder website tutorial with a complete guided
+      tutorial.
+      Completed: `2026-07-29`. Reorganized the public documentation around
+      user tasks, added installation and platform guidance, authored one
+      cumulative Tiny Canvas tutorial with a continuous walkthrough, retained
+      useful written steps without video, published stable tutorial and
+      reference media, removed superseded tutorial content, and verified the
+      production website build and affected recordings.
 
 - [x] `P1` Show useful progress throughout video builds.
       Completed: `2026-07-18`. Added one determinate progress surface for
