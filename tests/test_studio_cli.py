@@ -4275,7 +4275,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert browser_beat["heading"] == "Explore the Player"
     assert browser_beat["guide"] == {
         "summary": "This beat demonstrated beat previews and playback speed.",
-        "success_hint": "To learn more, start the tutorial or read the docs.",
+        "success_hint": "To learn more, explore the guides or read the docs.",
     }
     assert browser_beat["pointer"] == {"visible": False}
     assert "player" not in browser_beat
