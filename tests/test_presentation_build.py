@@ -197,6 +197,212 @@ def test_materialized_wait_is_silence_between_complete_audio_fragments(
     assert samples[sample_rate:] == tuple(source_samples[sample_rate // 2 :])
 
 
+def captured_realtime_terminal_action(
+    action_id: str,
+    *,
+    start_ms: int,
+    end_ms: int,
+    event_start: int = 0,
+    event_end: int = 1,
+) -> dict[str, object]:
+    return {
+        "id": action_id,
+        "timing": "realtime",
+        "capture_start_ms": start_ms,
+        "capture_end_ms": end_ms,
+        "event_indexes": {
+            "action_start": event_start,
+            "action_end": event_end,
+        },
+        "presentation_snapshot": {
+            "display": action_id,
+            "color": True,
+            "typing": True,
+            "typing_min_delay": 0.012,
+            "typing_max_delay": 0.045,
+            "typing_space_delay": 0.025,
+            "typing_punctuation_delay": 0.05,
+            "typing_newline_delay": 0.16,
+            "typing_seed": 17,
+            "pre_command_pause": 0,
+            "pre_enter_pause": 0,
+            "post_enter_pause": 0.35,
+            "post_command_pause": 0.85,
+        },
+    }
+
+
+def test_terminal_action_loader_rejects_pre_retime_sidecar(
+    tmp_path: Path,
+) -> None:
+    sidecar = tmp_path / "legacy.actions.json"
+    sidecar.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "beat_id": "legacy",
+                "actions": [
+                    {
+                        "id": "command",
+                        "start_ms": 0,
+                        "end_ms": 100,
+                        "duration_ms": 100,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        presentation_build.PresentationBuildError,
+        match="terminal action timing is invalid",
+    ):
+        presentation_build._load_terminal_actions(
+            sidecar,
+            beat_id="legacy",
+            expected_action_ids=("command",),
+        )
+
+
+def test_terminal_materialization_uses_current_presentation_settings(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "current-presentation",
+            "beats": [
+                {
+                    "id": "command",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "run",
+                                    "run": "printf done",
+                                    "display": "current display",
+                                    "pre_command_pause": 0.4,
+                                    "pre_enter_pause": 0.2,
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    old_snapshot = captured_realtime_terminal_action(
+        "run", start_ms=0, end_ms=20
+    )["presentation_snapshot"]
+    captured = presentation_build.CapturedTerminalAction(
+        id="run",
+        timing="presentation",
+        capture_start_ms=0,
+        capture_end_ms=20,
+        event_indexes={
+            "action_start": 0,
+            "typing_start": 0,
+            "typing_end": 0,
+            "output_start": 0,
+            "output_end": 0,
+            "action_end": 0,
+        },
+        presentation_snapshot={
+            **old_snapshot,
+            "display": "stale display",
+            "pre_command_pause": 9.0,
+        },
+    )
+
+    resolved = presentation_build._resolve_terminal_actions(
+        {"run": captured},
+        actions=tuple(plan.beats[0].actions),
+        spec={
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "environment": {"working_directory": str(tmp_path)},
+            "style": {"typing": False, "color": False},
+            "timing": {"post_enter_pause": 0.1, "post_command_pause": 0.2},
+        },
+    )["run"]
+
+    assert resolved.display == "current display"
+    assert resolved.pre_command_pause == 0.4
+    assert resolved.presentation_duration_ms == 900
+
+
+def test_terminal_presentation_config_change_recompiles_without_recapture(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "index.md"
+    manifest.write_text(
+        "---\nstyle:\n  typing_min_delay: 0.01\n---\n",
+        encoding="utf-8",
+    )
+    plan = normalize_recording_plan(
+        {
+            "id": "presentation-fingerprint",
+            "beats": [
+                {
+                    "id": "command",
+                    "actions": [{"run": "printf done"}],
+                }
+            ],
+        }
+    )
+    base = {
+        "id": "presentation-fingerprint",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(tmp_path),
+        "_manifest_path": str(manifest),
+        "environment": {"working_directory": str(tmp_path)},
+        "style": {"typing_min_delay": 0.01},
+        "beats": [{"id": "command", "actions": [{"run": "printf done"}]}],
+    }
+    manifest.write_text(
+        "---\nstyle:\n  typing_min_delay: 0.02\n---\n",
+        encoding="utf-8",
+    )
+    changed = {
+        **base,
+        "style": {"typing_min_delay": 0.02},
+    }
+
+    original = presentation_build.artifact_fingerprints(base, plan)
+    updated = presentation_build.artifact_fingerprints(changed, plan)
+
+    assert original.capture_fingerprint == updated.capture_fingerprint
+    assert original.presentation_fingerprint != updated.presentation_fingerprint
+
+    realtime_plan = normalize_recording_plan(
+        {
+            "id": "realtime-fingerprint",
+            "beats": [
+                {
+                    "id": "command",
+                    "actions": [
+                        {"run": "printf done", "timing": "realtime"}
+                    ],
+                }
+            ],
+        }
+    )
+    realtime_original = presentation_build.artifact_fingerprints(
+        {**base, "id": "realtime-fingerprint"},
+        realtime_plan,
+    )
+    realtime_updated = presentation_build.artifact_fingerprints(
+        {**changed, "id": "realtime-fingerprint"},
+        realtime_plan,
+    )
+
+    assert (
+        realtime_original.capture_fingerprint
+        != realtime_updated.capture_fingerprint
+    )
+
+
 def write_mixed_capture(run_dir: Path) -> None:
     capture = run_dir / "capture"
     beats = capture / "terminal-beats"
@@ -215,12 +421,9 @@ def write_mixed_capture(run_dir: Path) -> None:
                     "version": 1,
                     "beat_id": beat_id,
                     "actions": [
-                        {
-                            "id": "__step_0",
-                            "start_ms": 0,
-                            "end_ms": 100,
-                            "duration_ms": 100,
-                        }
+                        captured_realtime_terminal_action(
+                            "__step_0", start_ms=0, end_ms=100
+                        )
                     ],
                 }
             )
@@ -652,7 +855,7 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
         "beats": [
             {
                 "id": "prepare",
-                "actions": [{"run": "printf ready"}],
+                    "actions": [{"run": "printf ready", "timing": "realtime"}],
                 "guide": {
                     "commands": ["python -m pip install omegaflow"],
                     "summary": "Install the package before continuing.",
@@ -674,7 +877,10 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
                     }
                 ],
             },
-            {"id": "verify", "actions": [{"run": "printf done"}]},
+                {
+                    "id": "verify",
+                    "actions": [{"run": "printf done", "timing": "realtime"}],
+                },
         ],
     }
     plan = normalize_recording_plan(spec)
@@ -771,12 +977,9 @@ def test_visualization_and_terminal_authoring_compiles_end_to_end(
                 "version": 1,
                 "beat_id": capture_id,
                 "actions": [
-                    {
-                        "id": "run-status",
-                        "start_ms": 0,
-                        "end_ms": 100,
-                        "duration_ms": 100,
-                    }
+                    captured_realtime_terminal_action(
+                        "run-status", start_ms=0, end_ms=100
+                    )
                 ],
             }
         )
@@ -818,10 +1021,11 @@ def test_visualization_and_terminal_authoring_compiles_end_to_end(
                         {
                             "id": "status",
                             "actions": [
-                                {
-                                    "id": "run-status",
-                                    "run": "printf 'Renderer: ready\\n'",
-                                }
+                                    {
+                                        "id": "run-status",
+                                        "run": "printf 'Renderer: ready\\n'",
+                                        "timing": "realtime",
+                                    }
                             ],
                         }
                     ],
@@ -908,12 +1112,9 @@ def test_terminal_and_browser_panes_compile_browser_presentation_overrides(
                 "version": 1,
                 "beat_id": terminal_capture_id,
                 "actions": [
-                    {
-                        "id": "run-app",
-                        "start_ms": 0,
-                        "end_ms": 100,
-                        "duration_ms": 100,
-                    }
+                    captured_realtime_terminal_action(
+                        "run-app", start_ms=0, end_ms=100
+                    )
                 ],
             }
         )
@@ -1005,10 +1206,11 @@ def test_terminal_and_browser_panes_compile_browser_presentation_overrides(
                         {
                             "id": "session",
                             "actions": [
-                                {
-                                    "id": "run-app",
-                                    "run": "printf 'Terminal ready\\n'",
-                                }
+                                    {
+                                        "id": "run-app",
+                                        "run": "printf 'Terminal ready\\n'",
+                                        "timing": "realtime",
+                                    }
                             ],
                         }
                     ],
@@ -1336,12 +1538,9 @@ def test_sequential_visualization_beats_compile_at_narration_events(
                 "version": 1,
                 "beat_id": capture_id,
                 "actions": [
-                    {
-                        "id": "run-status",
-                        "start_ms": 0,
-                        "end_ms": 100,
-                        "duration_ms": 100,
-                    }
+                    captured_realtime_terminal_action(
+                        "run-status", start_ms=0, end_ms=100
+                    )
                 ],
             }
         )
@@ -1416,6 +1615,7 @@ def test_sequential_visualization_beats_compile_at_narration_events(
                                 {
                                     "id": "run-status",
                                     "run": "printf ready",
+                                    "timing": "realtime",
                                 }
                             ],
                         }

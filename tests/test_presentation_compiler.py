@@ -22,6 +22,7 @@ from omegaflow.presentation_compiler import (
     natural_text_duration_ms,
     pointer_motion,
     solved_intervals,
+    TerminalActionMaterialization,
     TerminalTextHighlightEvent,
     TerminalTextHighlightTargetEvent,
 )
@@ -969,7 +970,12 @@ def test_terminal_and_browser_beats_relocate_without_changing_local_timing() -> 
     assert relocated.action("browser", "open").local_end_ms == 180
 
 
-def artifact_fingerprints(plan: object, *, asset: str = "a") -> object:
+def artifact_fingerprints(
+    plan: object,
+    *,
+    asset: str = "a",
+    presentation_settings: dict[str, object] | None = None,
+) -> object:
     return compile_artifact_fingerprints(
         plan,
         capture_environment={
@@ -982,6 +988,7 @@ def artifact_fingerprints(plan: object, *, asset: str = "a") -> object:
             "stability": "stability-v1",
             "redaction": "redaction-v1",
         },
+        presentation_settings=presentation_settings,
         visual_asset_hashes=[asset * 64],
         narration_take_hashes={},
         timestamp_hashes={},
@@ -1046,10 +1053,45 @@ def test_fingerprints_separate_recapture_from_presentation_changes() -> None:
         != presentation_change.presentation_fingerprint
     )
     assert original.capture_fingerprint != capture_change.capture_fingerprint
-    assert original.capture_fingerprint != display_change.capture_fingerprint
-    assert original.capture_fingerprint != pause_change.capture_fingerprint
+    assert original.capture_fingerprint == display_change.capture_fingerprint
+    assert original.capture_fingerprint == pause_change.capture_fingerprint
+    assert (
+        original.presentation_fingerprint
+        != display_change.presentation_fingerprint
+    )
+    assert (
+        original.presentation_fingerprint
+        != pause_change.presentation_fingerprint
+    )
     assert original.capture_fingerprint != timing_change.capture_fingerprint
     assert original.presentation_fingerprint != asset_change.presentation_fingerprint
+
+
+def test_global_terminal_style_is_presentation_only_for_freshness() -> None:
+    original = artifact_fingerprints(
+        fingerprint_plan(),
+        presentation_settings={"terminal": {"typing_min_delay": 0.012}},
+    )
+    changed = artifact_fingerprints(
+        fingerprint_plan(),
+        presentation_settings={"terminal": {"typing_min_delay": 0.02}},
+    )
+
+    assert original.capture_fingerprint == changed.capture_fingerprint
+    assert original.presentation_fingerprint != changed.presentation_fingerprint
+
+
+def test_realtime_terminal_display_and_pauses_remain_capture_inputs() -> None:
+    original = artifact_fingerprints(fingerprint_plan(timing="realtime"))
+    display_change = artifact_fingerprints(
+        fingerprint_plan(timing="realtime", display="visible command")
+    )
+    pause_change = artifact_fingerprints(
+        fingerprint_plan(timing="realtime", pre_command_pause=0.5)
+    )
+
+    assert original.capture_fingerprint != display_change.capture_fingerprint
+    assert original.capture_fingerprint != pause_change.capture_fingerprint
 
 
 def test_browser_hold_before_is_presentation_only_for_freshness() -> None:
@@ -1200,7 +1242,36 @@ def test_terminal_materialization_relocates_events_to_solved_action_start(
         source,
         destination,
         duration_ms=1200,
-        captured_action_intervals_ms={"command": (0, 300)},
+        captured_actions={
+            "command": TerminalActionMaterialization(
+                id="command",
+                timing="realtime",
+                capture_start_ms=0,
+                capture_end_ms=300,
+                presentation_duration_ms=300,
+                event_indexes={
+                    "action_start": 0,
+                    "typing_start": 0,
+                    "typing_end": 1,
+                    "output_start": 1,
+                    "output_end": 2,
+                    "action_end": 2,
+                },
+                display="command",
+                color=False,
+                typing=False,
+                typing_min_delay=0,
+                typing_max_delay=0,
+                typing_space_delay=0,
+                typing_punctuation_delay=0,
+                typing_newline_delay=0,
+                typing_seed=17,
+                pre_command_pause=0,
+                pre_enter_pause=0,
+                post_enter_pause=0,
+                post_command_pause=0,
+            )
+        },
         action_starts_ms={"command": 700},
     )
 
@@ -1210,6 +1281,65 @@ def test_terminal_materialization_relocates_events_to_solved_action_start(
         [0.2, "o", "done\n"],
         [0.2, "o", ""],
     ]
+
+
+def test_presentation_terminal_action_preserves_prompt_before_next_command(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.cast"
+    destination = tmp_path / "published.cast"
+    write_cast(
+        source,
+        3,
+        [
+            [0.0, "o", "$ "],
+            [0.01, "o", "captured command"],
+            [0.01, "o", "done\r\n"],
+        ],
+    )
+
+    materialize_terminal_beat(
+        source,
+        destination,
+        duration_ms=500,
+        captured_actions={
+            "next": TerminalActionMaterialization(
+                id="next",
+                timing="presentation",
+                capture_start_ms=0,
+                capture_end_ms=20,
+                presentation_duration_ms=100,
+                event_indexes={
+                    "action_start": 0,
+                    "typing_start": 1,
+                    "typing_end": 2,
+                    "output_start": 2,
+                    "output_end": 3,
+                    "action_end": 3,
+                },
+                display="next command",
+                color=False,
+                typing=False,
+                typing_min_delay=0,
+                typing_max_delay=0,
+                typing_space_delay=0,
+                typing_punctuation_delay=0,
+                typing_newline_delay=0,
+                typing_seed=17,
+                pre_command_pause=0,
+                pre_enter_pause=0,
+                post_enter_pause=0,
+                post_command_pause=0.1,
+            )
+        },
+        action_starts_ms={"next": 200},
+    )
+
+    output = [json.loads(line) for line in destination.read_text().splitlines()]
+    visible = "".join(
+        str(event[2]) for event in output[1:] if event[1] == "o"
+    )
+    assert visible.startswith("$ next command\r\ndone\r\n")
 
 
 @pytest.mark.parametrize("version", [2, 3])

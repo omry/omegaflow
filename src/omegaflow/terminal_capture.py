@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import random
 import re
 import select
 import shlex
@@ -12,6 +14,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -40,6 +43,26 @@ TERMINAL_ACTION_MARKER_RE = re.compile(
     r"\x1b\]1337;OmegaFlowAction;(?P<beat>[A-Za-z0-9_-]+);"
     r"(?P<action>[A-Za-z0-9_-]+);(?P<phase>start|end)\x07"
 )
+TERMINAL_COMMAND_MARKER_RE = re.compile(
+    r"\x1b\]1337;OmegaFlowCommand;(?P<beat>[A-Za-z0-9_-]+);"
+    r"(?P<action>[A-Za-z0-9_-]+);"
+    r"(?P<phase>typing_start|typing_end|output_start|output_end)\x07"
+)
+TERMINAL_PRESENTATION_SNAPSHOT_FIELDS = (
+    "display",
+    "color",
+    "typing",
+    "typing_min_delay",
+    "typing_max_delay",
+    "typing_space_delay",
+    "typing_punctuation_delay",
+    "typing_newline_delay",
+    "typing_seed",
+    "pre_command_pause",
+    "pre_enter_pause",
+    "post_enter_pause",
+    "post_command_pause",
+)
 TERMINAL_BROWSER_HANDOFF_MARKER_RE = re.compile(
     r"\x1b\]1337;OmegaFlowBrowserHandoff;"
     r"(?P<action>[A-Za-z0-9_-]+);ready\x07"
@@ -48,6 +71,8 @@ TERMINAL_ANY_MARKER_RE = re.compile(
     r"\x1b\]1337;(?:"
     r"OmegaFlow;[0-9]+;(?:setup|beat|checks|cleanup);(?:start|end);[A-Za-z0-9_-]*"
     r"|OmegaFlowAction;[A-Za-z0-9_-]+;[A-Za-z0-9_-]+;(?:start|end)"
+    r"|OmegaFlowCommand;[A-Za-z0-9_-]+;[A-Za-z0-9_-]+;"
+    r"(?:typing_start|typing_end|output_start|output_end)"
     r"|OmegaFlowBrowserHandoff;[A-Za-z0-9_-]+;ready"
     r")\x07"
 )
@@ -76,6 +101,57 @@ class TerminalLifecycleStepError(TerminalCaptureError):
         super().__init__(f"{operation} step {step_name!r} failed: {error}")
 
 
+@dataclass(frozen=True)
+class TerminalPresentationDefaults:
+    """Resolved recording-wide defaults used to materialize terminal actions."""
+
+    color: bool
+    typing: bool
+    typing_min_delay: float
+    typing_max_delay: float
+    typing_space_delay: float
+    typing_punctuation_delay: float
+    typing_newline_delay: float
+    typing_seed: int
+    post_enter_pause: float
+    post_command_pause: float
+
+
+def terminal_typing_delays(
+    text: str,
+    *,
+    minimum: float,
+    maximum: float,
+    space: float,
+    punctuation: float,
+    newline: float,
+    seed: int,
+) -> tuple[float, ...]:
+    """Return the deterministic delay following each non-final typed character."""
+
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    rng = random.Random(seed ^ int.from_bytes(digest[:8], "big"))
+    delays: list[float] = []
+    for index, char in enumerate(text):
+        if index == len(text) - 1:
+            break
+        delay = rng.uniform(minimum, maximum)
+        if char == "\n":
+            delay += newline + rng.uniform(0.0, newline / 2)
+        elif char.isspace():
+            delay += rng.uniform(0.0, space)
+        elif char in "|;&":
+            delay += punctuation + rng.uniform(0.0, punctuation)
+        elif char == "\\":
+            delay += newline / 2
+        elif char in ",.:=/\"'{}[]()":
+            delay += rng.uniform(0.0, punctuation)
+        if char in " -_/" and rng.random() < 0.08:
+            delay += rng.uniform(0.04, 0.12)
+        delays.append(delay)
+    return tuple(delays)
+
+
 def _session_script() -> str:
     return r'''#!/usr/bin/env bash
 set +e
@@ -97,7 +173,6 @@ OMEGAFLOW_VISIBLE=0
 : "${OMEGAFLOW_TYPING_SEED:=17}"
 : "${OMEGAFLOW_POST_ENTER_PAUSE:=0}"
 : "${OMEGAFLOW_POST_COMMAND_PAUSE:=0}"
-: "${OMEGAFLOW_BEAT_PROMPT_SETTLE:=0.03}"
 OMEGAFLOW_USER_SHELL_INPUT="$TMPDIR/omegaflow-user-shell.input.pipe"
 OMEGAFLOW_USER_SHELL_DEAD="$TMPDIR/omegaflow-user-shell.dead"
 OMEGAFLOW_USER_SHELL_PGID="$TMPDIR/omegaflow-user-shell.pgid"
@@ -609,7 +684,8 @@ omegaflow_print_prompt() {
 
 omegaflow_type_text() {
   local text="$1"
-  if [[ "$OMEGAFLOW_VISIBLE" != "1" || "$OMEGAFLOW_TYPING" != "1" ]]; then
+  local timing="$2"
+  if [[ "$OMEGAFLOW_VISIBLE" != "1" || "$OMEGAFLOW_TYPING" != "1" || "$timing" != "realtime" ]]; then
     printf '%s' "$text"
     return
   fi
@@ -654,7 +730,8 @@ PY
 
 omegaflow_pause() {
   local duration="$1"
-  if [[ "$OMEGAFLOW_VISIBLE" == "1" && -n "$duration" && "$duration" != "0" ]]; then
+  local timing="$2"
+  if [[ "$OMEGAFLOW_VISIBLE" == "1" && "$timing" == "realtime" && -n "$duration" && "$duration" != "0" ]]; then
     sleep "$duration"
   fi
 }
@@ -662,11 +739,12 @@ omegaflow_pause() {
 omegaflow_print_command() {
   local display="$1"
   local pre_enter_pause="$2"
+  local timing="$3"
   if [[ "$OMEGAFLOW_COLOR" == "1" ]]; then
     printf '\033[1m'
   fi
-  omegaflow_type_text "$display"
-  omegaflow_pause "$pre_enter_pause"
+  omegaflow_type_text "$display" "$timing"
+  omegaflow_pause "$pre_enter_pause" "$timing"
   if [[ "$OMEGAFLOW_COLOR" == "1" ]]; then
     printf '\033[0m'
   fi
@@ -676,7 +754,12 @@ omegaflow_print_command() {
 omegaflow_begin_beat() {
   omegaflow_print_prompt
   OMEGAFLOW_PROMPT_VISIBLE=1
-  sleep "$OMEGAFLOW_BEAT_PROMPT_SETTLE"
+}
+
+omegaflow_command_marker() {
+  local phase="$1"
+  printf '\033]1337;OmegaFlowCommand;%s;%s;%s\007' \
+    "$OMEGAFLOW_ACTIVE_BEAT_ID" "$OMEGAFLOW_ACTIVE_ACTION_ID" "$phase"
 }
 
 omegaflow_validate_step() {
@@ -743,8 +826,10 @@ omegaflow_run_step() {
   if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
     omegaflow_print_prompt
   fi
-  omegaflow_pause "$pre_command_pause"
-  omegaflow_print_command "$display" "$pre_enter_pause"
+  omegaflow_pause "$pre_command_pause" "$timing"
+  omegaflow_command_marker typing_start
+  omegaflow_print_command "$display" "$pre_enter_pause" "$timing"
+  omegaflow_command_marker typing_end
   OMEGAFLOW_PROMPT_VISIBLE=0
   if [[ "$timing" == "realtime" && "$output_mode" == "real" ]]; then
     omegaflow_run_user_command \
@@ -767,7 +852,8 @@ omegaflow_run_step() {
   if [[ -z "$post_enter_pause" ]]; then
     post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
   fi
-  omegaflow_pause "$post_enter_pause"
+  omegaflow_pause "$post_enter_pause" "$timing"
+  omegaflow_command_marker output_start
   if [[ "$output_mode" == "real" && "$output_streamed" != "true" ]]; then
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDOUT" "$stdout_start"
     omegaflow_emit_range "$OMEGAFLOW_TERMINAL_STDERR" "$stderr_start" >&2
@@ -781,10 +867,11 @@ omegaflow_run_step() {
     omegaflow_print_prompt
     OMEGAFLOW_PROMPT_VISIBLE=1
   fi
+  omegaflow_command_marker output_end
   if [[ -z "$post_command_pause" ]]; then
     post_command_pause="$OMEGAFLOW_POST_COMMAND_PAUSE"
   fi
-  omegaflow_pause "$post_command_pause"
+  omegaflow_pause "$post_command_pause" "$timing"
   omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start"
 }
 
@@ -814,8 +901,12 @@ omegaflow_run_marked() {
   fi
   printf '{"seq":%s,"status":"action_started","action_id":"%s"}\n' "$seq" "$action_id" >&9
   printf '\033]1337;OmegaFlowAction;%s;%s;start\007' "$beat_id" "$action_id"
+  OMEGAFLOW_ACTIVE_BEAT_ID="$beat_id"
+  OMEGAFLOW_ACTIVE_ACTION_ID="$action_id"
   eval "$script"
   status=$?
+  OMEGAFLOW_ACTIVE_BEAT_ID=""
+  OMEGAFLOW_ACTIVE_ACTION_ID=""
   printf '\033]1337;OmegaFlowAction;%s;%s;end\007' "$beat_id" "$action_id"
   printf '{"seq":%s,"status":"action_completed","action_id":"%s"}\n' "$seq" "$action_id" >&9
   return "$status"
@@ -1315,7 +1406,7 @@ class PersistentTerminalRunner:
         self.context: CaptureContext | None = None
         self.session: TerminalControlSession | None = None
         self._captured_beat_ids: list[str] = []
-        self._command_snapshots: dict[str, dict[str, dict[str, str]]] = {}
+        self._command_snapshots: dict[str, dict[str, dict[str, Any]]] = {}
 
     def start(self, context: CaptureContext) -> None:
         if self.session is not None:
@@ -1368,7 +1459,22 @@ class PersistentTerminalRunner:
             check for check in beat.checks if isinstance(check, TerminalCheckPlan)
         )
         self._captured_beat_ids.append(beat.id)
-        command_snapshots = _beat_command_snapshots(actions, self.context)
+        command_snapshots = resolve_terminal_command_snapshots(
+            actions,
+            working_directory=self.context.working_directory,
+            defaults=TerminalPresentationDefaults(
+                color=self.color,
+                typing=self.typing,
+                typing_min_delay=self.typing_min_delay,
+                typing_max_delay=self.typing_max_delay,
+                typing_space_delay=self.typing_space_delay,
+                typing_punctuation_delay=self.typing_punctuation_delay,
+                typing_newline_delay=self.typing_newline_delay,
+                typing_seed=self.typing_seed,
+                post_enter_pause=self.post_enter_pause,
+                post_command_pause=self.post_command_pause,
+            ),
+        )
         self._command_snapshots[beat.id] = command_snapshots
         start_ms, end_ms = session.execute(
             "beat",
@@ -1511,7 +1617,7 @@ def _beat_script(
     actions: Iterable[TerminalActionPlan],
     context: CaptureContext | None,
     *,
-    command_snapshots: Mapping[str, Mapping[str, str]],
+    command_snapshots: Mapping[str, Mapping[str, Any]],
     delegated_environment: Mapping[str, str],
     secret_environment: Mapping[str, str],
 ) -> str:
@@ -1571,13 +1677,15 @@ def _beat_has_browser_handoff(actions: Iterable[TerminalActionPlan]) -> bool:
     )
 
 
-def _beat_command_snapshots(
+def resolve_terminal_command_snapshots(
     actions: Iterable[TerminalActionPlan],
-    context: CaptureContext | None,
-) -> dict[str, dict[str, str]]:
-    if context is None:
-        raise TerminalCaptureError("terminal capture context is unavailable")
-    snapshots: dict[str, dict[str, str]] = {}
+    *,
+    working_directory: Path,
+    defaults: TerminalPresentationDefaults,
+) -> dict[str, dict[str, Any]]:
+    """Resolve command execution and presentation settings from current config."""
+
+    snapshots: dict[str, dict[str, Any]] = {}
     for action_index, action in enumerate(actions):
         value = _thaw(action.config)
         command_entries = value.get("commands")
@@ -1587,11 +1695,72 @@ def _beat_command_snapshots(
             commands = ((None, value),)
         for command_index, command in commands:
             action_id = terminal_action_id(action_index, command_index, command)
-            command_text = _step_command(command, context)
-            snapshots[action_id] = {
+            command_text = _step_command_in_directory(
+                command, working_directory
+            )
+            display = _step_display(command, command_text)
+            timing = command.get("timing", "presentation")
+            if timing not in {"presentation", "realtime"}:
+                raise TerminalCaptureError(
+                    "terminal step timing must be presentation or realtime"
+                )
+            snapshot: dict[str, Any] = {
                 "command": command_text,
-                "display": _step_display(command, command_text),
+                "display": display,
+                "timing": timing,
+                "color": defaults.color,
+                "typing": defaults.typing,
+                "typing_min_delay": defaults.typing_min_delay,
+                "typing_max_delay": defaults.typing_max_delay,
+                "typing_space_delay": defaults.typing_space_delay,
+                "typing_punctuation_delay": defaults.typing_punctuation_delay,
+                "typing_newline_delay": defaults.typing_newline_delay,
+                "typing_seed": defaults.typing_seed,
+                "pre_command_pause": _resolved_pause(
+                    command, "pre_command_pause", 0.0
+                ),
+                "pre_enter_pause": _resolved_pause(
+                    command, "pre_enter_pause", 0.0
+                ),
+                "post_enter_pause": _resolved_pause(
+                    command,
+                    "post_enter_pause",
+                    defaults.post_enter_pause,
+                ),
+                "post_command_pause": _resolved_pause(
+                    command,
+                    "post_command_pause",
+                    defaults.post_command_pause,
+                ),
+                "show_prompt_after": command.get("show_prompt_after", True),
             }
+            if timing == "presentation":
+                typing_seconds = (
+                    sum(
+                        terminal_typing_delays(
+                            display,
+                            minimum=defaults.typing_min_delay,
+                            maximum=defaults.typing_max_delay,
+                            space=defaults.typing_space_delay,
+                            punctuation=defaults.typing_punctuation_delay,
+                            newline=defaults.typing_newline_delay,
+                            seed=defaults.typing_seed,
+                        )
+                    )
+                    if defaults.typing
+                    else 0.0
+                )
+                snapshot["presentation_duration_ms"] = round(
+                    1000
+                    * (
+                        snapshot["pre_command_pause"]
+                        + typing_seconds
+                        + snapshot["pre_enter_pause"]
+                        + snapshot["post_enter_pause"]
+                        + snapshot["post_command_pause"]
+                    )
+                )
+            snapshots[action_id] = snapshot
     return snapshots
 
 
@@ -1605,7 +1774,7 @@ def _validated_step_script(
     step: Mapping[str, Any],
     context: CaptureContext,
     *,
-    snapshot: Mapping[str, str] | None = None,
+    snapshot: Mapping[str, Any] | None = None,
     delegated_environment: Mapping[str, str] | None = None,
     secret_environment: Mapping[str, str] | None = None,
 ) -> str:
@@ -1634,22 +1803,32 @@ def _validated_step_script(
         output = command_output_config(dict(step), field="terminal step")
     except RecordingError as exc:
         raise TerminalCaptureError(str(exc)) from exc
-    show_prompt_after = step.get("show_prompt_after", True)
+    show_prompt_after = (
+        snapshot["show_prompt_after"]
+        if snapshot is not None
+        else step.get("show_prompt_after", True)
+    )
     if not isinstance(show_prompt_after, bool):
         raise TerminalCaptureError("terminal step show_prompt_after must be a boolean")
-    timing = step.get("timing", "presentation")
+    timing = (
+        snapshot["timing"]
+        if snapshot is not None
+        else step.get("timing", "presentation")
+    )
     if timing not in {"presentation", "realtime"}:
         raise TerminalCaptureError(
             "terminal step timing must be presentation or realtime"
         )
-    pauses = tuple(
-        _optional_pause(step, field)
-        for field in (
-            "pre_command_pause",
-            "pre_enter_pause",
-            "post_enter_pause",
-            "post_command_pause",
-        )
+    pause_fields = (
+        "pre_command_pause",
+        "pre_enter_pause",
+        "post_enter_pause",
+        "post_command_pause",
+    )
+    pauses = (
+        tuple(str(snapshot[field]) for field in pause_fields)
+        if snapshot is not None
+        else tuple(_optional_pause(step, field) for field in pause_fields)
     )
     requested_environment = step.get("with_env", [])
     if not isinstance(requested_environment, (list, tuple)) or any(
@@ -1715,6 +1894,19 @@ def _optional_pause(step: Mapping[str, Any], field: str) -> str:
     return str(value)
 
 
+def _resolved_pause(
+    step: Mapping[str, Any],
+    field: str,
+    default: float,
+) -> float:
+    value = step.get(field, default)
+    if value is None:
+        value = default
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise TerminalCaptureError(f"terminal step {field} must be non-negative")
+    return float(value)
+
+
 def _step_display(step: Mapping[str, Any], command: str) -> str:
     display = step.get("display")
     if display is None:
@@ -1766,6 +1958,12 @@ def _validate_expect(expect: Mapping[str, Any]) -> None:
 
 
 def _step_command(step: Mapping[str, Any], context: CaptureContext) -> str:
+    return _step_command_in_directory(step, context.working_directory)
+
+
+def _step_command_in_directory(
+    step: Mapping[str, Any], working_directory: Path
+) -> str:
     run = step.get("run")
     run_file = step.get("run_file")
     if isinstance(run, str) and run:
@@ -1773,7 +1971,7 @@ def _step_command(step: Mapping[str, Any], context: CaptureContext) -> str:
     if isinstance(run_file, str) and run_file:
         path = Path(run_file).expanduser()
         if not path.is_absolute():
-            path = context.working_directory / path
+            path = working_directory / path
         try:
             return path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -1794,7 +1992,7 @@ def extract_terminal_beat_casts(
     output_dir: Path,
     *,
     expected_beat_ids: tuple[str, ...],
-    command_snapshots: Mapping[str, Mapping[str, Mapping[str, str]]] | None = None,
+    command_snapshots: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
 ) -> dict[str, Path]:
     """Split the physical persistent cast into beat-local, zero-based casts."""
 
@@ -1820,7 +2018,8 @@ def extract_terminal_beat_casts(
     previous_times: dict[str, float] = {}
     beat_origins: dict[str, float] = {}
     active: str | None = None
-    active_action: tuple[str, str, float] | None = None
+    active_action: tuple[str, str, float, int] | None = None
+    active_command_boundaries: dict[str, int] = {}
     ended_handoffs: set[tuple[str, str]] = set()
     absolute_time = 0.0
 
@@ -1869,7 +2068,7 @@ def extract_terminal_beat_casts(
         active = None
 
     def handle_action_marker(match: re.Match[str]) -> None:
-        nonlocal active_action
+        nonlocal active_action, active_command_boundaries
         beat_id = match.group("beat")
         action_id = match.group("action")
         phase = match.group("phase")
@@ -1888,7 +2087,13 @@ def extract_terminal_beat_casts(
                 raise TerminalCaptureError(
                     f"terminal action {action_id!r} has a duplicate start marker"
                 )
-            active_action = (beat_id, action_id, absolute_time)
+            active_action = (
+                beat_id,
+                action_id,
+                absolute_time,
+                len(captured[beat_id]),
+            )
+            active_command_boundaries = {}
             return
         if active_action is None or active_action[:2] != (beat_id, action_id):
             raise TerminalCaptureError(
@@ -1896,23 +2101,59 @@ def extract_terminal_beat_casts(
             )
         finish_active_action()
 
+    def handle_command_marker(match: re.Match[str]) -> None:
+        beat_id = match.group("beat")
+        action_id = match.group("action")
+        phase = match.group("phase")
+        if active_action is None or active_action[:2] != (beat_id, action_id):
+            raise TerminalCaptureError(
+                f"terminal command marker {beat_id!r}/{action_id!r} "
+                "is outside its action"
+            )
+        expected_phases = (
+            "typing_start",
+            "typing_end",
+            "output_start",
+            "output_end",
+        )
+        if phase in active_command_boundaries:
+            raise TerminalCaptureError(
+                f"terminal command marker {beat_id!r}/{action_id!r}/{phase!r} "
+                "is duplicated"
+            )
+        phase_index = expected_phases.index(phase)
+        if any(
+            expected_phases.index(previous) > phase_index
+            for previous in active_command_boundaries
+        ):
+            raise TerminalCaptureError(
+                f"terminal command markers for {beat_id!r}/{action_id!r} "
+                "are out of order"
+            )
+        active_command_boundaries[phase] = len(captured[beat_id])
+
     def finish_active_action() -> None:
-        nonlocal active_action
+        nonlocal active_action, active_command_boundaries
         if active_action is None:
             raise TerminalCaptureError("terminal action has no active interval")
-        beat_id, action_id, start = active_action
+        beat_id, action_id, start, event_start = active_action
         origin = beat_origins[beat_id]
         start_ms = round((start - origin) * 1000)
         end_ms = round((absolute_time - origin) * 1000)
         action_timings[beat_id].append(
             {
                 "id": action_id,
-                "start_ms": start_ms,
-                "end_ms": end_ms,
-                "duration_ms": end_ms - start_ms,
+                "capture_start_ms": start_ms,
+                "capture_end_ms": end_ms,
+                "event_indexes": {
+                    "action_start": event_start,
+                    **active_command_boundaries,
+                    "action_end": len(captured[beat_id]),
+                },
             }
         )
         active_action = None
+        active_command_boundaries = {}
 
     def handle_handoff_marker(match: re.Match[str]) -> None:
         nonlocal active
@@ -1966,12 +2207,22 @@ def extract_terminal_beat_casts(
                 if action_marker is not None:
                     handle_action_marker(action_marker)
                 else:
-                    handoff_marker = TERMINAL_BROWSER_HANDOFF_MARKER_RE.fullmatch(
+                    command_marker = TERMINAL_COMMAND_MARKER_RE.fullmatch(
                         marker.group(0)
                     )
-                    if handoff_marker is None:
-                        raise TerminalCaptureError("terminal cast marker is malformed")
-                    handle_handoff_marker(handoff_marker)
+                    if command_marker is not None:
+                        handle_command_marker(command_marker)
+                    else:
+                        handoff_marker = (
+                            TERMINAL_BROWSER_HANDOFF_MARKER_RE.fullmatch(
+                                marker.group(0)
+                            )
+                        )
+                        if handoff_marker is None:
+                            raise TerminalCaptureError(
+                                "terminal cast marker is malformed"
+                            )
+                        handle_handoff_marker(handoff_marker)
             cursor = marker.end()
         suffix = data[cursor:]
         if suffix and active is not None:
@@ -2005,7 +2256,14 @@ def extract_terminal_beat_casts(
                     f"terminal command snapshots do not match beat {beat_id!r} actions"
                 )
             timing_actions = [
-                {**item, **beat_snapshots[item["id"]]}
+                {
+                    **item,
+                    "timing": beat_snapshots[item["id"]]["timing"],
+                    "presentation_snapshot": {
+                        field: beat_snapshots[item["id"]][field]
+                        for field in TERMINAL_PRESENTATION_SNAPSHOT_FIELDS
+                    },
+                }
                 for item in timing_actions
             ]
         timing_output.write_text(

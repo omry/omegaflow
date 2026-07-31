@@ -82,10 +82,13 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
     assert "stopped local watch server" not in output
     assert actions["actions"] == [
         {
+            "capture_end_ms": 200,
+            "capture_start_ms": 0,
+            "event_indexes": {
+                "action_end": 2,
+                "action_start": 0,
+            },
             "id": "watch_command",
-            "start_ms": 0,
-            "end_ms": 200,
-            "duration_ms": 200,
         }
     ]
 
@@ -295,7 +298,7 @@ def test_terminal_action_gate_gets_a_fresh_command_timeout(
         typing=False,
         post_enter_pause=0,
         post_command_pause=0,
-        timeout_seconds=0.15,
+        timeout_seconds=0.5,
     )
     runner.start(
         CaptureContext.create(
@@ -307,7 +310,7 @@ def test_terminal_action_gate_gets_a_fresh_command_timeout(
     try:
         runner.capture_beat(
             plan.beats[0],
-            before_action=lambda _action_id: time.sleep(0.25),
+            before_action=lambda _action_id: time.sleep(0.75),
         )
     finally:
         runner.close()
@@ -942,7 +945,7 @@ def test_terminal_commands_report_live_action_boundaries(tmp_path: Path) -> None
     ]
 
 
-def test_terminal_run_file_snapshot_survives_cleanup_mutation(
+def test_terminal_run_file_uses_current_display_and_captured_output(
     tmp_path: Path,
 ) -> None:
     if shutil.which(asciinema_command()) is None:
@@ -983,11 +986,15 @@ def test_terminal_run_file_snapshot_survives_cleanup_mutation(
             encoding="utf-8"
         )
     )
-    assert actions["actions"][0]["command"] == original_command
+    assert "command" not in actions["actions"][0]
+    assert (
+        actions["actions"][0]["presentation_snapshot"]["display"]
+        == original_command
+    )
     assert "original command output" in _cast_output(
         (result.bundle_dir / "beats/recorded.cast").read_text(encoding="utf-8")
     )
-    assert "mutated command output" not in _cast_output(
+    assert "mutated command output" in _cast_output(
         (result.bundle_dir / "beats/recorded.cast").read_text(encoding="utf-8")
     )
 
@@ -1276,8 +1283,8 @@ def test_terminal_protocol_runs_inside_one_asciinema_capture(tmp_path: Path) -> 
     assert [item["id"] for item in one_actions["actions"]] == ["__step_0"]
     assert [item["id"] for item in two_actions["actions"]] == ["__step_0"]
     assert (
-        one_actions["actions"][0]["end_ms"]
-        >= one_actions["actions"][0]["start_ms"]
+        one_actions["actions"][0]["capture_end_ms"]
+        >= one_actions["actions"][0]["capture_start_ms"]
     )
     for value in (one, two):
         assert "hidden-setup" not in value
@@ -1364,6 +1371,10 @@ def test_persistent_terminal_reuses_visible_prompt_between_commands(
                                     "display": "second command",
                                     "show_prompt_after": False,
                                 },
+                                {
+                                    "run": "printf 'third output\\n'",
+                                    "display": "third command",
+                                },
                             ]
                         }
                     ],
@@ -1400,8 +1411,48 @@ def test_persistent_terminal_reuses_visible_prompt_between_commands(
         "first output\r\n"
         "$ second command\r\n"
         "second output\r\n"
+        "$ third command\r\n"
+        "third output\r\n"
+        "$ "
     )
     assert fresh == "$ fresh command\r\nfresh output\r\n$ "
+
+    captured_actions = presentation_build._load_terminal_actions(
+        beat_dir / "commands.actions.json",
+        beat_id="commands",
+        expected_action_ids=(
+            "__step_0_command_0",
+            "__step_0_command_1",
+            "__step_0_command_2",
+        ),
+    )
+    resolved_actions = presentation_build._resolve_terminal_actions(
+        captured_actions,
+        actions=tuple(plan.beats[0].actions),
+        spec={
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "environment": {"working_directory": str(tmp_path)},
+            "style": {"color": False},
+        },
+    )
+    action_starts_ms: dict[str, int] = {}
+    cursor_ms = 0
+    for action_id, action in resolved_actions.items():
+        action_starts_ms[action_id] = cursor_ms
+        cursor_ms += action.presentation_duration_ms
+    published = tmp_path / "published.cast"
+    presentation_build.materialize_terminal_beat(
+        beat_dir / "commands.cast",
+        published,
+        duration_ms=cursor_ms,
+        captured_actions=resolved_actions,
+        action_starts_ms=action_starts_ms,
+    )
+
+    assert "$ third command\r\nthird output\r\n$ " in _cast_output(
+        published.read_text(encoding="utf-8")
+    )
 
 
 def test_persistent_terminal_colors_prompt_and_command_when_enabled(
@@ -1498,18 +1549,36 @@ def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
 
     beat_dir = tmp_path / "run" / "capture" / "terminal-beats"
     source = beat_dir / "typed.cast"
-    action_payload = json.loads(
-        (beat_dir / "typed.actions.json").read_text(encoding="utf-8")
-    )
-    interval = action_payload["actions"][0]
     destination = tmp_path / "published.cast"
+    captured_actions = presentation_build._load_terminal_actions(
+        beat_dir / "typed.actions.json",
+        beat_id="typed",
+        expected_action_ids=("command",),
+    )
+    resolved_actions = presentation_build._resolve_terminal_actions(
+        captured_actions,
+        actions=tuple(plan.beats[0].actions),
+        spec={
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "environment": {"working_directory": str(tmp_path)},
+            "style": {
+                "typing": True,
+                "color": False,
+                "typing_min_delay": 0.02,
+                "typing_max_delay": 0.02,
+                "typing_space_delay": 0,
+                "typing_punctuation_delay": 0,
+                "typing_newline_delay": 0,
+            },
+            "timing": {"post_enter_pause": 0, "post_command_pause": 0},
+        },
+    )
     presentation_build.materialize_terminal_beat(
         source,
         destination,
         duration_ms=2_000,
-        captured_action_intervals_ms={
-            "command": (interval["start_ms"], interval["end_ms"])
-        },
+        captured_actions=resolved_actions,
         action_starts_ms={"command": 700},
     )
 
@@ -1521,6 +1590,7 @@ def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
         if event[1] == "o" and event[2]:
             visible_events.append((absolute_ms, event[2]))
 
+    assert any(text == "\r\n" for _, text in visible_events)
     assert visible_events[0][0] <= 10
     assert visible_events[0][1] == "$ "
     typed_events: list[tuple[int, str]] = []
@@ -1532,6 +1602,111 @@ def test_terminal_beat_keeps_prompt_visible_while_command_waits_and_types(
     assert "".join(text for _, text in typed_events).startswith("abcde")
     assert len(typed_events) >= 3
     assert all(text != "abcde" for _, text in typed_events)
+
+
+def test_presentation_terminal_capture_is_compressed_before_materialization(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "compressed-presentation",
+            "beats": [
+                {
+                    "id": "commands",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "first",
+                                    "run": "printf 'first output\\n'",
+                                    "display": "abc",
+                                    "pre_command_pause": 1.0,
+                                    "pre_enter_pause": 0.5,
+                                    "post_enter_pause": 1.0,
+                                    "post_command_pause": 1.0,
+                                },
+                                {
+                                    "id": "second",
+                                    "run": "printf 'second output\\n'",
+                                    "display": "xyz",
+                                    "pre_command_pause": 1.0,
+                                    "pre_enter_pause": 0.5,
+                                    "post_enter_pause": 1.0,
+                                    "post_command_pause": 1.0,
+                                },
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=True,
+            typing_min_delay=0.2,
+            typing_max_delay=0.2,
+            typing_space_delay=0,
+            typing_punctuation_delay=0,
+            typing_newline_delay=0,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=15.0,
+        )
+    )
+
+    started = time.monotonic()
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+    capture_seconds = time.monotonic() - started
+
+    actions = json.loads(
+        (
+            tmp_path / "run/capture/terminal-beats/commands.actions.json"
+        ).read_text(encoding="utf-8")
+    )["actions"]
+    assert capture_seconds < 3.0
+    assert [action["timing"] for action in actions] == [
+        "presentation",
+        "presentation",
+    ]
+    resolved_actions = presentation_build._resolve_terminal_actions(
+        presentation_build._load_terminal_actions(
+            tmp_path / "run/capture/terminal-beats/commands.actions.json",
+            beat_id="commands",
+            expected_action_ids=("first", "second"),
+        ),
+        actions=tuple(plan.beats[0].actions),
+        spec={
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "environment": {"working_directory": str(tmp_path)},
+            "style": {
+                "typing": True,
+                "typing_min_delay": 0.2,
+                "typing_max_delay": 0.2,
+                "typing_space_delay": 0,
+                "typing_punctuation_delay": 0,
+                "typing_newline_delay": 0,
+            },
+            "timing": {"post_enter_pause": 0, "post_command_pause": 0},
+        },
+    )
+    assert [
+        action.presentation_duration_ms for action in resolved_actions.values()
+    ] == [
+        3_900,
+        3_900,
+    ]
+    assert all(
+        action["capture_end_ms"] - action["capture_start_ms"] < 1_000
+        for action in actions
+    )
+    assert all("command" not in action for action in actions)
+    assert all("show_prompt_after" not in action for action in actions)
+    assert all("capture_duration_ms" not in action for action in actions)
 
 
 def test_terminal_beat_realtime_streams_output_during_command(
@@ -1592,6 +1767,104 @@ def test_terminal_beat_realtime_streams_output_during_command(
     assert list(output_times) == ["1", "2", "3"]
     assert output_times["2"] - output_times["1"] >= 150
     assert output_times["3"] - output_times["2"] >= 150
+
+
+def test_terminal_materialization_combines_compressed_and_realtime_actions(
+    tmp_path: Path,
+) -> None:
+    if shutil.which(asciinema_command()) is None:
+        pytest.skip("asciinema is unavailable")
+    plan = normalize_recording_plan(
+        {
+            "id": "mixed-timing",
+            "beats": [
+                {
+                    "id": "mixed",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "prepared",
+                                    "run": "printf 'prepared\\n'",
+                                    "display": "prepare",
+                                    "pre_command_pause": 1.0,
+                                    "post_enter_pause": 0.5,
+                                },
+                                {
+                                    "id": "live",
+                                    "run": (
+                                        "printf 'live-one\\n'; sleep 0.25; "
+                                        "printf 'live-two\\n'"
+                                    ),
+                                    "display": "run live",
+                                    "timing": "realtime",
+                                },
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            record_cast=True,
+            typing=False,
+            post_enter_pause=0,
+            post_command_pause=0,
+            timeout_seconds=5.0,
+        )
+    )
+
+    coordinator.capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    beat_dir = tmp_path / "run/capture/terminal-beats"
+    captured_actions = presentation_build._load_terminal_actions(
+        beat_dir / "mixed.actions.json",
+        beat_id="mixed",
+        expected_action_ids=("prepared", "live"),
+    )
+    actions = presentation_build._resolve_terminal_actions(
+        captured_actions,
+        actions=tuple(plan.beats[0].actions),
+        spec={
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "environment": {"working_directory": str(tmp_path)},
+            "style": {"typing": False, "color": False},
+            "timing": {"post_enter_pause": 0, "post_command_pause": 0},
+        },
+    )
+    prepared_duration = actions["prepared"].presentation_duration_ms
+    live_duration = (
+        actions["live"].capture_end_ms - actions["live"].capture_start_ms
+    )
+    destination = tmp_path / "published.cast"
+    presentation_build.materialize_terminal_beat(
+        beat_dir / "mixed.cast",
+        destination,
+        duration_ms=prepared_duration + live_duration,
+        captured_actions=actions,
+        action_starts_ms={
+            "prepared": 0,
+            "live": prepared_duration,
+        },
+    )
+
+    absolute_ms = 0
+    output_times: dict[str, int] = {}
+    for line in destination.read_text(encoding="utf-8").splitlines()[1:]:
+        event = json.loads(line)
+        absolute_ms += round(float(event[0]) * 1000)
+        if event[1] != "o":
+            continue
+        for text in str(event[2]).replace("\r", "").splitlines():
+            if text in {"prepared", "live-one", "live-two"}:
+                output_times[text] = absolute_ms
+
+    assert output_times["prepared"] == 1_500
+    assert output_times["live-one"] >= prepared_duration
+    assert output_times["live-two"] - output_times["live-one"] >= 150
 
 
 def test_terminal_realtime_command_receives_a_pty(

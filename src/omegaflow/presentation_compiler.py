@@ -33,6 +33,7 @@ from .recording_plan import (
     pane_action_id,
     terminal_action_id,
 )
+from .terminal_capture import terminal_typing_delays
 
 
 class PresentationCompileError(RuntimeError):
@@ -1430,6 +1431,7 @@ def compile_artifact_fingerprints(
     plan: RecordingPlan,
     *,
     capture_environment: Mapping[str, Any],
+    presentation_settings: Mapping[str, Any] | None = None,
     source_dependencies: Mapping[str, str],
     capture_policy_versions: Mapping[str, str],
     visual_asset_hashes: Iterable[str] = (),
@@ -1481,6 +1483,9 @@ def compile_artifact_fingerprints(
         "policy": PRESENTATION_FINGERPRINT_POLICY,
         "capture_fingerprint": capture_fingerprint,
         "plan": _presentation_plan_value(plan),
+        "settings": _canonical_value(
+            {} if presentation_settings is None else presentation_settings
+        ),
         "visual_asset_hashes": assets,
         "narration_take_hashes": narration_hashes,
         "timestamp_hashes": timestamps,
@@ -1589,6 +1594,15 @@ def _capture_action_value(action: TerminalActionPlan | BrowserActionPlan) -> Any
 
 def _strip_terminal_presentation_fields(value: dict[str, Any]) -> None:
     value.pop("after", None)
+    if value.get("timing", "presentation") == "presentation":
+        for field in (
+            "display",
+            "pre_command_pause",
+            "pre_enter_pause",
+            "post_enter_pause",
+            "post_command_pause",
+        ):
+            value.pop(field, None)
 
 
 def _presentation_plan_value(plan: RecordingPlan) -> dict[str, Any]:
@@ -1706,6 +1720,31 @@ class TerminalBeatMaterialization:
 
 
 @dataclass(frozen=True)
+class TerminalActionMaterialization:
+    """Captured output boundaries and authored presentation timing for one action."""
+
+    id: str
+    timing: str
+    capture_start_ms: int
+    capture_end_ms: int
+    presentation_duration_ms: int
+    event_indexes: Mapping[str, int]
+    display: str
+    color: bool
+    typing: bool
+    typing_min_delay: float
+    typing_max_delay: float
+    typing_space_delay: float
+    typing_punctuation_delay: float
+    typing_newline_delay: float
+    typing_seed: int
+    pre_command_pause: float
+    pre_enter_pause: float
+    post_enter_pause: float
+    post_command_pause: float
+
+
+@dataclass(frozen=True)
 class TerminalTextHighlightTargetEvent:
     kind: str
     pattern: str
@@ -1726,7 +1765,7 @@ def materialize_terminal_beat(
     destination: Path,
     *,
     duration_ms: int,
-    captured_action_intervals_ms: Mapping[str, tuple[int, int]] | None = None,
+    captured_actions: Mapping[str, TerminalActionMaterialization] | None = None,
     action_starts_ms: Mapping[str, int] | None = None,
     text_highlights: tuple[TerminalTextHighlightEvent, ...] = (),
 ) -> TerminalBeatMaterialization:
@@ -1796,17 +1835,17 @@ def materialize_terminal_beat(
 
     captured_ms = milliseconds_half_up(Decimal(str(captured_seconds)) * 1000)
     materialized_ms = captured_ms
-    if captured_action_intervals_ms is not None or action_starts_ms is not None:
-        if captured_action_intervals_ms is None or action_starts_ms is None:
+    if captured_actions is not None or action_starts_ms is not None:
+        if captured_actions is None or action_starts_ms is None:
             raise PresentationCompileError(
                 "PRESENTATION_SCHEMA",
-                "terminal action intervals and solved starts must be supplied together",
+                "terminal actions and solved starts must be supplied together",
             )
         events, materialized_ms = _relocate_terminal_events(
             events,
             event_absolute_ms,
             version=version,
-            captured_action_intervals_ms=captured_action_intervals_ms,
+            captured_actions=captured_actions,
             action_starts_ms=action_starts_ms,
         )
     if materialized_ms > solved_duration:
@@ -1954,32 +1993,24 @@ def _relocate_terminal_events(
     event_absolute_ms: list[int],
     *,
     version: int,
-    captured_action_intervals_ms: Mapping[str, tuple[int, int]],
+    captured_actions: Mapping[str, TerminalActionMaterialization],
     action_starts_ms: Mapping[str, int],
 ) -> tuple[list[list[object]], int]:
-    if set(captured_action_intervals_ms) != set(action_starts_ms):
+    if set(captured_actions) != set(action_starts_ms):
         raise PresentationCompileError(
             "PRESENTATION_SCHEMA", "terminal action timing identities do not match"
         )
-    intervals: list[tuple[str, int, int, int]] = []
+    actions: list[tuple[TerminalActionMaterialization, int]] = []
     previous_end = 0
-    for action_id, interval in captured_action_intervals_ms.items():
-        if (
-            not isinstance(interval, tuple)
-            or len(interval) != 2
-            or any(
-                isinstance(value, bool) or not isinstance(value, int)
-                for value in interval
-            )
-        ):
-            raise PresentationCompileError(
-                "PRESENTATION_SCHEMA", "terminal action interval is invalid"
-            )
-        start, end = interval
+    previous_event_end = 0
+    for action_id, action in captured_actions.items():
         target = action_starts_ms[action_id]
         if (
-            start < previous_end
-            or end < start
+            action.id != action_id
+            or action.timing not in {"presentation", "realtime"}
+            or action.capture_start_ms < previous_end
+            or action.capture_end_ms < action.capture_start_ms
+            or action.presentation_duration_ms < 0
             or isinstance(target, bool)
             or not isinstance(target, int)
             or target < 0
@@ -1987,28 +2018,180 @@ def _relocate_terminal_events(
             raise PresentationCompileError(
                 "PRESENTATION_SCHEMA", "terminal action timing is invalid"
             )
-        intervals.append((action_id, start, end, target))
-        previous_end = end
+        indexes = action.event_indexes
+        required_indexes = (
+            (
+                "action_start",
+                "typing_start",
+                "typing_end",
+                "output_start",
+                "output_end",
+                "action_end",
+            )
+            if action.timing == "presentation"
+            else ("action_start", "action_end")
+        )
+        if not set(required_indexes).issubset(indexes) or any(
+            isinstance(indexes[name], bool)
+            or not isinstance(indexes[name], int)
+            for name in required_indexes
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA", "terminal action event indexes are invalid"
+            )
+        ordered_indexes = [indexes[name] for name in required_indexes]
+        if (
+            ordered_indexes != sorted(ordered_indexes)
+            or ordered_indexes[0] < previous_event_end
+            or ordered_indexes[-1] > len(events)
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA", "terminal action event indexes are invalid"
+            )
+        actions.append((action, target))
+        previous_end = action.capture_end_ms
+        previous_event_end = indexes["action_end"]
 
-    relocated_absolute: list[int] = []
-    previous = 0
-    for source_ms in event_absolute_ms:
-        target_ms = source_ms
-        for _action_id, start, end, target in intervals:
-            if start <= source_ms <= end:
-                target_ms = target + source_ms - start
-                break
-        target_ms = max(previous, target_ms)
-        relocated_absolute.append(target_ms)
-        previous = target_ms
+    timeline: list[tuple[int, int, list[object]]] = []
+    source_cursor = 0
+    sequence = 0
+
+    def append_source(
+        start_index: int,
+        end_index: int,
+        *,
+        source_origin_ms: int | None = None,
+        target_origin_ms: int | None = None,
+    ) -> None:
+        nonlocal sequence
+        for index in range(start_index, end_index):
+            target_ms = event_absolute_ms[index]
+            if source_origin_ms is not None and target_origin_ms is not None:
+                target_ms = (
+                    target_origin_ms
+                    + event_absolute_ms[index]
+                    - source_origin_ms
+                )
+            timeline.append((target_ms, sequence, [*events[index][1:]]))
+            sequence += 1
+
+    for action, target_ms in actions:
+        indexes = action.event_indexes
+        append_source(source_cursor, indexes["action_start"])
+        if action.timing == "realtime":
+            append_source(
+                indexes["action_start"],
+                indexes["action_end"],
+                source_origin_ms=action.capture_start_ms,
+                target_origin_ms=target_ms,
+            )
+        else:
+            action_events = _materialize_presentation_terminal_action(
+                action,
+                prefix_events=events[
+                    indexes["action_start"] : indexes["typing_start"]
+                ],
+                output_events=events[
+                    indexes["output_start"] : indexes["output_end"]
+                ],
+                target_ms=target_ms,
+            )
+            for event_ms, payload in action_events:
+                timeline.append((event_ms, sequence, payload))
+                sequence += 1
+        source_cursor = indexes["action_end"]
+    append_source(source_cursor, len(events))
 
     relocated: list[list[object]] = []
-    previous = 0
-    for event, target_ms in zip(events, relocated_absolute, strict=True):
-        timestamp_ms = target_ms - previous if version == 3 else target_ms
-        relocated.append([timestamp_ms / 1000, *event[1:]])
-        previous = target_ms
-    return relocated, (relocated_absolute[-1] if relocated_absolute else 0)
+    previous_ms = 0
+    for target_ms, _sequence, payload in timeline:
+        target_ms = max(previous_ms, target_ms)
+        timestamp_ms = target_ms - previous_ms if version == 3 else target_ms
+        relocated.append([timestamp_ms / 1000, *payload])
+        previous_ms = target_ms
+    materialized_ms = max(
+        previous_ms,
+        max(
+            (
+                target
+                + (
+                    action.presentation_duration_ms
+                    if action.timing == "presentation"
+                    else action.capture_end_ms - action.capture_start_ms
+                )
+                for action, target in actions
+            ),
+            default=0,
+        ),
+    )
+    return relocated, materialized_ms
+
+
+def _materialize_presentation_terminal_action(
+    action: TerminalActionMaterialization,
+    *,
+    prefix_events: list[list[object]],
+    output_events: list[list[object]],
+    target_ms: int,
+) -> list[tuple[int, list[object]]]:
+    """Build one presentation-timed command without replaying capture latency."""
+
+    typed_at_ms = target_ms + round(action.pre_command_pause * 1000)
+    result = [(target_ms, [*event[1:]]) for event in prefix_events]
+    if action.color:
+        result.append((typed_at_ms, ["o", "\x1b[1m"]))
+    if action.typing:
+        delays = terminal_typing_delays(
+            action.display,
+            minimum=action.typing_min_delay,
+            maximum=action.typing_max_delay,
+            space=action.typing_space_delay,
+            punctuation=action.typing_punctuation_delay,
+            newline=action.typing_newline_delay,
+            seed=action.typing_seed,
+        )
+        elapsed_seconds = 0.0
+        for index, char in enumerate(action.display):
+            result.append(
+                (
+                    typed_at_ms + round(elapsed_seconds * 1000),
+                    ["o", char],
+                )
+            )
+            if index < len(delays):
+                elapsed_seconds += delays[index]
+        typing_duration_seconds = elapsed_seconds
+    else:
+        result.append((typed_at_ms, ["o", action.display]))
+        typing_duration_seconds = 0.0
+    enter_at_ms = target_ms + round(
+        (
+            action.pre_command_pause
+            + typing_duration_seconds
+            + action.pre_enter_pause
+        )
+        * 1000
+    )
+    if action.color:
+        result.append((enter_at_ms, ["o", "\x1b[0m"]))
+    result.append((enter_at_ms, ["o", "\r\n"]))
+    output_at_ms = target_ms + round(
+        (
+            action.pre_command_pause
+            + typing_duration_seconds
+            + action.pre_enter_pause
+            + action.post_enter_pause
+        )
+        * 1000
+    )
+    result.extend((output_at_ms, [*event[1:]]) for event in output_events)
+    result.append(
+        (
+            target_ms + action.presentation_duration_ms,
+            ["o", ""],
+        )
+    )
+    return result
 
 
 POINTER_MIN_DURATION_MS = 260

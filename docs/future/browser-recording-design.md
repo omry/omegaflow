@@ -1288,7 +1288,7 @@ The recording fingerprint is split logically into two hashes:
 The capture hash includes:
 
 - normalized browser actions, checks, capture URLs, and readiness conditions
-- recording source and `run_file` dependencies
+- normalized capture-relevant recording source and `run_file` dependencies
 - setup and cleanup
 - Playwright package version and exact browser revision
 - operating-system/container profile

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -55,6 +56,7 @@ from .presentation_compiler import (
     BrowserCaptureLog,
     CompiledBrowserBeat,
     CompiledRecordingTiming,
+    TerminalActionMaterialization,
     TerminalTextHighlightEvent,
     TerminalTextHighlightTargetEvent,
     compile_artifact_fingerprints,
@@ -109,14 +111,19 @@ from .service_environment import (
     ServiceEnvironmentError,
     resolve_service_environment,
 )
-from .terminal_capture import PersistentTerminalRunner
+from .terminal_capture import (
+    TERMINAL_PRESENTATION_SNAPSHOT_FIELDS,
+    PersistentTerminalRunner,
+    TerminalPresentationDefaults,
+    resolve_terminal_command_snapshots,
+)
 from .tool_progress import format_activity_elapsed
 from .visualization import VisualizationError, syntax_tokens
 
 
 CAPTURE_POLICY_VERSIONS = {
     "coordinator": "capture-v2-runner-scopes",
-    "terminal": "persistent-terminal-v5-runner-scopes",
+    "terminal": "persistent-terminal-v6-compressed-presentation",
     "browser": "playwright-capture-v8-runner-scopes",
     "stability": "stable-v1",
     "redaction": "capture-mask-v1",
@@ -126,7 +133,7 @@ PRESENTATION_POLICY_VERSIONS = {
     "terminal_renderer": "payload-v1",
     "browser_renderer": "payload-v1",
     "pointer": "pointer-v1",
-    "typing": "natural-v1",
+    "typing": "natural-v2-materialized",
     "clip": "playwright-video-v2-h264",
 }
 FINGERPRINT_FILE = "recording.fingerprint.json"
@@ -137,6 +144,18 @@ RECORDING_METADATA_FILE = "recording.recording.json"
 
 class PresentationBuildError(RuntimeError):
     """Raised when capture or presentation materialization cannot complete."""
+
+
+@dataclass(frozen=True)
+class CapturedTerminalAction:
+    """Capture-owned boundaries plus an informational presentation snapshot."""
+
+    id: str
+    timing: str
+    capture_start_ms: int
+    capture_end_ms: int
+    event_indexes: Mapping[str, int]
+    presentation_snapshot: Mapping[str, Any]
 
 
 def project_root_from_spec(spec: Mapping[str, Any]) -> Path:
@@ -887,9 +906,6 @@ def _source_dependencies(spec: Mapping[str, Any]) -> dict[str, str]:
 
 def _dependency_paths(spec: Mapping[str, Any]) -> list[Path]:
     paths: list[Path] = []
-    manifest = spec.get("_manifest_path")
-    if isinstance(manifest, str) and manifest:
-        paths.append(record.relative_path(manifest))
 
     def visit(value: object) -> None:
         if isinstance(value, Mapping):
@@ -950,20 +966,27 @@ def artifact_fingerprints(
     capture = spec.get("capture", {})
     environment = spec.get("environment", {})
     _, resolved_environment = _capture_environment(spec)
+    terminal_presentation = {
+        "color": resolved_environment.get("NO_COLOR") is None,
+        **_terminal_capture_options(spec),
+    }
+    terminal_capture = {
+        "color": terminal_presentation["color"],
+    }
+    if _has_realtime_terminal_action(plan):
+        terminal_capture.update(terminal_presentation)
     return compile_artifact_fingerprints(
         plan,
         capture_environment={
             "capture": capture,
             "environment": environment,
             "omegaflow_version": __version__,
-            "terminal": {
-                "color": resolved_environment.get("NO_COLOR") is None,
-                **_terminal_capture_options(spec),
-            },
+            "terminal": terminal_capture,
             "playwright": PLAYWRIGHT_PACKAGE_VERSION,
             "chromium_revision": CHROMIUM_REVISION,
             "chromium_version": CHROMIUM_BROWSER_VERSION,
         },
+        presentation_settings={"terminal": terminal_presentation},
         source_dependencies=_source_dependencies(spec),
         capture_policy_versions=CAPTURE_POLICY_VERSIONS,
         visual_asset_hashes=visual_asset_hashes,
@@ -972,6 +995,26 @@ def artifact_fingerprints(
         presentation_policy_versions=PRESENTATION_POLICY_VERSIONS,
         auth_state_sha256=_auth_state_sha256(spec),
     )
+
+
+def _has_realtime_terminal_action(plan: RecordingPlan) -> bool:
+    beats = (
+        tuple(captured.beat for captured in captured_pane_beats(plan))
+        if plan.panes
+        else plan.beats
+    )
+    for beat in beats:
+        for action in beat.actions:
+            if not isinstance(action, TerminalActionPlan):
+                continue
+            commands = action.config.get("commands")
+            values = commands if isinstance(commands, tuple) else (action.config,)
+            if any(
+                command.get("timing", "presentation") == "realtime"
+                for command in values
+            ):
+                return True
+    return False
 
 
 def capture_is_fresh(spec: Mapping[str, Any], plan: RecordingPlan, run_dir: Path) -> bool:
@@ -1464,19 +1507,6 @@ def _spoken_character_time_ms(
     return round(start_ms + fraction * (end_ms - start_ms))
 
 
-def _terminal_duration_ms(path: Path) -> int:
-    try:
-        values = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    except (OSError, json.JSONDecodeError) as exc:
-        raise PresentationBuildError(f"terminal beat cast is invalid: {path}") from exc
-    if not values or not isinstance(values[0], dict):
-        raise PresentationBuildError(f"terminal beat cast is invalid: {path}")
-    version = values[0].get("version")
-    times = [float(event[0]) for event in values[1:] if isinstance(event, list) and event]
-    seconds = sum(times) if version == 3 else (times[-1] if times else 0.0)
-    return round(seconds * 1000)
-
-
 def _final_browser_state(
     initial: Mapping[str, Any], actions: Iterable[Mapping[str, Any]]
 ) -> Mapping[str, Any]:
@@ -1717,7 +1747,9 @@ def _explicit_pane_tracks(
     captured_by_outer_pane_beat: Mapping[
         tuple[str, str, str], CapturedPaneBeatPlan
     ],
-    terminal_intervals: Mapping[str, Mapping[str, tuple[int, int]]],
+    terminal_actions: Mapping[
+        str, Mapping[str, TerminalActionMaterialization]
+    ],
     compiled_browser: Mapping[str, CompiledBrowserBeat],
     all_sources: dict[str, Any],
     presentation_config: Mapping[str, Any],
@@ -1795,7 +1827,7 @@ def _explicit_pane_tracks(
                 captured = captured_by_outer_pane_beat[
                     (beat.id, track.pane_id, pane_beat.id)
                 ]
-                if captured.capture_id not in terminal_intervals:
+                if captured.capture_id not in terminal_actions:
                     raise PresentationBuildError(
                         "terminal action timing is missing for "
                         f"{captured.capture_id!r}"
@@ -1805,9 +1837,7 @@ def _explicit_pane_tracks(
                     paths["terminal_beats"] / f"{captured.capture_id}.cast",
                     staging / payload,
                     duration_ms=content_duration_ms,
-                    captured_action_intervals_ms=terminal_intervals[
-                        captured.capture_id
-                    ],
+                    captured_actions=terminal_actions[captured.capture_id],
                     action_starts_ms={
                         item.action_id: (
                             item.local_start_ms
@@ -2025,7 +2055,9 @@ def compile_presentation_bundle(
         preliminary.update(compiled)
     action_durations: dict[tuple[str, str], int] = {}
     visual_durations: dict[str, int] = {}
-    terminal_intervals: dict[str, dict[str, tuple[int, int]]] = {}
+    terminal_actions: dict[
+        str, dict[str, TerminalActionMaterialization]
+    ] = {}
     pane_action_intervals: dict[
         tuple[str, str, str, str], tuple[int, int]
     ] = {}
@@ -2061,12 +2093,7 @@ def compile_presentation_bundle(
                             in compiled.action_starts_ms.items()
                         }
                     else:
-                        source = (
-                            paths["terminal_beats"]
-                            / f"{captured.capture_id}.cast"
-                        )
-                        duration = _terminal_duration_ms(source)
-                        intervals = _load_terminal_action_intervals(
+                        captured_actions = _load_terminal_actions(
                             paths["terminal_beats"]
                             / f"{captured.capture_id}.actions.json",
                             beat_id=captured.capture_id,
@@ -2074,14 +2101,31 @@ def compile_presentation_bundle(
                                 captured.beat
                             ),
                         )
-                        terminal_intervals[captured.capture_id] = intervals
-                        duration = max(
-                            duration,
-                            max(
-                                (end_ms for _, end_ms in intervals.values()),
-                                default=0,
+                        actions = _resolve_terminal_actions(
+                            captured_actions,
+                            actions=tuple(
+                                action
+                                for action in captured.beat.actions
+                                if isinstance(action, TerminalActionPlan)
                             ),
+                            spec=spec,
                         )
+                        terminal_actions[captured.capture_id] = actions
+                        intervals = {}
+                        cursor_ms = 0
+                        for action_id, action in actions.items():
+                            action_duration_ms = (
+                                action.presentation_duration_ms
+                                if action.timing == "presentation"
+                                else action.capture_end_ms
+                                - action.capture_start_ms
+                            )
+                            intervals[action_id] = (
+                                cursor_ms,
+                                cursor_ms + action_duration_ms,
+                            )
+                            cursor_ms += action_duration_ms
+                        duration = cursor_ms
                     pane_beat_visual_durations[
                         (beat.id, track.pane_id, pane_beat.id)
                     ] = duration
@@ -2100,16 +2144,35 @@ def compile_presentation_bundle(
                         compiled.action_completions_ms[action_id] - start
                     )
             else:
-                source = paths["terminal_beats"] / f"{beat.id}.cast"
-                visual_durations[beat.id] = _terminal_duration_ms(source)
-                intervals = _load_terminal_action_intervals(
+                captured_actions = _load_terminal_actions(
                     paths["terminal_beats"] / f"{beat.id}.actions.json",
                     beat_id=beat.id,
                     expected_action_ids=_terminal_action_ids(beat),
                 )
-                terminal_intervals[beat.id] = intervals
-                for action_id, (start_ms, end_ms) in intervals.items():
-                    action_durations[(beat.id, action_id)] = end_ms - start_ms
+                actions = _resolve_terminal_actions(
+                    captured_actions,
+                    actions=tuple(
+                        action
+                        for action in beat.actions
+                        if isinstance(action, TerminalActionPlan)
+                    ),
+                    spec=spec,
+                )
+                terminal_actions[beat.id] = actions
+                visual_durations[beat.id] = sum(
+                    (
+                        action.presentation_duration_ms
+                        if action.timing == "presentation"
+                        else action.capture_end_ms - action.capture_start_ms
+                    )
+                    for action in actions.values()
+                )
+                for action_id, action in actions.items():
+                    action_durations[(beat.id, action_id)] = (
+                        action.presentation_duration_ms
+                        if action.timing == "presentation"
+                        else action.capture_end_ms - action.capture_start_ms
+                    )
     timing_plan = _timing_plan(plan, audio_artifacts is not None)
     timing = compile_recording_timing(
         timing_plan,
@@ -2246,7 +2309,7 @@ def compile_presentation_bundle(
                             captured_by_outer_pane_beat=(
                                 captured_by_outer_pane_beat
                             ),
-                            terminal_intervals=terminal_intervals,
+                            terminal_actions=terminal_actions,
                             compiled_browser=compiled_browser,
                             all_sources=all_sources,
                             presentation_config=presentation_config,
@@ -2265,7 +2328,7 @@ def compile_presentation_bundle(
                     paths["terminal_beats"] / f"{beat.id}.cast",
                     staging / payload,
                     duration_ms=beat_timing.duration_ms,
-                    captured_action_intervals_ms=terminal_intervals[beat.id],
+                    captured_actions=terminal_actions[beat.id],
                     action_starts_ms={
                         item.action_id: item.local_start_ms
                         for item in timing.actions
@@ -2605,12 +2668,12 @@ def _terminal_pane_action_ids(pane_beat) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _load_terminal_action_intervals(
+def _load_terminal_actions(
     path: Path,
     *,
     beat_id: str,
     expected_action_ids: tuple[str, ...],
-) -> dict[str, tuple[int, int]]:
+) -> dict[str, CapturedTerminalAction]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -2630,32 +2693,149 @@ def _load_terminal_action_intervals(
         raise PresentationBuildError(
             f"terminal action timing is invalid for beat {beat_id!r}"
         )
-    result: dict[str, tuple[int, int]] = {}
+    result: dict[str, CapturedTerminalAction] = {}
     for item in actions:
         if not isinstance(item, dict):
             raise PresentationBuildError(
                 f"terminal action timing is invalid for beat {beat_id!r}"
             )
         action_id = item.get("id")
-        start_ms = item.get("start_ms")
-        end_ms = item.get("end_ms")
+        timing = item.get("timing")
+        capture_start_ms = item.get("capture_start_ms")
+        capture_end_ms = item.get("capture_end_ms")
+        event_indexes = item.get("event_indexes")
+        presentation_snapshot = item.get("presentation_snapshot")
         if (
             not isinstance(action_id, str)
-            or isinstance(start_ms, bool)
-            or not isinstance(start_ms, int)
-            or isinstance(end_ms, bool)
-            or not isinstance(end_ms, int)
-            or start_ms < 0
-            or end_ms < start_ms
+            or timing not in {"presentation", "realtime"}
+            or isinstance(capture_start_ms, bool)
+            or not isinstance(capture_start_ms, int)
+            or isinstance(capture_end_ms, bool)
+            or not isinstance(capture_end_ms, int)
+            or capture_start_ms < 0
+            or capture_end_ms < capture_start_ms
+            or not isinstance(event_indexes, dict)
+            or not isinstance(presentation_snapshot, dict)
             or action_id in result
         ):
             raise PresentationBuildError(
                 f"terminal action timing is invalid for beat {beat_id!r}"
             )
-        result[action_id] = (start_ms, end_ms)
+        float_fields = (
+            "typing_min_delay",
+            "typing_max_delay",
+            "typing_space_delay",
+            "typing_punctuation_delay",
+            "typing_newline_delay",
+            "pre_command_pause",
+            "pre_enter_pause",
+            "post_enter_pause",
+            "post_command_pause",
+        )
+        if set(presentation_snapshot) != set(
+            TERMINAL_PRESENTATION_SNAPSHOT_FIELDS
+        ) or any(
+            isinstance(presentation_snapshot.get(field), bool)
+            or not isinstance(presentation_snapshot.get(field), (int, float))
+            or not math.isfinite(float(presentation_snapshot[field]))
+            or presentation_snapshot[field] < 0
+            for field in float_fields
+        ):
+            raise PresentationBuildError(
+                f"terminal action timing is invalid for beat {beat_id!r}"
+            )
+        if (
+            not isinstance(presentation_snapshot.get("display"), str)
+            or not isinstance(presentation_snapshot.get("color"), bool)
+            or not isinstance(presentation_snapshot.get("typing"), bool)
+            or isinstance(presentation_snapshot.get("typing_seed"), bool)
+            or not isinstance(presentation_snapshot.get("typing_seed"), int)
+        ):
+            raise PresentationBuildError(
+                f"terminal action timing is invalid for beat {beat_id!r}"
+            )
+        result[action_id] = CapturedTerminalAction(
+            id=action_id,
+            timing=timing,
+            capture_start_ms=capture_start_ms,
+            capture_end_ms=capture_end_ms,
+            event_indexes=event_indexes,
+            presentation_snapshot=presentation_snapshot,
+        )
     if tuple(result) != expected_action_ids:
         raise PresentationBuildError(
             f"terminal action timing does not match beat {beat_id!r} actions"
+        )
+    return result
+
+
+def _resolve_terminal_actions(
+    captured_actions: Mapping[str, CapturedTerminalAction],
+    *,
+    actions: tuple[TerminalActionPlan, ...],
+    spec: Mapping[str, Any],
+) -> dict[str, TerminalActionMaterialization]:
+    """Resolve effective presentation settings from current recording config."""
+
+    options = _terminal_capture_options(spec)
+    working_directory, environment = _capture_environment(spec)
+    snapshots = resolve_terminal_command_snapshots(
+        actions,
+        working_directory=working_directory,
+        defaults=TerminalPresentationDefaults(
+            color=environment.get("NO_COLOR") is None,
+            typing=bool(options["typing"]),
+            typing_min_delay=float(options["typing_min_delay"]),
+            typing_max_delay=float(options["typing_max_delay"]),
+            typing_space_delay=float(options["typing_space_delay"]),
+            typing_punctuation_delay=float(
+                options["typing_punctuation_delay"]
+            ),
+            typing_newline_delay=float(options["typing_newline_delay"]),
+            typing_seed=int(options["typing_seed"]),
+            post_enter_pause=float(options["post_enter_pause"]),
+            post_command_pause=float(options["post_command_pause"]),
+        ),
+    )
+    if tuple(captured_actions) != tuple(snapshots):
+        raise PresentationBuildError(
+            "terminal action timing does not match current recording actions"
+        )
+
+    result: dict[str, TerminalActionMaterialization] = {}
+    for action_id, captured in captured_actions.items():
+        snapshot = snapshots[action_id]
+        if captured.timing != snapshot["timing"]:
+            raise PresentationBuildError(
+                f"terminal action {action_id!r} timing changed after capture"
+            )
+        presentation_duration_ms = (
+            int(snapshot["presentation_duration_ms"])
+            if captured.timing == "presentation"
+            else captured.capture_end_ms - captured.capture_start_ms
+        )
+        result[action_id] = TerminalActionMaterialization(
+            id=action_id,
+            timing=captured.timing,
+            capture_start_ms=captured.capture_start_ms,
+            capture_end_ms=captured.capture_end_ms,
+            presentation_duration_ms=presentation_duration_ms,
+            event_indexes=captured.event_indexes,
+            display=str(snapshot["display"]),
+            color=bool(snapshot["color"]),
+            typing=bool(snapshot["typing"]),
+            typing_min_delay=float(snapshot["typing_min_delay"]),
+            typing_max_delay=float(snapshot["typing_max_delay"]),
+            typing_space_delay=float(snapshot["typing_space_delay"]),
+            typing_punctuation_delay=float(
+                snapshot["typing_punctuation_delay"]
+            ),
+            typing_newline_delay=float(snapshot["typing_newline_delay"]),
+            typing_seed=int(snapshot["typing_seed"]),
+            pre_command_pause=float(snapshot["pre_command_pause"]),
+            pre_enter_pause=float(snapshot["pre_enter_pause"]),
+            post_enter_pause=float(snapshot["post_enter_pause"]),
+            post_command_pause=float(snapshot["post_command_pause"]),
         )
     return result
 
