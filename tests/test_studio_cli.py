@@ -143,6 +143,13 @@ def test_build_progress_keeps_a_long_first_action_visibly_active() -> None:
     assert active_output.count("Recording workflow (1 action)") >= 2
 
 
+def test_build_completion_detail_includes_video_length() -> None:
+    assert studio.format_build_completion_detail(
+        8.25,
+        video_duration_ms=64_200,
+    ) == "8.2s · video length 1m 4.2s"
+
+
 @pytest.mark.parametrize(
     ("elapsed", "expected"),
     [
@@ -267,13 +274,59 @@ def test_build_progress_retains_the_completed_interactive_bar() -> None:
     progress.finish(completion="completed in 2.3s")
 
     output = stream.getvalue()
-    final_render = output.rsplit("\x1b[2F", 1)[-1]
+    final_render = output.rsplit("\x1b8", 2)[-2]
     final_progress_line = next(
         line for line in final_render.splitlines() if "progress" in line
     )
     assert "[████████████████████████████] 1/1" in final_progress_line
     assert final_progress_line.endswith("1/1 · completed in 2.3s")
-    assert output.endswith("\x1b[1F\x1b[2K\r")
+    assert output.endswith("\x1b8\x1b[1E\x1b[2K\r")
+
+
+def test_build_progress_anchors_redraw_without_changing_terminal_input() -> None:
+    termios = pytest.importorskip("termios")
+    master_fd, slave_fd = os.openpty()
+    try:
+        with os.fdopen(
+            os.dup(slave_fd), "w", encoding="utf-8"
+        ) as output_stream:
+            original_lflag = termios.tcgetattr(slave_fd)[3]
+            assert original_lflag & termios.ECHO
+            progress = studio.BuildProgress(
+                total=1,
+                stream=output_stream,
+                interactive=True,
+                color=False,
+                heartbeat_interval=10.0,
+            )
+
+            progress.begin("Recording workflow")
+
+            active_lflag = termios.tcgetattr(slave_fd)[3]
+            assert active_lflag == original_lflag
+            os.set_blocking(master_fd, False)
+            initial_output = bytearray()
+            while True:
+                try:
+                    initial_output.extend(os.read(master_fd, 4096))
+                except BlockingIOError:
+                    break
+            assert b"\x1b7" in initial_output
+
+            os.write(master_fd, b"\n")
+            time.sleep(0.01)
+
+            assert b"\n" in os.read(master_fd, 4096)
+
+            progress.advance("Video ready")
+            progress.finish()
+
+            redraw_output = os.read(master_fd, 4096)
+            assert b"\x1b8" in redraw_output
+            assert termios.tcgetattr(slave_fd)[3] == original_lflag
+    finally:
+        os.close(master_fd)
+        os.close(slave_fd)
 
 
 def test_build_progress_clears_an_incomplete_interactive_bar() -> None:
@@ -288,7 +341,7 @@ def test_build_progress_clears_an_incomplete_interactive_bar() -> None:
 
     progress.finish()
 
-    assert stream.getvalue().endswith("\x1b[2F\x1b[2M")
+    assert stream.getvalue().endswith("\x1b8\x1b[2M")
 
 
 def test_build_progress_keeps_the_progress_line_within_narrow_terminals() -> None:
@@ -644,6 +697,63 @@ def test_capture_failure_message_surfaces_stderr_and_recovery_command() -> None:
     )
 
 
+def test_capture_failure_message_collapses_terminal_progress_redraws() -> None:
+    report = {
+        "output": (
+            "\x1b[3F\x1b7\x1b[2Kprogress [░░░░] 0/5\r\n"
+            "\x1b[2Kcurrent Recording workflow\r\n"
+            "\x1b8\x1b[2Kprogress [████] 5/5\r\n"
+            "\x1b[2Kcurrent Video ready\r\n"
+            "\x1b8\x1b[2Kprogress [████] 5/5 · completed in 0.8s "
+            "· video length 10.5s\r\n"
+            "\x1b8\x1b[1E\x1b[2Kpublish html: updated\r\n"
+        ),
+        "recording_id": "demo",
+        "run_id": "20260731-140558",
+    }
+
+    message = studio.capture_failure_message(RuntimeError("cleanup failed"), report)
+
+    assert "\x1b" not in message
+    assert "\r" not in message
+    assert "current Recording workflow" not in message
+    assert "current Video ready" not in message
+    assert message.count("progress ") == 1
+    assert (
+        "progress [████] 5/5 · completed in 0.8s · video length 10.5s"
+        in message
+    )
+    assert "publish html: updated" in message
+
+
+def test_cleanup_only_failure_does_not_repeat_primary_cleanup_as_warning() -> None:
+    error = CaptureFailed(
+        primary=None,
+        cleanup=(
+            CaptureFailureDetail(
+                "close terminal runner",
+                TerminalCaptureError("terminal extraction failed"),
+            ),
+        ),
+    )
+
+    message = studio.capture_failure_message(
+        error,
+        {
+            "output": "captured context\n",
+            "recording_id": "demo",
+            "run_id": "20260731-140558",
+        },
+    )
+
+    assert message == (
+        "Cleanup failed\n"
+        "  terminal extraction failed\n"
+        "  captured context\n"
+        "Run: omegaflow recording=demo action=output run_id=20260731-140558"
+    )
+
+
 def test_capture_failure_preserves_primary_error_when_report_is_invalid(
     tmp_path, monkeypatch
 ) -> None:
@@ -778,6 +888,7 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
         "compile_presentation_bundle",
         lambda *_args, **_kwargs: SimpleNamespace(
             manifest=run_dir / "presentation" / "recording.presentation.json",
+            duration_ms=1400,
             warnings=(),
         ),
     )
@@ -829,6 +940,7 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
     )
     assert "step  Assembling video" in output
     assert "pass  build completed after" in output
+    assert " · video length 1.4s" in output
     assert "capture recording" not in output
     assert "compile presentation" not in output
     assert "publish surface" not in output

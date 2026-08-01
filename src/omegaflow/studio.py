@@ -84,6 +84,9 @@ class StudioError(RuntimeError):
 
 
 ToolRunner = Callable[[Any], int]
+TERMINAL_ESCAPE_SEQUENCE_RE = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[78])"
+)
 
 
 def text_output_enabled(cfg: DictConfig) -> bool:
@@ -498,13 +501,15 @@ def capture_failure_message(
     heading = "Capture failed"
     cleanup_lines: list[str] = []
     if isinstance(error, CaptureFailed):
+        secondary_cleanup = error.cleanup
         if error.primary is not None:
             primary_error = error.primary.error
             heading = f"Capture failed during {error.primary.operation}"
         elif error.cleanup:
             primary_error = error.cleanup[0].error
             heading = "Cleanup failed"
-        for detail in error.cleanup:
+            secondary_cleanup = error.cleanup[1:]
+        for detail in secondary_cleanup:
             cleanup_error = detail.error
             if isinstance(cleanup_error, TerminalLifecycleStepError):
                 cleanup_line = (
@@ -532,19 +537,34 @@ def capture_failure_message(
     output_value = report.get("stderr") or report.get("output")
     output_lines: list[str] = []
     if isinstance(output_value, str):
-        for line in output_value.rstrip().splitlines():
+        progress_index: int | None = None
+        cleaned_output = TERMINAL_ESCAPE_SEQUENCE_RE.sub("", output_value)
+        for line in cleaned_output.replace("\r", "\n").rstrip().splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("terminal step exited "):
+                continue
+            if stripped.startswith("current "):
+                continue
+            if stripped.startswith("progress "):
+                if progress_index is None:
+                    progress_index = len(output_lines)
+                    output_lines.append(stripped)
+                else:
+                    output_lines[progress_index] = stripped
                 continue
             output_lines.append(line)
     if len(output_lines) > 12:
         output_lines = ["…", *output_lines[-12:]]
 
     lines = [heading]
+    primary_message = str(primary_error).strip()
+    primary_is_lifecycle = isinstance(primary_error, TerminalLifecycleStepError)
+    if primary_message and not primary_is_lifecycle:
+        lines.append(f"  {primary_message}")
     if output_lines:
         lines.extend(f"  {line}" for line in output_lines)
-    elif str(primary_error):
-        lines.append(f"  {primary_error}")
+    elif primary_message and primary_is_lifecycle:
+        lines.append(f"  {primary_message}")
     lines.extend(cleanup_lines)
 
     recording_id = report.get("recording_id")
@@ -3572,11 +3592,35 @@ def format_elapsed(seconds: float) -> str:
     return f"{int(hours)}h {int(minute_remainder)}m {remainder:.1f}s"
 
 
-def print_build_elapsed(cfg: DictConfig, seconds: float, *, success: bool) -> None:
+def format_build_completion_detail(
+    seconds: float,
+    *,
+    video_duration_ms: int,
+) -> str:
+    return (
+        f"{format_elapsed(seconds)} · "
+        f"video length {format_elapsed(video_duration_ms / 1000)}"
+    )
+
+
+def print_build_elapsed(
+    cfg: DictConfig,
+    seconds: float,
+    *,
+    success: bool,
+    video_duration_ms: int | None = None,
+) -> None:
     if OmegaConf.select(cfg, "output_format", default="text") == "json":
         return
     if success:
-        pass_line(f"build completed after {format_elapsed(seconds)}")
+        assert video_duration_ms is not None
+        pass_line(
+            "build completed after "
+            + format_build_completion_detail(
+                seconds,
+                video_duration_ms=video_duration_ms,
+            )
+        )
     else:
         fail_line(f"build failed after {format_elapsed(seconds)}")
 
@@ -3801,6 +3845,7 @@ def run_manifest_build(
     warnings: tuple[str, ...] = ()
     published_surfaces: list[tuple[str, PublishSurfaceOutcome, bool]] = []
     billing_message: str | None = None
+    video_duration_ms: int | None = None
     try:
         with timing.stage("resolve_publish_targets"):
             publish_targets = resolve_build_publish_surfaces(
@@ -3874,6 +3919,7 @@ def run_manifest_build(
                 audio_artifacts=audio_artifacts,
             )
         progress.advance("Assembled video")
+        video_duration_ms = result.duration_ms
         warnings = result.warnings
         if publish_targets:
             progress.update("Publish video")
@@ -3925,9 +3971,15 @@ def run_manifest_build(
     finally:
         elapsed = time.monotonic() - started
         compact_success = success and progress.active and progress.interactive
+        if success:
+            assert video_duration_ms is not None
         progress.finish(
             completion=(
-                f"completed in {format_elapsed(elapsed)}"
+                "completed in "
+                + format_build_completion_detail(
+                    elapsed,
+                    video_duration_ms=video_duration_ms,
+                )
                 if compact_success
                 else None
             )
@@ -3938,7 +3990,12 @@ def run_manifest_build(
             for warning in warnings:
                 info_line(f"{warning}: review recommended")
         if not compact_success:
-            print_build_elapsed(cfg, elapsed, success=success)
+            print_build_elapsed(
+                cfg,
+                elapsed,
+                success=success,
+                video_duration_ms=video_duration_ms,
+            )
         if success:
             print_publish_surfaces(cfg, published_surfaces)
         if timing_run_dir is not None:

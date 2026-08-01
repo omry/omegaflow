@@ -180,6 +180,7 @@ class PresentationBuildResult:
     run_dir: Path
     bundle_dir: Path
     manifest: Path
+    duration_ms: int
     fingerprints: ArtifactFingerprints
     warnings: tuple[str, ...]
 
@@ -2585,6 +2586,7 @@ def compile_presentation_bundle(
             run_dir=run_dir,
             bundle_dir=bundle,
             manifest=bundle / MANIFEST_FILE,
+            duration_ms=timing.duration_ms,
             fingerprints=fingerprints,
             warnings=tuple(warnings),
         )

@@ -37,6 +37,11 @@ STATUS_COLORS = {
     "warn": ANSI_YELLOW_BOLD,
 }
 
+_CURSOR_SAVE = "\x1b7"
+_CURSOR_RESTORE = "\x1b8"
+_PROGRESS_RENDER_ROWS = 2
+_PROGRESS_INPUT_HEADROOM_ROWS = 1
+
 
 def progress_pipes_supported() -> bool:
     return hasattr(os, "mkfifo")
@@ -260,10 +265,11 @@ class ProgressBarRenderer:
     def finish(self, *, replay: bool = False, retain: bool = False) -> None:
         stream = self.stream or sys.stdout
         if self._rendered:
+            stream.write(_CURSOR_RESTORE)
             if retain:
-                stream.write("\x1b[1F\x1b[2K\r")
+                stream.write("\x1b[1E\x1b[2K\r")
             else:
-                stream.write("\x1b[2F\x1b[2M")
+                stream.write("\x1b[2M")
             self._rendered = False
         if replay:
             renderer = LogProgressRenderer(stream=stream, enabled=self.enabled)
@@ -299,7 +305,13 @@ class ProgressBarRenderer:
         )
         active = active and not complete
         if self._rendered:
-            stream.write("\x1b[2F")
+            stream.write(_CURSOR_RESTORE)
+        else:
+            reserved_rows = (
+                _PROGRESS_RENDER_ROWS + _PROGRESS_INPUT_HEADROOM_ROWS
+            )
+            stream.write("\n" * reserved_rows)
+            stream.write(f"\x1b[{reserved_rows}F{_CURSOR_SAVE}")
         columns = self._terminal_columns()
         detail = self._detail(
             current=current,

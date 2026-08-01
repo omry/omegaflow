@@ -2105,6 +2105,8 @@ def extract_terminal_beat_casts(
         beat_id = match.group("beat")
         action_id = match.group("action")
         phase = match.group("phase")
+        if (beat_id, action_id) in ended_handoffs:
+            return
         if active_action is None or active_action[:2] != (beat_id, action_id):
             raise TerminalCaptureError(
                 f"terminal command marker {beat_id!r}/{action_id!r} "

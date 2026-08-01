@@ -40,7 +40,11 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
                         "o",
                         "\x1b]1337;OmegaFlow;1;beat;start;watch\x07"
                         "\x1b]1337;OmegaFlowAction;watch;watch_command;start\x07"
-                        "$ omegaflow recording=demo action=watch\r\n",
+                        "\x1b]1337;OmegaFlowCommand;watch;watch_command;"
+                        "typing_start\x07"
+                        "$ omegaflow recording=demo action=watch\r\n"
+                        "\x1b]1337;OmegaFlowCommand;watch;watch_command;"
+                        "typing_end\x07",
                     ]
                 ),
                 json.dumps(
@@ -57,6 +61,10 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
                         2.0,
                         "o",
                         "info  stopped local watch server\r\n"
+                        "\x1b]1337;OmegaFlowCommand;watch;watch_command;"
+                        "output_start\x07"
+                        "\x1b]1337;OmegaFlowCommand;watch;watch_command;"
+                        "output_end\x07"
                         "\x1b]1337;OmegaFlowAction;watch;watch_command;end\x07"
                         "\x1b]1337;OmegaFlow;1;beat;end;watch\x07",
                     ]
@@ -84,10 +92,12 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
         {
             "capture_end_ms": 200,
             "capture_start_ms": 0,
-            "event_indexes": {
-                "action_end": 2,
-                "action_start": 0,
-            },
+                "event_indexes": {
+                    "action_end": 2,
+                    "action_start": 0,
+                    "typing_end": 1,
+                    "typing_start": 0,
+                },
             "id": "watch_command",
         }
     ]
@@ -2202,9 +2212,10 @@ def test_terminal_realtime_captures_interactive_build_progress(
     assert "progress" in output
     assert "2/2" in output
     assert "2/2 · completed in 2.3s" in output
-    assert "\x1b[2F" in output
+    assert "\x1b7" in output
+    assert "\x1b8" in output
     assert "\x1b[2M" not in output
-    assert "\x1b[1F\x1b[2K\r" in output
+    assert "\x1b8\x1b[1E\x1b[2K\r" in output
 
 
 def _cast_output(cast: str) -> str:
