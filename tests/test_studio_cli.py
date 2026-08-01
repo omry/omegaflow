@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import tomllib
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -408,6 +409,60 @@ def test_cached_recording_advances_build_progress_without_internal_lines(
     assert capsys.readouterr().out == ""
 
 
+def test_private_watch_capture_does_not_reuse_canonical_run(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "demo",
+            "beats": [{"id": "hello", "actions": [{"run": "printf hello"}]}],
+        }
+    )
+    canonical_run = tmp_path / "runs/demo/canonical"
+    private_run = tmp_path / "runs/.scratch/watch/demo/hello/private"
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: canonical_run,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_is_fresh",
+        lambda *_args: pytest.fail("private capture must not inspect canonical runs"),
+    )
+    captured: list[Path] = []
+
+    def fake_capture(_spec, _plan, run_dir, *, headed, on_progress):
+        captured.append(run_dir)
+
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_recording",
+        fake_capture,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "write_capture_fingerprint",
+        lambda *_args: None,
+    )
+
+    result = studio.run_build_record_action(
+        OmegaConf.create(
+            {"force": False, "verbose": False, "output_format": "json"}
+        ),
+        {
+            "_recording_id": "demo",
+            "_hydra_output_dir": str(private_run),
+        },
+        plan,
+        reuse_latest=False,
+    )
+
+    assert result == private_run
+    assert captured == [private_run]
+
+
 def test_forced_recording_reports_each_captured_action(
     tmp_path, monkeypatch, capsys
 ) -> None:
@@ -487,9 +542,11 @@ def test_forced_recording_reports_each_captured_action(
 def test_failed_build_clears_progress_and_reports_failure(
     tmp_path, monkeypatch, capsys
 ) -> None:
+    run_dir = tmp_path / "failed-run"
     spec = {
         "id": "demo",
         "_recording_id": "demo",
+        "_hydra_output_dir": str(run_dir),
         "audio": {"enabled": False},
         "beats": [{"id": "hello", "actions": []}],
     }
@@ -504,7 +561,8 @@ def test_failed_build_clears_progress_and_reports_failure(
     )
     monkeypatch.setattr(studio, "build_publish_surface_names", lambda *_args: [])
 
-    def fail_capture(_cfg, _spec, _plan, *, progress):
+    def fail_capture(_cfg, _spec, _plan, *, progress, reuse_latest):
+        assert reuse_latest is True
         progress.begin("Recording workflow (1 beat)")
         progress.update("Record: Broken beat")
         raise studio.StudioError("broken capture")
@@ -518,6 +576,18 @@ def test_failed_build_clears_progress_and_reports_failure(
     assert "step  Recording workflow (1 beat)" in output
     assert "fail  build failed after" in output
     assert "build completed" not in output
+    timing = json.loads((run_dir / "build-timing.json").read_text(encoding="utf-8"))
+    assert timing["version"] == 1
+    assert timing["recording"] == "demo"
+    assert timing["status"] == "failed"
+    assert isinstance(timing["duration_ms"], int)
+    assert timing["duration_ms"] >= 0
+    assert [stage["name"] for stage in timing["stages"]] == [
+        "resolve_publish_targets",
+        "capture",
+    ]
+    assert timing["stages"][0]["status"] == "completed"
+    assert timing["stages"][1]["status"] == "failed"
 
 
 def test_capture_failure_message_surfaces_stderr_and_recovery_command() -> None:
@@ -776,6 +846,34 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
         ("standalone", False, False),
     ]
     assert output_events == ["progress finished", "billing printed"]
+    timing = json.loads((run_dir / "build-timing.json").read_text(encoding="utf-8"))
+    assert timing["version"] == 1
+    assert timing["recording"] == "demo"
+    assert timing["status"] == "completed"
+    assert isinstance(timing["duration_ms"], int)
+    assert timing["duration_ms"] >= 0
+    assert [stage["name"] for stage in timing["stages"]] == [
+        "resolve_publish_targets",
+        "capture",
+        "narration",
+        "assemble",
+        "publish_bundle",
+        "publish_surface",
+        "publish_surface",
+        "finalize",
+    ]
+    capture = timing["stages"][1]
+    assert capture["details"] == {"action_count": 0, "reused": True}
+    narration = timing["stages"][2]
+    assert narration["details"] == {
+        "enabled": True,
+        "take_count": 1,
+        "generated_tts_takes": 1,
+        "generated_timestamp_files": 1,
+    }
+    assert [
+        stage["details"]["surface"] for stage in timing["stages"][5:7]
+    ] == ["website", "standalone"]
 
 
 def test_narration_billing_message_colors_only_dollar_amounts() -> None:
@@ -5837,6 +5935,33 @@ def test_watch_player_url_path_allows_silent_terminal_recordings(tmp_path) -> No
     }
 
 
+def test_watch_presentation_artifacts_uses_selected_prefix_run(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    run_dir = tmp_path / "runs/.scratch/watch/hello/prepare/20260730-010203"
+    manifest = run_dir / "presentation/recording.presentation.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        studio,
+        "latest_successful_recording_run_dir",
+        lambda _spec: pytest.fail("canonical recording run should not be selected"),
+    )
+
+    bundle, artifacts = studio.watch_presentation_artifacts(
+        {
+            "_recording_id": "hello",
+            "_watch_run_dir": str(run_dir),
+        }
+    )
+
+    assert bundle == manifest.parent.resolve()
+    assert artifacts == {
+        "recording.presentation.json": manifest.resolve(),
+    }
+
+
 def test_watch_recording_url_path_targets_a_named_beat() -> None:
     assert studio.watch_recording_url_path(
         "tutorial/beat",
@@ -6136,6 +6261,7 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
 def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
     requested: dict[str, object] = {}
     spec = {
+        "id": "hello",
         "_recording_id": "hello",
         "beats": [
             {"id": "intro", "actions": []},
@@ -6151,6 +6277,11 @@ def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
         studio,
         "watch_presentation_artifacts",
         lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_has_fresh_presentation",
+        lambda _spec, _plan: True,
     )
 
     def fake_run_watch_server(_cfg, url, _artifacts, **_kwargs):
@@ -6171,6 +6302,110 @@ def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
         == 0
     )
     assert requested["url"] == "/watch/hello/?beat=highlight"
+
+
+def test_recording_plan_through_beat_keeps_selected_prefix() -> None:
+    plan = studio.normalized_recording_plan(
+        {
+            "id": "hello",
+            "audio": {"enabled": True},
+            "beats": [
+                {
+                    "id": "intro",
+                    "narration": "Intro.",
+                    "actions": [{"run": "printf intro"}],
+                },
+                {
+                    "id": "prepare",
+                    "narration": "Prepare.",
+                    "actions": [{"run": "printf prepare"}],
+                },
+                {
+                    "id": "publish",
+                    "narration": "Publish.",
+                    "actions": [{"run": "printf publish"}],
+                },
+            ],
+        }
+    )
+
+    selected = studio.recording_plan_through_beat(plan, "prepare")
+
+    assert [beat.id for beat in selected.beats] == ["intro", "prepare"]
+    assert [
+        member.beat_id
+        for take in selected.narration_takes
+        for member in take.members
+    ] == [
+        "intro",
+        "prepare",
+    ]
+
+
+def test_run_watch_builds_missing_selected_beat_prefix(monkeypatch) -> None:
+    requested: dict[str, object] = {}
+    spec = {
+        "id": "hello",
+        "_recording_id": "hello",
+        "beats": [
+            {"id": "intro", "actions": []},
+            {"id": "prepare", "actions": []},
+            {"id": "publish", "actions": []},
+        ],
+    }
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_has_fresh_presentation",
+        lambda _spec, _plan: False,
+    )
+
+    def fake_rebuild(_cfg, recording_id, *, beat_id=None):
+        requested["rebuild"] = (recording_id, beat_id)
+        return Path("/watch-prefix")
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+    monkeypatch.setattr(
+        studio,
+        "watch_presentation_artifacts",
+        lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
+
+    @contextmanager
+    def fake_rebuilds(
+        _cfg,
+        _config,
+        recording_ids,
+        *,
+        target_beats=None,
+        target_specs=None,
+    ):
+        requested["target_beats"] = target_beats
+        requested["target_specs"] = target_specs
+        assert recording_ids == ("hello",)
+        yield
+
+    monkeypatch.setattr(studio, "watch_recording_rebuilds", fake_rebuilds)
+    monkeypatch.setattr(studio, "run_watch_server", lambda *_args, **_kwargs: 0)
+
+    assert (
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {
+                "recording": "hello",
+                "beat": "prepare",
+                "autoplay": False,
+            },
+        )
+        == 0
+    )
+    assert requested["rebuild"] == ("hello", "prepare")
+    assert requested["target_beats"] == {"hello": "prepare"}
+    assert requested["target_specs"]["hello"]["_watch_run_dir"] == "/watch-prefix"
 
 
 def test_run_watch_rejects_unknown_source_beat_with_valid_ids(monkeypatch) -> None:
@@ -6256,10 +6491,12 @@ def test_run_watch_rejects_invalid_beat_id(value, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("changed_file", ["index.md", "scripts/action.sh"])
+@pytest.mark.parametrize("target_beat", [None, "prepare"])
 def test_watch_rebuilds_after_recording_source_changes(
     tmp_path,
     monkeypatch,
     changed_file,
+    target_beat,
 ) -> None:
     recording_dir = tmp_path / "recordings"
     recording_source = recording_dir / "hello"
@@ -6272,7 +6509,8 @@ def test_watch_rebuilds_after_recording_source_changes(
         "studio": {"recording_dir": str(recording_dir)},
     }
     stop_event = threading.Event()
-    rebuilt: list[str] = []
+    rebuilt: list[tuple[str, str | None]] = []
+    target_spec: dict[str, object] = {}
 
     class ChangingEvent:
         def __init__(self) -> None:
@@ -6284,10 +6522,10 @@ def test_watch_rebuilds_after_recording_source_changes(
                 (recording_source / changed_file).write_text("changed\n")
             return stop_event.is_set()
 
-    def fake_rebuild(_cfg, recording_id) -> int:
-        rebuilt.append(recording_id)
+    def fake_rebuild(_cfg, recording_id, *, beat_id=None) -> Path:
+        rebuilt.append((recording_id, beat_id))
         stop_event.set()
-        return 0
+        return Path("/rebuilt-prefix")
 
     monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
 
@@ -6298,9 +6536,17 @@ def test_watch_rebuilds_after_recording_source_changes(
         ChangingEvent(),
         poll_interval=0.001,
         quiet_interval=0.001,
+        target_beats=(
+            None if target_beat is None else {"hello": target_beat}
+        ),
+        target_specs=(
+            None if target_beat is None else {"hello": target_spec}
+        ),
     )
 
-    assert rebuilt == ["hello"]
+    assert rebuilt == [("hello", target_beat)]
+    if target_beat is not None:
+        assert target_spec["_watch_run_dir"] == "/rebuilt-prefix"
 
 
 def test_watch_waits_for_2_5_seconds_of_source_quiet_before_rebuilding(
@@ -6389,7 +6635,10 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
     ):
         observed["config"] = config
         observed["run_dir"] = Path(hydra_output_dir)
-        return {"_recording_id": "hello"}
+        return {
+            "_recording_id": "hello",
+            "_hydra_output_dir": hydra_output_dir,
+        }
 
     monkeypatch.setattr(studio, "recording_spec_from_config", fake_recording_spec)
     monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "plan")
@@ -6401,6 +6650,9 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
         plan,
         *,
         show_followups=True,
+        publish_surfaces=True,
+        garbage_collect_runs=True,
+        reuse_latest_capture=True,
     ) -> int:
         observed.update(
             build_cfg=build_cfg,
@@ -6408,17 +6660,102 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
             spec=spec,
             plan=plan,
             show_followups=show_followups,
+            publish_surfaces=publish_surfaces,
+            garbage_collect_runs=garbage_collect_runs,
+            reuse_latest_capture=reuse_latest_capture,
         )
         return 0
 
     monkeypatch.setattr(studio, "run_manifest_build", fake_manifest_build)
 
-    assert studio.run_watch_rebuild(cfg, "hello") == 0
+    assert studio.run_watch_rebuild(cfg, "hello") == observed["run_dir"]
     assert observed["config"]["action"] == "build"
     assert observed["run_dir"].parent == (
         tmp_path / "recordings/.omegaflow/runs/hello"
     )
     assert observed["show_followups"] is False
+    assert observed["publish_surfaces"] is False
+    assert observed["garbage_collect_runs"] is True
+    assert observed["reuse_latest_capture"] is True
+
+
+def test_watch_rebuild_selected_prefix_uses_private_scratch_run(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    cfg = OmegaConf.create(
+        {
+            "action": "watch",
+            "recording": "hello",
+            "project_root": str(tmp_path),
+            "studio": {
+                "data_dir": "recordings/.omegaflow",
+                "recording_dir": "recordings",
+            },
+        }
+    )
+    observed: dict[str, object] = {}
+
+    def fake_recording_spec(
+        _config,
+        *,
+        recording_id=None,
+        overrides=(),
+        hydra_output_dir=None,
+    ):
+        return {
+            "_recording_id": "hello",
+            "_hydra_output_dir": hydra_output_dir,
+        }
+
+    monkeypatch.setattr(studio, "recording_spec_from_config", fake_recording_spec)
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "full")
+    monkeypatch.setattr(
+        studio,
+        "recording_plan_through_beat",
+        lambda plan, beat_id: (plan, beat_id),
+    )
+    monkeypatch.setattr(
+        studio,
+        "latest_watch_build_run_dir",
+        lambda _config, _recording_id, _beat_id: None,
+    )
+
+    def fake_manifest_build(
+        _build_cfg,
+        _config,
+        spec,
+        plan,
+        *,
+        show_followups=True,
+        publish_surfaces=True,
+        garbage_collect_runs=True,
+        reuse_latest_capture=True,
+    ) -> int:
+        observed.update(
+            run_dir=Path(spec["_hydra_output_dir"]),
+            plan=plan,
+            show_followups=show_followups,
+            publish_surfaces=publish_surfaces,
+            garbage_collect_runs=garbage_collect_runs,
+            reuse_latest_capture=reuse_latest_capture,
+        )
+        return 0
+
+    monkeypatch.setattr(studio, "run_manifest_build", fake_manifest_build)
+
+    run_dir = studio.run_watch_rebuild(cfg, "hello", beat_id="prepare")
+
+    assert run_dir == observed["run_dir"]
+    assert (
+        tmp_path
+        / "recordings/.omegaflow/runs/.scratch/watch/hello/prepare"
+    ) in run_dir.parents
+    assert observed["plan"] == ("full", "prepare")
+    assert observed["show_followups"] is False
+    assert observed["publish_surfaces"] is False
+    assert observed["garbage_collect_runs"] is False
+    assert observed["reuse_latest_capture"] is False
 
 
 def test_run_watch_can_disable_countdown_autoplay(monkeypatch) -> None:

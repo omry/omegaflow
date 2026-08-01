@@ -21,9 +21,9 @@ import threading
 import time
 import uuid
 import webbrowser
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from importlib import resources
 from pathlib import Path
@@ -38,7 +38,13 @@ from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
 from .capture import CaptureActionItem, CaptureFailed, capture_action_items
-from .recording_plan import RecordingPlanError, normalize_recording_plan
+from .recording_plan import (
+    RecordingPlan,
+    RecordingPlanError,
+    normalize_recording_plan,
+    plan_narration_stream,
+    plan_narration_takes,
+)
 from .studio_config import (
     BootstrapMode,
     CONFIG_DIR,
@@ -415,6 +421,7 @@ def run_build_record_action(
     plan: Any,
     *,
     progress: BuildProgress | None = None,
+    reuse_latest: bool = True,
 ) -> Path:
     config = container_from_hydra_cfg(cfg)
     verbose = bool_config(config, "verbose")
@@ -422,7 +429,7 @@ def run_build_record_action(
     if progress is not None:
         noun = "action" if action_count == 1 else "actions"
         progress.begin(f"Recording workflow ({action_count} {noun})")
-    if not bool_config(config, "force"):
+    if reuse_latest and not bool_config(config, "force"):
         latest = latest_successful_recording_run_dir(spec)
         if latest is not None and presentation_build.capture_is_fresh(
             spec, plan, latest
@@ -2299,7 +2306,15 @@ def watch_presentation_artifacts(
     *,
     run_dir: Path | None = None,
 ) -> tuple[Path, dict[str, Path]]:
-    resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
+    configured_watch_run = spec.get("_watch_run_dir")
+    watch_run_dir = (
+        Path(configured_watch_run)
+        if isinstance(configured_watch_run, str) and configured_watch_run
+        else None
+    )
+    resolved_run_dir = (
+        run_dir or watch_run_dir or latest_successful_recording_run_dir(spec)
+    )
     paths = (
         presentation_build.run_paths(resolved_run_dir)
         if resolved_run_dir is not None
@@ -2919,9 +2934,15 @@ def watch_source_fingerprint(roots: tuple[Path, ...]) -> str:
 def next_watch_build_run_dir(
     config: dict[str, Any],
     recording_id: str,
+    *,
+    beat_id: str | None = None,
 ) -> Path:
     timestamp = datetime.now()
-    runs_dir = studio_data_dir_from_config(config) / "runs" / recording_id
+    runs_dir = studio_data_dir_from_config(config) / "runs"
+    if beat_id is None:
+        runs_dir /= recording_id
+    else:
+        runs_dir = runs_dir / ".scratch" / "watch" / recording_id / beat_id
     while True:
         run_id = timestamp.strftime(record.RUN_ID_DATETIME_FORMAT)
         candidate = runs_dir / run_id
@@ -2930,13 +2951,71 @@ def next_watch_build_run_dir(
         timestamp += timedelta(seconds=1)
 
 
-def run_watch_rebuild(cfg: DictConfig, recording_id: str) -> int:
+def latest_watch_build_run_dir(
+    config: dict[str, Any],
+    recording_id: str,
+    beat_id: str,
+) -> Path | None:
+    runs_dir = (
+        studio_data_dir_from_config(config)
+        / "runs"
+        / ".scratch"
+        / "watch"
+        / recording_id
+        / beat_id
+    )
+    if not runs_dir.is_dir():
+        return None
+    candidates = [
+        path
+        for path in runs_dir.iterdir()
+        if path.is_dir()
+        and presentation_build.run_paths(path)["manifest"].is_file()
+        and presentation_build.run_paths(path)["fingerprint"].is_file()
+    ]
+    return max(candidates, default=None, key=lambda path: path.name)
+
+
+def garbage_collect_watch_build_runs(
+    spec: dict[str, Any],
+    *,
+    current_run_dir: Path,
+) -> None:
+    config = spec.get("_studio_config", {})
+    studio_config = config.get("studio", {}) if isinstance(config, dict) else {}
+    run_gc = (
+        studio_config.get("run_gc", {})
+        if isinstance(studio_config, dict)
+        else {}
+    )
+    if not isinstance(run_gc, dict):
+        raise StudioError("studio.run_gc must be a mapping")
+    enabled = run_gc.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise StudioError("studio.run_gc.enabled must be a boolean")
+    if not enabled:
+        return
+    garbage_collect_run_directory(
+        current_run_dir.parent,
+        run_gc=run_gc,
+        current_run_dir=current_run_dir,
+        report=False,
+    )
+
+
+def run_watch_rebuild(
+    cfg: DictConfig,
+    recording_id: str,
+    *,
+    beat_id: str | None = None,
+) -> Path:
     data = OmegaConf.to_container(cfg, resolve=False, enum_to_str=True)
     if not isinstance(data, dict):
         raise StudioError("composed Hydra config must be a mapping")
     data["action"] = "build"
     data["recording"] = recording_id
     data["step"] = None
+    data["beat"] = None
     build_cfg = OmegaConf.create(data)
     config = container_from_hydra_cfg(build_cfg)
     try:
@@ -2944,18 +3023,40 @@ def run_watch_rebuild(cfg: DictConfig, recording_id: str) -> int:
             config,
             recording_id=None,
             overrides=(),
-            hydra_output_dir=str(next_watch_build_run_dir(config, recording_id)),
+            hydra_output_dir=str(
+                next_watch_build_run_dir(
+                    config,
+                    recording_id,
+                    beat_id=beat_id,
+                )
+            ),
         )
     except StudioConfigError as exc:
         raise StudioError(str(exc)) from exc
     plan = normalized_recording_plan(spec)
-    return run_manifest_build(
+    if beat_id is not None:
+        plan = recording_plan_through_beat(plan, beat_id)
+        cached_run = latest_watch_build_run_dir(config, recording_id, beat_id)
+        if cached_run is not None and watch_plan_has_fresh_presentation(
+            spec,
+            plan,
+            run_dir=cached_run,
+        ):
+            return cached_run
+    run_manifest_build(
         build_cfg,
         config,
         spec,
         plan,
         show_followups=False,
+        publish_surfaces=False,
+        garbage_collect_runs=beat_id is None,
+        reuse_latest_capture=beat_id is None,
     )
+    run_dir = current_recording_run_dir(spec)
+    if beat_id is not None:
+        garbage_collect_watch_build_runs(spec, current_run_dir=run_dir)
+    return run_dir
 
 
 def run_watch_rebuild_loop(
@@ -2966,6 +3067,8 @@ def run_watch_rebuild_loop(
     *,
     poll_interval: float = WATCH_POLL_INTERVAL_SECONDS,
     quiet_interval: float = WATCH_QUIET_INTERVAL_SECONDS,
+    target_beats: Mapping[str, str] | None = None,
+    target_specs: Mapping[str, dict[str, Any]] | None = None,
 ) -> None:
     roots = {
         recording_id: recording_watch_source_roots(config, recording_id)
@@ -3008,7 +3111,22 @@ def run_watch_rebuild_loop(
             if text_output_enabled(cfg):
                 info_line(f"recording source changed: {recording_id}; rebuilding")
             try:
-                run_watch_rebuild(cfg, recording_id)
+                target_beat = (
+                    None if target_beats is None else target_beats.get(recording_id)
+                )
+                run_dir = (
+                    run_watch_rebuild(cfg, recording_id)
+                    if target_beat is None
+                    else run_watch_rebuild(
+                        cfg,
+                        recording_id,
+                        beat_id=target_beat,
+                    )
+                )
+                if target_beat is not None and target_specs is not None:
+                    target_spec = target_specs.get(recording_id)
+                    if target_spec is not None:
+                        target_spec["_watch_run_dir"] = str(run_dir)
             except Exception as exc:
                 if text_output_enabled(cfg):
                     fail_line(f"watch rebuild failed: {exc}")
@@ -3020,12 +3138,19 @@ def watch_recording_rebuilds(
     cfg: DictConfig,
     config: dict[str, Any],
     recording_ids: tuple[str, ...],
+    *,
+    target_beats: Mapping[str, str] | None = None,
+    target_specs: Mapping[str, dict[str, Any]] | None = None,
 ):
     unique_recording_ids = tuple(dict.fromkeys(recording_ids))
     stop_event = threading.Event()
     rebuild_thread = threading.Thread(
         target=run_watch_rebuild_loop,
         args=(cfg, config, unique_recording_ids, stop_event),
+        kwargs={
+            "target_beats": target_beats,
+            "target_specs": target_specs,
+        },
         daemon=True,
         name="omegaflow-watch-rebuild",
     )
@@ -3163,6 +3288,86 @@ def configured_watch_beat(
     return value
 
 
+def recording_plan_through_beat(
+    plan: RecordingPlan,
+    beat_id: str,
+) -> RecordingPlan:
+    beat_ids = [beat.id for beat in plan.beats]
+    try:
+        selected_index = beat_ids.index(beat_id)
+    except ValueError as exc:
+        raise StudioError(f"unknown beat {beat_id!r} for recording {plan.id}") from exc
+    beats = plan.beats[: selected_index + 1]
+    included_ids = {beat.id for beat in beats}
+    crossing_handoffs = [
+        handoff.id
+        for handoff in plan.browser_handoffs
+        if (
+            handoff.producer_outer_beat_id in included_ids
+            or handoff.consumer_outer_beat_id in included_ids
+        )
+        and not (
+            handoff.producer_outer_beat_id in included_ids
+            and handoff.consumer_outer_beat_id in included_ids
+        )
+    ]
+    if crossing_handoffs:
+        raise StudioError(
+            f"cannot watch through beat {beat_id!r}: browser handoff(s) cross "
+            "the selected boundary: "
+            + ", ".join(crossing_handoffs)
+        )
+    return replace(
+        plan,
+        beats=beats,
+        narration_stream=plan_narration_stream(
+            beats,
+            narration_id=plan.narration_stream.id,
+        ),
+        narration_takes=plan_narration_takes(beats),
+        browser_handoffs=tuple(
+            handoff
+            for handoff in plan.browser_handoffs
+            if handoff.producer_outer_beat_id in included_ids
+            and handoff.consumer_outer_beat_id in included_ids
+        ),
+    )
+
+
+def watch_plan_has_fresh_presentation(
+    spec: dict[str, Any],
+    plan: RecordingPlan,
+    *,
+    run_dir: Path | None = None,
+) -> bool:
+    resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
+    if resolved_run_dir is None:
+        return False
+    manifest = presentation_build.run_paths(resolved_run_dir)["manifest"]
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    beats = payload.get("beats") if isinstance(payload, dict) else None
+    if not isinstance(beats, list):
+        return False
+    manifest_beat_ids = [
+        beat.get("id")
+        for beat in beats
+        if isinstance(beat, dict) and isinstance(beat.get("id"), str)
+    ]
+    if manifest_beat_ids != [beat.id for beat in plan.beats]:
+        return False
+    try:
+        return presentation_build.capture_is_fresh(
+            spec,
+            plan,
+            resolved_run_dir,
+        )
+    except presentation_build.PresentationBuildError:
+        return False
+
+
 def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     run_id = config.get("run_id")
     recording_id = recording_id_from_value(config.get("recording"))
@@ -3177,6 +3382,28 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         spec,
         recording_id=recording_id,
     )
+    target_beats: dict[str, str] | None = None
+    if beat_id is not None:
+        plan = normalized_recording_plan(spec)
+        target_plan = recording_plan_through_beat(plan, beat_id)
+        if not watch_plan_has_fresh_presentation(spec, plan):
+            target_run = latest_watch_build_run_dir(
+                config,
+                recording_id,
+                beat_id,
+            )
+            if target_run is None or not watch_plan_has_fresh_presentation(
+                spec,
+                target_plan,
+                run_dir=target_run,
+            ):
+                target_run = run_watch_rebuild(
+                    cfg,
+                    recording_id,
+                    beat_id=beat_id,
+                )
+            spec["_watch_run_dir"] = str(target_run)
+        target_beats = {recording_id: beat_id}
     watch_presentation_artifacts(spec)
     url_path = watch_recording_url_path(
         recording_id,
@@ -3184,7 +3411,13 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         autoplay_countdown=autoplay,
     )
     open_browser = bool_config(config, "open", True)
-    with watch_recording_rebuilds(cfg, config, (recording_id,)):
+    with watch_recording_rebuilds(
+        cfg,
+        config,
+        (recording_id,),
+        target_beats=target_beats,
+        target_specs={recording_id: spec} if beat_id is not None else None,
+    ):
         return run_watch_server(
             cfg,
             url_path,
@@ -3447,6 +3680,87 @@ def run_collection_build(cfg: DictConfig, config: dict[str, Any]) -> int:
     return 0
 
 
+BUILD_TIMING_VERSION = 1
+BUILD_TIMING_FILE = "build-timing.json"
+
+
+class BuildTimingRecorder:
+    """Collect and persist one build invocation's stage timings."""
+
+    def __init__(self, recording_id: str) -> None:
+        self.recording_id = recording_id
+        self.started_at = datetime.now().astimezone()
+        self.started = time.monotonic()
+        self.stages: list[dict[str, Any]] = []
+        self.artifact_run_dir: Path | None = None
+
+    @contextmanager
+    def stage(
+        self,
+        name: str,
+        *,
+        details: Mapping[str, Any] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        started_at = datetime.now().astimezone()
+        started = time.monotonic()
+        entry: dict[str, Any] = {
+            "name": name,
+            "status": "running",
+            "started_at": started_at.isoformat(timespec="milliseconds"),
+            "duration_ms": 0,
+            "details": dict(details or {}),
+        }
+        self.stages.append(entry)
+        try:
+            yield entry["details"]
+        except BaseException:
+            entry["status"] = "failed"
+            raise
+        else:
+            entry["status"] = "completed"
+        finally:
+            entry["duration_ms"] = max(
+                0,
+                round((time.monotonic() - started) * 1000),
+            )
+
+    def write(self, run_dir: Path, *, status: str) -> Path:
+        finished_at = datetime.now().astimezone()
+        run_dir.mkdir(parents=True, exist_ok=True)
+        target = run_dir / BUILD_TIMING_FILE
+        temporary = target.with_suffix(".json.tmp")
+        payload = {
+            "version": BUILD_TIMING_VERSION,
+            "recording": self.recording_id,
+            "status": status,
+            "started_at": self.started_at.isoformat(timespec="milliseconds"),
+            "finished_at": finished_at.isoformat(timespec="milliseconds"),
+            "duration_ms": max(
+                0,
+                round((time.monotonic() - self.started) * 1000),
+            ),
+            "artifact_run_dir": (
+                None
+                if self.artifact_run_dir is None
+                else str(self.artifact_run_dir)
+            ),
+            "stages": self.stages,
+        }
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(target)
+        return target
+
+
+def configured_build_run_dir(spec: Mapping[str, Any]) -> Path | None:
+    value = spec.get("_hydra_output_dir")
+    if not isinstance(value, str) or not value:
+        return None
+    return Path(value)
+
+
 def run_manifest_build(
     cfg: DictConfig,
     config: dict[str, Any],
@@ -3454,10 +3768,20 @@ def run_manifest_build(
     plan: Any,
     *,
     show_followups: bool = True,
+    publish_surfaces: bool = True,
+    garbage_collect_runs: bool = True,
+    reuse_latest_capture: bool = True,
 ) -> int:
     started = time.monotonic()
+    requested_run_dir = configured_build_run_dir(spec)
+    timing_run_dir = requested_run_dir
+    timing = BuildTimingRecorder(
+        str(spec.get("id") or spec.get("_recording_id") or "")
+    )
     success = False
-    surface_names = build_publish_surface_names(config, spec)
+    surface_names = (
+        build_publish_surface_names(config, spec) if publish_surfaces else []
+    )
     raw_audio = spec.get("audio")
     audio_enabled = (
         isinstance(raw_audio, Mapping) and raw_audio.get("enabled") is True
@@ -3478,12 +3802,28 @@ def run_manifest_build(
     published_surfaces: list[tuple[str, PublishSurfaceOutcome, bool]] = []
     billing_message: str | None = None
     try:
-        publish_targets = resolve_build_publish_surfaces(
-            config,
-            spec,
-            surface_names,
-        )
-        run_dir = run_build_record_action(cfg, spec, plan, progress=progress)
+        with timing.stage("resolve_publish_targets"):
+            publish_targets = resolve_build_publish_surfaces(
+                config,
+                spec,
+                surface_names,
+            )
+        with timing.stage(
+            "capture",
+            details={"action_count": len(capture_action_items(plan))},
+        ) as capture_details:
+            run_dir = run_build_record_action(
+                cfg,
+                spec,
+                plan,
+                progress=progress,
+                reuse_latest=reuse_latest_capture,
+            )
+            capture_details["reused"] = (
+                requested_run_dir is None or run_dir != requested_run_dir
+            )
+        timing.artifact_run_dir = run_dir
+        timing_run_dir = run_dir
         narration_current = 0
 
         def on_narration_progress(message: str, current: int, _total: int) -> None:
@@ -3498,35 +3838,60 @@ def run_manifest_build(
             take_count = len(plan.narration_takes)
             noun = "take" if take_count == 1 else "takes"
             progress.begin(f"Preparing narration ({take_count} {noun})")
-        audio_artifacts = presentation_build.prepare_narration_audio(
-            spec,
-            plan,
-            run_dir,
-            force=bool_config(config, "force"),
-            on_progress=on_narration_progress if narration_steps else None,
-        )
+        with timing.stage(
+            "narration",
+            details={
+                "enabled": audio_enabled,
+                "take_count": len(plan.narration_takes),
+            },
+        ) as narration_details:
+            audio_artifacts = presentation_build.prepare_narration_audio(
+                spec,
+                plan,
+                run_dir,
+                force=bool_config(config, "force"),
+                on_progress=on_narration_progress if narration_steps else None,
+            )
+            narration_details["generated_tts_takes"] = (
+                0
+                if audio_artifacts is None
+                or audio_artifacts.tts_billing is None
+                else audio_artifacts.tts_billing.generated_segments
+            )
+            narration_details["generated_timestamp_files"] = (
+                0
+                if audio_artifacts is None
+                or audio_artifacts.transcription_billing is None
+                else audio_artifacts.transcription_billing.generated_timestamp_files
+            )
         billing_message = narration_billing_message(audio_artifacts)
         progress.begin("Assembling video")
-        result = presentation_build.compile_presentation_bundle(
-            spec,
-            plan,
-            run_dir,
-            audio_artifacts=audio_artifacts,
-        )
+        with timing.stage("assemble"):
+            result = presentation_build.compile_presentation_bundle(
+                spec,
+                plan,
+                run_dir,
+                audio_artifacts=audio_artifacts,
+            )
         progress.advance("Assembled video")
         warnings = result.warnings
         if publish_targets:
             progress.update("Publish video")
-            publish_presentation_bundle(spec, run_dir)
+            with timing.stage("publish_bundle"):
+                publish_presentation_bundle(spec, run_dir)
         for target in publish_targets:
             progress.update(f"Publish {target.label}")
-            outcome = run_publish_surface(
-                cfg,
-                surface_name=target.name,
-                presentation_run_dir=run_dir,
-                publish_bundle_assets=False,
-                report=False,
-            )
+            with timing.stage(
+                "publish_surface",
+                details={"surface": target.name, "type": target.type},
+            ):
+                outcome = run_publish_surface(
+                    cfg,
+                    surface_name=target.name,
+                    presentation_run_dir=run_dir,
+                    publish_bundle_assets=False,
+                    report=False,
+                )
             if outcome is None:
                 raise StudioError(f"publish surface not found: {target.name}")
             published_surfaces.append(
@@ -3539,12 +3904,20 @@ def run_manifest_build(
             result_label = "updated" if outcome.updated else "unchanged"
             progress.advance(f"{target.label}: {result_label}")
         progress.update("Finalize video")
-        remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
-        garbage_collect_recording_runs(
-            spec,
-            current_run_dir=run_dir,
-            report=text_output_enabled(cfg) and bool_config(config, "verbose"),
-        )
+        with timing.stage(
+            "finalize",
+            details={"garbage_collection": garbage_collect_runs},
+        ):
+            remove_unused_empty_run_dir(spec, used_run_dir=run_dir)
+            if garbage_collect_runs:
+                garbage_collect_recording_runs(
+                    spec,
+                    current_run_dir=run_dir,
+                    report=(
+                        text_output_enabled(cfg)
+                        and bool_config(config, "verbose")
+                    ),
+                )
         progress.advance("Video ready")
         success = True
     except presentation_build.PresentationBuildError as exc:
@@ -3568,6 +3941,17 @@ def run_manifest_build(
             print_build_elapsed(cfg, elapsed, success=success)
         if success:
             print_publish_surfaces(cfg, published_surfaces)
+        if timing_run_dir is not None:
+            try:
+                timing.write(
+                    timing_run_dir,
+                    status="completed" if success else "failed",
+                )
+            except OSError as exc:
+                if success:
+                    raise StudioError(
+                        f"could not persist build timing: {exc}"
+                    ) from exc
     if show_followups:
         print_success_followups(cfg)
     return 0
