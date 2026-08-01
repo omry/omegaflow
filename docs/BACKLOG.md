@@ -26,9 +26,36 @@ server, client, plugin, deployment, and product-security work.
 
 ## Now
 
-No active release blockers.
+- [ ] `P0` Restore fast baseline terminal capture with post-capture
+      presentation retiming. The coordinated presentation pipeline currently
+      performs simulated typing and authored pauses with real sleeps during
+      capture, so short commands consume their full presentation duration while
+      building. This regressed the former compressed-baseline workflow when the
+      legacy retimer was removed. This is a mandatory release blocker and must
+      be completed before further tutorial implementation.
+      Acceptance checks: execute presentation-timed terminal commands without
+      typing or presentation-delay sleeps; retain actual command runtime and
+      realtime terminal behavior where explicitly requested; synthesize typing,
+      prompts, output pauses, and authored holds during presentation
+      materialization; preserve narration anchors, action and pane event
+      synchronization, highlights, browser handoffs, and multi-pane timing; make
+      repeated short commands add negligible capture overhead; and add an
+      end-to-end regression proving the published video keeps its authored
+      pacing while capture completes from the compressed baseline. Before
+      implementation, review and approve the timing model and artifact
+      boundaries. Before completion, run a deep code review, full relevant CI,
+      and side-by-side playback validation of representative terminal,
+      realtime, browser-handoff, and multi-pane recordings.
 
 ## Release backlog
+
+- [ ] `P1` Improve the visual design of the tutorial orientation roadmap.
+      The current full-screen monospaced list is functional but visually dull
+      and leaves most of the presentation area unused. Keep the roadmap limited
+      to the orientation beat; give the five-stage progression a deliberate,
+      branded composition without previewing the finished Tiny Canvas artwork;
+      preserve readable responsive and compact layouts; and verify the result
+      in the standalone and embedded players.
 
 - [ ] `P1` Investigate slow repeat builds and verify incremental caching.
       Rebuilding an unchanged tutorial recording appears to repeat expensive
@@ -193,6 +220,9 @@ No active release blockers.
       recommends one bounded prototype. Acceptance checks: identify the
       required processing and recording dependencies; account for casts,
       timelines, narration, logs, failure metadata, and published assets;
+      keep the host installation on bare `omegaflow`, while provisioning
+      `omegaflow[browser]` and its browser runtime inside the Reploy environment
+      only when the recording requires browser support;
       validate whether safe nested control is available; prefer a narrow Reploy
       API over broad Docker-socket access; and leave the current local workflow
       and its dependency errors unchanged.
