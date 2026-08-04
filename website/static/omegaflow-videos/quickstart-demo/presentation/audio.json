@@ -48,7 +48,7 @@
           "text_start": 0
         }
       ],
-      "playback_end_ms": 54909,
+      "playback_end_ms": 54499,
       "playback_src": "audio/__beat__~3abootstrap-playback.mp3",
       "playback_start_ms": 34056,
       "source_end_ms": 53976,
@@ -72,9 +72,9 @@
           "text_start": 186
         }
       ],
-      "playback_end_ms": 93443,
-      "playback_src": "audio/build-and-browser-playback.mp3",
-      "playback_start_ms": 54909,
+      "playback_end_ms": 91147,
+      "playback_src": "audio/build-and-browser.mp3",
+      "playback_start_ms": 54499,
       "source_end_ms": 90624,
       "source_start_ms": 53976,
       "src": "audio/build-and-browser.mp3",
