@@ -97,41 +97,39 @@ tree has one terminal execution implementation.
 
 ## Authoring schema
 
-### Recording header
+### Recording config
 
-Browser capture and browser presentation defaults are recording-level header
-concerns:
+Browser capture and browser presentation defaults are recording-level
+production settings:
 
-```yaml
----
-title: Create a project
-browser:
-  profile: desktop-v1
-  base_url: http://127.0.0.1:3000
-  auth:
-    storage_state_env: OMEGAFLOW_BROWSER_AUTH_STATE
-  timeouts:
-    action_ms: 10000
-    readiness_ms: 15000
-  redactions:
-  - target:
-      test_id: account-email
-presentation:
+```yaml studio-directive
+config:
   browser:
-    window:
-      mode: framed
-      theme: kde-breeze
-      title: OmegaFlow
-      opening_transition: window-open
-    chrome:
-      mode: full
-    transitions:
-      default: fade
-    pointer:
-      visible: true
-    typing:
-      policy: natural-v1
----
+    profile: desktop-v1
+    base_url: http://127.0.0.1:3000
+    auth:
+      storage_state_env: OMEGAFLOW_BROWSER_AUTH_STATE
+    timeouts:
+      action_ms: 10000
+      readiness_ms: 15000
+    redactions:
+    - target:
+        test_id: account-email
+  presentation:
+    browser:
+      window:
+        mode: framed
+        theme: kde-breeze
+        title: OmegaFlow
+        opening_transition: window-open
+      chrome:
+        mode: full
+      transitions:
+        default: fade
+      pointer:
+        visible: true
+      typing:
+        policy: natural-v1
 ```
 
 `browser` is required when any beat uses `medium: browser`. `profile` defaults
@@ -187,9 +185,9 @@ automatic action-scoped redaction for its target.
 `narration_take` is optional. Its absence creates an internal singleton take
 for that narrated beat.
 
-```yaml
-beats:
-- id: start-server
+```yaml studio-directive
+beat:
+  id: start-server
   medium: terminal
   heading: Start the application
   narration: Start the local service.
@@ -198,8 +196,11 @@ beats:
     name: start demo server
     expect:
       contains: ready
+```
 
-- id: create
+```yaml studio-directive
+beat:
+  id: create
   medium: browser
   heading: Create a project
   narration_take: project-creation
@@ -1130,7 +1131,7 @@ paths and parent traversal are invalid. `renderers` is derived from the beats;
 authors do not declare versions or capabilities.
 
 `presentation.browser` is the generated renderer-header configuration resolved
-from the user-facing recording header. It applies to every browser beat; beats
+from the user-facing recording config. It applies to every browser beat; beats
 cannot override renderer versions or framing profiles.
 
 The asset table is authoritative. A renderer may load only a beat payload and

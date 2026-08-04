@@ -1,8 +1,5 @@
 ---
 title: Refine a Sunset Beach Poster
-setup:
-- name: restore the Tiny Canvas draft
-  run: python {{ tutorial_path }}/scripts/reset_artwork.py
 ---
 
 # Refine a Sunset Beach Poster
@@ -11,7 +8,10 @@ This starter contains one reliable terminal beat. The tutorial adds one browser
 beat, then extends that same beat with narration, guidance, and publishing.
 
 ```yaml studio-directive
-scene: Refine a Sunset Beach Poster
+config:
+  setup:
+  - name: restore the Tiny Canvas draft
+    run: python {{ tutorial_path }}/scripts/reset_artwork.py
 ```
 
 ```yaml studio-directive

@@ -223,7 +223,7 @@ def test_application_environment_names_are_typed_configuration() -> None:
         )
 
 
-def test_recording_frontmatter_accepts_declared_application_secrets(
+def test_recording_config_directive_accepts_declared_application_secrets(
     tmp_path: Path,
 ) -> None:
     recording_dir = tmp_path / "recordings"
@@ -233,15 +233,16 @@ def test_recording_frontmatter_accepts_declared_application_secrets(
         """\
 ---
 kind: video
-environment:
-  secrets:
-  - APP_TOKEN
-audio:
-  enabled: false
+title: Demo
 ---
 
 ```studio-directive
-scene: Application environment
+config:
+  environment:
+    secrets:
+    - APP_TOKEN
+  audio:
+    enabled: false
 ```
 
 ```studio-directive

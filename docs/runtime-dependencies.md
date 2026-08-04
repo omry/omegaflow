@@ -37,13 +37,14 @@ override.
 ## Recording-specific tools
 
 Commands used by a recording belong to that recording. Declare them in its
-frontmatter so OmegaFlow can fail before capture:
+`config` directive so OmegaFlow can fail before capture:
 
-```yaml
-requirements:
-  commands:
-    - git
-    - python
+```yaml studio-directive
+config:
+  requirements:
+    commands:
+      - git
+      - python
 ```
 
 Revisit and simplify these requirements when the Reploy execution model is

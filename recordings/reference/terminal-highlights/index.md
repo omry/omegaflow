@@ -2,28 +2,31 @@
 kind: video
 title: Highlight Terminal Output
 description: Apply exact-text and multiline regular-expression highlights in sync with narration.
-capture:
-  window_size: 80x20
-  timeout: 50
-style:
-  color: true
-  typing: true
-audio:
-  enabled: true
-outputs:
-  dir: website/static/omegaflow-videos
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${outputs.asset_dir}/index.html
 ---
 
 # Highlight Terminal Output
 
 ```yaml studio-directive
-scene: Highlighting terminal text
+config:
+  capture:
+    window_size: 80x20
+    timeout: 50
+  style:
+    color: true
+    typing: true
+  audio:
+    enabled: true
+  outputs:
+    dir: website/static/omegaflow-videos
+  publish:
+    default: html
+    surfaces:
+      html:
+        type: standalone_html
+        file: ${outputs.asset_dir}/index.html
+```
+
+```yaml studio-directive
 panes:
 - id: definition
   kind: visualization

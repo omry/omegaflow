@@ -840,29 +840,27 @@ def bootstrap_recording_text(recording_id: str, title: str) -> str:
 ---
 kind: video
 title: {title}
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${{outputs.asset_dir}}/index.html
 ---
 
 # {title}
 
-This Markdown file is the source for one generated terminal video.
-
-The YAML header names the recording, chooses output paths, and declares where
-the finished video can be published. The prose explains the walkthrough for
-readers and future maintainers. The fenced `studio-directive` blocks tell
-OmegaFlow what to record.
+This Markdown file is the source for one generated terminal video. The YAML
+header contains its metadata. The prose explains the walkthrough for readers
+and future maintainers. The fenced `studio-directive` blocks configure the
+recording and tell OmegaFlow what to record.
 
 ```yaml studio-directive
-scene: {title}
+config:
+  publish:
+    default: html
+    surfaces:
+      html:
+        type: standalone_html
+        file: ${{outputs.asset_dir}}/index.html
 ```
 
-The scene is the title shown by the player. Beats are the steps in the video.
-The two short beats make the generated player's section navigation easy to see.
+The video title comes from the header. Beats are the steps in the video. The
+two short beats make the generated player's section navigation easy to see.
 
 When you enable audio, narration anchors can synchronize words and commands.
 For example, put `@run_demo@` in the narration, set the command's `after` field
@@ -898,8 +896,9 @@ beat:
       run: "# Second video beat"
 ```
 
-Publish surfaces in the header let the same recording write a standalone HTML
-page. Add a docs surface when you want the build to update a documentation page.
+Publish surfaces in the config directive let the same recording write a
+standalone HTML page. Add a docs surface when you want the build to update a
+documentation page.
 """
 
 

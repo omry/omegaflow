@@ -277,6 +277,14 @@ server, client, plugin, deployment, and product-security work.
 
 ## Done
 
+- [x] `P1` Separate recording metadata, production configuration, and authored
+      structure. Completed: `2026-08-01`. Limited video frontmatter to `kind`,
+      required `title`, and optional `description`; added one typed `config`
+      directive for per-recording production settings; retained singleton
+      `panes` and repeated singular `beat` directives; derived the internal
+      scene from the directory id and title; and migrated sources, docs, and
+      tests without a compatibility path.
+
 - [x] `P0` Make the final OmegaFlow artifacts installable from public package
       indexes. Completed: `2026-07-29`. Published OmegaConf `2.4.0.dev14`, then
       installed the final OmegaFlow `0.9.0` Linux wheel and its browser extra

@@ -169,8 +169,8 @@ that every subject belongs in the tutorial.
 | --- | --- | --- |
 | Product | Definition, use cases, source-controlled rebuildability | Homepage, introduction |
 | Lifecycle | Script, build/check, watch/iterate, publish, rebuild | Homepage, Getting Started |
-| Mental model | Project, recording workspace, video, collection, scene, beat | Concepts |
-| Authoring | Markdown prose, frontmatter, scene and beat directives | Tutorial, reference |
+| Mental model | Project, recording workspace, video, collection, pane, beat | Concepts |
+| Authoring | Markdown prose, metadata frontmatter, config, pane, and beat directives | Tutorial, reference |
 | Terminal workflows | Commands, visible commands, output, checks, realtime mode, synchronized effects | Tutorial, guides, reference |
 | Browser workflows | Navigation, click, type, scroll, pointer, waits, checks, presentation | Tutorial, guides, reference |
 | Narration | Optional voiceover, takes, anchors, waits, cross-beat synchronization | Tutorial, guides, reference |
@@ -178,7 +178,7 @@ that every subject belongs in the tutorial.
 | Build behavior | Capture, generation, retiming, assembly, validation, caching, force rebuilds | Concepts, guides |
 | Player | Beat navigation, previews, guided mode, checkpoints, seeking, speed | Tutorial, guide |
 | Publishing | Docusaurus, standalone HTML, assets, tracked versus runtime files | Tutorial, guides, reference |
-| Configuration | Project settings, recording defaults, frontmatter, CLI overrides | Concepts, reference |
+| Configuration | Project settings, recording defaults, per-recording config, CLI overrides | Concepts, reference |
 | Operations | Bootstrap, list, build, watch, check, inspect, runs, clean, GC | Getting Started, reference |
 | Security | Authentication, secrets, redaction | Browser guide, reference |
 | Environment | Installation, Python and Bash requirements, supported platforms, WSL | Getting Started |

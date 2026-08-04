@@ -354,12 +354,16 @@ remains an implementation detail.
 Narration stays beside the beat it explains. By default, each narrated beat is
 its own TTS generation and cache unit. Adjacent beats may opt into one take:
 
-```yaml
-beats:
-- id: install
+```yaml studio-directive
+beat:
+  id: install
   narration_take: setup
   narration: Start by @install@ installing OmegaFlow.
-- id: bootstrap
+```
+
+```yaml studio-directive
+beat:
+  id: bootstrap
   narration_take: setup
   narration: >-
     @wait:install_command+200ms@ Once it is ready, go to your repository root

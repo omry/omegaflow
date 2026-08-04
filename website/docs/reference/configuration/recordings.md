@@ -6,8 +6,9 @@ slug: /reference/configuration/recordings/
 
 # Recording Configuration
 
-Every recording gets its config from three layers. The same schema is used for
-shared workspace defaults and for the per-recording frontmatter block.
+Recording metadata and production configuration have separate owners.
+Frontmatter identifies and describes the source; workspace defaults, one
+`config` directive, and CLI overrides compose the production configuration.
 
 ## Override Order
 
@@ -15,7 +16,7 @@ OmegaFlow builds the final recording config in this order:
 
 1. Schema default values.
 2. `<recording-dir>/config.yaml`, the workspace defaults for recordings.
-3. The per-recording config block in `<recording-dir>/<id>/index.md` frontmatter.
+3. The optional `config:` studio directive in `<recording-dir>/<id>/index.md`.
 4. CLI `rec.*` overrides, such as `rec.capture.headless=false`.
 
 Later layers override earlier layers. The recording `id` is derived from the
@@ -36,12 +37,12 @@ omegaflow recording=hello rec.style.typing=false
 omegaflow recording=hello rec.audio.enabled=false
 ```
 
-`rec.*` overrides are merged after frontmatter, so they can override values from
-both `config.yaml` and the recording header. They are best for scalar values and
-small config maps. For larger recording structure such as beats, commands, and
-narration, edit the recording Markdown file instead. Recording identity and
-generated fields such as `id`, `title`, and `script` cannot be overridden with
-`rec.*`.
+`rec.*` overrides are merged after the recording's `config` directive, so they
+can override both workspace defaults and per-recording settings. They are best
+for scalar values and small config maps. Pane and beat structure is authored in
+dedicated directives and cannot be overridden. Recording identity and generated
+fields such as `id`, `title`, `script`, `panes`, and `beats` cannot be overridden
+with `rec.*`.
 
 ## Composition And Interpolation
 
@@ -55,15 +56,15 @@ outputs:
 
 Interpolations are evaluated lazily when the composed config is accessed, not
 when an individual file or directive block is first parsed. This lets schema
-defaults, workspace defaults, frontmatter, and directive-derived values refer to
-the final composed recording object.
+defaults, workspace defaults, the `config` directive, and generated values refer
+to the final composed recording object.
 
 All fenced `studio-directive` blocks in the recording Markdown body are parsed
-as config fragments and folded into the same recording object. For example, beat
-directives contribute to `beats`, and the scene/narration directives contribute
-to generated narration config. Because directive blocks are combined before
-interpolation resolution, references can use values from the final recording
-config rather than only values from the local block.
+as typed fragments and folded into the same recording object. The singleton
+`config` directive contributes per-recording settings, while pane and beat
+directives contribute authored structure. Because directive blocks are combined
+before interpolation resolution, references can use values from the final
+recording config rather than only values from the local block.
 
 ## Workspace Defaults
 
@@ -107,24 +108,49 @@ Each `<id>/index.md` recording starts with YAML frontmatter:
 kind: video
 title: Hello Video
 description: A small narrated hello-world recording.
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${outputs.asset_dir}/index.html
-audio:
-  enabled: false
 ---
 ```
 
-The frontmatter header is the right place for recording-specific config:
+Video frontmatter accepts only:
 
 - `kind`, `title`, and `description`
-- one-off output overrides
-- one-off audio settings
-- recording-local setup, cleanup, or configured beats
-- publish target choices for that recording
+
+`title` is required. `kind` defaults to `video`, and `description` is optional.
+The recording id comes from the directory path.
+
+Collections use frontmatter only and accept `kind`, `title`, and `members`.
+They cannot contain studio directives.
+
+## Per-recording Config Directive
+
+Put production settings that differ from workspace defaults in one `config`
+directive. It must appear before `panes` or `beat`:
+
+```yaml
+config:
+  publish:
+    default: html
+    surfaces:
+      html:
+        type: standalone_html
+        file: ${outputs.asset_dir}/index.html
+  audio:
+    enabled: false
+```
+
+## Migrating Existing Recording Sources
+
+The previous authoring shape is not accepted. Update each video source in
+three mechanical steps:
+
+1. Leave only `kind`, `title`, and `description` in frontmatter. Move capture,
+   audio, publishing, setup, cleanup, and other production settings into one
+   leading `config:` studio directive.
+2. Delete the `scene:` directive. The recording directory supplies its id and
+   frontmatter `title` supplies its internal scene title.
+3. Replace a list-valued `beats:` directive with one singular `beat:` studio
+   directive per beat, preserving their order. Keep `panes:` once before the
+   first beat when the recording uses multiple panes.
 
 ## Structure
 
@@ -135,9 +161,15 @@ but is not an accepted frontmatter field.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `kind` | `video` or `collection` | Source type. Omitted values default to `video`; declare `kind: collection` for a collection. Collections use only `title` and `members`. |
-| `title` | string | Human-readable title for players and publish surfaces. Frontmatter only. |
-| `description` | string | Short summary used when a collection renders its watch index. Frontmatter only. |
+| `kind` | `video` or `collection` | Frontmatter source type. Omitted values default to `video`; declare `kind: collection` for a collection. |
+| `title` | string | Required frontmatter title for videos and human-readable collection title. Also supplies the generated internal scene title. |
+| `description` | string | Optional video summary used when a collection renders its watch index. Frontmatter only. |
+| `members` | list | Ordered recording ids for a collection. Collection frontmatter only. |
+
+The `config` directive and workspace `config.yaml` share these fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
 | `parameters` | mapping | Script parameters and defaults for `script_params`. |
 | `requirements` | mapping | Required shell commands and tools. |
 | `capture` | mapping | Recording settings such as `window_size`, `headless`, and `idle_time_limit`. |
@@ -149,9 +181,10 @@ but is not an accepted frontmatter field.
 | `browser` | mapping or null | Deterministic Playwright capture profile, viewport, context, authentication, timeouts, and redaction targets. Required when any beat has `medium: browser`. |
 | `presentation` | mapping | Recording-wide browser window, chrome, transition, pointer, and typing presentation policy. |
 | `publish` | mapping | Publish surfaces such as Docusaurus MDX and standalone HTML. |
+| `failure_summary` | mapping | Presentation cleanup for expected failure output. |
+| `narration` | mapping | Recording-wide narration stream settings. |
 | `setup` | list | Commands that run before beats. See [Recording schema](../recording-files/schema.md). |
 | `cleanup` | list | Commands that run after recording. See [Recording schema](../recording-files/schema.md). |
-| `beats` | list | Optional configured beats. See [Recording schema](../recording-files/schema.md). |
 
 A collection replaces the video-specific fields with an ordered `members`
 list of full recording ids. Collection members must be videos; nested
@@ -224,7 +257,7 @@ recording. Values configured under `environment.variables` are not printed by
 OmegaFlow, but this mapping is **not secret storage**: recorded applications
 can read and display them.
 
-## Browser header configuration
+## Browser configuration
 
 Browser capture parameters are recording-wide because every browser beat uses
 one persistent page and deterministic viewport:
@@ -257,8 +290,8 @@ entry whose value is a private Playwright storage-state path. Use
 config. The file content remains private and its hash, not its secrets,
 participates in capture freshness.
 
-Presentation framing in the recording header supplies the defaults for every
-browser beat:
+Presentation framing in workspace defaults or the recording's `config`
+directive supplies defaults for every browser beat:
 
 ```yaml
 presentation:
@@ -284,7 +317,7 @@ following beat is rendered. See [Recording schema](../recording-files/schema.md#
 toolbar-highlight authoring. Multi-pane layouts use
 `pane_chrome.style: framed` by default, which adds pane labels, borders, and
 renderer-colored accents. Set the style to `none` for an undecorated layout.
-Pane declarations and titles are body authoring rather than frontmatter
+Pane declarations and titles are structural directives rather than production
 configuration; see [Multi-pane Beats](../recording-files/schema.md#multi-pane-beats). Individual
 browser beats can override the window and browser chrome modes; see
 [Browser beats](../recording-files/schema.md#browser-beats).
@@ -546,11 +579,10 @@ class RecordingDefaults:
     )
     setup: list[RecordingStepConfig] = field(default_factory=list)
     cleanup: list[RecordingStepConfig] = field(default_factory=list)
-    beats: list[RecordingBeatConfig] = field(default_factory=list)
 
 
 @dataclass
-class RecordingSourceSpec(RecordingDefaults):
+class RecordingSourceSpec:
     kind: RecordingSourceKind = RecordingSourceKind.video
     title: str | None = None
     description: str | None = None

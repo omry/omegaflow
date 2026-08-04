@@ -9,6 +9,8 @@ slug: /reference/recording-files/schema/
 A beat is one recorded unit in a video. It can describe what the viewer is
 seeing, operate a terminal or browser, run checks, and provide guide text.
 Narration can be absent, local to one beat, or shared across multiple beats.
+Author one beat per `studio-directive` block; the recording title comes from
+frontmatter.
 
 ```yaml
 beat:
@@ -16,6 +18,17 @@ beat:
   heading: Install OmegaFlow
   narration: Install the package and confirm the omegaflow command is available.
 ```
+
+## Directive Order
+
+A video source accepts these directive types in order:
+
+1. One optional `config` mapping for per-recording production settings.
+2. One optional `panes` declaration for multi-pane recordings.
+3. One or more repeated `beat` mappings.
+
+`scene` and list-valued `beats` directives are not authored. OmegaFlow derives
+the internal scene from the recording directory and frontmatter title.
 
 ## Fields
 
@@ -41,10 +54,9 @@ beat:
 
 The regular `medium`, `actions`, `checks`, and `effects` fields are convenient
 single-pane shorthand. To show multiple synchronized views, declare recording
-panes once in a `studio-directive` before any `beat` or `beats` declaration:
+panes once in a `studio-directive` before any `beat` declaration:
 
 ```yaml
-scene: Highlighting terminal text
 panes:
 - id: definition
   kind: visualization

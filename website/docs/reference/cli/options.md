@@ -42,7 +42,7 @@ shown here are the bundled defaults; `.omegaflow/config.yaml` can replace them.
 | `load_env_file` | `false` | Load an explicitly configured process-level env file before actions that execute or inspect recording work. |
 | `env_file` | `null` | Optional env file path resolved from the project root. This advanced compatibility path is separate from OmegaFlow's private TTS environment. |
 | `env_override` | `false` | Let env-file values replace variables already present in the process environment. |
-| `rec` | `{}` | Recording config merged after workspace defaults and recording frontmatter. Use CLI keys such as `rec.capture.headless=false`. |
+| `rec` | `{}` | Recording config merged after workspace defaults and the recording's `config` directive. Use CLI keys such as `rec.capture.headless=false`. |
 | `script_params` | `{}` | Values for names declared by the recording's `parameters` mapping. |
 
 ## Bootstrap fields

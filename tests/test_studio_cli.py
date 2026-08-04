@@ -1833,12 +1833,13 @@ def test_narration_step_prepares_build_narration_without_capture(
         """
 ---
 kind: video
-audio:
-  enabled: true
+title: Narrated
 ---
 
 ```yaml studio-directive
-scene: Narrated
+config:
+  audio:
+    enabled: true
 ```
 
 ```yaml studio-directive
@@ -1985,10 +1986,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -2023,10 +2020,6 @@ def test_nested_recording_directories_are_listed_and_loaded(tmp_path) -> None:
 ---
 title: Tutorial Recording File
 ---
-
-```yaml studio-directive
-scene: Tutorial Recording File
-```
 
 ```yaml studio-directive
 beat:
@@ -2107,10 +2100,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -2136,10 +2125,6 @@ kind: video
 title: Hello Video
 description: Learn how to make a narrated terminal video.
 ---
-
-```yaml studio-directive
-scene: Hello Video
-```
 
 ```yaml studio-directive
 beat:
@@ -2168,7 +2153,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 beat:
   id: hello
   heading: Say Hello
@@ -2206,7 +2190,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 beat:
   id: hello
   heading: Say Hello
@@ -2313,12 +2296,12 @@ members:
 ---
 kind: video
 title: {member}
-audio:
-  enabled: false
 ---
 
 ```yaml studio-directive
-scene: {member}
+config:
+  audio:
+    enabled: false
 ```
 
 ```yaml studio-directive
@@ -2633,10 +2616,6 @@ title: Demo
 ---
 
 ```yaml studio-directive
-scene: Demo
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Hello
@@ -2676,10 +2655,6 @@ def test_text_highlight_anchor_timing_requires_audio_enabled(tmp_path) -> None:
 ---
 title: Demo
 ---
-
-```yaml studio-directive
-scene: Demo
-```
 
 ```yaml studio-directive
 beat:
@@ -2890,7 +2865,9 @@ def test_repository_recordings_use_the_private_tts_service_environment(
     assert settings.env_file is None
 
 
-def test_recording_frontmatter_overrides_recordings_config(tmp_path, monkeypatch) -> None:
+def test_recording_config_directive_overrides_workspace_defaults(
+    tmp_path, monkeypatch
+) -> None:
     recordings_dir = tmp_path / "recordings"
     recordings_dir.mkdir()
     (recordings_dir / "hello").mkdir()
@@ -2911,14 +2888,14 @@ style:
         """
 ---
 title: Hello Video
-audio:
-  enabled: true
 ---
 
 # Hello Video
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  audio:
+    enabled: true
 ```
 
 ```yaml studio-directive
@@ -2962,13 +2939,13 @@ def test_rec_from_tool_config_overrides_recording_spec(
         """
 ---
 title: Hello Video
-capture:
-  headless: true
-  window_size: 80x20
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  capture:
+    headless: true
+    window_size: 80x20
 ```
 
 ```yaml studio-directive
@@ -3010,12 +2987,12 @@ def test_rec_overrides_are_applied_before_recording_interpolations(
         """
 ---
 title: Hello Video
-outputs:
-  dir: site/videos
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  outputs:
+    dir: site/videos
 ```
 
 ```yaml studio-directive
@@ -3055,10 +3032,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -3095,10 +3068,6 @@ title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -3124,6 +3093,68 @@ beat:
         assert "script" in str(exc)
     else:
         raise AssertionError("expected StudioConfigError")
+
+
+def test_rec_narration_id_is_applied_before_narration_is_generated(tmp_path) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+title: Hello Video
+---
+
+```yaml studio-directive
+beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    spec = recording_from_script(
+        "hello",
+        recording_dir=recordings_dir,
+        overrides={"narration": {"id": "guide"}},
+    )
+
+    assert spec["narration"]["id"] == "guide"
+    assert spec["narration"]["scene"] == {
+        "id": "hello",
+        "title": "Hello Video",
+    }
+    assert [beat["id"] for beat in spec["narration"]["beats"]] == ["hello"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("scene", {"title": "Override"}),
+        ("beats", []),
+    ],
+)
+def test_rec_rejects_generated_narration_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        "---\ntitle: Hello Video\n---\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(StudioConfigError, match=field):
+        recording_from_script(
+            "hello",
+            recording_dir=recordings_dir,
+            overrides={"narration": {field: value}},
+        )
 
 
 def test_compose_accepts_nested_rec_overrides() -> None:
@@ -3220,11 +3251,8 @@ def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> Non
         """
 ---
 kind: video
+title: Hello Video
 ---
-
-```yaml studio-directive
-scene: Hello Video
-```
 
 ```yaml studio-directive
 beat:
@@ -3269,10 +3297,6 @@ title: {recording_id.title()}
 ---
 
 ```yaml studio-directive
-scene: {recording_id.title()}
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -3308,12 +3332,13 @@ def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-capture:
-  typo_window_size: 80x20
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  capture:
+    typo_window_size: 80x20
 ```
 
 ```yaml studio-directive
@@ -3344,12 +3369,13 @@ def test_recording_schema_rejects_old_top_level_retime_config(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-retime:
-  post_command_pause: 0.1
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  retime:
+    post_command_pause: 0.1
 ```
 """.lstrip(),
         encoding="utf-8",
@@ -3364,7 +3390,7 @@ scene: Hello Video
         raise AssertionError("expected old top-level retime config to fail")
 
 
-def test_recording_schema_validates_frontmatter_command_fields(
+def test_recording_schema_validates_beat_directive_command_fields(
     tmp_path, monkeypatch
 ) -> None:
     recordings_dir = tmp_path / "recordings"
@@ -3373,8 +3399,12 @@ def test_recording_schema_validates_frontmatter_command_fields(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-beats:
-- id: configured
+title: Hello Video
+---
+
+```yaml studio-directive
+beat:
+  id: configured
   heading: Say Hello
   narration: Print one line.
   actions:
@@ -3383,10 +3413,6 @@ beats:
       run: printf 'hello\\n'
       display: echo hello
       timing: realtime
----
-
-```yaml studio-directive
-scene: Hello Video
 ```
 
 ```yaml studio-directive
@@ -3416,15 +3442,19 @@ def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-beats:
-- id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+beat:
+  id: hello
   heading: Say Hello
   narration: Print one line.
   actions:
   - commands:
     - run: printf 'hello\\n'
       disaply: echo hello
----
+```
 """.lstrip(),
         encoding="utf-8",
     )
@@ -3447,15 +3477,19 @@ def test_recording_schema_rejects_old_command_retime_field(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-beats:
-- id: hello
+title: Hello Video
+---
+
+```yaml studio-directive
+beat:
+  id: hello
   heading: Say Hello
   narration: Print one line.
   actions:
   - commands:
     - run: printf 'hello\\n'
       retime: realtime
----
+```
 """.lstrip(),
         encoding="utf-8",
     )
@@ -3482,6 +3516,21 @@ wat: true
         assert "Key 'wat' not in 'StudioDirectiveBlock'" in str(exc)
     else:
         raise AssertionError("expected unknown directive key to fail")
+
+
+@pytest.mark.parametrize("value", ["null", "[]", "true"])
+def test_studio_directive_config_requires_a_mapping(value: str) -> None:
+    script = f"""
+```yaml studio-directive
+config: {value}
+```
+""".lstrip()
+
+    with pytest.raises(
+        StudioConfigError,
+        match=r"studio-directive block near line 1\.config must be a mapping",
+    ):
+        studio_directive_blocks(script)
 
 
 def test_studio_directive_schema_rejects_unknown_nested_key() -> None:
@@ -3583,10 +3632,6 @@ def test_recording_frontmatter_rejects_non_user_fields(
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -3601,7 +3646,7 @@ beat:
         recording_from_script("hello")
 
 
-def test_recording_frontmatter_accepts_a_typed_narration_stream_id(
+def test_recording_config_directive_accepts_a_typed_narration_stream_id(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -3611,12 +3656,13 @@ def test_recording_frontmatter_accepts_a_typed_narration_stream_id(
     (recording_dir / "index.md").write_text(
         """
 ---
-narration:
-  id: guide
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  narration:
+    id: guide
 ```
 
 ```yaml studio-directive
@@ -3650,10 +3696,10 @@ def test_studio_directive_accepts_pane_title_shortcuts(
         """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 panes:
 - id: automatic
   kind: visualization
@@ -3710,11 +3756,15 @@ def test_studio_directive_accepts_targeted_browser_handoff(
     (recording_dir / "index.md").write_text(
         """
 ---
-browser: {}
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  browser: {}
+```
+
+```yaml studio-directive
 panes:
 - id: terminal
   kind: terminal
@@ -3772,10 +3822,10 @@ def test_studio_directive_accepts_realtime_input_on_explicit_terminal_pane(
         """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 panes:
 - id: terminal
   kind: terminal
@@ -3838,10 +3888,6 @@ panes:
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-```
-
-```yaml studio-directive
 beat:
   id: hello
   heading: Say Hello
@@ -3871,11 +3917,8 @@ def test_recordings_config_rejects_pane_declarations(
         """
 ---
 kind: video
+title: Hello Video
 ---
-
-```yaml studio-directive
-scene: Hello Video
-```
 
 ```yaml studio-directive
 beat:
@@ -3903,11 +3946,8 @@ def test_rec_override_rejects_pane_declarations(
         """
 ---
 kind: video
+title: Hello Video
 ---
-
-```yaml studio-directive
-scene: Hello Video
-```
 
 ```yaml studio-directive
 beat:
@@ -3941,10 +3981,10 @@ def test_studio_directive_rejects_duplicate_pane_declarations(
         """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 panes:
 - id: terminal
   kind: terminal
@@ -3982,10 +4022,10 @@ def test_studio_directive_rejects_empty_pane_declaration(
         """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 panes: []
 ```
 
@@ -4007,32 +4047,21 @@ beat:
         recording_from_script("hello")
 
 
-@pytest.mark.parametrize("beat_key", ["beat", "beats"])
 @pytest.mark.parametrize("pane_block", ["same", "later"])
 def test_studio_directive_requires_panes_before_every_beat_declaration(
     tmp_path: Path,
     monkeypatch,
-    beat_key: str,
     pane_block: str,
 ) -> None:
     recordings_dir = tmp_path / "recordings"
     recording_dir = recordings_dir / "hello"
     recording_dir.mkdir(parents=True)
-    beat_value = (
-        """
+    beat_value = """
 beat:
   id: hello
   heading: Say Hello
   narration: Print one line.
 """
-        if beat_key == "beat"
-        else """
-beats:
-- id: hello
-  heading: Say Hello
-  narration: Print one line.
-"""
-    )
     pane_declaration = """
 panes:
 - id: terminal
@@ -4048,10 +4077,10 @@ panes:
             """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 """
             + beat_value
             + pane_source
@@ -4062,16 +4091,14 @@ scene: Hello Video
 
     with pytest.raises(
         StudioConfigError,
-        match="studio-directive panes must appear before any beat or beats declaration",
+        match="studio-directive panes must appear before any beat declaration",
     ):
         recording_from_script("hello")
 
 
-@pytest.mark.parametrize("beat_declaration", ["beat: null", "beats: []"])
 def test_studio_directive_requires_panes_before_empty_beat_declaration(
     tmp_path: Path,
     monkeypatch,
-    beat_declaration: str,
 ) -> None:
     recordings_dir = tmp_path / "recordings"
     recording_dir = recordings_dir / "hello"
@@ -4080,11 +4107,11 @@ def test_studio_directive_requires_panes_before_empty_beat_declaration(
         f"""
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-{beat_declaration}
+beat: null
 panes:
 - id: terminal
   kind: terminal
@@ -4096,7 +4123,7 @@ panes:
 
     with pytest.raises(
         StudioConfigError,
-        match="studio-directive panes must appear before any beat or beats declaration",
+        match="studio-directive panes must appear before any beat declaration",
     ):
         recording_from_script("hello")
 
@@ -4112,10 +4139,10 @@ def test_explicit_multi_pane_beat_requires_pane_declaration(
         """
 ---
 kind: video
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
 beat:
   id: hello
   heading: Say Hello
@@ -4149,7 +4176,55 @@ beat:
         recording_from_script("hello")
 
 
-def test_studio_directive_panes_reject_preceding_config_beats(
+@pytest.mark.parametrize("structure", ["panes", "beat"])
+def test_studio_directive_requires_config_before_structure(
+    tmp_path: Path,
+    monkeypatch,
+    structure: str,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    structure_block = (
+        """panes:
+- id: terminal
+  kind: terminal
+"""
+        if structure == "panes"
+        else """beat:
+  id: hello
+  heading: Say Hello
+  narration: Print one line.
+"""
+    )
+    (recording_dir / "index.md").write_text(
+        f"""
+---
+title: Hello Video
+---
+
+```yaml studio-directive
+{structure_block.rstrip()}
+```
+
+```yaml studio-directive
+config:
+  audio:
+    enabled: false
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    with pytest.raises(
+        StudioConfigError,
+        match="studio-directive config must appear before panes or beat",
+    ):
+        recording_from_script("hello")
+
+
+def test_studio_directive_rejects_duplicate_config_declarations(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -4159,18 +4234,94 @@ def test_studio_directive_panes_reject_preceding_config_beats(
     (recording_dir / "index.md").write_text(
         """
 ---
-beats:
-- id: configured
-  actions:
-  - run: printf configured
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
-panes:
-- id: terminal
-  kind: terminal
+config:
+  audio:
+    enabled: false
 ```
+
+```yaml studio-directive
+config:
+  capture:
+    headless: true
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    with pytest.raises(StudioConfigError, match="duplicate studio-directive config"):
+        recording_from_script("hello")
+
+
+@pytest.mark.parametrize("removed_key", ["scene", "beats"])
+def test_studio_directive_rejects_removed_structure_keys(removed_key: str) -> None:
+    value = "{id: hello, title: Hello}" if removed_key == "scene" else "[]"
+    script = f"""
+```yaml studio-directive
+{removed_key}: {value}
+```
+""".lstrip()
+
+    with pytest.raises(StudioConfigError, match=removed_key):
+        studio_directive_blocks(script)
+
+
+def test_recording_frontmatter_rejects_production_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+title: Hello Video
+capture:
+  headless: true
+---
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    with pytest.raises(StudioConfigError, match="capture"):
+        recording_from_script("hello")
+
+
+def test_recording_frontmatter_requires_title(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        "---\nkind: video\n---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
+
+    with pytest.raises(StudioConfigError, match="non-empty title"):
+        recording_from_script("hello")
+
+
+def test_recording_narration_scene_is_generated_from_directory_and_title(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+title: Hello Video
+---
 
 ```yaml studio-directive
 beat:
@@ -4183,14 +4334,9 @@ beat:
     )
     monkeypatch.setattr(studio_config_module, "RECORDING_SCRIPT_DIR", recordings_dir)
 
-    with pytest.raises(
-        StudioConfigError,
-        match=(
-            "studio-directive panes cannot be combined with frontmatter or "
-            "recording-default beats"
-        ),
-    ):
-        recording_from_script("hello")
+    spec = recording_from_script("hello")
+
+    assert spec["narration"]["scene"] == {"id": "hello", "title": "Hello Video"}
 
 
 def test_studio_directive_panes_build_a_multi_pane_plan(
@@ -4203,12 +4349,16 @@ def test_studio_directive_panes_build_a_multi_pane_plan(
     (recording_dir / "index.md").write_text(
         """
 ---
-audio:
-  enabled: false
+title: Hello Video
 ---
 
 ```yaml studio-directive
-scene: Hello Video
+config:
+  audio:
+    enabled: false
+```
+
+```yaml studio-directive
 panes:
 - id: definition
   kind: visualization
@@ -4588,7 +4738,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     assert "kind: video" in generated
     generated_beats = [
         block["beat"]
-        for block in studio_directive_blocks(generated)
+        for block in studio_directive_blocks(generated, resolve=False)
         if "beat" in block
     ]
     assert [beat["id"] for beat in generated_beats] == [
@@ -4950,7 +5100,8 @@ def test_bootstrap_creates_composable_project_workspace(tmp_path, monkeypatch) -
     assert "cast:" not in recording
     assert "file: ${outputs.asset_dir}/index.html" in recording
     assert "This Markdown file is the source for one generated terminal video." in recording
-    assert "fenced `studio-directive` blocks tell" in recording
+    assert "header contains its metadata" in recording
+    assert "fenced `studio-directive` blocks configure" in recording
     assert "id: first-video-beat" in recording
     assert 'run: "# First video beat"' in recording
     assert "id: second-video-beat" in recording

@@ -315,7 +315,6 @@ narration:
 ---
 
 ```yaml studio-directive
-scene: Highlight Terminal Text
 panes:
 - id: definition
   kind: visualization

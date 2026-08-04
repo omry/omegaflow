@@ -216,18 +216,6 @@ def studio_directive_blocks(script_text: str) -> list[dict[str, Any]]:
         raise AudioError(str(exc)) from exc
 
 
-def scene_title_from_directive(value: object) -> str:
-    if isinstance(value, str):
-        title = value.strip()
-    elif isinstance(value, dict):
-        title = str(value.get("title") or "").strip()
-    else:
-        title = ""
-    if not title:
-        raise AudioError("studio-directive scene must define a non-empty title")
-    return title
-
-
 def beat_from_directive(value: dict[str, Any]) -> NarrationSegment:
     segment_id = value.get("id")
     heading = value.get("heading")
@@ -246,22 +234,14 @@ def beat_from_directive(value: dict[str, Any]) -> NarrationSegment:
 
 
 def beat_values_from_directive(block: dict[str, Any]) -> list[dict[str, Any]]:
-    values: list[dict[str, Any]] = []
-    if block.get("beat") is not None:
-        values.append(block["beat"])
-    values.extend(block.get("beats") or [])
-    return values
+    beat = block.get("beat")
+    return [beat] if isinstance(beat, dict) else []
 
 
 def extract_directive_narration(script_text: str) -> ScriptNarration:
-    scene_title = ""
     segments: list[NarrationSegment] = []
     seen_ids: set[str] = set()
     for block in studio_directive_blocks(script_text):
-        if "scene" in block:
-            if scene_title:
-                raise AudioError("duplicate studio-directive scene")
-            scene_title = scene_title_from_directive(block["scene"])
         for beat_value in beat_values_from_directive(block):
             if "narration" not in beat_value:
                 continue
@@ -270,7 +250,7 @@ def extract_directive_narration(script_text: str) -> ScriptNarration:
                 raise AudioError(f"duplicate narration beat id: {segment.segment_id}")
             seen_ids.add(segment.segment_id)
             segments.append(segment)
-    return ScriptNarration(scene_title=scene_title, segments=segments)
+    return ScriptNarration(scene_title="", segments=segments)
 
 
 def extract_script_narration(script_text: str) -> ScriptNarration:

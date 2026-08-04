@@ -1,66 +1,6 @@
 ---
 kind: video
 title: Quickstart Demo
-capture:
-  window_size: 90x24
-  headless: true
-style:
-  color: true
-  typing: true
-  typing_min_delay: 0.02
-  typing_max_delay: 0.06
-  typing_space_delay: 0.03
-  typing_punctuation_delay: 0.05
-  typing_newline_delay: 0.12
-  typing_seed: 5
-outputs:
-  dir: website/static/omegaflow-videos
-publish:
-  default: docusaurus
-  surfaces:
-    docusaurus:
-      type: docusaurus_mdx
-      file: website/docs/getting-started/first-video.md
-      placeholder: quickstart-demo
-      component: VideoPlayer
-timing:
-  typing_char_delay: 0.03
-  typing_space_delay: 0.02
-  typing_punctuation_delay: 0.04
-  typing_newline_delay: 0.0
-  post_enter_pause: 0.25
-  post_command_pause: 0.55
-  minimum_section_spacing: 0.6
-browser:
-  viewport:
-    width: 1152
-    height: 360
-  context:
-    locale: en-US
-    timezone: UTC
-    color_scheme: dark
-    reduced_motion: reduce
-presentation:
-  guided: true
-  browser:
-    window:
-      mode: framed
-      theme: kde-breeze
-      title: OmegaFlow Player
-      opening_transition: window-open
-    chrome:
-      mode: full
-    transitions:
-      default: cut
-audio:
-  enabled: true
-  env: OPENAI_OMEGAFLOW_API_KEY
-setup:
-- name: prepare isolated demo environment
-  run_file: scripts/setup-demo-environment.sh
-cleanup:
-- name: remove demo project
-  run_file: scripts/cleanup-demo-project.sh
 ---
 
 # Quickstart Demo
@@ -70,7 +10,67 @@ then switches to a browser beat that operates the real generated
 player.
 
 ```yaml studio-directive
-scene: Quickstart Demo
+config:
+  capture:
+    window_size: 90x24
+    headless: true
+  style:
+    color: true
+    typing: true
+    typing_min_delay: 0.02
+    typing_max_delay: 0.06
+    typing_space_delay: 0.03
+    typing_punctuation_delay: 0.05
+    typing_newline_delay: 0.12
+    typing_seed: 5
+  outputs:
+    dir: website/static/omegaflow-videos
+  publish:
+    default: docusaurus
+    surfaces:
+      docusaurus:
+        type: docusaurus_mdx
+        file: website/docs/getting-started/first-video.md
+        placeholder: quickstart-demo
+        component: VideoPlayer
+  timing:
+    typing_char_delay: 0.03
+    typing_space_delay: 0.02
+    typing_punctuation_delay: 0.04
+    typing_newline_delay: 0.0
+    post_enter_pause: 0.25
+    post_command_pause: 0.55
+    minimum_section_spacing: 0.6
+  browser:
+    viewport:
+      width: 1152
+      height: 360
+    context:
+      locale: en-US
+      timezone: UTC
+      color_scheme: dark
+      reduced_motion: reduce
+  presentation:
+    guided: true
+    browser:
+      window:
+        mode: framed
+        theme: kde-breeze
+        title: OmegaFlow Player
+        opening_transition: window-open
+      chrome:
+        mode: full
+      transitions:
+        default: cut
+  audio:
+    enabled: true
+    env: OPENAI_OMEGAFLOW_API_KEY
+  setup:
+  - name: prepare isolated demo environment
+    run_file: scripts/setup-demo-environment.sh
+  cleanup:
+  - name: remove demo project
+    run_file: scripts/cleanup-demo-project.sh
 ```
 
 ```yaml studio-directive

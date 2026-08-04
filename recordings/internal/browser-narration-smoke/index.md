@@ -1,57 +1,6 @@
 ---
 kind: video
 title: Internal Browser Narration Smoke Test
-outputs:
-  dir: website/static/omegaflow-videos
-environment:
-  working_directory: recordings/internal/browser-narration-smoke
-browser:
-  base_url: http://127.0.0.1:18473
-  viewport:
-    width: 1280
-    height: 720
-  context:
-    locale: en-US
-    timezone: UTC
-    color_scheme: light
-    reduced_motion: reduce
-presentation:
-  browser:
-    window:
-      mode: framed
-      theme: kde-breeze
-      title: OmegaFlow Narration Smoke Test
-      opening_transition: window-open
-    chrome:
-      mode: minimal
-    transitions:
-      default: fade
-audio:
-  enabled: true
-  env: OPENAI_OMEGAFLOW_API_KEY
-publish:
-  default: html
-  surfaces:
-    html:
-      type: standalone_html
-      file: ${outputs.asset_dir}/index.html
-setup:
-- name: start local reference application
-  run: >-
-    rm -f .reference-server-ready reference-state.json;
-    python3 scripts/reference_server.py --port 18473 >reference-server.log 2>&1 &
-    export REFERENCE_SERVER_PID=$!;
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
-      test -f .reference-server-ready && break;
-      sleep 0.1;
-    done;
-    test -f .reference-server-ready
-cleanup:
-- name: stop local reference application
-  run: >-
-    kill "$REFERENCE_SERVER_PID" 2>/dev/null || true;
-    wait "$REFERENCE_SERVER_PID" 2>/dev/null || true;
-    rm -f .reference-server-ready reference-state.json reference-server.log
 ---
 
 # Internal Browser Narration Smoke Test
@@ -61,7 +10,58 @@ beat boundary. It is separate from the API-free reference fixture so automated
 capture remains deterministic and does not require credentials.
 
 ```yaml studio-directive
-scene: Mixed capture with continuous narration
+config:
+  outputs:
+    dir: website/static/omegaflow-videos
+  environment:
+    working_directory: recordings/internal/browser-narration-smoke
+  browser:
+    base_url: http://127.0.0.1:18473
+    viewport:
+      width: 1280
+      height: 720
+    context:
+      locale: en-US
+      timezone: UTC
+      color_scheme: light
+      reduced_motion: reduce
+  presentation:
+    browser:
+      window:
+        mode: framed
+        theme: kde-breeze
+        title: OmegaFlow Narration Smoke Test
+        opening_transition: window-open
+      chrome:
+        mode: minimal
+      transitions:
+        default: fade
+  audio:
+    enabled: true
+    env: OPENAI_OMEGAFLOW_API_KEY
+  publish:
+    default: html
+    surfaces:
+      html:
+        type: standalone_html
+        file: ${outputs.asset_dir}/index.html
+  setup:
+  - name: start local reference application
+    run: >-
+      rm -f .reference-server-ready reference-state.json;
+      python3 scripts/reference_server.py --port 18473 >reference-server.log 2>&1 &
+      export REFERENCE_SERVER_PID=$!;
+      for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        test -f .reference-server-ready && break;
+        sleep 0.1;
+      done;
+      test -f .reference-server-ready
+  cleanup:
+  - name: stop local reference application
+    run: >-
+      kill "$REFERENCE_SERVER_PID" 2>/dev/null || true;
+      wait "$REFERENCE_SERVER_PID" 2>/dev/null || true;
+      rm -f .reference-server-ready reference-state.json reference-server.log
 ```
 
 ```yaml studio-directive

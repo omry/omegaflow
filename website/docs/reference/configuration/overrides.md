@@ -18,14 +18,15 @@ omegaflow recording=demo rec.audio.enabled=false
 omegaflow recording=demo rec.outputs.asset_dir=preview/demo
 ```
 
-The override is merged after workspace defaults and recording frontmatter. It
-can change recording behavior, but cannot change the directory-derived `id` or
-OmegaFlow's private `_...` metadata.
+The override is merged after workspace defaults and the recording's `config`
+directive. It can change production behavior, but cannot change metadata,
+authored pane or beat structure, generated fields, or OmegaFlow's private
+`_...` metadata.
 
 `rec.*` is useful for diagnosis, local previews, and deliberate one-off output
 variants. If a value defines the normal project behavior, put it in
-`recordings/config.yaml` or the recording's frontmatter so the build remains
-reproducible without a remembered command.
+`recordings/config.yaml` or the recording's `config` directive so the build
+remains reproducible without a remembered command.
 
 The accepted keys are the same as
 [Recording Configuration](./recordings.md).
@@ -34,15 +35,12 @@ The accepted keys are the same as
 
 A recording can declare shell-safe parameters and their defaults:
 
-```yaml
----
-kind: video
-title: Greeting
-parameters:
-  name: world
-  repetitions:
-    default: 1
----
+```yaml studio-directive
+config:
+  parameters:
+    name: world
+    repetitions:
+      default: 1
 ```
 
 Override only declared names:
@@ -72,7 +70,7 @@ For recording data, the effective order is:
 
 1. the recording schema defaults;
 2. `recordings/config.yaml` workspace defaults;
-3. the selected recording's frontmatter; and
+3. the selected recording's `config` directive; and
 4. command-line `rec.*` overrides.
 
 `script_params.*` does not participate in that merge. It replaces defaults

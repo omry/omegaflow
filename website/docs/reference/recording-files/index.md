@@ -37,9 +37,9 @@ A recording Markdown file has three main parts:
 
 | Part | Purpose | Where to read more |
 | --- | --- | --- |
-| Recording configuration | YAML frontmatter at the top of the file. Defines `title` and per-video config overrides. The directory path supplies the recording id. | [Recording Configuration](../configuration/recordings.md) |
+| Recording metadata | YAML frontmatter at the top of the file. Defines the source kind, title, and description. The directory path supplies the recording id. | [Recording Configuration](../configuration/recordings.md) |
 | Markdown prose | Human-readable notes and headings for the authored walkthrough. | This page |
-| `studio-directive` blocks | Machine-readable scene, pane, and beat declarations that OmegaFlow records, retimes, checks, and publishes. | [Recording schema](./schema.md) |
+| `studio-directive` blocks | Machine-readable recording config, pane declarations, and beats that OmegaFlow records, retimes, checks, and publishes. | [Recording schema](./schema.md) |
 
 ````md
 ---
@@ -48,10 +48,6 @@ title: Test Video
 ---
 
 # Test Video
-
-```yaml studio-directive
-scene: Test Video
-```
 
 ```yaml studio-directive
 beat:
@@ -108,20 +104,21 @@ one index page using each member's `title` and `description`; selecting a card
 opens that member's normal player. Other single-video actions require selecting
 one member.
 
-## Scene
+## Per-recording configuration
 
-Every recording defines one scene. The scene names the video:
-
-```yaml
-scene: Quickstart
-```
-
-It can also be a mapping:
+Put production settings that differ from the workspace defaults in one optional
+`config` directive before any pane or beat directive:
 
 ```yaml
-scene:
-  title: Quickstart
+config:
+  capture:
+    window_size: 80x20
+  audio:
+    enabled: true
 ```
+
+OmegaFlow generates the internal scene id from the recording directory and its
+scene title from frontmatter `title`; neither value is repeated in a directive.
 
 ## What You Touch
 
@@ -134,7 +131,7 @@ scene:
 
 ## Read Next
 
-- [Recording Configuration](../configuration/recordings.md): schema defaults, workspace defaults, and frontmatter overrides.
+- [Recording Configuration](../configuration/recordings.md): metadata, schema defaults, workspace defaults, and per-recording `config` overrides.
 - [Recording schema](./schema.md): beat structure, actions, checks, commands, and guide prompts.
 - [Publishing And Runtime Output](../output/index.md): publish surfaces and generated files.
 - [Project Configuration](../configuration/project.md): tool defaults such as the recording directory and runtime state directory.

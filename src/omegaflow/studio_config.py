@@ -970,11 +970,10 @@ class RecordingDefaults:
     )
     setup: list[RecordingStepConfig] = field(default_factory=list)
     cleanup: list[RecordingStepConfig] = field(default_factory=list)
-    beats: list[RecordingBeatConfig] = field(default_factory=list)
 
 
 @dataclass
-class RecordingSourceSpec(RecordingDefaults):
+class RecordingSourceSpec:
     kind: RecordingSourceKind = RecordingSourceKind.video
     title: str | None = None
     description: str | None = None
@@ -988,22 +987,21 @@ class RecordingCollectionSourceSpec:
 
 
 @dataclass
-class RecordingSpec(RecordingSourceSpec):
+class RecordingSpec(RecordingDefaults):
     """Resolved internal spec, including fields generated from the script body."""
 
+    kind: RecordingSourceKind = RecordingSourceKind.video
+    title: str | None = None
+    description: str | None = None
     id: str = ""
     script: str | None = None
     panes: list[PaneConfig] = field(default_factory=list)
+    beats: list[RecordingBeatConfig] = field(default_factory=list)
     narration: dict[str, Any] = field(default_factory=dict)
 
 
 RECORDING_IDENTITY_FIELDS = {"kind", "id", "title", "description"}
-RECORDING_GENERATED_FIELDS = {"panes", "script"}
-
-
-@dataclass
-class StudioDirectiveScene:
-    title: str | None = None
+RECORDING_GENERATED_FIELDS = {"beats", "panes", "script"}
 
 
 @dataclass
@@ -1013,10 +1011,9 @@ class StudioDirectiveBeat(RecordingBeatConfig):
 
 @dataclass
 class StudioDirectiveBlock:
-    scene: str | dict[str, str] | None = None
+    config: RecordingDefaults | None = None
     panes: list[PaneConfig] = field(default_factory=list)
     beat: StudioDirectiveBeat | None = None
-    beats: list[StudioDirectiveBeat] = field(default_factory=list)
 
 
 USER_RECORDING_YAML_SCHEMAS = (
@@ -1095,7 +1092,6 @@ USER_RECORDING_YAML_SCHEMAS = (
     RecordingDefaults,
     RecordingSourceSpec,
     RecordingCollectionSourceSpec,
-    StudioDirectiveScene,
     StudioDirectiveBeat,
     StudioDirectiveBlock,
 )
@@ -1407,18 +1403,6 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
-def validate_studio_directive_scene(value: object, *, source: str) -> object:
-    if isinstance(value, str) or value is None:
-        return value
-    if not isinstance(value, dict):
-        raise StudioConfigError(f"{source}.scene must be a string or mapping")
-    return structured_config_mapping(
-        value,
-        schema=StudioDirectiveScene,
-        source=f"{source}.scene",
-    )
-
-
 def project_schema_values_onto_input(value: object, source: object) -> object:
     if isinstance(value, dict) and isinstance(source, dict):
         return {
@@ -1437,6 +1421,8 @@ def validate_studio_directive_block(
     block: dict[str, Any], *, line: int
 ) -> dict[str, Any]:
     source = f"studio-directive block near line {line}"
+    if "config" in block and not isinstance(block["config"], dict):
+        raise StudioConfigError(f"{source}.config must be a mapping")
     try:
         structured = structured_config_mapping(
             block,
@@ -1456,11 +1442,6 @@ def validate_studio_directive_block(
     validated = project_schema_values_onto_input(structured, block)
     if not isinstance(validated, dict):
         raise StudioConfigError(f"{source} must be a mapping")
-    if "scene" in validated:
-        validated["scene"] = validate_studio_directive_scene(
-            validated["scene"],
-            source=source,
-        )
     from .recording_plan import normalize_beat_actions, validate_beat_pointer
 
     for index, beat in enumerate(beat_values_from_directive(validated)):
@@ -1728,24 +1709,34 @@ def narration_text_and_anchors(
     return normalize_narration_text("".join(parts)), anchors, waits
 
 
-def scene_title_from_directive(value: object) -> str:
-    if isinstance(value, str):
-        title = value.strip()
-    elif isinstance(value, dict):
-        title = str(value.get("title") or "").strip()
-    else:
-        title = ""
-    if not title:
-        raise StudioConfigError("studio-directive scene must define a non-empty title")
-    return title
-
-
 def beat_values_from_directive(block: dict[str, Any]) -> list[dict[str, Any]]:
-    values: list[dict[str, Any]] = []
-    if block.get("beat") is not None:
-        values.append(block["beat"])
-    values.extend(block.get("beats") or [])
-    return values
+    beat = block.get("beat")
+    return [beat] if isinstance(beat, dict) else []
+
+
+def recording_config_from_script(
+    blocks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    declaration: dict[str, Any] | None = None
+    structure_seen = False
+    for block in blocks:
+        for key, value in block.items():
+            if key == "config":
+                if declaration is not None:
+                    raise StudioConfigError("duplicate studio-directive config")
+                if structure_seen:
+                    raise StudioConfigError(
+                        "studio-directive config must appear before panes or beat"
+                    )
+                if not isinstance(value, dict):
+                    raise StudioConfigError(
+                        "studio-directive config must be a mapping"
+                    )
+                declaration = value
+                continue
+            if key in {"panes", "beat"}:
+                structure_seen = True
+    return declaration or {}
 
 
 def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1758,8 +1749,7 @@ def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     raise StudioConfigError("duplicate studio-directive panes")
                 if beat_declaration_seen:
                     raise StudioConfigError(
-                        "studio-directive panes must appear before any beat or beats "
-                        "declaration"
+                        "studio-directive panes must appear before any beat declaration"
                     )
                 if not isinstance(value, list) or not value:
                     raise StudioConfigError(
@@ -1767,14 +1757,10 @@ def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     )
                 declaration = value
                 continue
-            if key not in {"beat", "beats"}:
+            if key != "beat":
                 continue
             beat_declaration_seen = True
-            beat_values = (
-                [value]
-                if key == "beat" and value is not None
-                else value if key == "beats" and isinstance(value, list) else []
-            )
+            beat_values = [value] if isinstance(value, dict) else []
             if not beat_values:
                 continue
             if declaration is not None:
@@ -1791,16 +1777,15 @@ def panes_from_script(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def narration_from_script(
-    *, recording_id: str, script_path: Path, blocks: list[dict[str, Any]]
+    *,
+    recording_id: str,
+    recording_title: str,
+    script_path: Path,
+    blocks: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    scene_title = ""
     beats: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for block in blocks:
-        if "scene" in block:
-            if scene_title:
-                raise StudioConfigError("duplicate studio-directive scene")
-            scene_title = scene_title_from_directive(block["scene"])
         for value in beat_values_from_directive(block):
             beat_id = value["id"]
             heading = value["heading"]
@@ -1842,13 +1827,11 @@ def narration_from_script(
                     )
                 beat["viewer_hold"] = float(viewer_hold)
             beats.append(beat)
-    if not scene_title:
-        raise StudioConfigError(f"recording script must define a scene: {script_path}")
     return {
         "source_script": display_path(script_path),
         "source_sha256": sha256(script_path.read_bytes()).hexdigest(),
         "generated": False,
-        "scene": {"id": recording_id, "title": scene_title},
+        "scene": {"id": recording_id, "title": recording_title},
         "beats": beats,
     }
 
@@ -1961,7 +1944,7 @@ def recording_source_kind(
     )
     if not frontmatter:
         raise StudioConfigError(
-            f"recording script must contain frontmatter config: {script_path}"
+            f"recording script must contain frontmatter metadata: {script_path}"
         )
     return recording_source_kind_from_frontmatter(frontmatter, source=script_path)
 
@@ -1980,7 +1963,7 @@ def recording_collection_from_script(
     )
     if not frontmatter:
         raise StudioConfigError(
-            f"recording script must contain frontmatter config: {script_path}"
+            f"recording script must contain frontmatter metadata: {script_path}"
         )
     kind = recording_source_kind_from_frontmatter(frontmatter, source=script_path)
     if kind is not RecordingSourceKind.collection:
@@ -2027,14 +2010,9 @@ def recording_from_script(
     script_text = script_path.read_text(encoding="utf-8")
     frontmatter, script_body = split_frontmatter(script_text, source=script_path)
     blocks = studio_directive_blocks(script_body, resolve=False)
-    if any("recording" in block for block in blocks):
-        raise StudioConfigError(
-            f"recording directives are no longer supported; use frontmatter: "
-            f"{script_path}"
-        )
     if not frontmatter:
         raise StudioConfigError(
-            f"recording script must contain frontmatter config: {script_path}"
+            f"recording script must contain frontmatter metadata: {script_path}"
         )
     kind = recording_source_kind_from_frontmatter(frontmatter, source=script_path)
     if kind is not RecordingSourceKind.video:
@@ -2046,28 +2024,41 @@ def recording_from_script(
         schema=RecordingSourceSpec,
         source=f"{script_path} frontmatter",
     )
+    source_spec = structured_config_mapping(
+        frontmatter,
+        schema=RecordingSourceSpec,
+        source=f"{script_path} frontmatter",
+    )
+    title = source_spec.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise StudioConfigError(
+            f"recording frontmatter must define a non-empty title: {script_path}"
+        )
+    source_spec["title"] = title.strip()
     defaults = load_recording_defaults(workspace_dir)
-    spec = merge_mapping(defaults, frontmatter)
+    inline_config = recording_config_from_script(blocks)
+    spec = merge_mapping(defaults, inline_config)
     spec = structured_config_mapping(
         spec,
-        schema=RecordingSourceSpec,
+        schema=RecordingDefaults,
         source=str(script_path),
     )
+    spec = merge_mapping(spec, source_spec)
     spec["id"] = recording_id
     spec["script"] = display_path(script_path)
     spec["_script_dir"] = str(script_path.parent.resolve())
     panes = panes_from_script(blocks)
-    if panes and spec.get("beats"):
-        raise StudioConfigError(
-            "studio-directive panes cannot be combined with frontmatter or "
-            "recording-default beats; move those beats into studio-directive "
-            "blocks after the panes declaration"
-        )
     spec["panes"] = panes
+    spec["beats"] = []
     merge_script_recording_beats(spec, blocks)
     from .recording_plan import validate_recording_modalities
 
     validate_recording_modalities(spec)
+    spec = apply_recording_overrides(
+        spec,
+        overrides,
+        source=f"recording {recording_id} overrides",
+    )
     narration_config = spec.get("narration", {})
     narration_id = (
         narration_config.get("id", "voiceover")
@@ -2076,16 +2067,12 @@ def recording_from_script(
     )
     narration = narration_from_script(
         recording_id=recording_id,
+        recording_title=source_spec["title"],
         script_path=script_path,
         blocks=blocks,
     )
     narration["id"] = narration_id
     spec["narration"] = narration
-    spec = apply_recording_overrides(
-        spec,
-        overrides,
-        source=f"recording {recording_id} overrides",
-    )
     spec = resolve_recording_spec_interpolations(spec)
     validate_recording_modalities(spec)
     validate_recording_inline_run_lengths(spec)
@@ -2146,6 +2133,15 @@ def apply_recording_overrides(
         raise StudioConfigError(
             "rec cannot override recording identity/generated fields: "
             + ", ".join(forbidden_keys)
+        )
+    narration_override = overrides.get("narration")
+    if narration_override is not None:
+        if not isinstance(narration_override, dict):
+            raise StudioConfigError("rec.narration must be a mapping")
+        validate_config_keys(
+            narration_override,
+            schema=RecordingNarrationConfig,
+            source="rec.narration",
         )
     try:
         config = OmegaConf.merge(OmegaConf.create(spec), OmegaConf.create(overrides))
