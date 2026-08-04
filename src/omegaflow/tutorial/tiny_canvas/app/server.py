@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 APP_DIR = Path(__file__).resolve().parent
 RECORDING_DIR = APP_DIR.parent
 STATE_DIR = RECORDING_DIR.parent / ".omegaflow" / "tutorial" / "sunset-beach"
-DRAFT = APP_DIR / "draft.svg"
+EXAMPLE = RECORDING_DIR / "example.svg"
 SVG_FILENAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.svg")
 
 
@@ -120,7 +120,7 @@ class TinyCanvasHandler(BaseHTTPRequestHandler):
 
 def ensure_artwork() -> None:
     if not ARTWORK.exists():
-        write_atomic(ARTWORK, DRAFT.read_bytes())
+        write_atomic(ARTWORK, EXAMPLE.read_bytes())
 
 
 def main() -> None:

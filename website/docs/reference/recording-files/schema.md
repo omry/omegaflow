@@ -344,6 +344,8 @@ Step fields:
 | `display` | string | Command text shown in the terminal. |
 | `name` | string | Check/setup/cleanup label. |
 | `after` | string | Anchor syntax such as `@server@`. |
+| `inputs` | list | Optional source paths or named producer outputs used by this command. |
+| `produces` | mapping | Optional names mapped directly to files or directories created by this command. |
 | `progress` | list | Progress labels for visible command chunks. |
 | `output` | string or mapping | Show real output, suppress it, or replace it with configured text. |
 | `expect` | mapping | Exit code, output, regex, or file-existence expectations. |
@@ -351,6 +353,56 @@ Step fields:
 
 Command entries also accept `id`, `show_prompt_after`, `timing`, `with_env`,
 `input`, and pre/post command pause fields.
+
+#### Declare inputs and produced outputs
+
+Dependency declarations are optional. They do not change what a shell command
+can read or write; they let OmegaFlow decide when an earlier capture is safe to
+reuse and coordinate commands that exchange generated files. If dependencies
+are omitted, use `force=true` whenever you need to capture every command again.
+
+Declare source files or directories with `inputs`. A relative path is resolved
+from the recording directory containing `index.md`. Use `project://` for a path
+relative to the OmegaFlow project root. `run_file` is always treated as an
+implicit input.
+
+```yaml
+actions:
+- commands:
+  - id: generate_assets
+    run: python scripts/generate_assets.py
+    inputs:
+    - scripts/generate_assets.py
+    - project://src/theme
+    produces:
+      site: build/site
+```
+
+Changing a declared source input changes the capture fingerprint, so an
+ordinary build records the workflow again. Files are hashed by contents;
+directories are hashed from their relative path list and contents.
+
+`produces` is a direct mapping from an output name to a file or directory. Its
+paths are interpreted by the terminal after the command runs, relative to that
+terminal's current working directory. The producer fails if a declared path is
+missing. A later terminal command can name that output as an input:
+
+```yaml
+- id: inspect_assets
+  run: python scripts/inspect_assets.py build/site
+  inputs:
+  - {output: generate_assets.site}
+```
+
+The producer command needs an explicit, recording-wide producer `id`. The
+reference adds producer-before-consumer ordering, including across terminal
+panes. Setup outputs are available to later actions; setup commands themselves
+can reference only earlier setup producers. Checks may declare source inputs
+but do not produce named outputs.
+
+OmegaFlow does not infer dependencies from arbitrary shell command text.
+`force=true` bypasses freshness reuse regardless of these declarations, while
+still validating produced paths and respecting declared runtime ordering.
 
 `with_env` is a narrow exception for trusted nested OmegaFlow operations that
 need an OmegaFlow service credential:
@@ -833,11 +885,18 @@ class RecordingExpectationConfig:
 
 
 @dataclass
+class RecordingOutputReferenceConfig:
+    output: str = ""
+
+
+@dataclass
 class RecordingInvocationConfig:
     run: str | None = None
     run_file: str | None = None
     display: str | None = None
     after: str | None = None
+    inputs: list[str | RecordingOutputReferenceConfig] = field(default_factory=list)
+    produces: dict[str, str] = field(default_factory=dict)
     output: str | dict[str, str] | None = None
     expect: RecordingExpectationConfig = field(
         default_factory=RecordingExpectationConfig
@@ -876,6 +935,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
 
 @dataclass
 class RecordingStepConfig(RecordingInvocationConfig):
+    id: str | None = None
     name: str | None = None
     progress: list[str] = field(default_factory=list)
     commands: list[RecordingCommandConfig] | None = None

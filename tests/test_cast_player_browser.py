@@ -530,7 +530,7 @@ def test_tiny_canvas_artwork_fits_short_browser_viewport(tmp_path: Path) -> None
     sync_api = pytest.importorskip("playwright.sync_api")
     app_root = REPO_ROOT / "src/omegaflow/tutorial/tiny_canvas/app"
     shutil.copy2(app_root / "styles.css", tmp_path / "styles.css")
-    artwork = (app_root / "draft.svg").read_text(encoding="utf-8")
+    artwork = (app_root.parent / "example.svg").read_text(encoding="utf-8")
     (tmp_path / "index.html").write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -570,7 +570,7 @@ def test_tiny_canvas_save_button_shows_saved_feedback(tmp_path: Path) -> None:
     app_root = REPO_ROOT / "src/omegaflow/tutorial/tiny_canvas/app"
     for name in ("app.js", "index.html", "styles.css"):
         shutil.copy2(app_root / name, tmp_path / name)
-    artwork = (app_root / "draft.svg").read_text(encoding="utf-8")
+    artwork = (app_root.parent / "example.svg").read_text(encoding="utf-8")
 
     with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)

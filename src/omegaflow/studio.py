@@ -793,10 +793,10 @@ TUTORIAL_BOOTSTRAP_RECORDING_ID = "sunset-beach"
 TUTORIAL_BOOTSTRAP_RESOURCE_FILES = (
     ".nanorc",
     "app/app.js",
-    "app/draft.svg",
     "app/index.html",
     "app/server.py",
     "app/styles.css",
+    "example.svg",
     "index.md",
     "scripts/inspect_artwork.py",
     "scripts/reset_artwork.py",
@@ -1639,6 +1639,10 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
     recording_plan = normalized_recording_plan(spec)
     manifest_path = optional_string(spec.get("_manifest_path"))
     script_path = optional_string(spec.get("script"))
+    source_dependencies = [
+        display_path(path)
+        for path in presentation_build.source_dependency_paths(spec)
+    ]
     surface_info: list[dict[str, Any]] = []
     for surface_name in build_publish_surface_names(config, spec):
         surface = selected_surface(config, spec, surface_name=surface_name)
@@ -1667,6 +1671,7 @@ def build_plan(cfg: DictConfig, config: dict[str, Any]) -> dict[str, Any]:
         "inputs": {
             "recording_script": display_path(script_path),
             "recording_source": display_path(manifest_path),
+            "source_dependencies": source_dependencies,
         },
         "outputs": {
             "private_capture": display_path(presentation_paths["capture"]),
@@ -1707,7 +1712,15 @@ def print_build_plan(plan: dict[str, Any]) -> None:
     print()
     print("Inputs:")
     for name, value in plan["inputs"].items():
-        print(f"  {name}: {value}")
+        if isinstance(value, list):
+            if value:
+                print(f"  {name}:")
+                for item in value:
+                    print(f"    - {item}")
+            else:
+                print(f"  {name}: []")
+        else:
+            print(f"  {name}: {value}")
     print()
     print("Outputs:")
     for name, value in plan["outputs"].items():
@@ -2908,11 +2921,20 @@ def launch_managed_watch_browser(
 def recording_watch_source_roots(
     config: dict[str, Any],
     recording_id: str,
+    *,
+    spec: Mapping[str, Any] | None = None,
 ) -> tuple[Path, ...]:
     recording_dir = recording_script_dir_from_config(config)
-    return (
+    roots = (
         recording_dir / "config.yaml",
         recording_dir / recording_id,
+    )
+    if spec is None:
+        return roots
+    return tuple(
+        dict.fromkeys(
+            (*roots, *presentation_build.source_dependency_paths(spec))
+        )
     )
 
 
@@ -2945,15 +2967,17 @@ def watch_source_fingerprint(roots: tuple[Path, ...]) -> str:
     for path in sorted(files):
         try:
             stat = path.stat()
+            content_digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    content_digest.update(chunk)
         except OSError:
             continue
         digest.update(str(path).encode("utf-8"))
         digest.update(b"\0")
-        digest.update(str(stat.st_mtime_ns).encode("ascii"))
-        digest.update(b":")
-        digest.update(str(stat.st_size).encode("ascii"))
-        digest.update(b":")
         digest.update(str(stat.st_mode & 0o777).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(content_digest.digest())
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -3095,9 +3119,15 @@ def run_watch_rebuild_loop(
     quiet_interval: float = WATCH_QUIET_INTERVAL_SECONDS,
     target_beats: Mapping[str, str] | None = None,
     target_specs: Mapping[str, dict[str, Any]] | None = None,
+    source_specs: Mapping[str, dict[str, Any]] | None = None,
 ) -> None:
+    current_source_specs = dict(source_specs or {})
     roots = {
-        recording_id: recording_watch_source_roots(config, recording_id)
+        recording_id: recording_watch_source_roots(
+            config,
+            recording_id,
+            spec=current_source_specs.get(recording_id),
+        )
         for recording_id in recording_ids
     }
     fingerprints = {
@@ -3153,10 +3183,26 @@ def run_watch_rebuild_loop(
                     target_spec = target_specs.get(recording_id)
                     if target_spec is not None:
                         target_spec["_watch_run_dir"] = str(run_dir)
+                if recording_id in current_source_specs:
+                    member_cfg = cfg_for_recording(cfg, recording_id)
+                    member_config = container_from_hydra_cfg(member_cfg)
+                    current_source_specs[recording_id] = recording_spec_from_config(
+                        member_config,
+                        recording_id=None,
+                        overrides=(),
+                    )
+                    roots[recording_id] = recording_watch_source_roots(
+                        member_config,
+                        recording_id,
+                        spec=current_source_specs[recording_id],
+                    )
             except Exception as exc:
                 if text_output_enabled(cfg):
                     fail_line(f"watch rebuild failed: {exc}")
-        fingerprints = pending
+        fingerprints = {
+            recording_id: watch_source_fingerprint(source_roots)
+            for recording_id, source_roots in roots.items()
+        }
 
 
 @contextmanager
@@ -3167,6 +3213,7 @@ def watch_recording_rebuilds(
     *,
     target_beats: Mapping[str, str] | None = None,
     target_specs: Mapping[str, dict[str, Any]] | None = None,
+    source_specs: Mapping[str, dict[str, Any]] | None = None,
 ):
     unique_recording_ids = tuple(dict.fromkeys(recording_ids))
     stop_event = threading.Event()
@@ -3176,6 +3223,7 @@ def watch_recording_rebuilds(
         kwargs={
             "target_beats": target_beats,
             "target_specs": target_specs,
+            "source_specs": source_specs,
         },
         daemon=True,
         name="omegaflow-watch-rebuild",
@@ -3511,6 +3559,7 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         (recording_id,),
         target_beats=target_beats,
         target_specs={recording_id: spec} if beat_id is not None else None,
+        source_specs={recording_id: spec},
     ):
         return run_watch_server(
             cfg,
@@ -3527,7 +3576,12 @@ def run_collection_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
     port = configured_watch_port(config)
     url_path, pages, recordings = collection_watch_routes(cfg, config)
     open_browser = bool_config(config, "open", True)
-    with watch_recording_rebuilds(cfg, config, tuple(recordings)):
+    with watch_recording_rebuilds(
+        cfg,
+        config,
+        tuple(recordings),
+        source_specs=recordings,
+    ):
         return run_watch_server(
             cfg,
             url_path,

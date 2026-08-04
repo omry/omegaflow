@@ -898,14 +898,15 @@ def read_fingerprint(run_dir: Path) -> dict[str, Any] | None:
 
 def _source_dependencies(spec: Mapping[str, Any]) -> dict[str, str]:
     dependencies: dict[str, str] = {}
-    for path in _dependency_paths(spec):
-        if not path.is_file():
+    for path in source_dependency_paths(spec):
+        if not path.exists():
             raise PresentationBuildError(f"recording dependency is missing: {path}")
-        dependencies[_display_path(path, spec)] = hashlib.sha256(path.read_bytes()).hexdigest()
+        dependencies[_display_path(path, spec)] = _dependency_sha256(path)
     return dependencies
 
 
-def _dependency_paths(spec: Mapping[str, Any]) -> list[Path]:
+def source_dependency_paths(spec: Mapping[str, Any]) -> list[Path]:
+    """Return files and directories that participate in capture freshness."""
     paths: list[Path] = []
 
     def visit(value: object) -> None:
@@ -913,6 +914,10 @@ def _dependency_paths(spec: Mapping[str, Any]) -> list[Path]:
             for key, item in value.items():
                 if key == "run_file" and isinstance(item, str) and item:
                     paths.append(record.run_file_path(item, dict(spec)))
+                elif key == "inputs" and isinstance(item, list):
+                    for dependency in item:
+                        if isinstance(dependency, str) and dependency:
+                            paths.append(_declared_input_path(dependency, spec))
                 else:
                     visit(item)
         elif isinstance(value, list):
@@ -921,6 +926,64 @@ def _dependency_paths(spec: Mapping[str, Any]) -> list[Path]:
 
     visit(spec)
     return sorted(set(paths), key=lambda item: str(item))
+
+
+def _declared_input_path(value: str, spec: Mapping[str, Any]) -> Path:
+    project_root = project_root_from_spec(spec)
+    if value.startswith("project://"):
+        relative = value.removeprefix("project://")
+        relative_path = Path(relative)
+        if (
+            not relative_path.parts
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+        ):
+            raise PresentationBuildError(
+                "recording input project:// path must stay within the project root"
+            )
+        return (project_root / relative_path).expanduser().resolve()
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    source = spec.get("_script_dir")
+    if isinstance(source, str) and source:
+        source_dir = Path(source).expanduser()
+        if not source_dir.is_absolute():
+            source_dir = project_root / source_dir
+    else:
+        source_dir = project_root
+    return (source_dir / path).resolve()
+
+
+def _dependency_sha256(path: Path) -> str:
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    if not path.is_dir():
+        raise PresentationBuildError(
+            f"recording dependency must be a file or directory: {path}"
+        )
+    digest = hashlib.sha256(b"directory\0")
+    try:
+        entries = sorted(
+            path.rglob("*"),
+            key=lambda item: item.relative_to(path).as_posix(),
+        )
+        for entry in entries:
+            relative = entry.relative_to(path).as_posix().encode("utf-8")
+            if entry.is_symlink():
+                digest.update(b"link\0" + relative + b"\0")
+                digest.update(os.readlink(entry).encode("utf-8") + b"\0")
+            elif entry.is_dir():
+                digest.update(b"dir\0" + relative + b"\0")
+            elif entry.is_file():
+                digest.update(b"file\0" + relative + b"\0")
+                digest.update(entry.read_bytes())
+                digest.update(b"\0")
+    except OSError as exc:
+        raise PresentationBuildError(
+            f"could not hash recording dependency: {path}"
+        ) from exc
+    return digest.hexdigest()
 
 
 def _display_path(path: Path, spec: Mapping[str, Any]) -> str:

@@ -8,7 +8,7 @@ slug: /guides/terminal-workflows/
 Use a terminal beat when the meaningful work is expressed as commands, output,
 or a terminal interface.
 
-1. Put repeatable preparation in recording setup rather than a visible action.
+1. Put repeatable preparation in `config.setup` rather than a visible action.
 2. Add a terminal beat with one or more `commands`.
 3. Give important actions stable `id` values.
 4. Add `expect` clauses for output or exit status that proves success.

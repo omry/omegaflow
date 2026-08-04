@@ -928,6 +928,170 @@ def test_coordinator_isolates_two_terminal_streams_and_runs_lifecycle_once(
     ]
 
 
+def test_coordinator_waits_for_declared_output_across_terminal_panes(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "output-order",
+            "panes": [
+                {"id": "producer", "kind": "terminal"},
+                {"id": "consumer", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "exchange",
+                    "layout": {"areas": [["producer", "consumer"]]},
+                    "panes": {
+                        "producer": [
+                            {
+                                "id": "write",
+                                "actions": [
+                                    {
+                                        "id": "generate",
+                                        "run": "generate",
+                                        "produces": {"result": "result"},
+                                    }
+                                ],
+                            }
+                        ],
+                        "consumer": [
+                            {
+                                "id": "read",
+                                "actions": [
+                                    {
+                                        "id": "inspect",
+                                        "run": "inspect",
+                                        "inputs": [{"output": "generate.result"}],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    events: list[str] = []
+    events_lock = threading.Lock()
+
+    class DependencyRunner(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            assert context.runner_id is not None
+            self.name = context.runner_id
+            super().start(context)
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            action_id = beat.actions[0].config["commands"][0]["id"]
+            assert before_action is not None
+            before_action(action_id)
+            assert on_progress is not None
+            with events_lock:
+                events.append(f"{action_id}.started")
+            on_progress("started", action_id)
+            if action_id == "generate":
+                time.sleep(0.05)
+            with events_lock:
+                events.append(f"{action_id}.ended")
+            on_progress("completed", action_id)
+            return BeatCapture(beat_id=beat.id)
+
+    CaptureCoordinator(
+        terminal_runner_factory=lambda: DependencyRunner("pending", []),
+    ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert events.index("generate.ended") < events.index("inspect.started")
+
+
+def test_failed_output_producer_does_not_release_cross_pane_consumer(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "failed-output-order",
+            "panes": [
+                {"id": "producer", "kind": "terminal"},
+                {"id": "consumer", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "exchange",
+                    "layout": {"areas": [["producer", "consumer"]]},
+                    "panes": {
+                        "producer": [
+                            {
+                                "id": "write",
+                                "actions": [
+                                    {
+                                        "id": "generate",
+                                        "run": "generate",
+                                        "produces": {"result": "result"},
+                                    }
+                                ],
+                            }
+                        ],
+                        "consumer": [
+                            {
+                                "id": "read",
+                                "actions": [
+                                    {
+                                        "id": "inspect",
+                                        "run": "inspect",
+                                        "inputs": [
+                                            {"output": "generate.result"}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    consumer_ran = threading.Event()
+
+    class FailingDependencyRunner(FakeRunner):
+        def start(self, context: CaptureContext) -> None:
+            assert context.runner_id is not None
+            self.name = context.runner_id
+            super().start(context)
+
+        def capture_beat(
+            self,
+            beat: object,
+            *,
+            on_progress=None,
+            before_action=None,
+        ) -> BeatCapture:
+            action_id = beat.actions[0].config["commands"][0]["id"]
+            assert before_action is not None
+            before_action(action_id)
+            assert on_progress is not None
+            on_progress("started", action_id)
+            if self.name == "producer":
+                raise RuntimeError("producer failed")
+            consumer_ran.set()
+            on_progress("completed", action_id)
+            return BeatCapture(beat_id=beat.id)
+
+    with pytest.raises(CaptureFailed, match="producer failed"):
+        CaptureCoordinator(
+            terminal_runner_factory=lambda: FailingDependencyRunner(
+                "pending",
+                [],
+            ),
+        ).capture(plan, tmp_path / "run", workspace=tmp_path)
+
+    assert not consumer_ran.is_set()
+
+
 def test_capture_action_items_flatten_terminal_commands_and_browser_actions() -> None:
     plan = normalize_recording_plan(
         {

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Restore the editable artwork from the immutable tutorial draft."""
+"""Prepare editable runtime state from the packaged example artwork."""
 
 from pathlib import Path
 import shutil
 
 
 RECORDING_DIR = Path(__file__).resolve().parents[1]
-SOURCE = RECORDING_DIR / "app" / "draft.svg"
+SOURCE = RECORDING_DIR / "example.svg"
 STATE_DIR = RECORDING_DIR.parent / ".omegaflow" / "tutorial" / "sunset-beach"
 DESTINATION = STATE_DIR / "sunset-study.svg"
 
@@ -16,7 +16,7 @@ def main() -> None:
     for artwork in STATE_DIR.glob("*.svg"):
         artwork.unlink()
     shutil.copyfile(SOURCE, DESTINATION)
-    print("Restored the Tiny Canvas draft.")
+    print("Prepared the example artwork.")
 
 
 if __name__ == "__main__":

@@ -147,6 +147,10 @@ beat:
         cd "$HOMEPAGE_DEMO_ROOT" &&
         omegaflow project_root="$HOMEPAGE_DEMO_ROOT" bootstrap=project
       display: omegaflow bootstrap=project
+      inputs:
+      - project://src/omegaflow/studio.py
+      produces:
+        recording: recordings/test-video/index.md
       after: "@bootstrap@"
       pre_command_pause: 0.45
   checks:
@@ -205,12 +209,18 @@ beat:
     - id: build_command
       run: omegaflow recording=test-video action=build force=true
       display: omegaflow recording=test-video action=build
+      inputs:
+      - {output: bootstrap_run.recording}
+      produces:
+        presentation: recordings/.omegaflow/videos/test-video
       after: "@build@"
       timing: realtime
     - id: watch_command
       # Keep the captured URL stable across homepage-video rebuilds.
       run: omegaflow recording=test-video action=watch watch_port=43123 autoplay=false
       display: omegaflow recording=test-video action=watch
+      inputs:
+      - {output: build_command.presentation}
       after: "@watch@"
       pre_command_pause: 0.45
       browser_handoff: true

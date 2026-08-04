@@ -28,6 +28,44 @@ OmegaFlow creates project settings, recording defaults, ignored local service
 credentials, and a small `test-video` recording. The generated source belongs
 in version control; runtime runs and secrets do not.
 
+## Understand the generated source
+
+`recordings/test-video/index.md` separates the information you author by
+purpose:
+
+- Frontmatter contains basic metadata: `kind`, `title`, and `description`. The
+  directory name supplies the command-line recording id.
+- One optional leading `config` directive contains production settings that
+  differ from workspace defaults.
+- One optional `panes` directive declares reusable panes for multi-pane video.
+- Each singular `beat` directive defines one section of the video, in playback
+  order.
+
+````md
+---
+kind: video
+title: Test Video
+---
+
+```yaml studio-directive
+config:
+  audio:
+    enabled: false
+```
+
+```yaml studio-directive
+beat:
+  id: first-video-beat
+  heading: First Video Beat
+  actions:
+  - commands:
+    - run: "# First video beat"
+```
+````
+
+The frontmatter title becomes the player title. Each following `beat` block
+becomes its own section in the player.
+
 ## Build and watch
 
 ```bash
@@ -38,6 +76,10 @@ omegaflow recording=test-video action=watch
 The build captures the scripted workflow and assembles a local player. Watch
 serves the latest successful build and rebuilds when the recording source
 changes.
+
+Recordings that read additional source files can declare them with command-level
+`inputs` so those changes also trigger a rebuild. This is an optional freshness
+optimization; `force=true` always captures the workflow again.
 
 ## Make one source change
 

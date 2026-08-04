@@ -162,6 +162,7 @@ exec 9<>"$OMEGAFLOW_RESPONSE_STREAM"
 : >"$OMEGAFLOW_TERMINAL_STDERR"
 OMEGAFLOW_PROMPT_VISIBLE=0
 OMEGAFLOW_USER_COMMAND_SEQ=0
+OMEGAFLOW_LAST_COMMAND_CWD=""
 OMEGAFLOW_VISIBLE=0
 : "${OMEGAFLOW_COLOR:=0}"
 : "${OMEGAFLOW_TYPING:=0}"
@@ -233,7 +234,8 @@ omegaflow_run_user_command() {
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
   local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
   local status_result="${status_pipe}.result"
-  rm -f "$status_pipe" "$status_result"
+  local cwd_result="${status_pipe}.cwd"
+  rm -f "$status_pipe" "$status_result" "$cwd_result"
   mkfifo "$status_pipe"
   "$OMEGAFLOW_PYTHON" - "$status_pipe" "$status_result" "$OMEGAFLOW_USER_SHELL_DEAD" <<'PY' &
 import os
@@ -583,18 +585,19 @@ PY
       wait "$status_monitor_pid" 2>/dev/null || true
       rm -f \
         "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" \
-        "$input_error"
+        "$input_error" "$cwd_result"
       return 125
     fi
     local pty_slave
     IFS= read -r pty_slave <"$pty_ready"
-    printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
+    printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
       "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" "$decoder" \
-      "$encoded_command" "$status_pipe" >&7 || true
+      "$encoded_command" "$cwd_result" "$status_pipe" >&7 || true
   else
-    printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\nprintf "%%s\\n" "$?" >%q\n' \
+    printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\n' \
       "$OMEGAFLOW_PYTHON" "$decoder" "$encoded_command" \
-      "$stdout_target" "$stderr_target" "$status_pipe" >&7 || true
+      "$stdout_target" "$stderr_target" "$cwd_result" "$status_pipe" \
+      >&7 || true
   fi
   wait "$status_monitor_pid" 2>/dev/null || true
   if [[ -n "$relay_pid" ]]; then
@@ -614,9 +617,14 @@ PY
     cat "$input_error" >>"$stderr_target"
     status=125
   fi
+  OMEGAFLOW_LAST_COMMAND_CWD=""
+  if [[ -f "$cwd_result" ]]; then
+    IFS= read -r OMEGAFLOW_LAST_COMMAND_CWD <"$cwd_result" || \
+      OMEGAFLOW_LAST_COMMAND_CWD=""
+  fi
   rm -f \
     "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" "$secret_leak" \
-    "$input_error"
+    "$input_error" "$cwd_result"
   return "$status"
 }
 
@@ -803,6 +811,92 @@ for value in expect.get("file_exists", []):
 PY
 }
 
+omegaflow_validate_produces() {
+  local producer_id="$1"
+  local produces_json="$2"
+  local command_cwd="$3"
+  [[ "$produces_json" == "{}" ]] && return 0
+  "$OMEGAFLOW_PYTHON" - \
+    "$producer_id" "$produces_json" "$command_cwd" \
+    "$OMEGAFLOW_PRODUCED_OUTPUTS" \
+    "$OMEGAFLOW_TERMINAL_STDERR" <<'PY'
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+producer_id, produces_json, command_cwd, log_path, stderr_path = sys.argv[1:]
+produces = json.loads(produces_json)
+
+
+def fail(message):
+    print(message, file=sys.stderr)
+    with open(stderr_path, "a", encoding="utf-8") as handle:
+        handle.write(message + "\n")
+    raise SystemExit(1)
+
+
+def path_hash(path):
+    if path.is_file():
+        return "file", hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256(b"directory\0")
+    entries = sorted(
+        path.rglob("*"),
+        key=lambda item: item.relative_to(path).as_posix(),
+    )
+    for entry in entries:
+        relative = entry.relative_to(path).as_posix().encode("utf-8")
+        if entry.is_symlink():
+            digest.update(b"link\0" + relative + b"\0")
+            digest.update(os.readlink(entry).encode("utf-8") + b"\0")
+        elif entry.is_dir():
+            digest.update(b"dir\0" + relative + b"\0")
+        elif entry.is_file():
+            digest.update(b"file\0" + relative + b"\0")
+            digest.update(entry.read_bytes())
+            digest.update(b"\0")
+    return "directory", digest.hexdigest()
+
+
+records = []
+for name, configured in produces.items():
+    configured_path = Path(os.path.expandvars(configured)).expanduser()
+    if configured_path.is_absolute():
+        path = configured_path
+    elif command_cwd:
+        path = Path(command_cwd) / configured_path
+    else:
+        fail(
+            f"terminal producer {producer_id!r} could not resolve the current "
+            f"working directory for {name!r}: {configured_path}"
+        )
+    if not path.exists():
+        fail(
+            f"terminal producer {producer_id!r} did not create "
+            f"{name!r}: {configured_path}"
+        )
+    if not path.is_file() and not path.is_dir():
+        fail(
+            f"terminal producer {producer_id!r} output {name!r} "
+            f"is not a file or directory: {configured_path}"
+        )
+    kind, sha256 = path_hash(path)
+    records.append(
+        {
+            "producer": producer_id,
+            "output": name,
+            "path": str(path.resolve()),
+            "kind": kind,
+            "sha256": sha256,
+        }
+    )
+with open(log_path, "a", encoding="utf-8") as handle:
+    for record in records:
+        handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+PY
+}
+
 omegaflow_run_step() {
   local command="$1"
   local expect="$2"
@@ -817,6 +911,8 @@ omegaflow_run_step() {
   local post_command_pause="${11}"
   local encoded_environment="${12}"
   local input_json="${13}"
+  local producer_id="${14}"
+  local produces_json="${15}"
   local stdout_start
   local stderr_start
   local status
@@ -872,7 +968,9 @@ omegaflow_run_step() {
     post_command_pause="$OMEGAFLOW_POST_COMMAND_PAUSE"
   fi
   omegaflow_pause "$post_command_pause" "$timing"
-  omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start"
+  omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start" || return $?
+  omegaflow_validate_produces \
+    "$producer_id" "$produces_json" "$OMEGAFLOW_LAST_COMMAND_CWD"
 }
 
 omegaflow_run_group() {
@@ -908,7 +1006,9 @@ omegaflow_run_marked() {
   OMEGAFLOW_ACTIVE_BEAT_ID=""
   OMEGAFLOW_ACTIVE_ACTION_ID=""
   printf '\033]1337;OmegaFlowAction;%s;%s;end\007' "$beat_id" "$action_id"
-  printf '{"seq":%s,"status":"action_completed","action_id":"%s"}\n' "$seq" "$action_id" >&9
+  if [[ "$status" -eq 0 ]]; then
+    printf '{"seq":%s,"status":"action_completed","action_id":"%s"}\n' "$seq" "$action_id" >&9
+  fi
   return "$status"
 }
 
@@ -1069,6 +1169,9 @@ class TerminalControlSession:
                 "OMEGAFLOW_TERMINAL_STDERR": str(
                     self.context.runner_capture / "terminal.stderr.log"
                 ),
+                "OMEGAFLOW_PRODUCED_OUTPUTS": str(
+                    self.context.runner_capture / "produced-outputs.jsonl"
+                ),
             }
         )
         command: list[str]
@@ -1195,6 +1298,13 @@ class TerminalControlSession:
             )
             if input_errors:
                 error = input_errors[-1]
+            produced_output_errors = re.findall(
+                r"^(terminal producer .+ (?:did not create|is not) .+)$",
+                stderr_text,
+                flags=re.MULTILINE,
+            )
+            if produced_output_errors:
+                error = produced_output_errors[-1]
             if "recording secret appeared in terminal command output" in stderr_text:
                 error = "recording secret appeared in terminal command output"
             raise TerminalCaptureError(
@@ -1868,6 +1978,10 @@ def _validated_step_script(
     if input_steps and output["mode"] != "real":
         raise TerminalCaptureError("terminal step input requires output: real")
     input_json = json.dumps(_thaw(input_steps), separators=(",", ":"))
+    produces = step.get("produces", {})
+    if not isinstance(produces, Mapping):
+        raise TerminalCaptureError("terminal step produces must be a mapping")
+    producer_id = step.get("id", "")
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
@@ -1881,6 +1995,8 @@ def _validated_step_script(
             *pauses,
             encoded_environment,
             input_json,
+            str(producer_id or ""),
+            json.dumps(_thaw(produces), separators=(",", ":")),
         )
     )
 

@@ -2762,3 +2762,116 @@ def test_audio_metadata_rejects_coerced_duration_types(duration: object) -> None
             take_durations_ms={plan.narration_takes[0].id: duration},
             timestamp_paths={plan.narration_takes[0].id: "timestamps/terminal.json"},
         )
+
+
+def test_terminal_output_dependencies_resolve_setup_and_explicit_pane_producers() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "declared-dependencies",
+            "setup": [
+                {
+                    "id": "prepare",
+                    "run": "mkdir -p build",
+                    "produces": {"workspace": "build"},
+                }
+            ],
+            "panes": [
+                {"id": "left", "kind": "terminal"},
+                {"id": "right", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "exchange",
+                    "layout": {"areas": [["left", "right"]]},
+                    "panes": {
+                        "left": [
+                            {
+                                "id": "producer",
+                                "actions": [
+                                    {
+                                        "id": "generate",
+                                        "run": "touch build/result",
+                                        "inputs": [{"output": "prepare.workspace"}],
+                                        "produces": {"result": "build/result"},
+                                    }
+                                ],
+                            }
+                        ],
+                        "right": [
+                            {
+                                "id": "consumer",
+                                "actions": [
+                                    {
+                                        "id": "inspect",
+                                        "run": "cat build/result",
+                                        "inputs": [{"output": "generate.result"}],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert plan.output_dependencies == (
+        recording_plan_module.OutputDependencyPlan(
+            producer_id="generate",
+            output_name="result",
+            producer_event_id="left.producer.generate",
+            consumer_event_id="right.consumer.inspect",
+        ),
+    )
+
+
+def test_terminal_output_dependency_rejects_unknown_output() -> None:
+    with pytest.raises(RecordingPlanError, match="unknown output 'prepare.missing'"):
+        normalize_recording_plan(
+            {
+                "id": "unknown-output",
+                "setup": [
+                    {
+                        "id": "prepare",
+                        "run": "touch result",
+                        "produces": {"result": "result"},
+                    }
+                ],
+                "beats": [
+                    {
+                        "id": "consume",
+                        "actions": [
+                            {
+                                "run": "cat result",
+                                "inputs": [{"output": "prepare.missing"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+
+def test_terminal_output_dependency_rejects_forward_reference_in_one_stream() -> None:
+    with pytest.raises(RecordingPlanError, match="before it runs"):
+        normalize_recording_plan(
+            {
+                "id": "forward-output",
+                "beats": [
+                    {
+                        "id": "commands",
+                        "actions": [
+                            {
+                                "run": "cat result",
+                                "inputs": [{"output": "generate.result"}],
+                            },
+                            {
+                                "id": "generate",
+                                "run": "touch result",
+                                "produces": {"result": "result"},
+                            },
+                        ],
+                    }
+                ],
+            }
+        )

@@ -10,8 +10,13 @@ beat, then extends that same beat with narration, guidance, and publishing.
 ```yaml studio-directive
 config:
   setup:
-  - name: restore the Tiny Canvas draft
+  - id: prepare-example
+    name: prepare the example artwork
     run: python {{ tutorial_path }}/scripts/reset_artwork.py
+    inputs:
+    - example.svg
+    produces:
+      artwork: recordings/.omegaflow/tutorial/sunset-beach/sunset-study.svg
 ```
 
 ```yaml studio-directive
@@ -24,6 +29,8 @@ beat:
   - commands:
     - run: python {{ tutorial_path }}/scripts/inspect_artwork.py
       display: python scripts/inspect_artwork.py
+      inputs:
+      - {output: prepare-example.artwork}
       expect:
         output_contains:
         - "Title: Sunset Study"

@@ -231,6 +231,187 @@ def test_terminal_action_gate_runs_before_the_command(tmp_path: Path) -> None:
     assert marker.exists()
 
 
+def test_terminal_producer_records_file_and_directory_outputs(tmp_path: Path) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "producer",
+            "beats": [
+                {
+                    "id": "generate",
+                    "actions": [
+                        {
+                            "id": "generate-assets",
+                            "run": "mkdir -p build && printf done > build/result.txt",
+                            "produces": {
+                                "file": "build/result.txt",
+                                "directory": "build",
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(record_cast=False, timeout_seconds=5.0)
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+            working_directory=tmp_path,
+        )
+    )
+    try:
+        runner.capture_beat(plan.beats[0])
+    finally:
+        runner.close()
+
+    records = [
+        json.loads(line)
+        for line in (
+            tmp_path / "run/capture/produced-outputs.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+    ]
+    assert [(record["output"], record["kind"]) for record in records] == [
+        ("file", "file"),
+        ("directory", "directory"),
+    ]
+    assert all(record["producer"] == "generate-assets" for record in records)
+
+
+@pytest.mark.parametrize("timing", ["presentation", "realtime"])
+def test_terminal_producer_resolves_outputs_from_persistent_shell_cwd(
+    tmp_path: Path,
+    timing: str,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "producer-cwd",
+            "setup": [
+                {
+                    "run": "mkdir -p workspace && cd workspace",
+                }
+            ],
+            "beats": [
+                {
+                    "id": "generate",
+                    "actions": [
+                        {
+                            "id": "generate-assets",
+                            "run": "mkdir -p build && printf done > build/result.txt",
+                            "produces": {"result": "build/result.txt"},
+                            "timing": timing,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(record_cast=False, timeout_seconds=5.0)
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+            working_directory=tmp_path,
+        )
+    )
+    try:
+        runner.run_setup(plan.setup)
+        runner.capture_beat(plan.beats[0])
+    finally:
+        runner.close()
+
+    record = json.loads(
+        (tmp_path / "run/capture/produced-outputs.jsonl").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert record["path"] == str(
+        (tmp_path / "workspace/build/result.txt").resolve()
+    )
+
+
+def test_terminal_producer_fails_when_declared_output_is_missing(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "missing-output",
+            "beats": [
+                {
+                    "id": "generate",
+                    "actions": [
+                        {
+                            "id": "generate-assets",
+                            "run": "true",
+                            "produces": {"site": "build/site"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(record_cast=False, timeout_seconds=5.0)
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+            working_directory=tmp_path,
+        )
+    )
+    progress: list[tuple[str, str]] = []
+    try:
+        with pytest.raises(
+            TerminalCaptureError,
+            match="did not create 'site': build/site",
+        ):
+            runner.capture_beat(
+                plan.beats[0],
+                on_progress=lambda state, action_id: progress.append(
+                    (state, action_id)
+                ),
+            )
+    finally:
+        runner.close()
+
+    assert progress == [("started", "__step_0")]
+
+
+def test_terminal_producer_rejects_special_files(tmp_path: Path) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "special-output",
+            "beats": [
+                {
+                    "id": "generate",
+                    "actions": [
+                        {
+                            "id": "generate-assets",
+                            "run": "mkfifo result.pipe",
+                            "produces": {"result": "result.pipe"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(record_cast=False, timeout_seconds=5.0)
+    runner.start(
+        CaptureContext.create(
+            tmp_path / "run",
+            workspace=tmp_path,
+            working_directory=tmp_path,
+        )
+    )
+    try:
+        with pytest.raises(
+            TerminalCaptureError,
+            match="output 'result' is not a file or directory: result.pipe",
+        ):
+            runner.capture_beat(plan.beats[0])
+    finally:
+        runner.close()
+
+
 def test_terminal_action_gate_does_not_disable_command_timeout(
     tmp_path: Path,
 ) -> None:

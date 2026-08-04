@@ -28,7 +28,10 @@ narration takes, solves a global semantic timeline, validates the closed public
 bundle, and publishes the selected surfaces. Presentation-only changes reuse a
 fresh private capture.
 
-Fresh artifacts are reused. Force every rebuildable stage to run with:
+Fresh artifacts are reused. Optional command-level `inputs` declarations add
+external files and directories to the capture fingerprint, making that reuse
+more precise. Force every rebuildable stage to run, regardless of declared
+dependencies, with:
 
 ```bash
 omegaflow recording=demo force=true
@@ -45,8 +48,9 @@ artifacts.
 
 ## Preview a build
 
-`dry_run=true` resolves the recording and prints its inputs, outputs, publish
-targets, and processing stages without running commands:
+`dry_run=true` resolves the recording and prints its recording sources,
+declared source dependencies, outputs, publish targets, and processing stages
+without running commands:
 
 ```bash
 omegaflow recording=demo dry_run=true

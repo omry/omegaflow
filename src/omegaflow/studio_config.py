@@ -574,11 +574,18 @@ class RecordingRequirementsConfig:
 
 
 @dataclass
+class RecordingOutputReferenceConfig:
+    output: str = ""
+
+
+@dataclass
 class RecordingInvocationConfig:
     run: str | None = None
     run_file: str | None = None
     display: str | None = None
     after: str | None = None
+    inputs: list[str | RecordingOutputReferenceConfig] = field(default_factory=list)
+    produces: dict[str, str] = field(default_factory=dict)
     output: str | dict[str, str] | None = None
     expect: RecordingExpectationConfig = field(
         default_factory=RecordingExpectationConfig
@@ -617,6 +624,7 @@ class RecordingCommandConfig(RecordingInvocationConfig):
 
 @dataclass
 class RecordingStepConfig(RecordingInvocationConfig):
+    id: str | None = None
     name: str | None = None
     progress: list[str] = field(default_factory=list)
     commands: list[RecordingCommandConfig] | None = None

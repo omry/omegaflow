@@ -1750,6 +1750,43 @@ def test_build_plan_lists_each_scoped_browser_capture_log(
     assert "browser_capture_log" not in plan["outputs"]
 
 
+def test_build_plan_lists_declared_source_dependencies(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    recording_dir = tmp_path / "recordings" / "demo"
+    recording_dir.mkdir(parents=True)
+    dependency = recording_dir / "example.svg"
+    dependency.write_text("<svg/>", encoding="utf-8")
+    spec = {
+        "id": "demo",
+        "_recording_id": "demo",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(recording_dir),
+        "_hydra_output_dir": str(tmp_path / "run"),
+        "outputs": {"asset_dir": str(tmp_path / "public")},
+        "beats": [
+            {
+                "id": "inspect",
+                "actions": [
+                    {"run": "true", "inputs": ["example.svg"]},
+                ],
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        studio,
+        "load_recording_spec_from_hydra_cfg",
+        lambda _cfg: spec,
+    )
+
+    plan = studio.build_plan(OmegaConf.create({}), {})
+
+    assert plan["inputs"]["source_dependencies"] == [
+        str(dependency),
+    ]
+
+
 def test_capture_step_uses_the_hydra_run_directory(monkeypatch, tmp_path) -> None:
     run_dir = tmp_path / "capture-run"
     spec = {
@@ -4400,6 +4437,34 @@ beat:
     ]
 
 
+def test_repository_video_recordings_use_current_source_structure() -> None:
+    recordings_dir = Path(__file__).resolve().parents[1] / "recordings"
+
+    for recording_id in list_recording_ids(recordings_dir):
+        source_path = recordings_dir / recording_id / "index.md"
+        source = source_path.read_text(encoding="utf-8")
+        frontmatter, body = studio_config_module.split_frontmatter(
+            source,
+            source=source_path,
+        )
+        if frontmatter.get("kind") == "collection":
+            continue
+
+        assert set(frontmatter) <= {"kind", "title", "description"}, source_path
+        blocks = studio_directive_blocks(body, resolve=False)
+        assert all(len(block) == 1 for block in blocks), source_path
+        directive_names = [next(iter(block)) for block in blocks]
+        expected_names = (
+            (["config"] if "config" in directive_names else [])
+            + (["panes"] if "panes" in directive_names else [])
+            + ["beat"] * directive_names.count("beat")
+        )
+        assert directive_names == expected_names, source_path
+        assert "beat" in directive_names, source_path
+
+        recording_from_script(recording_id, recording_dir=recordings_dir)
+
+
 def test_terminal_highlight_demo_combines_exact_and_multiline_regex_targets() -> None:
     recordings_dir = Path(__file__).resolve().parents[1] / "recordings"
     spec = recording_from_script(
@@ -4555,6 +4620,8 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
             "run_file": "scripts/setup-demo-environment.sh",
             "display": None,
             "after": None,
+            "inputs": [],
+            "produces": {},
             "output": None,
             "expect": {
                 "exit_code": 0,
@@ -4562,6 +4629,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
                 "output_regex": [],
                 "file_exists": [],
             },
+            "id": None,
             "name": "prepare isolated demo environment",
             "progress": [],
             "commands": None,
@@ -4765,167 +4833,6 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     }
 
 
-def test_guided_tutorial_builds_and_reviews_repeatable_terminal_baseline() -> None:
-    assert [beat["id"] for beat in beats[:5]] == [
-        "build-baseline",
-        "open-baseline",
-        "review-baseline",
-    ]
-    build = beats_by_id["build-baseline"]
-    build_commands = build["panes"]["terminal"][0]["actions"]
-    assert [command["id"] for command in build_commands] == [
-        "build-baseline-command"
-    assert build_commands[0]["display"] == (
-        "omegaflow recording=sunset-beach action=build"
-    )
-    assert build_commands[0]["timing"] == "realtime"
-    open_baseline = beats_by_id["open-baseline"]
-    watch_command = open_baseline["panes"]["terminal"][0]["actions"][0]
-    assert watch_command["id"] == "watch-baseline-command"
-    assert watch_command["browser_handoff"] is True
-    assert watch_command["timing"] == "realtime"
-
-    review = beats_by_id["review-baseline"]
-    review_actions = review["panes"]["player"][0]["actions"]
-    assert review_actions[0]["open_page"]["handoff"] == (
-        "watch-baseline-command"
-    )
-    assert review_actions[1]["timing"] == "realtime"
-    assert review_actions[1]["click"]["target"] == {
-        "role": "button",
-        "name": "Play",
-        "exact": True,
-    }
-    assert review_actions[1]["until"] == {
-        "visible": {
-            "role": "button",
-            "name": "Play again",
-            "exact": True,
-        }
-    plan = normalize_recording_plan(
-        recording_from_script("tutorial", recording_dir=root / "recordings")
-    assert [pane.id for pane in plan.panes] == [
-        "overview",
-        "terminal",
-        "player",
-    assert [beat.id for beat in plan.beats[:5]] == [
-        "orientation",
-        "prepare-workspace",
-        "build-baseline",
-        "open-baseline",
-        "review-baseline",
-
-def test_guided_tutorial_authors_and_reviews_silent_browser_workflow(
-    tmp_path: Path,
-) -> None:
-    root = Path(__file__).resolve().parents[1]
-    source = (root / "recordings" / "tutorial" / "index.md").read_text(
-        encoding="utf-8"
-    )
-    beats = [
-        block["beat"]
-        for block in studio_directive_blocks(source)
-        if "beat" in block
-    beats_by_id = {beat["id"]: beat for beat in beats}
-    expected_ids = [
-        "orientation",
-        "prepare-workspace",
-        "build-baseline",
-        "open-baseline",
-        "review-baseline",
-        "author-browser-workflow",
-        "build-browser-workflow",
-        "open-browser-workflow",
-        "review-browser-workflow",
-    assert [beat["id"] for beat in beats] == expected_ids
-
-    author = beats_by_id["author-browser-workflow"]
-    author_action = author["panes"]["terminal"][0]["actions"][0]
-    assert author_action["run"] == (
-        "nano --rcfile recordings/sunset-beach/.nanorc "
-        "recordings/sunset-beach/index.md"
-    )
-    input_steps = author_action["input"]
-    typed_source = "".join(
-        step["text"] for step in input_steps if step.get("text") is not None
-    )
-    expected_source = (
-        root / "tests" / "fixtures" / "tutorial" / "sunset-beach-browser.md"
-    ).read_text(encoding="utf-8")
-    assert typed_source + "\n" == expected_source
-    assert sum(step.get("control") == "k" for step in input_steps) == 33
-
-    build = beats_by_id["build-browser-workflow"]
-    build_action = build["panes"]["terminal"][0]["actions"][0]
-    assert build_action["display"] == (
-        "omegaflow recording=sunset-beach action=build"
-    )
-    assert build_action["timing"] == "realtime"
-
-    open_workflow = beats_by_id["open-browser-workflow"]
-    watch_action = open_workflow["panes"]["terminal"][0]["actions"][0]
-    assert watch_action["display"] == (
-        "omegaflow recording=sunset-beach action=watch beat=edit-artwork"
-    )
-    assert watch_action["browser_handoff"] is True
-
-    review = beats_by_id["review-browser-workflow"]
-    review_actions = review["panes"]["player"][0]["actions"]
-    assert review_actions[0]["open_page"]["handoff"] == "watch-browser-command"
-    assert review_actions[1]["until"] == {
-        "visible": {
-            "role": "button",
-            "name": "Play again",
-            "exact": True,
-        }
-
-    tutorial_plan = normalize_recording_plan(
-        recording_from_script("tutorial", recording_dir=root / "recordings")
-    assert [beat.id for beat in tutorial_plan.beats] == expected_ids
-    recordings_dir = tmp_path / "recordings"
-    recording_dir = recordings_dir / "sunset-beach"
-    recording_dir.mkdir(parents=True)
-    (recording_dir / "index.md").write_text(
-        expected_source,
-        encoding="utf-8",
-    )
-    browser_spec = recording_from_script(
-        "sunset-beach",
-        recording_dir=recordings_dir,
-    browser_plan = normalize_recording_plan(browser_spec)
-    assert browser_spec["audio"]["enabled"] is False
-    assert [beat.id for beat in browser_plan.beats] == [
-        "inspect-draft",
-        "edit-artwork",
-    assert browser_plan.browser_handoffs[0].id == "open-editor"
-    browser_actions = browser_plan.beats[1].pane_tracks[0].beats[0].actions
-    assert [action.id for action in browser_actions] == [
-        "open-editor",
-        "rename-artwork",
-        "move-sun",
-        "move-tree",
-        "save-new-file",
-        "saved-new-file",
-def test_guided_tutorial_editor_input_materializes_silent_browser_source(
-    author = next(
-        if block.get("beat", {}).get("id") == "author-browser-workflow"
-    authored_action = author["panes"]["terminal"][0]["actions"][0]
-    shutil.copy2(
-        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / "index.md",
-        recording_dir / "index.md",
-    )
-    command = {
-        key: authored_action[key]
-        for key in ("id", "run", "display", "timing", "input")
-    }
-                    "id": "edit-browser-source",
-                    "actions": [{"commands": [command]}],
-        tmp_path / "run",
-    expected = (
-        root / "tests" / "fixtures" / "tutorial" / "sunset-beach-browser.md"
-    ).read_text(encoding="utf-8")
-    assert (recording_dir / "index.md").read_text(encoding="utf-8") == expected
-        / "run/capture/terminal-beats/edit-browser-source.cast"
 def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
     tmp_path,
 ) -> None:
@@ -5755,10 +5662,10 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert files == [
         ".nanorc",
         "app/app.js",
-        "app/draft.svg",
         "app/index.html",
         "app/server.py",
         "app/styles.css",
+        "example.svg",
         "index.md",
         "scripts/inspect_artwork.py",
         "scripts/reset_artwork.py",
@@ -5770,7 +5677,7 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert "title: Refine a Sunset Beach Poster" in recording
     assert "id: inspect-draft" in recording
     assert "medium: terminal" in recording
-    assert "name: restore the Tiny Canvas draft" in recording
+    assert "name: prepare the example artwork" in recording
     assert "base_url:" not in recording
     assert "presentation:" not in recording
     assert "publish:" not in recording
@@ -5821,25 +5728,33 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert '"--view"' in launcher
     assert 'f"/files/{filename}"' in launcher
 
-    draft = (tutorial_root / "app" / "draft.svg").read_text(encoding="utf-8")
-    assert 'id="sun"' in draft
-    assert 'data-testid="sun"' in draft
-    assert 'id="sun-glasses"' in draft
-    assert 'id="sun-smile"' in draft
-    assert 'id="sea"' in draft
-    assert draft.index('id="sun"') < draft.index('id="sea"')
-    assert 'id="coconut-tree"' in draft
-    assert 'data-testid="coconut-tree"' in draft
-    assert 'id="sunset-target"' in draft
-    assert 'data-testid="sunset-target"' in draft
-    assert 'cx="405" cy="390"' in draft
-    assert 'id="tree-target"' in draft
-    assert 'data-testid="tree-target"' in draft
-    assert 'cx="565" cy="425"' in draft
-    assert draft.count('class="palm-leaf"') >= 6
+    example = (tutorial_root / "example.svg").read_text(encoding="utf-8")
+    assert 'id="sun"' in example
+    assert 'data-testid="sun"' in example
+    assert 'id="sun-glasses"' in example
+    assert 'id="sun-smile"' in example
+    assert 'id="sea"' in example
+    assert example.index('id="sun"') < example.index('id="sea"')
+    assert 'id="coconut-tree"' in example
+    assert 'data-testid="coconut-tree"' in example
+    assert 'id="sunset-target"' in example
+    assert 'data-testid="sunset-target"' in example
+    assert 'cx="405" cy="390"' in example
+    assert 'id="tree-target"' in example
+    assert 'data-testid="tree-target"' in example
+    assert 'cx="565" cy="425"' in example
+    assert example.count('class="palm-leaf"') >= 6
     assert not (tutorial_root / "sunset-study.svg").exists()
 
     output = capsys.readouterr().out
+    created = [
+        line.removeprefix("created ")
+        for line in output.splitlines()
+        if line.startswith("created ")
+    ]
+    assert created == [
+        f"recordings/sunset-beach/{relative_path}" for relative_path in files
+    ]
     assert "next    " not in output
 
 
@@ -7086,9 +7001,11 @@ def test_run_watch_builds_missing_selected_beat_prefix(monkeypatch) -> None:
         *,
         target_beats=None,
         target_specs=None,
+        source_specs=None,
     ):
         requested["target_beats"] = target_beats
         requested["target_specs"] = target_specs
+        requested["source_specs"] = source_specs
         assert recording_ids == ("hello",)
         yield
 
@@ -7109,6 +7026,7 @@ def test_run_watch_builds_missing_selected_beat_prefix(monkeypatch) -> None:
     assert requested["rebuild"] == ("hello", "prepare")
     assert requested["target_beats"] == {"hello": "prepare"}
     assert requested["target_specs"]["hello"]["_watch_run_dir"] == "/watch-prefix"
+    assert requested["source_specs"] == {"hello": spec}
 
 
 def test_run_watch_rejects_unknown_source_beat_with_valid_ids(monkeypatch) -> None:
@@ -7250,6 +7168,73 @@ def test_watch_rebuilds_after_recording_source_changes(
     assert rebuilt == [("hello", target_beat)]
     if target_beat is not None:
         assert target_spec["_watch_run_dir"] == "/rebuilt-prefix"
+
+
+def test_watch_rebuilds_after_declared_external_input_changes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    recording_dir = tmp_path / "recordings"
+    recording_source = recording_dir / "hello"
+    recording_source.mkdir(parents=True)
+    (recording_source / "index.md").write_text("initial narration\n")
+    dependency = tmp_path / "shared" / "example.svg"
+    dependency.parent.mkdir()
+    dependency.write_text("initial\n", encoding="utf-8")
+    config = {
+        "recording": "hello",
+        "project_root": str(tmp_path),
+        "studio": {"recording_dir": str(recording_dir)},
+    }
+    spec = {
+        "_project_root": str(tmp_path),
+        "_script_dir": str(recording_source),
+        "beats": [
+            {
+                "id": "inspect",
+                "actions": [
+                    {"run": "true", "inputs": ["project://shared/example.svg"]}
+                ],
+            }
+        ],
+    }
+    stop_event = threading.Event()
+    rebuilt: list[str] = []
+
+    class ChangingEvent:
+        def __init__(self) -> None:
+            self.wait_count = 0
+
+        def wait(self, _timeout) -> bool:
+            self.wait_count += 1
+            if self.wait_count == 1:
+                dependency.write_text("changed\n", encoding="utf-8")
+            return stop_event.is_set()
+
+    def fake_rebuild(_cfg, recording_id, *, beat_id=None) -> Path:
+        assert beat_id is None
+        rebuilt.append(recording_id)
+        stop_event.set()
+        return Path("/rebuilt-prefix")
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda *_args, **_kwargs: spec,
+    )
+
+    studio.run_watch_rebuild_loop(
+        OmegaConf.create(config),
+        config,
+        ("hello",),
+        ChangingEvent(),
+        poll_interval=0.001,
+        quiet_interval=0.001,
+        source_specs={"hello": spec},
+    )
+
+    assert rebuilt == ["hello"]
 
 
 def test_watch_waits_for_2_5_seconds_of_source_quiet_before_rebuilding(

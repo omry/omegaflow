@@ -565,6 +565,16 @@ class CaptureCoordinator:
             handoff_by_id = {
                 handoff.id: handoff for handoff in plan.browser_handoffs
             }
+            output_producers_by_consumer: dict[str, tuple[str, ...]] = {}
+            for dependency in plan.output_dependencies:
+                existing = output_producers_by_consumer.get(
+                    dependency.consumer_event_id,
+                    (),
+                )
+                output_producers_by_consumer[dependency.consumer_event_id] = (
+                    *existing,
+                    dependency.producer_event_id,
+                )
             for handoff in plan.browser_handoffs:
                 handoff_broker.prepare(handoff.id)
             streams: dict[str, list[CapturedPaneBeatPlan]] = {}
@@ -733,6 +743,27 @@ class CaptureCoordinator:
                                     f"{beat.id!r}/{action_id!r}"
                                 ) from exc
                             wait_for_join(getattr(action, "start_join", None))
+                            consumer_event_id = (
+                                f"{captured.pane_id}.{captured.beat.id}.{action_id}"
+                            )
+                            for producer_event_id in output_producers_by_consumer.get(
+                                consumer_event_id,
+                                (),
+                            ):
+                                producer_ended = capture_events.get(
+                                    f"{producer_event_id}.ended"
+                                )
+                                if producer_ended is None:
+                                    raise CaptureSetupError(
+                                        "output dependency references unavailable event "
+                                        f"{producer_event_id!r}"
+                                    )
+                                while not producer_ended.wait(0.05):
+                                    if failed.is_set():
+                                        raise CaptureSetupError(
+                                            "output dependency on "
+                                            f"{producer_event_id!r} was cancelled"
+                                        )
                             handoff = handoff_by_consumer.get(
                                 (
                                     captured.outer_beat_id,

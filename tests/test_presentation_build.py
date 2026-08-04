@@ -786,6 +786,68 @@ def test_capture_with_application_secrets_is_never_reused(
     assert not presentation_build.capture_is_fresh(spec, plan, tmp_path)
 
 
+def test_declared_file_and_directory_inputs_participate_in_capture_fingerprint(
+    tmp_path: Path,
+) -> None:
+    recording_dir = tmp_path / "recordings" / "demo"
+    recording_dir.mkdir(parents=True)
+    local_input = recording_dir / "settings.txt"
+    local_input.write_text("first\n", encoding="utf-8")
+    project_input = tmp_path / "theme"
+    project_input.mkdir()
+    (project_input / "color.txt").write_text("blue\n", encoding="utf-8")
+    spec = {
+        "id": "declared-inputs",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(recording_dir),
+        "beats": [
+            {
+                "id": "build",
+                "actions": [
+                    {
+                        "run": "true",
+                        "inputs": ["settings.txt", "project://theme"],
+                    }
+                ],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    initial = presentation_build.artifact_fingerprints(spec, plan)
+
+    local_input.write_text("second\n", encoding="utf-8")
+    local_changed = presentation_build.artifact_fingerprints(spec, plan)
+    assert initial.capture_fingerprint != local_changed.capture_fingerprint
+
+    (project_input / "color.txt").write_text("green\n", encoding="utf-8")
+    directory_changed = presentation_build.artifact_fingerprints(spec, plan)
+    assert (
+        local_changed.capture_fingerprint
+        != directory_changed.capture_fingerprint
+    )
+
+
+def test_missing_declared_input_fails_fingerprinting(tmp_path: Path) -> None:
+    spec = {
+        "id": "missing-input",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(tmp_path / "recordings" / "demo"),
+        "beats": [
+            {
+                "id": "build",
+                "actions": [{"run": "true", "inputs": ["missing.txt"]}],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+
+    with pytest.raises(
+        presentation_build.PresentationBuildError,
+        match="recording dependency is missing",
+    ):
+        presentation_build.artifact_fingerprints(spec, plan)
+
+
 def test_publication_validation_registers_application_secret_values(
     tmp_path: Path, monkeypatch
 ) -> None:

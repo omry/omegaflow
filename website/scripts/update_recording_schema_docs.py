@@ -46,6 +46,7 @@ SCHEMA_GROUPS = {
     ],
     "beat": [
         "RecordingExpectationConfig",
+        "RecordingOutputReferenceConfig",
         "RecordingInvocationConfig",
         "TerminalInputStepConfig",
         "BrowserHandoffConfig",

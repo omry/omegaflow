@@ -96,6 +96,10 @@ CONDITION_KINDS = ("visible", "hidden", "url", "response")
 CHECK_KINDS = ("url", "visible", "hidden", "text", "value", "count", "response")
 URL_MATCH_KINDS = ("equals", "contains", "matches")
 ACTION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
+OUTPUT_REFERENCE_RE = re.compile(
+    r"(?P<producer>[A-Za-z][A-Za-z0-9_-]*)\."
+    r"(?P<output>[A-Za-z][A-Za-z0-9_-]*)\Z"
+)
 ANCHOR_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_-]*@\Z")
 CSS_LENGTH_RE = re.compile(
     r"(?:0|(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%))\Z"
@@ -122,9 +126,9 @@ TERMINAL_STEP_FIELDS = {item.name for item in fields(RecordingStepConfig)}
 TERMINAL_ACTION_FIELDS = {item.name for item in fields(TerminalActionConfig)}
 BROWSER_ACTION_FIELDS = {item.name for item in fields(BrowserActionConfig)}
 BROWSER_CHECK_FIELDS = {item.name for item in fields(BrowserCheckConfig)}
-BROWSER_ACTION_ONLY_FIELDS = BROWSER_ACTION_FIELDS - {"after", "timing"}
+BROWSER_ACTION_ONLY_FIELDS = BROWSER_ACTION_FIELDS - {"after", "timing", "id"}
 BROWSER_CHECK_ONLY_FIELDS = BROWSER_CHECK_FIELDS - {"name"}
-TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_ACTION_FIELDS - {"after", "timing"}
+TERMINAL_ACTION_ONLY_FIELDS = TERMINAL_ACTION_FIELDS - {"after", "timing", "id"}
 TERMINAL_CHECK_ONLY_FIELDS = TERMINAL_STEP_FIELDS - {"name"}
 
 
@@ -336,6 +340,67 @@ def validate_terminal_command(value: object, *, field: str) -> None:
         not isinstance(command_id, str) or not ACTION_ID_RE.fullmatch(command_id)
     ):
         raise RecordingPlanError(f"{field}.id must be identifier-like")
+    inputs = mapping.get("inputs", [])
+    if not isinstance(inputs, list):
+        raise RecordingPlanError(f"{field}.inputs must be a list")
+    normalized_inputs: list[tuple[str, str]] = []
+    for index, dependency in enumerate(inputs):
+        dependency_field = f"{field}.inputs.{index}"
+        if isinstance(dependency, str):
+            if not dependency:
+                raise RecordingPlanError(
+                    f"{dependency_field} must be a non-empty path"
+                )
+            if dependency.startswith("project://"):
+                project_relative = Path(
+                    dependency.removeprefix("project://")
+                )
+                if (
+                    not project_relative.parts
+                    or project_relative.is_absolute()
+                    or ".." in project_relative.parts
+                ):
+                    raise RecordingPlanError(
+                        f"{dependency_field} project:// path must stay "
+                        "within the project root"
+                    )
+            normalized_inputs.append(("path", dependency))
+            continue
+        dependency_mapping = _mapping(dependency, field=dependency_field)
+        if set(dependency_mapping) != {"output"}:
+            raise RecordingPlanError(
+                f"{dependency_field} must contain exactly one output reference"
+            )
+        output_reference = dependency_mapping["output"]
+        if (
+            not isinstance(output_reference, str)
+            or OUTPUT_REFERENCE_RE.fullmatch(output_reference) is None
+        ):
+            raise RecordingPlanError(
+                f"{dependency_field}.output must be producer-id.output-name"
+            )
+        normalized_inputs.append(("output", output_reference))
+    duplicates = sorted(
+        value
+        for value in set(normalized_inputs)
+        if normalized_inputs.count(value) > 1
+    )
+    if duplicates:
+        raise RecordingPlanError(f"{field}.inputs contains duplicate entries")
+    produces = mapping.get("produces", {})
+    if not isinstance(produces, dict):
+        raise RecordingPlanError(f"{field}.produces must be a mapping")
+    for name, path in produces.items():
+        if not isinstance(name, str) or ACTION_ID_RE.fullmatch(name) is None:
+            raise RecordingPlanError(
+                f"{field}.produces keys must be identifier-like"
+            )
+        if not isinstance(path, str) or not path:
+            raise RecordingPlanError(
+                f"{field}.produces.{name} must be a non-empty path"
+            )
+    if produces and command_id in {None, ""}:
+        raise RecordingPlanError(f"{field}.produces requires an explicit id")
     display = mapping.get("display")
     if display is not None and (not isinstance(display, str) or not display):
         raise RecordingPlanError(f"{field}.display must be a non-empty string")
@@ -427,9 +492,12 @@ def validate_terminal_step(
     else:
         if not isinstance(commands, list) or not commands:
             raise RecordingPlanError(f"{field}.commands must be a non-empty list")
-        if any(mapping.get(name) is not None for name in ("run", "run_file", "display")):
+        if any(
+            mapping.get(name) is not None
+            for name in ("run", "run_file", "display", "id")
+        ) or mapping.get("inputs") or mapping.get("produces"):
             raise RecordingPlanError(
-                f"{field} must use commands or run/run_file/display, not both"
+                f"{field} must declare invocation fields on entries inside commands"
             )
         for index, command in enumerate(commands):
             validate_terminal_command(command, field=f"{field}.commands.{index}")
@@ -1587,6 +1655,16 @@ class TerminalCheckPlan:
 
 
 @dataclass(frozen=True)
+class OutputDependencyPlan:
+    """One captured terminal action waiting for a named producer output."""
+
+    producer_id: str
+    output_name: str
+    producer_event_id: str
+    consumer_event_id: str
+
+
+@dataclass(frozen=True)
 class TextHighlightTargetPlan:
     kind: str
     pattern: str
@@ -1935,6 +2013,7 @@ class RecordingPlan:
     narration_stream: NarrationStreamPlan
     narration_takes: tuple[NarrationTakePlan, ...]
     browser_handoffs: tuple[BrowserHandoffPlan, ...] = ()
+    output_dependencies: tuple[OutputDependencyPlan, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2970,6 +3049,7 @@ def _validate_explicit_event_graph(
     pane_kinds: Mapping[str, PaneKind],
     narration_event_ids: set[str],
     browser_handoffs: tuple[BrowserHandoffPlan, ...],
+    output_dependencies: tuple[OutputDependencyPlan, ...],
 ) -> None:
     event_ids = set(narration_event_ids)
     action_nodes: dict[tuple[str, str, str], tuple[str, str]] = {}
@@ -3112,6 +3192,12 @@ def _validate_explicit_event_graph(
         edge(f"{producer_prefix}.started", f"{consumer_prefix}.started")
         edge(consumer_sequence[-1][1], f"{producer_prefix}.ended")
 
+    for dependency in output_dependencies:
+        edge(
+            f"{dependency.producer_event_id}.ended",
+            f"{dependency.consumer_event_id}.started",
+        )
+
     indegree = {node: 0 for node in adjacency}
     for successors in adjacency.values():
         for successor in successors:
@@ -3130,6 +3216,223 @@ def _validate_explicit_event_graph(
         raise RecordingPlanError(
             "capture dependency cycle: " + " -> ".join(cycle_nodes)
         )
+
+
+@dataclass(frozen=True)
+class _TerminalInvocationLocation:
+    label: str
+    phase: str
+    order: int
+    pane_id: str | None
+    event_id: str | None
+    config: Mapping[str, Any]
+
+
+def _terminal_invocations(
+    setup: tuple[TerminalCheckPlan, ...],
+    beats: tuple[OuterBeatPlan, ...],
+    cleanup: tuple[TerminalCheckPlan, ...],
+    *,
+    explicit_panes: bool,
+) -> tuple[_TerminalInvocationLocation, ...]:
+    locations: list[_TerminalInvocationLocation] = []
+    order = 0
+
+    def add_config(
+        config: Mapping[str, Any],
+        *,
+        label: str,
+        phase: str,
+        pane_id: str | None = None,
+        pane_beat_id: str | None = None,
+        action_index: int | None = None,
+    ) -> None:
+        nonlocal order
+        commands = config.get("commands")
+        entries = tuple(commands) if commands else (config,)
+        for command_index, command in enumerate(entries):
+            action_id = command.get("id")
+            event_id = None
+            if (
+                phase == "action"
+                and pane_id is not None
+                and pane_beat_id is not None
+            ):
+                if not isinstance(action_id, str) or not action_id:
+                    if action_index is None:
+                        raise RecordingPlanError(
+                            f"{label} dependency-tracked action is missing its index"
+                        )
+                    action_id = terminal_action_id(
+                        action_index,
+                        command_index if commands else None,
+                        command,
+                    )
+                if explicit_panes:
+                    event_id = f"{pane_id}.{pane_beat_id}.{action_id}"
+            locations.append(
+                _TerminalInvocationLocation(
+                    label=(
+                        f"{label}.commands.{command_index}"
+                        if commands
+                        else label
+                    ),
+                    phase=phase,
+                    order=order,
+                    pane_id=pane_id,
+                    event_id=event_id,
+                    config=command,
+                )
+            )
+            order += 1
+
+    for index, step in enumerate(setup):
+        add_config(step.config, label=f"setup.{index}", phase="setup")
+    for outer in beats:
+        for track in outer.pane_tracks:
+            for pane_beat in track.beats:
+                for action_index, action in enumerate(pane_beat.actions):
+                    if isinstance(action, TerminalActionPlan):
+                        add_config(
+                            action.config,
+                            label=(
+                                f"beat {outer.id!r} pane {track.pane_id!r} "
+                                f"action {action_index}"
+                            ),
+                            phase="action",
+                            pane_id=track.pane_id,
+                            pane_beat_id=pane_beat.id,
+                            action_index=action_index,
+                        )
+                for check_index, check in enumerate(pane_beat.checks):
+                    if isinstance(check, TerminalCheckPlan):
+                        add_config(
+                            check.config,
+                            label=(
+                                f"beat {outer.id!r} pane {track.pane_id!r} "
+                                f"check {check_index}"
+                            ),
+                            phase="check",
+                            pane_id=track.pane_id,
+                        )
+    for index, step in enumerate(cleanup):
+        add_config(step.config, label=f"cleanup.{index}", phase="cleanup")
+    return tuple(locations)
+
+
+def _output_reference(value: object) -> tuple[str, str] | None:
+    if not isinstance(value, Mapping) or set(value) != {"output"}:
+        return None
+    reference = value.get("output")
+    if not isinstance(reference, str):
+        return None
+    match = OUTPUT_REFERENCE_RE.fullmatch(reference)
+    if match is None:
+        return None
+    return match.group("producer"), match.group("output")
+
+
+def _plan_output_dependencies(
+    setup: tuple[TerminalCheckPlan, ...],
+    beats: tuple[OuterBeatPlan, ...],
+    cleanup: tuple[TerminalCheckPlan, ...],
+    *,
+    explicit_panes: bool,
+) -> tuple[OutputDependencyPlan, ...]:
+    locations = _terminal_invocations(
+        setup,
+        beats,
+        cleanup,
+        explicit_panes=explicit_panes,
+    )
+    producers: dict[str, _TerminalInvocationLocation] = {}
+    for location in locations:
+        produces = location.config.get("produces") or {}
+        if not produces:
+            continue
+        producer_id = location.config.get("id")
+        if not isinstance(producer_id, str) or not producer_id:
+            raise RecordingPlanError(
+                f"{location.label}.produces requires an explicit id"
+            )
+        if location.phase == "check":
+            raise RecordingPlanError(
+                f"{location.label}.produces is not supported on checks"
+            )
+        if producer_id in producers:
+            raise RecordingPlanError(
+                f"duplicate terminal producer id {producer_id!r}"
+            )
+        producers[producer_id] = location
+
+    dependencies: list[OutputDependencyPlan] = []
+    for consumer in locations:
+        for value in consumer.config.get("inputs") or ():
+            reference = _output_reference(value)
+            if reference is None:
+                continue
+            producer_id, output_name = reference
+            producer = producers.get(producer_id)
+            if producer is None:
+                raise RecordingPlanError(
+                    f"{consumer.label}.inputs references unknown producer "
+                    f"{producer_id!r}"
+                )
+            produces = producer.config.get("produces") or {}
+            if output_name not in produces:
+                reference = f"{producer_id}.{output_name}"
+                raise RecordingPlanError(
+                    f"{consumer.label}.inputs references unknown output "
+                    f"{reference!r}"
+                )
+            if consumer.phase == "setup":
+                if producer.phase != "setup" or producer.order >= consumer.order:
+                    raise RecordingPlanError(
+                        f"{consumer.label}.inputs must reference an earlier "
+                        "setup producer"
+                    )
+                continue
+            if consumer.phase == "cleanup":
+                if producer.phase == "cleanup" and producer.order >= consumer.order:
+                    raise RecordingPlanError(
+                        f"{consumer.label}.inputs must reference an earlier "
+                        "cleanup producer"
+                    )
+                continue
+            if producer.phase == "setup":
+                continue
+            if producer.phase != "action":
+                raise RecordingPlanError(
+                    f"{consumer.label}.inputs cannot depend on {producer.phase} "
+                    f"producer {producer_id!r}"
+                )
+            if not explicit_panes:
+                if producer.order >= consumer.order:
+                    raise RecordingPlanError(
+                        f"{consumer.label}.inputs references producer "
+                        f"{producer_id!r} before it runs"
+                    )
+                continue
+            if consumer.phase == "check":
+                if producer.pane_id != consumer.pane_id:
+                    raise RecordingPlanError(
+                        f"{consumer.label}.inputs cannot synchronize a check "
+                        "across panes"
+                    )
+                continue
+            if producer.event_id is None or consumer.event_id is None:
+                raise RecordingPlanError(
+                    f"{consumer.label}.inputs could not resolve capture events"
+                )
+            dependencies.append(
+                OutputDependencyPlan(
+                    producer_id=producer_id,
+                    output_name=output_name,
+                    producer_event_id=producer.event_id,
+                    consumer_event_id=consumer.event_id,
+                )
+            )
+    return tuple(dependencies)
 
 
 def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
@@ -3477,6 +3780,12 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         for endpoint in EventEndpoint
     }
     browser_handoffs = _plan_browser_handoffs(frozen_beats)
+    output_dependencies = _plan_output_dependencies(
+        lifecycle_steps["setup"],
+        frozen_beats,
+        lifecycle_steps["cleanup"],
+        explicit_panes=bool(pane_plans),
+    )
     if pane_plans:
         used_pane_ids = {
             track.pane_id
@@ -3503,6 +3812,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             pane_kinds=pane_kinds,
             narration_event_ids=narration_event_ids,
             browser_handoffs=browser_handoffs,
+            output_dependencies=output_dependencies,
         )
     plan = RecordingPlan(
         id=recording_id,
@@ -3516,6 +3826,7 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
         narration_stream=narration_stream,
         narration_takes=plan_narration_takes(frozen_beats),
         browser_handoffs=browser_handoffs,
+        output_dependencies=output_dependencies,
     )
     _validate_recording_plan_limits(plan)
     return plan

@@ -35,8 +35,13 @@ config:
       chrome: {mode: minimal}
       transitions: {default: fade}
   setup:
-  - name: restore the Tiny Canvas draft
+  - id: prepare-example
+    name: prepare the example artwork
     run: python recordings/sunset-beach/scripts/reset_artwork.py
+    inputs:
+    - example.svg
+    produces:
+      artwork: recordings/.omegaflow/tutorial/sunset-beach/sunset-study.svg
   - name: start Tiny Canvas
     run: >-
       export TINY_CANVAS_URL=http://127.0.0.1:18476;
@@ -66,6 +71,8 @@ beat:
   - commands:
     - run: python recordings/sunset-beach/scripts/inspect_artwork.py
       display: python scripts/inspect_artwork.py
+      inputs:
+      - {output: prepare-example.artwork}
       expect:
         output_contains:
         - "Title: Sunset Study"

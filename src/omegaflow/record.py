@@ -379,6 +379,8 @@ def action_command_entries(
             field=f"{field}.{index}.commands.{command_index}.pre_enter_pause",
         )
         input_steps = raw_command.get("input", [])
+        inputs = raw_command.get("inputs", [])
+        produces = raw_command.get("produces", {})
         entries.append(
             {
                 "id": command_id,
@@ -395,6 +397,8 @@ def action_command_entries(
                 "post_enter_pause": post_enter_pause,
                 "post_command_pause": post_command_pause,
                 "input": input_steps,
+                "inputs": inputs,
+                "produces": produces,
             }
         )
     return entries
