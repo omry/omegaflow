@@ -125,18 +125,18 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/asciinema" --version
 
-      - name: Build generated quickstart recording
+      - name: Build generated test recording
         run: |
           project="$RUNNER_TEMP/omegaflow-integration"
           mkdir -p "$project"
           cd "$project"
-          omegaflow action=bootstrap
-          omegaflow recording=quickstart action=build force=true
-          test -s recordings/.omegaflow/videos/quickstart/presentation/recording.presentation.json
-          test -s recordings/.omegaflow/videos/quickstart/presentation/recording.recording.json
-          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/first-video-beat.cast
-          test -s recordings/.omegaflow/videos/quickstart/presentation/beats/second-video-beat.cast
-          test -s recordings/.omegaflow/videos/quickstart/index.html
+          omegaflow bootstrap=project
+          omegaflow recording=test-video action=build force=true
+          test -s recordings/.omegaflow/videos/test-video/presentation/recording.presentation.json
+          test -s recordings/.omegaflow/videos/test-video/presentation/recording.recording.json
+          test -s recordings/.omegaflow/videos/test-video/presentation/beats/first-video-beat.cast
+          test -s recordings/.omegaflow/videos/test-video/presentation/beats/second-video-beat.cast
+          test -s recordings/.omegaflow/videos/test-video/index.html
 
       - name: Upload recording artifacts
         if: failure()
