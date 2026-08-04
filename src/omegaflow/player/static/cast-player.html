@@ -340,6 +340,8 @@
 
       .stage[data-pane-layout="true"] .terminal-renderer-host {
         overflow: hidden;
+        white-space: pre;
+        word-break: normal;
       }
 
       .stage[data-pane-layout="true"] .visualization-renderer-host {
@@ -1439,6 +1441,7 @@
       let activeTerminalElement = terminal;
       let terminalLines = [[]];
       const activeTerminalHighlights = new Map();
+      const terminalResizeObservers = new WeakMap();
       let cursorRow = 0;
       let cursorColumn = 0;
       let terminalCursorVisible = true;
@@ -1751,6 +1754,69 @@
         activeStyle = '';
       }
 
+      function configureTerminalGrid(container, header) {
+        const columns = Number(header?.term?.cols);
+        const rows = Number(header?.term?.rows);
+        if (
+          !Number.isInteger(columns) || columns < 1 ||
+          !Number.isInteger(rows) || rows < 1
+        ) {
+          delete container.dataset.terminalColumns;
+          delete container.dataset.terminalRows;
+          container.style.removeProperty('font-size');
+          return;
+        }
+        container.dataset.terminalColumns = String(columns);
+        container.dataset.terminalRows = String(rows);
+      }
+
+      function fitTerminalGrid(container) {
+        if (!container || container.hidden) {
+          return;
+        }
+        const columns = Number(container.dataset.terminalColumns);
+        const rows = Number(container.dataset.terminalRows);
+        if (!Number.isInteger(columns) || !Number.isInteger(rows)) {
+          return;
+        }
+        const style = window.getComputedStyle(container);
+        const availableWidth = container.clientWidth
+          - (Number.parseFloat(style.paddingLeft) || 0)
+          - (Number.parseFloat(style.paddingRight) || 0);
+        const availableHeight = container.clientHeight
+          - (Number.parseFloat(style.paddingTop) || 0)
+          - (Number.parseFloat(style.paddingBottom) || 0);
+        if (availableWidth <= 0 || availableHeight <= 0) {
+          return;
+        }
+        const probe = document.createElement('span');
+        probe.textContent = 'MMMMMMMMMM';
+        Object.assign(probe.style, {
+          position: 'absolute',
+          visibility: 'hidden',
+          whiteSpace: 'pre',
+          fontFamily: style.fontFamily,
+          fontSize: '100px',
+          fontWeight: style.fontWeight,
+          lineHeight: '1',
+        });
+        container.append(probe);
+        const characterWidth = probe.getBoundingClientRect().width / 1000;
+        probe.remove();
+        const currentFontSize = Number.parseFloat(style.fontSize) || 15;
+        const currentLineHeight = Number.parseFloat(style.lineHeight);
+        const lineHeightRatio = Number.isFinite(currentLineHeight)
+          ? currentLineHeight / currentFontSize
+          : 1.35;
+        const fontSize = Math.min(
+          availableWidth / (columns * characterWidth),
+          availableHeight / (rows * lineHeightRatio),
+        ) * 0.985;
+        if (Number.isFinite(fontSize) && fontSize > 0) {
+          container.style.fontSize = `${Math.min(48, Math.max(6, fontSize))}px`;
+        }
+      }
+
       function currentTerminalLine() {
         while (terminalLines.length <= cursorRow) {
           terminalLines.push([]);
@@ -1759,6 +1825,11 @@
       }
 
       function putTerminalChar(char) {
+        const columns = Number(activeTerminalElement?.dataset.terminalColumns);
+        if (Number.isInteger(columns) && columns > 0 && cursorColumn >= columns) {
+          cursorRow += 1;
+          cursorColumn = 0;
+        }
         const line = currentTerminalLine();
         const characterSet = singleShiftTerminalCharacterSet ??
           activeTerminalCharacterSet;
@@ -2722,7 +2793,10 @@
           setNarrationScrollTop(0);
           return;
         }
-        if (!current) {
+        const past = narration.querySelectorAll('.narration-word.past');
+        const lastSpoken = past[past.length - 1] || null;
+        const focus = current || (!animate ? lastSpoken : null);
+        if (!focus) {
           if (animate) {
             narration.scrollLeft = 0;
             return;
@@ -2739,7 +2813,7 @@
         const canAnimateWithoutHidingCurrentWord =
           narration.clientHeight / lineHeight >= 1.5;
         const narrationTop = narration.getBoundingClientRect().top;
-        const currentTop = current.getBoundingClientRect().top;
+        const currentTop = focus.getBoundingClientRect().top;
         const relativeTop = Math.max(
           0,
           currentTop - narrationTop + narration.scrollTop,
@@ -4282,10 +4356,11 @@
             rendererFactories: {
               visualization: () => CastPlayerCore.createVisualizationDomRenderer(),
               terminal: () => CastPlayerCore.createTerminalRendererAdapter({
-                reset({container}) {
+                reset({container, header}) {
                   if (!container) {
                     throw new Error('terminal renderer reset has no container');
                   }
+                  configureTerminalGrid(container, header);
                   resetTerminalBuffer({container});
                   container.innerHTML = '';
                 },
@@ -4341,6 +4416,11 @@
                 configurePaneTitle(host, pane);
                 host.hidden = true;
                 host.addEventListener('click', togglePlaybackFromSelectableStageContent);
+                if (typeof ResizeObserver === 'function') {
+                  const observer = new ResizeObserver(() => fitTerminalGrid(host));
+                  observer.observe(host);
+                  terminalResizeObservers.set(host, observer);
+                }
                 stage.append(host);
                 return host;
               }
@@ -4413,6 +4493,7 @@
                   );
                   host.style.opacity = String(terminalLayers[layerIndex].opacity);
                   host.style.zIndex = String(layerIndex + 1);
+                  fitTerminalGrid(host);
                 }
               });
               browserStage.hidden = browserLayers.length === 0;
@@ -4432,6 +4513,8 @@
             },
             removeRendererContainer({container}) {
               if (container) {
+                terminalResizeObservers.get(container)?.disconnect();
+                terminalResizeObservers.delete(container);
                 container.remove();
               }
             },

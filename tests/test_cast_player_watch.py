@@ -1565,6 +1565,33 @@ if (narration.scrollTop !== 20) {
     assert result.returncode == 0, result.stderr
 
 
+def test_narration_scroll_keeps_last_spoken_words_visible_when_paused() -> None:
+    result = run_player_script(
+        r"""
+vm.runInContext(`
+const lastSpokenWord = {
+  getBoundingClientRect() { return {top: 180}; },
+};
+narration.clientHeight = 40;
+narration.scrollHeight = 200;
+narration.scrollTop = 0;
+narration.getBoundingClientRect = () => ({top: 100});
+narration.querySelector = () => null;
+narration.querySelectorAll = (selector) => (
+  selector === '.narration-word.past' ? [lastSpokenWord] : []
+);
+updateNarrationScroll({animate: false});
+if (narration.scrollTop !== 80) {
+  console.error(JSON.stringify({scrollTop: narration.scrollTop}));
+  process.exit(1);
+}
+`, context);
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_only_manifest_can_play_without_terminal_events() -> None:
     result = run_player_script(
         r"""

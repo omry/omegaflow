@@ -655,6 +655,26 @@ def test_generated_player_replays_nano_without_control_sequence_artifacts(
         assert "\x1b" not in terminal_text
         assert "(B" not in terminal_text
         assert ")0" not in terminal_text
+        page.wait_for_function(
+            "parseFloat(getComputedStyle(document.querySelector("
+            "'.terminal-renderer-host:not([hidden])')).fontSize) > 15"
+        )
+        geometry = terminal_host.evaluate(
+            """element => {
+              const box = element.getBoundingClientRect();
+              const range = document.createRange();
+              range.selectNodeContents(element);
+              const content = range.getBoundingClientRect();
+              return {
+                boxHeight: box.height,
+                contentHeight: content.height,
+                fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+              };
+            }"""
+        )
+        assert geometry["fontSize"] > 15
+        assert geometry["contentHeight"] <= geometry["boxHeight"]
+        assert geometry["contentHeight"] >= geometry["boxHeight"] * 0.8
 
         page.locator("#progress").evaluate(
             "element => { element.value = '1090'; "
@@ -664,6 +684,66 @@ def test_generated_player_replays_nano_without_control_sequence_artifacts(
             "document.querySelector('.terminal-renderer-host:not([hidden])')"
             ".textContent === ''"
         )
+        browser.close()
+
+
+def test_terminal_player_wraps_printable_output_at_captured_columns(
+    tmp_path: Path,
+) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_terminal_player_fixture(tmp_path)
+    payload_path = tmp_path / "beats" / "nano.cast"
+    payload_path.write_text(
+        "\n".join(
+            (
+                json.dumps(
+                    {
+                        "version": 3,
+                        "term": {"cols": 10, "rows": 4},
+                        "timestamp": 0,
+                    }
+                ),
+                json.dumps([0.0, "o", "1234567890ABC"]),
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    payload = payload_path.read_bytes()
+    (tmp_path / "signatures.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "files": {
+                    "beats/nano.cast": {
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "bytes": len(payload),
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 640, "height": 360})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        page.locator("#progress").evaluate(
+            "element => { element.value = '500'; "
+            "element.dispatchEvent(new Event('input', {bubbles: true})); }"
+        )
+        terminal_host = page.locator(".terminal-renderer-host:not([hidden])")
+        page.wait_for_function(
+            "document.querySelector('.terminal-renderer-host:not([hidden])')"
+            ".textContent.includes('ABC')"
+        )
+
+        assert terminal_host.text_content().rstrip() == "1234567890\nABC"
         browser.close()
 
 
