@@ -4947,6 +4947,7 @@ def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
         workspace=root,
         working_directory=root,
         environment={
+            "HOMEPAGE_DEMO_REPO_PYTHON": sys.executable,
             "OMEGAFLOW_TEST_ROOT": str(root),
             "PATH": os.environ.get("PATH", ""),
         },

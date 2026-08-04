@@ -5,7 +5,7 @@
 # cleanup step to run. The capture working directory is the repository root.
 omegaflow_prepare_quickstart_environment() {
   export HOMEPAGE_DEMO_REPO_ROOT="$PWD"
-  local repo_python="$HOMEPAGE_DEMO_REPO_ROOT/.venv/bin/python"
+  local repo_python="${HOMEPAGE_DEMO_REPO_PYTHON:-$HOMEPAGE_DEMO_REPO_ROOT/.venv/bin/python}"
   if [[ ! -x "$repo_python" ]]; then
     echo "repository environment is missing: $repo_python" >&2
     return 1
