@@ -1,6 +1,5 @@
 ---
 kind: video
-id: internal/browser-narration-smoke
 title: Internal Browser Narration Smoke Test
 outputs:
   dir: website/static/omegaflow-videos

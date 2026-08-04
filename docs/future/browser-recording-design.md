@@ -104,7 +104,6 @@ concerns:
 
 ```yaml
 ---
-id: create-project
 title: Create a project
 browser:
   profile: desktop-v1

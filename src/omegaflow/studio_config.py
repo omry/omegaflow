@@ -976,7 +976,6 @@ class RecordingDefaults:
 @dataclass
 class RecordingSourceSpec(RecordingDefaults):
     kind: RecordingSourceKind = RecordingSourceKind.video
-    id: str = ""
     title: str | None = None
     description: str | None = None
 
@@ -984,7 +983,6 @@ class RecordingSourceSpec(RecordingDefaults):
 @dataclass
 class RecordingCollectionSourceSpec:
     kind: RecordingSourceKind = RecordingSourceKind.collection
-    id: str = ""
     title: str | None = None
     members: list[str] = field(default_factory=list)
 
@@ -993,6 +991,7 @@ class RecordingCollectionSourceSpec:
 class RecordingSpec(RecordingSourceSpec):
     """Resolved internal spec, including fields generated from the script body."""
 
+    id: str = ""
     script: str | None = None
     panes: list[PaneConfig] = field(default_factory=list)
     narration: dict[str, Any] = field(default_factory=dict)
@@ -1438,11 +1437,22 @@ def validate_studio_directive_block(
     block: dict[str, Any], *, line: int
 ) -> dict[str, Any]:
     source = f"studio-directive block near line {line}"
-    structured = structured_config_mapping(
-        block,
-        schema=StudioDirectiveBlock,
-        source=source,
-    )
+    try:
+        structured = structured_config_mapping(
+            block,
+            schema=StudioDirectiveBlock,
+            source=source,
+        )
+    except StudioConfigError as exc:
+        cause = exc.__cause__
+        if not isinstance(cause, OmegaConfBaseException):
+            raise
+        detail = str(cause).splitlines()[0]
+        full_key = getattr(cause, "full_key", None)
+        field = f"{full_key}: " if isinstance(full_key, str) and full_key else ""
+        raise StudioConfigError(
+            f"invalid {source}:\n  {field}{detail}"
+        ) from cause
     validated = project_schema_values_onto_input(structured, block)
     if not isinstance(validated, dict):
         raise StudioConfigError(f"{source} must be a mapping")
@@ -1986,10 +1996,7 @@ def recording_collection_from_script(
     )
     if spec["kind"] != RecordingSourceKind.collection.value:
         raise StudioConfigError(f"recording source is not a collection: {script_path}")
-    if spec["id"] != recording_id:
-        raise StudioConfigError(
-            f"collection id must match its recording path: expected {recording_id}"
-        )
+    spec["id"] = recording_id
     members = spec["members"]
     if not members:
         raise StudioConfigError(f"collection {recording_id} must contain members")
@@ -2041,12 +2048,12 @@ def recording_from_script(
     )
     defaults = load_recording_defaults(workspace_dir)
     spec = merge_mapping(defaults, frontmatter)
-    spec.setdefault("id", recording_id)
     spec = structured_config_mapping(
         spec,
         schema=RecordingSourceSpec,
         source=str(script_path),
     )
+    spec["id"] = recording_id
     spec["script"] = display_path(script_path)
     spec["_script_dir"] = str(script_path.parent.resolve())
     panes = panes_from_script(blocks)

@@ -233,7 +233,6 @@ def test_recording_frontmatter_accepts_declared_application_secrets(
         """\
 ---
 kind: video
-id: demo
 environment:
   secrets:
   - APP_TOKEN

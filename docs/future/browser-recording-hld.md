@@ -261,7 +261,6 @@ field names remain provisional until detailed design.
 
 ```yaml
 ---
-id: create-project
 title: Create a project
 browser:
   base_url: http://127.0.0.1:3000

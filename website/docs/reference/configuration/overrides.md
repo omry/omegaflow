@@ -19,8 +19,8 @@ omegaflow recording=demo rec.outputs.asset_dir=preview/demo
 ```
 
 The override is merged after workspace defaults and recording frontmatter. It
-can change recording behavior, but cannot change identity or generated fields
-such as `id` and OmegaFlow's private `_...` metadata.
+can change recording behavior, but cannot change the directory-derived `id` or
+OmegaFlow's private `_...` metadata.
 
 `rec.*` is useful for diagnosis, local previews, and deliberate one-off output
 variants. If a value defines the normal project behavior, put it in
@@ -37,7 +37,6 @@ A recording can declare shell-safe parameters and their defaults:
 ```yaml
 ---
 kind: video
-id: greeting
 title: Greeting
 parameters:
   name: world

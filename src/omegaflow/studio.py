@@ -609,8 +609,9 @@ def narration_billing_message(
     color: bool | None = None,
 ) -> str | None:
     def amount(value: float) -> str:
+        display = "< $0.01" if value < 0.01 else f"${value:.2f}"
         return color_text(
-            audio.format_usd(value),
+            display,
             ANSI_GREEN_BOLD,
             enabled=color,
         )
@@ -633,10 +634,12 @@ def narration_billing_message(
             f"{amount(transcription.estimated_cost_usd)}"
         )
     total = tts.estimated_cost_usd + transcription.estimated_cost_usd
+    message = f"OpenAI narration estimated cost this build: {amount(total)}"
+    if total <= 0.10:
+        return message
     return (
-        f"OpenAI narration estimated cost this build: {amount(total)} "
-        f"(TTS {amount(tts.estimated_cost_usd)} + transcription "
-        f"{amount(transcription.estimated_cost_usd)})"
+        f"{message} (TTS {amount(tts.estimated_cost_usd)} + "
+        f"transcription {amount(transcription.estimated_cost_usd)})"
     )
 
 
@@ -836,7 +839,6 @@ def bootstrap_recording_text(recording_id: str, title: str) -> str:
     return f"""\
 ---
 kind: video
-id: {recording_id}
 title: {title}
 publish:
   default: html
@@ -1172,7 +1174,6 @@ def execute_bootstrap_files(
     writes: list[BootstrapFile],
     workspace: Path,
     label: str,
-    next_recording: str,
     dry_run_mode: str | None,
 ) -> int:
     for item in writes:
@@ -1227,8 +1228,6 @@ def execute_bootstrap_files(
             mode=item.mode,
         )
         print(f"{status:>7} {display_path(item.path)}")
-    print()
-    print(f"next    omegaflow recording={next_recording} action=build")
     return 0
 
 
@@ -1298,7 +1297,6 @@ def run_bootstrap(config: dict[str, Any]) -> int:
         writes=writes,
         workspace=workspace,
         label=recording_id,
-        next_recording=recording_id,
         dry_run_mode=dry_run_mode,
     )
 
@@ -1356,7 +1354,6 @@ def run_tutorial_bootstrap(config: dict[str, Any]) -> int:
         writes=writes,
         workspace=workspace,
         label="tutorial",
-        next_recording=TUTORIAL_BOOTSTRAP_RECORDING_ID,
         dry_run_mode=dry_run_mode,
     )
 
@@ -3079,7 +3076,6 @@ def run_watch_rebuild(
         config,
         spec,
         plan,
-        show_followups=False,
         publish_surfaces=False,
         garbage_collect_runs=beat_id is None,
         reuse_latest_capture=beat_id is None,
@@ -3550,20 +3546,6 @@ def studio_tool_command(recording_id: str, *overrides: str) -> str:
     return " ".join(shlex.quote(part) for part in parts)
 
 
-def print_success_followups(cfg: DictConfig) -> None:
-    if OmegaConf.select(cfg, "output_format", default="text") == "json":
-        return
-    recording_value = OmegaConf.select(cfg, "recording")
-    recording_id = recording_id_from_value(recording_value)
-    if not isinstance(recording_id, str) or not recording_id:
-        return
-    print(
-        color_text("watch", ANSI_GREEN_BOLD)
-        + "  "
-        + studio_tool_command(recording_id, "action=watch")
-    )
-
-
 def print_publish_surfaces(
     cfg: DictConfig,
     surfaces: list[tuple[str, PublishSurfaceOutcome, bool]],
@@ -3793,7 +3775,7 @@ def run_collection_build(cfg: DictConfig, config: dict[str, Any]) -> int:
         if text_output_enabled(cfg):
             info_line(f"[{index}/{count}] {member}")
         try:
-            run_build(member_cfg, show_followups=False)
+            run_build(member_cfg)
         except StudioError as exc:
             raise StudioError(
                 f"collection {collection['id']} failed at {member}: {exc}"
@@ -3890,7 +3872,6 @@ def run_manifest_build(
     spec: dict[str, Any],
     plan: Any,
     *,
-    show_followups: bool = True,
     publish_surfaces: bool = True,
     garbage_collect_runs: bool = True,
     reuse_latest_capture: bool = True,
@@ -4088,12 +4069,10 @@ def run_manifest_build(
                     raise StudioError(
                         f"could not persist build timing: {exc}"
                     ) from exc
-    if show_followups:
-        print_success_followups(cfg)
     return 0
 
 
-def run_build(cfg: DictConfig, *, show_followups: bool = True) -> int:
+def run_build(cfg: DictConfig) -> int:
     config = container_from_hydra_cfg(cfg)
     spec = load_recording_spec_from_hydra_cfg(cfg)
     plan = normalized_recording_plan(spec)
@@ -4102,7 +4081,6 @@ def run_build(cfg: DictConfig, *, show_followups: bool = True) -> int:
         config,
         spec,
         plan,
-        show_followups=show_followups,
     )
 
 

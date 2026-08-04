@@ -18,8 +18,9 @@ OmegaFlow builds the final recording config in this order:
 3. The per-recording config block in `<recording-dir>/<id>/index.md` frontmatter.
 4. CLI `rec.*` overrides, such as `rec.capture.headless=false`.
 
-Later layers override earlier layers. `id` and `title` are recording identity
-fields; they belong in frontmatter and are rejected in workspace `config.yaml`.
+Later layers override earlier layers. The recording `id` is derived from the
+directory path and cannot be authored in config. `title` belongs in frontmatter
+and is rejected in workspace `config.yaml`.
 
 This page starts after OmegaFlow has selected the recording workspace. Tool-level
 settings such as which directory to use are documented in
@@ -104,7 +105,6 @@ Each `<id>/index.md` recording starts with YAML frontmatter:
 ```yaml
 ---
 kind: video
-id: hello
 title: Hello Video
 description: A small narrated hello-world recording.
 publish:
@@ -120,7 +120,7 @@ audio:
 
 The frontmatter header is the right place for recording-specific config:
 
-- `kind`, `id`, `title`, and `description`
+- `kind`, `title`, and `description`
 - one-off output overrides
 - one-off audio settings
 - recording-local setup, cleanup, or configured beats
@@ -128,10 +128,14 @@ The frontmatter header is the right place for recording-specific config:
 
 ## Structure
 
+OmegaFlow derives each recording id from its directory relative to the
+recording workspace. For example, `recordings/tutorial/install/index.md` has id
+`tutorial/install`. `id` is available in the resolved config for interpolation,
+but is not an accepted frontmatter field.
+
 | Field | Type | Notes |
 | --- | --- | --- |
-| `kind` | `video` or `collection` | Source type. Omitted values default to `video`; declare `kind: collection` for a collection. Collections use only `id`, `title`, and `members`. |
-| `id` | string | Required per recording. Used by `omegaflow recording=<id>`. Nested ids such as `tutorial/install` are supported. Frontmatter only. |
+| `kind` | `video` or `collection` | Source type. Omitted values default to `video`; declare `kind: collection` for a collection. Collections use only `title` and `members`. |
 | `title` | string | Human-readable title for players and publish surfaces. Frontmatter only. |
 | `description` | string | Short summary used when a collection renders its watch index. Frontmatter only. |
 | `parameters` | mapping | Script parameters and defaults for `script_params`. |
@@ -548,7 +552,6 @@ class RecordingDefaults:
 @dataclass
 class RecordingSourceSpec(RecordingDefaults):
     kind: RecordingSourceKind = RecordingSourceKind.video
-    id: str = ""
     title: str | None = None
     description: str | None = None
 
@@ -556,7 +559,6 @@ class RecordingSourceSpec(RecordingDefaults):
 @dataclass
 class RecordingCollectionSourceSpec:
     kind: RecordingSourceKind = RecordingSourceKind.collection
-    id: str = ""
     title: str | None = None
     members: list[str] = field(default_factory=list)
 ```

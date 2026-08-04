@@ -1,6 +1,5 @@
 ---
 kind: video
-id: quickstart-demo
 title: Quickstart Demo
 capture:
   window_size: 90x24

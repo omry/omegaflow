@@ -649,7 +649,6 @@ close to:
 
 ```yaml
 ---
-id: sunset-beach
 title: Refine a Sunset Beach Poster
 ---
 ```

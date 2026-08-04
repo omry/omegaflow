@@ -1,5 +1,4 @@
 ---
-id: sunset-beach
 title: Refine a Sunset Beach Poster
 setup:
 - name: restore the Tiny Canvas draft

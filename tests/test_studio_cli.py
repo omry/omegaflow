@@ -966,11 +966,7 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
     output = capsys.readouterr().out
     assert "step  Recording workflow (0 actions)" in output
     assert "step  Preparing narration (1 take)" in output
-    assert (
-        "info  OpenAI narration estimated cost this build: $0.002000 "
-        "(TTS $0.001500 + transcription $0.000500)"
-        in output
-    )
+    assert "info  OpenAI narration estimated cost this build: < $0.01" in output
     assert "step  Assembling video" in output
     assert "pass  build completed after" in output
     assert " · video length 1.4s" in output
@@ -978,6 +974,7 @@ def test_manifest_build_folds_internal_steps_into_concise_progress(
     assert "compile presentation" not in output
     assert "publish surface" not in output
     assert "wrote presentation" not in output
+    assert "omegaflow recording=demo action=watch" not in output
     assert "publish  website (Docusaurus): updated — rebuild required" in output
     assert str(tmp_path / "website.html") not in output
     assert (
@@ -1026,20 +1023,49 @@ def test_narration_billing_message_colors_only_dollar_amounts() -> None:
         tts_billing=audio.AudioBillingSummary(
             generated_segments=1,
             billable_characters=100,
-            estimated_cost_usd=0.0015,
+            estimated_cost_usd=0.004275,
         ),
         transcription_billing=audio.AudioTranscriptionBillingSummary(
             generated_timestamp_files=1,
             audio_seconds=5.0,
-            estimated_cost_usd=0.0005,
+            estimated_cost_usd=0.001846,
         ),
     )
 
     assert studio.narration_billing_message(artifacts, color=True) == (
         "OpenAI narration estimated cost this build: "
-        f"{ANSI_GREEN_BOLD}$0.002000{ANSI_RESET} "
-        f"(TTS {ANSI_GREEN_BOLD}$0.001500{ANSI_RESET} + transcription "
-        f"{ANSI_GREEN_BOLD}$0.000500{ANSI_RESET})"
+        f"{ANSI_GREEN_BOLD}< $0.01{ANSI_RESET}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("tts_cost", "transcription_cost", "expected"),
+    [
+        (0.007, 0.003, "$0.01"),
+        (0.075, 0.025, "$0.10"),
+        (0.087, 0.034, "$0.12 (TTS $0.09 + transcription $0.03)"),
+    ],
+)
+def test_narration_billing_message_rounds_to_cents_and_limits_breakdown(
+    tts_cost: float,
+    transcription_cost: float,
+    expected: str,
+) -> None:
+    artifacts = SimpleNamespace(
+        tts_billing=audio.AudioBillingSummary(
+            generated_segments=1,
+            billable_characters=100,
+            estimated_cost_usd=tts_cost,
+        ),
+        transcription_billing=audio.AudioTranscriptionBillingSummary(
+            generated_timestamp_files=1,
+            audio_seconds=5.0,
+            estimated_cost_usd=transcription_cost,
+        ),
+    )
+
+    assert studio.narration_billing_message(artifacts, color=False) == (
+        f"OpenAI narration estimated cost this build: {expected}"
     )
 
 
@@ -1807,7 +1833,6 @@ def test_narration_step_prepares_build_narration_without_capture(
         """
 ---
 kind: video
-id: narrated
 audio:
   enabled: true
 ---
@@ -1956,7 +1981,6 @@ def test_studio_recording_dir_comes_from_config(tmp_path) -> None:
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 ---
 
@@ -1997,7 +2021,6 @@ def test_nested_recording_directories_are_listed_and_loaded(tmp_path) -> None:
     (recording_dir / "index.md").write_text(
         """
 ---
-id: tutorial/recording-file
 title: Tutorial Recording File
 ---
 
@@ -2047,6 +2070,32 @@ beat:
     )
 
 
+@pytest.mark.parametrize("kind", ["video", "collection"])
+def test_recording_source_rejects_authored_id(tmp_path, kind: str) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    collection_fields = "members:\n  - child\n" if kind == "collection" else ""
+    (recording_dir / "index.md").write_text(
+        f"""\
+---
+kind: {kind}
+id: other
+{collection_fields}---
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(StudioConfigError, match=r"Key 'id' not in"):
+        if kind == "collection":
+            studio_config_module.recording_collection_from_script(
+                "hello",
+                recording_dir=recordings_dir,
+            )
+        else:
+            recording_from_script("hello", recording_dir=recordings_dir)
+
+
 def test_recording_source_kind_defaults_to_video_for_compatibility(tmp_path) -> None:
     recordings_dir = tmp_path / "recordings"
     recording_dir = recordings_dir / "hello"
@@ -2054,7 +2103,6 @@ def test_recording_source_kind_defaults_to_video_for_compatibility(tmp_path) -> 
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 ---
 
@@ -2085,7 +2133,6 @@ def test_recording_video_preserves_description(tmp_path) -> None:
         """
 ---
 kind: video
-id: hello
 title: Hello Video
 description: Learn how to make a narrated terminal video.
 ---
@@ -2117,7 +2164,6 @@ def test_recording_beat_without_narration_is_a_valid_silent_beat(tmp_path) -> No
         """
 ---
 kind: video
-id: hello
 title: Hello Video
 ---
 
@@ -2156,7 +2202,6 @@ def test_recording_beat_with_explicit_empty_narration_reports_public_config_erro
         """
 ---
 kind: video
-id: hello
 title: Hello Video
 ---
 
@@ -2186,7 +2231,6 @@ def test_recording_collection_preserves_declared_member_order(tmp_path) -> None:
         """
 ---
 kind: collection
-id: tutorial
 title: Tutorial
 members:
   - tutorial/recording-file
@@ -2224,7 +2268,6 @@ def test_recording_collection_rejects_duplicate_members(tmp_path) -> None:
         """
 ---
 kind: collection
-id: tutorial
 members:
   - tutorial/beat
   - tutorial/beat
@@ -2254,7 +2297,6 @@ def test_collection_build_delegates_to_video_pipeline_in_member_order(
         """
 ---
 kind: collection
-id: tutorial
 title: Tutorial
 members:
   - tutorial/recording-file
@@ -2270,7 +2312,6 @@ members:
             f"""
 ---
 kind: video
-id: {member}
 title: {member}
 audio:
   enabled: false
@@ -2308,17 +2349,17 @@ beat:
         },
     }
     cfg = OmegaConf.create(config)
-    built: list[tuple[str, bool]] = []
+    built: list[str] = []
 
-    def fake_run_build(member_cfg, *, show_followups=True):
-        built.append((OmegaConf.select(member_cfg, "recording"), show_followups))
+    def fake_run_build(member_cfg):
+        built.append(OmegaConf.select(member_cfg, "recording"))
         return 0
 
     monkeypatch.setattr(studio, "run_build", fake_run_build)
 
     assert studio.run_collection_build(cfg, config) == 0
 
-    assert built == [(members[0], False), (members[1], False)]
+    assert built == members
     output = capsys.readouterr().out
     assert "build collection: Tutorial (2 videos)" in output
     assert "[1/2] tutorial/recording-file" in output
@@ -2397,7 +2438,6 @@ def test_tool_dispatches_collection_to_collection_build(tmp_path, monkeypatch) -
         """
 ---
 kind: collection
-id: tutorial
 members:
   - tutorial/beat
 ---
@@ -2435,7 +2475,6 @@ def test_tool_dispatches_collection_to_collection_watch(tmp_path, monkeypatch) -
         """
 ---
 kind: collection
-id: tutorial
 members:
   - tutorial/beat
 ---
@@ -2473,7 +2512,6 @@ def test_tool_rejects_beat_target_for_a_collection(tmp_path, monkeypatch) -> Non
         """
 ---
 kind: collection
-id: tutorial
 members:
   - tutorial/beat
 ---
@@ -2517,7 +2555,6 @@ def test_tool_rejects_single_video_actions_for_a_collection(tmp_path) -> None:
         """
 ---
 kind: collection
-id: tutorial
 members:
   - tutorial/beat
 ---
@@ -2592,7 +2629,6 @@ def test_audio_timing_markers_require_audio_enabled(tmp_path) -> None:
     (recording_dir / "index.md").write_text(
         """\
 ---
-id: demo
 title: Demo
 ---
 
@@ -2638,7 +2674,6 @@ def test_text_highlight_anchor_timing_requires_audio_enabled(tmp_path) -> None:
     (recording_dir / "index.md").write_text(
         """\
 ---
-id: demo
 title: Demo
 ---
 
@@ -2692,7 +2727,6 @@ def test_flat_recording_file_is_not_supported(tmp_path, monkeypatch) -> None:
     (recordings_dir / "hello.md").write_text(
         """
 ---
-id: hello
 title: Old Layout
 ---
 """.lstrip(),
@@ -2876,7 +2910,6 @@ style:
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 audio:
   enabled: true
@@ -2928,7 +2961,6 @@ def test_rec_from_tool_config_overrides_recording_spec(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 capture:
   headless: true
@@ -2977,7 +3009,6 @@ def test_rec_overrides_are_applied_before_recording_interpolations(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 outputs:
   dir: site/videos
@@ -3020,7 +3051,6 @@ def test_rec_rejects_non_mapping(tmp_path) -> None:
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 ---
 
@@ -3061,7 +3091,6 @@ def test_rec_rejects_identity_and_generated_fields(tmp_path) -> None:
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 title: Hello Video
 ---
 
@@ -3190,7 +3219,7 @@ def test_recordings_config_rejects_identity_fields(tmp_path, monkeypatch) -> Non
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3236,7 +3265,6 @@ audio:
         (recording_dir / "index.md").write_text(
             f"""
 ---
-id: {recording_id}
 title: {recording_id.title()}
 ---
 
@@ -3280,7 +3308,6 @@ def test_recording_schema_rejects_unknown_nested_config(tmp_path, monkeypatch) -
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 capture:
   typo_window_size: 80x20
 ---
@@ -3317,7 +3344,6 @@ def test_recording_schema_rejects_old_top_level_retime_config(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 retime:
   post_command_pause: 0.1
 ---
@@ -3347,7 +3373,6 @@ def test_recording_schema_validates_frontmatter_command_fields(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 beats:
 - id: configured
   heading: Say Hello
@@ -3391,7 +3416,6 @@ def test_recording_schema_rejects_unknown_command_field(tmp_path, monkeypatch) -
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 beats:
 - id: hello
   heading: Say Hello
@@ -3423,7 +3447,6 @@ def test_recording_schema_rejects_old_command_retime_field(
     (recordings_dir / "hello" / "index.md").write_text(
         """
 ---
-id: hello
 beats:
 - id: hello
   heading: Say Hello
@@ -3478,6 +3501,27 @@ beat:
         assert "Key 'surprise' not in 'StudioDirectiveBeat'" in str(exc)
     else:
         raise AssertionError("expected unknown beat key to fail")
+
+
+def test_studio_directive_type_error_is_concise_and_names_the_field() -> None:
+    script = """
+```yaml studio-directive
+beat:
+  id: hello
+  medium: shell
+```
+""".lstrip()
+
+    with pytest.raises(StudioConfigError) as exc_info:
+        studio_directive_blocks(script)
+
+    assert str(exc_info.value) == (
+        "invalid studio-directive block near line 1:\n"
+        "  beat.medium: Invalid value 'shell', expected one of "
+        "[terminal, browser]"
+    )
+    assert "reference_type" not in str(exc_info.value)
+    assert "object_type" not in str(exc_info.value)
 
 
 def test_studio_directive_schema_rejects_unknown_action_payload_key() -> None:
@@ -3535,7 +3579,6 @@ def test_recording_frontmatter_rejects_non_user_fields(
     (recording_dir / "index.md").write_text(
         f"""
 ---
-id: hello
 {generated_field}: {{}}
 ---
 
@@ -3568,7 +3611,6 @@ def test_recording_frontmatter_accepts_a_typed_narration_stream_id(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 narration:
   id: guide
 ---
@@ -3607,7 +3649,7 @@ def test_studio_directive_accepts_pane_title_shortcuts(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3668,7 +3710,6 @@ def test_studio_directive_accepts_targeted_browser_handoff(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 browser: {}
 ---
 
@@ -3730,7 +3771,7 @@ def test_studio_directive_accepts_realtime_input_on_explicit_terminal_pane(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3791,7 +3832,6 @@ def test_recording_frontmatter_rejects_pane_declarations(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 panes:
 - id: terminal
   kind: terminal
@@ -3830,7 +3870,7 @@ def test_recordings_config_rejects_pane_declarations(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3862,7 +3902,7 @@ def test_rec_override_rejects_pane_declarations(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3900,7 +3940,7 @@ def test_studio_directive_rejects_duplicate_pane_declarations(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -3941,7 +3981,7 @@ def test_studio_directive_rejects_empty_pane_declaration(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -4007,7 +4047,7 @@ panes:
         (
             """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -4039,7 +4079,7 @@ def test_studio_directive_requires_panes_before_empty_beat_declaration(
     (recording_dir / "index.md").write_text(
         f"""
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -4071,7 +4111,7 @@ def test_explicit_multi_pane_beat_requires_pane_declaration(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
+kind: video
 ---
 
 ```yaml studio-directive
@@ -4119,7 +4159,6 @@ def test_studio_directive_panes_reject_preceding_config_beats(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 beats:
 - id: configured
   actions:
@@ -4164,7 +4203,6 @@ def test_studio_directive_panes_build_a_multi_pane_plan(
     (recording_dir / "index.md").write_text(
         """
 ---
-id: hello
 audio:
   enabled: false
 ---
@@ -4907,7 +4945,7 @@ def test_bootstrap_creates_composable_project_workspace(tmp_path, monkeypatch) -
     }
     assert "id:" not in shared_config
     assert "title:" not in shared_config
-    assert "id: test-video" in recording
+    assert "\nid:" not in recording
     assert "type: standalone_html" in recording
     assert "cast:" not in recording
     assert "file: ${outputs.asset_dir}/index.html" in recording
@@ -4971,7 +5009,7 @@ def test_project_bootstrap_creates_the_minimal_project_tree(
     recording = (
         tmp_path / "recordings" / "test-video" / "index.md"
     ).read_text(encoding="utf-8")
-    assert "id: test-video" in recording
+    assert "\nid:" not in recording
     assert "title: Test Video" in recording
     assert "quickstart" not in recording.lower()
 
@@ -5347,7 +5385,7 @@ def test_project_bootstrap_preserves_existing_files_until_forced(
     assert recordings_ignore.read_text(encoding="utf-8") == (
         "# user recording rule\n**/app.secret.env\n"
     )
-    assert "id: test-video" in recording_file.read_text(encoding="utf-8")
+    assert "\nid:" not in recording_file.read_text(encoding="utf-8")
     assert "exists .omegaflow/omegaflow-secret.env" in output
     assert "updated recordings/test-video/index.md" in output
 
@@ -5369,13 +5407,13 @@ def test_bootstrap_default_recording_is_test_video(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
 
     assert status == 0
-    assert "next    omegaflow recording=test-video action=build\n" in output
+    assert "next    " not in output
     recording = (workspace / "test-video" / "index.md").read_text(
         encoding="utf-8"
     )
     support_dir = workspace / "test-video" / "scripts"
 
-    assert "id: test-video" in recording
+    assert "\nid:" not in recording
     assert "title: Test Video" in recording
     assert "heading: First Video Beat" in recording
     assert "heading: Second Video Beat" in recording
@@ -5429,7 +5467,7 @@ def test_bootstrap_dry_run_diff_does_not_write(tmp_path, capsys) -> None:
     assert "+studio:" in output
     assert "+  recording_dir: recordings" in output
     assert "+  data_dir: recordings/.omegaflow" in output
-    assert "+id: test-video" in output
+    assert "+id:" not in output
     assert '+      run: "# First video beat"' in output
     assert '+      run: "# Second video beat"' in output
     assert "No files were written." in output
@@ -5577,7 +5615,7 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     ]
 
     recording = (tutorial_root / "index.md").read_text(encoding="utf-8")
-    assert "id: sunset-beach" in recording
+    assert "\nid:" not in recording
     assert "title: Refine a Sunset Beach Poster" in recording
     assert "id: inspect-draft" in recording
     assert "medium: terminal" in recording
@@ -5651,7 +5689,7 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
     assert not (tutorial_root / "sunset-study.svg").exists()
 
     output = capsys.readouterr().out
-    assert "next    omegaflow recording=sunset-beach action=build" in output
+    assert "next    " not in output
 
 
 def test_tiny_canvas_filename_is_derived_from_the_artwork_title() -> None:
@@ -5693,7 +5731,7 @@ def test_tutorial_bootstrap_preserves_user_owned_files_until_forced(
     assert studio.run_tool_from_hydra_cfg(OmegaConf.create(forced)) == 0
     output = capsys.readouterr().out
 
-    assert "id: sunset-beach" in recording.read_text(encoding="utf-8")
+    assert "\nid:" not in recording.read_text(encoding="utf-8")
     assert "Tiny Canvas" in application.read_text(encoding="utf-8")
     assert "updated recordings/sunset-beach/index.md" in output
     assert "updated recordings/sunset-beach/app/index.html" in output
@@ -5835,24 +5873,6 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     assert browser_actions[2].config["after"] == "@sun@"
     assert browser_actions[3].config["after"] == "@tree@"
     assert browser_actions[4].config["after"] == "@save@"
-
-
-def test_success_followups_show_user_facing_actions(capsys) -> None:
-    cfg = OmegaConf.create(
-        {
-            "recording": "quickstart-demo",
-            "output_format": "text",
-        }
-    )
-
-    studio.print_success_followups(cfg)
-
-    output = capsys.readouterr().out
-    assert output.splitlines() == [
-        "watch  omegaflow recording=quickstart-demo action=watch"
-    ]
-    assert "action=play" not in output
-    assert "action=inspect" not in output
 
 
 def test_play_is_not_a_public_action() -> None:
@@ -7181,7 +7201,6 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
         spec,
         plan,
         *,
-        show_followups=True,
         publish_surfaces=True,
         garbage_collect_runs=True,
         reuse_latest_capture=True,
@@ -7191,7 +7210,6 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
             build_config=config,
             spec=spec,
             plan=plan,
-            show_followups=show_followups,
             publish_surfaces=publish_surfaces,
             garbage_collect_runs=garbage_collect_runs,
             reuse_latest_capture=reuse_latest_capture,
@@ -7205,7 +7223,6 @@ def test_watch_rebuild_uses_a_build_config_and_recording_run_dir(
     assert observed["run_dir"].parent == (
         tmp_path / "recordings/.omegaflow/runs/hello"
     )
-    assert observed["show_followups"] is False
     assert observed["publish_surfaces"] is False
     assert observed["garbage_collect_runs"] is True
     assert observed["reuse_latest_capture"] is True
@@ -7259,7 +7276,6 @@ def test_watch_rebuild_selected_prefix_uses_private_scratch_run(
         spec,
         plan,
         *,
-        show_followups=True,
         publish_surfaces=True,
         garbage_collect_runs=True,
         reuse_latest_capture=True,
@@ -7267,7 +7283,6 @@ def test_watch_rebuild_selected_prefix_uses_private_scratch_run(
         observed.update(
             run_dir=Path(spec["_hydra_output_dir"]),
             plan=plan,
-            show_followups=show_followups,
             publish_surfaces=publish_surfaces,
             garbage_collect_runs=garbage_collect_runs,
             reuse_latest_capture=reuse_latest_capture,
@@ -7284,7 +7299,6 @@ def test_watch_rebuild_selected_prefix_uses_private_scratch_run(
         / "recordings/.omegaflow/runs/.scratch/watch/hello/prepare"
     ) in run_dir.parents
     assert observed["plan"] == ("full", "prepare")
-    assert observed["show_followups"] is False
     assert observed["publish_surfaces"] is False
     assert observed["garbage_collect_runs"] is False
     assert observed["reuse_latest_capture"] is False

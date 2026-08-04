@@ -1,5 +1,4 @@
 ---
-id: sunset-beach
 title: Refine a Sunset Beach Poster
 publish:
   default: html

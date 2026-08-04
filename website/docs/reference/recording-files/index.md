@@ -37,14 +37,13 @@ A recording Markdown file has three main parts:
 
 | Part | Purpose | Where to read more |
 | --- | --- | --- |
-| Recording configuration | YAML frontmatter at the top of the file. Defines `id`, `title`, and per-video config overrides. | [Recording Configuration](../configuration/recordings.md) |
+| Recording configuration | YAML frontmatter at the top of the file. Defines `title` and per-video config overrides. The directory path supplies the recording id. | [Recording Configuration](../configuration/recordings.md) |
 | Markdown prose | Human-readable notes and headings for the authored walkthrough. | This page |
 | `studio-directive` blocks | Machine-readable scene, pane, and beat declarations that OmegaFlow records, retimes, checks, and publishes. | [Recording schema](./schema.md) |
 
 ````md
 ---
 kind: video
-id: test-video
 title: Test Video
 ---
 
@@ -93,7 +92,6 @@ An `index.md` can instead define an ordered build shortcut:
 ```yaml
 ---
 kind: collection
-id: release
 title: Release Walkthroughs
 members:
   - release/install

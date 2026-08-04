@@ -1,6 +1,5 @@
 ---
 kind: video
-id: reference/terminal-highlights
 title: Highlight Terminal Output
 description: Apply exact-text and multiline regular-expression highlights in sync with narration.
 capture:
