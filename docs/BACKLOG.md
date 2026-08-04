@@ -60,6 +60,23 @@ server, client, plugin, deployment, and product-security work.
       useful CLI and `failure.json` diagnostics; and cover noisy output,
       multi-command beats, lifecycle steps, cancellation, and secret redaction.
 
+- [ ] `P1` Add an authored player-size and undersized-viewing policy.
+      Dense multi-pane recordings can become unreadable when a website embed
+      scales them into a narrow container, even though the player controls
+      remain responsive. Add typed recording-level player settings for
+      `preferred_size`, `minimum_size`, and an explicit `below_minimum` policy;
+      carry the policy in the generated presentation manifest so standalone
+      and embedded players apply the same contract. The guided Tiny Canvas
+      tutorial should declare a preferred size of `1680x1120`, a minimum size
+      of `1440x960`, and `below_minimum: unsupported`. An unsupported surface
+      must show a clear larger-display requirement instead of a miniature
+      player or poster. Acceptance checks: define sizes as rendered player CSS
+      pixels rather than device resolution; require authors to choose the
+      below-minimum behavior; validate malformed or contradictory sizes;
+      preserve the declared aspect ratio on publishing surfaces; cover player
+      behavior immediately above and below the minimum; and verify the tutorial
+      in its standalone and website surfaces.
+
 - [ ] `P1` Improve the visual design of the tutorial orientation roadmap.
       The current full-screen monospaced list is functional but visually dull
       and leaves most of the presentation area unused. Keep the roadmap limited
