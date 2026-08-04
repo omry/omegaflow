@@ -451,6 +451,10 @@ def compile_recording_timing(
         )
         scheduled_pane_beats.extend(explicit_pane_beats)
         scheduled_pane_actions.extend(explicit_pane_actions)
+        for action in explicit_pane_actions:
+            action_end_nodes[(action.outer_beat_id, action.action_id)] = (
+                action.end_node
+            )
         visual_end_nodes.update(explicit_visual_ends)
     else:
         for beat in plan.beats:

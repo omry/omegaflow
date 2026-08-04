@@ -250,6 +250,10 @@ spoken while `install_command` is still running. This is completion-based
 synchronization, so it remains correct when command duration varies between
 recordings or machines.
 
+In an explicit multi-pane beat, a wait can target an action in any pane. The
+target action id must be unique within that outer beat so OmegaFlow can resolve
+the completion milestone unambiguously.
+
 Add an optional gap when the result needs a little time to settle visually:
 
 ```text

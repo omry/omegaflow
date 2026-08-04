@@ -306,10 +306,10 @@ def validate_terminal_input_step(value: object, *, field: str) -> None:
         raise RecordingPlanError(f"{field}.key is an unsupported key")
     if operation == "control" and (
         not isinstance(mapping[operation], str)
-        or re.fullmatch(r"[A-Za-z]", mapping[operation]) is None
+        or re.fullmatch(r"[A-Za-z_]", mapping[operation]) is None
     ):
         raise RecordingPlanError(
-            f"{field}.control must be a single ASCII letter"
+            f"{field}.control must be a single ASCII letter or underscore"
         )
     if operation == "pause":
         _optional_non_negative_number(mapping[operation], field=f"{field}.pause")
@@ -2747,11 +2747,6 @@ def _explicit_outer_beat(
         )
 
     narration_text, anchors, waits = _beat_narration(beat, narration_entry)
-    if waits:
-        raise RecordingPlanError(
-            f"beats.{index} narration waits are not supported in explicit "
-            "multi-pane beats"
-        )
     anchor_ids = {anchor.id for anchor in anchors}
     tracks: list[OuterPaneTrackPlan] = []
     track_order = list(dict.fromkeys(pane_id for row in layout.areas for pane_id in row))
@@ -2822,6 +2817,25 @@ def _explicit_outer_beat(
                 beats=tuple(pane_beats),
             )
         )
+
+    action_id_counts: dict[str, int] = {}
+    for track in tracks:
+        for pane_beat in track.beats:
+            for action_index, action in enumerate(pane_beat.actions):
+                action_id = pane_action_id(action, action_index)
+                action_id_counts[action_id] = action_id_counts.get(action_id, 0) + 1
+    for wait in waits:
+        match_count = action_id_counts.get(wait.target, 0)
+        if match_count == 0:
+            raise RecordingPlanError(
+                f"narration wait in beat {beat['id']!r} references unknown "
+                f"pane action {wait.target!r}"
+            )
+        if match_count > 1:
+            raise RecordingPlanError(
+                f"narration wait in beat {beat['id']!r} references ambiguous "
+                f"pane action {wait.target!r}"
+            )
 
     effects = _text_highlights(
         beat,
@@ -2904,7 +2918,7 @@ def _explicit_outer_beat(
         player_highlight=player_highlight,
         guide=guide,
         anchors=anchors,
-        waits=(),
+        waits=waits,
         effects=effects,
         pane_tracks=tuple(tracks),
         layout=PaneLayoutPlan(

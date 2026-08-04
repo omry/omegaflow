@@ -194,6 +194,7 @@ def test_realtime_terminal_command_accepts_typed_input_steps() -> None:
         {"text": "updated", "interval": 0.01},
         {"key": "enter"},
         {"control": "x"},
+        {"control": "_"},
         {"pause": 0.1},
     ]
 
@@ -1969,6 +1970,42 @@ def test_explicit_terminal_and_browser_actions_normalize_cross_stream_joins() ->
     assert browser.beats[0].actions[0].start_join.event.qualified_id == (
         "terminal.session.start-app.ended"
     )
+
+
+def test_explicit_multi_pane_narration_wait_targets_unique_action() -> None:
+    spec = cross_capture_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["narration"] = (
+        "Start both panes. @wait:mark-ready+300ms@ The result is ready."
+    )
+
+    plan = normalize_recording_plan(spec)
+
+    assert [(wait.target, wait.gap_ms) for wait in plan.beats[0].waits] == [
+        ("mark-ready", 300)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        ("missing", "references unknown pane action 'missing'"),
+        ("duplicate", "references ambiguous pane action 'duplicate'"),
+    ],
+)
+def test_explicit_multi_pane_narration_wait_rejects_unresolved_action(
+    target: str,
+    message: str,
+) -> None:
+    spec = cross_capture_spec()
+    spec["audio"] = {"enabled": True}
+    spec["beats"][0]["narration"] = f"Wait. @wait:{target}@ Continue."
+    if target == "duplicate":
+        spec["beats"][0]["panes"]["terminal"][0]["actions"][0]["id"] = target
+        spec["beats"][0]["panes"]["browser"][0]["actions"][0]["id"] = target
+
+    with pytest.raises(RecordingPlanError, match=message):
+        normalize_recording_plan(spec)
 
 
 def test_nested_pane_beat_timing_inherits_and_overrides_outer_default() -> None:

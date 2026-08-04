@@ -660,6 +660,84 @@ def test_authored_wait_pauses_audio_until_action_completion_and_gap() -> None:
     ] == [(0, 500), (800, 1300)]
 
 
+def test_explicit_multi_pane_wait_pauses_audio_for_target_pane_action() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "pane-wait",
+            "audio": {"enabled": True},
+            "panes": [
+                {"id": "source", "kind": "terminal"},
+                {"id": "build", "kind": "terminal"},
+            ],
+            "beats": [
+                {
+                    "id": "validate",
+                    "narration": (
+                        "Edit the source. @wait:build-invalid+300ms@ "
+                        "Now explain the error."
+                    ),
+                    "layout": {"areas": [["source", "build"]]},
+                    "panes": {
+                        "source": [
+                            {
+                                "id": "edit",
+                                "actions": [
+                                    {"id": "edit-source", "run": "printf edit"}
+                                ],
+                            }
+                        ],
+                        "build": [
+                            {
+                                "id": "run",
+                                "actions": [
+                                    {
+                                        "id": "build-invalid",
+                                        "run": "printf error",
+                                        "after": "source.edit.edit-source.ended",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    take = plan.narration_takes[0]
+    sidecar = timestamp_sidecar(
+        plan,
+        take.id,
+        duration_ms=1000,
+        member_ranges=[(0, 1000)],
+        wait_times=[500],
+    )
+
+    timing = compile_recording_timing(
+        plan,
+        timestamp_sidecars={take.id: sidecar},
+        beat_visual_durations_ms={"validate": 900},
+        pane_action_intervals_ms={
+            ("validate", "source", "edit", "edit-source"): (0, 400),
+            ("validate", "build", "run", "build-invalid"): (0, 500),
+        },
+        pane_beat_visual_durations_ms={
+            ("validate", "source", "edit"): 400,
+            ("validate", "build", "run"): 500,
+        },
+    )
+
+    build = next(
+        action
+        for action in timing.pane_actions
+        if action.action_id == "build-invalid"
+    )
+    assert (build.local_start_ms, build.local_end_ms) == (400, 900)
+    assert [
+        (interval.presentation_start_ms, interval.presentation_end_ms)
+        for interval in timing.audio_intervals
+    ] == [(0, 500), (1200, 1700)]
+
+
 def test_wait_at_shared_member_boundary_delays_boundary_without_audio_fragmentation() -> None:
     plan = normalize_recording_plan(
         {
