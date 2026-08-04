@@ -1747,6 +1747,34 @@ def test_realtime_action_until_can_follow_its_condition_past_implicit_limit(
     assert 3000 < authored_duration_ms <= 5000
     assert abs(fragment["duration_ms"] - authored_duration_ms) <= 120
     assert fragment["encoded_bytes"] <= 2_000_000
+    media = browser_visuals.require_browser_media_runtime(require_h264=True)
+    keyframe_probe = subprocess.run(
+        [
+            media.ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=key_frame,best_effort_timestamp_time",
+            "-of",
+            "json",
+            str(tmp_path / "run" / fragment["path"]),
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    keyframe_times = [
+        float(frame["best_effort_timestamp_time"])
+        for frame in json.loads(keyframe_probe.stdout)["frames"]
+        if frame.get("key_frame") == 1
+    ]
+    assert len(keyframe_times) >= 4
+    assert max(
+        right - left for left, right in zip(keyframe_times, keyframe_times[1:])
+    ) <= 1.05
 
 
 def test_implicit_dynamic_fragment_keeps_short_duration_limit(tmp_path: Path) -> None:
