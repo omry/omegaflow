@@ -27,6 +27,9 @@ jobs:
       - name: Install package and test dependencies
         run: python -m pip install -e ".[dev,browser]"
 
+      - name: Install terminal recorder
+        run: python tools/vendor_asciinema.py linux-x86_64
+
       - name: Install Chromium and browser system dependencies
         run: python -m playwright install --with-deps chromium
 
@@ -45,7 +48,7 @@ jobs:
             echo "## Python tests"
             echo ""
             echo "- Installed the package with dev and browser dependencies."
-            echo "- Installed pinned Chromium, FFmpeg, and FFprobe."
+            echo "- Installed the pinned terminal recorder, Chromium, FFmpeg, and FFprobe."
             echo "- Ran \`nox -s ci\` (tests and generated schema docs)."
             echo "- Job status: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
