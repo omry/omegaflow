@@ -877,6 +877,36 @@ const renderer = core.createBrowserRendererAdapter({render() {}});
     assert result.returncode == 0, result.stderr
 
 
+def test_browser_scene_exposes_chrome_reload_only_during_refresh_event() -> None:
+    result = run_core_script(
+        r"""
+const payload = {
+  payload_version: 1,
+  beat_id: 'browser',
+  duration_ms: 800,
+  viewport: {width: 1000, height: 500, device_scale_factor: 1},
+  initial_state: 'initial',
+  initial_pointer: {x: 10, y: 20, visible: true},
+  initial_display_url: 'https://example.test/',
+  events: [
+    {
+      kind: 'chrome_reload', action_id: 'refresh', at_ms: 100, end_ms: 520,
+    },
+  ],
+};
+const before = core.browserSceneAt(payload, 50);
+const during = core.browserSceneAt(payload, 310);
+const after = core.browserSceneAt(payload, 600);
+if (before.chromeReload !== null || during.chromeReload === null || after.chromeReload !== null) {
+  console.error(JSON.stringify({before, during, after}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_viewport_layout_scales_uniformly_and_letterboxes() -> None:
     result = run_core_script(
         r"""

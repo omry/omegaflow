@@ -2251,6 +2251,7 @@ CLICK_DURATION_MS = 120
 FOCUS_DURATION_MS = 100
 STATE_FADE_DURATION_MS = 180
 KEY_DURATION_MS = 300
+CHROME_RELOAD_DURATION_MS = 420
 SCROLL_MIN_DURATION_MS = 280
 SCROLL_MAX_DURATION_MS = 900
 
@@ -2649,6 +2650,16 @@ def _compile_browser_action(
         )
         resolved_pointer["visible"] = visible
         return events, cursor, resolved_pointer
+    if action.kind == "reload_page":
+        events.append(
+            {
+                "kind": "chrome_reload",
+                "action_id": action.id,
+                "at_ms": cursor,
+                "end_ms": cursor + CHROME_RELOAD_DURATION_MS,
+            }
+        )
+        cursor += CHROME_RELOAD_DURATION_MS
     if action.kind in {"click", "move_pointer"}:
         point = _target_point(target, action.id)
         move_duration, curve = pointer_motion(

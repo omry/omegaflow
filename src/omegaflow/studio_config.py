@@ -674,6 +674,13 @@ class BrowserOpenPageConfig:
 
 
 @dataclass
+class BrowserReloadPageConfig:
+    lifecycle: str = "domcontentloaded"
+    ready: BrowserConditionConfig | None = None
+    timeout_ms: int | None = None
+
+
+@dataclass
 class BrowserClickConfig:
     target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
     button: str = "left"
@@ -752,6 +759,7 @@ class BrowserWaitForConfig(BrowserConditionConfig):
 class BrowserActionConfig:
     id: str = ""
     open_page: BrowserOpenPageConfig | None = None
+    reload_page: BrowserReloadPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
     drag: dict[str, BrowserDragEndpointConfig] | None = None
@@ -798,6 +806,7 @@ class RecordingActionConfig(RecordingStepConfig):
     timing: ActionTiming | None = None
     audio: BrowserAudioMode | None = None
     open_page: BrowserOpenPageConfig | None = None
+    reload_page: BrowserReloadPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
     drag: dict[str, BrowserDragEndpointConfig] | None = None
@@ -1068,6 +1077,7 @@ USER_RECORDING_YAML_SCHEMAS = (
     BrowserStateMatcherConfig,
     BrowserConditionConfig,
     BrowserOpenPageConfig,
+    BrowserReloadPageConfig,
     BrowserClickConfig,
     BrowserViewportPointConfig,
     BrowserMovePointerConfig,

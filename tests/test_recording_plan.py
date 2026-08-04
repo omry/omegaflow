@@ -1346,6 +1346,35 @@ def test_requires_display_url_for_full_chrome() -> None:
         normalize_recording_plan(spec)
 
 
+def test_normalizes_reload_page_action() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append(
+        {
+            "id": "refresh",
+            "reload_page": {
+                "lifecycle": "load",
+                "ready": {"visible": {"role": "button", "name": "Play"}},
+            },
+        }
+    )
+
+    plan = normalize_recording_plan(spec)
+
+    refresh = plan.beats[0].actions[-1]
+    assert refresh.kind == "reload_page"
+    assert refresh.config["reload_page"]["lifecycle"] == "load"
+
+
+def test_rejects_invalid_reload_page_lifecycle() -> None:
+    spec = browser_spec()
+    spec["beats"][0]["actions"].append(
+        {"id": "refresh", "reload_page": {"lifecycle": "networkidle"}}
+    )
+
+    with pytest.raises(RecordingPlanError, match="reload_page.lifecycle"):
+        normalize_recording_plan(spec)
+
+
 def test_browser_beat_presentation_overrides_are_typed_and_normalized() -> None:
     spec = browser_spec()
     spec["presentation"]["browser"].update(

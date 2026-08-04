@@ -2342,6 +2342,59 @@ def test_handoff_display_url_uses_the_captured_watch_url() -> None:
     ] == [watch_url]
 
 
+def test_reload_page_compiles_visible_chrome_refresh_before_new_state() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "reload",
+            "browser": {},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [
+                        {"id": "open", "open_page": {"url": "about:blank"}},
+                        {"id": "refresh", "reload_page": {}},
+                    ],
+                }
+            ],
+        }
+    )
+    initial = state_asset("0")
+    refreshed = state_asset("1")
+
+    compiled = compile_browser_beat(
+        plan.id,
+        plan.beats[0],
+        action_captures=[
+            {
+                "action_id": "open",
+                "kind": "open_page",
+                "completion": {"kind": "navigation"},
+                "visual": {"kind": "state", "state": initial},
+            },
+            {
+                "action_id": "refresh",
+                "kind": "reload_page",
+                "completion": {"kind": "navigation"},
+                "before_state": initial,
+                "visual": {"kind": "state", "state": refreshed},
+            },
+        ],
+        viewport={"width": 1440, "height": 900, "device_scale_factor": 1},
+        initial_state=initial,
+    )
+
+    events = [
+        event
+        for event in compiled.payload["events"]
+        if event["action_id"] == "refresh"
+    ]
+    assert events[0]["kind"] == "chrome_reload"
+    assert events[0]["end_ms"] - events[0]["at_ms"] == 420
+    refreshed_state = next(event for event in events if event["kind"] == "state")
+    assert refreshed_state["at_ms"] == events[0]["end_ms"]
+
+
 def test_pointer_and_text_animation_are_deterministic() -> None:
     arguments = (
         "recording",

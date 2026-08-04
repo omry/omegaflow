@@ -58,6 +58,7 @@ SCHEMA_GROUPS = {
         "BrowserStateMatcherConfig",
         "BrowserConditionConfig",
         "BrowserOpenPageConfig",
+        "BrowserReloadPageConfig",
         "BrowserClickConfig",
         "BrowserViewportPointConfig",
         "BrowserMovePointerConfig",

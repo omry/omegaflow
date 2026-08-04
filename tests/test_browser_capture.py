@@ -340,6 +340,33 @@ def test_open_page_consumes_recorder_owned_handoff_url_once() -> None:
         )
 
 
+def test_reload_page_reloads_current_url() -> None:
+    watch_url = "http://127.0.0.1:43123/watch/demo/"
+    calls: list[tuple[str, int]] = []
+
+    class FakePage:
+        url = watch_url
+
+        def reload(self, *, wait_until: str, timeout: int) -> None:
+            calls.append((wait_until, timeout))
+
+    runner = PersistentBrowserRunner({})
+    runner.page = FakePage()
+
+    completion = runner._reload_page(  # noqa: SLF001
+        {},
+        beat_id="browser",
+        action_id="refresh",
+    )
+
+    assert calls == [("domcontentloaded", 15_000)]
+    assert completion == {
+        "kind": "navigation",
+        "lifecycle": "domcontentloaded",
+        "url": watch_url,
+    }
+
+
 def test_visible_wait_allows_target_to_match_later(tmp_path: Path) -> None:
     runner = PersistentBrowserRunner(
         {"timeouts": {"action_ms": 100, "readiness_ms": 1500}}

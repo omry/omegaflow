@@ -76,6 +76,7 @@ T = TypeVar("T")
 
 ACTION_KINDS = (
     "open_page",
+    "reload_page",
     "click",
     "move_pointer",
     "drag",
@@ -817,6 +818,28 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
             validate_condition(payload["ready"], field=f"{field}.open_page.ready")
         if payload.get("timeout_ms") is not None:
             _positive_int(payload["timeout_ms"], field=f"{field}.open_page.timeout_ms")
+    elif kind == "reload_page":
+        unexpected_reload_fields = sorted(
+            set(payload) - {"lifecycle", "ready", "timeout_ms"}
+        )
+        if unexpected_reload_fields:
+            raise RecordingPlanError(
+                f"{field}.reload_page has unknown fields: "
+                + ", ".join(unexpected_reload_fields)
+            )
+        if payload.get("lifecycle", "domcontentloaded") not in {
+            "domcontentloaded",
+            "load",
+        }:
+            raise RecordingPlanError(
+                f"{field}.reload_page.lifecycle must be domcontentloaded or load"
+            )
+        if payload.get("ready") is not None:
+            validate_condition(payload["ready"], field=f"{field}.reload_page.ready")
+        if payload.get("timeout_ms") is not None:
+            _positive_int(
+                payload["timeout_ms"], field=f"{field}.reload_page.timeout_ms"
+            )
     elif kind == "move_pointer":
         destination = _one_present(
             payload,
@@ -951,7 +974,7 @@ def validate_browser_action(value: object, *, field: str) -> BrowserActionConfig
             raise RecordingPlanError(
                 f"{field}.audio capture requires timing: realtime"
             )
-        if kind in {"open_page", "set_pointer"}:
+        if kind in {"open_page", "reload_page", "set_pointer"}:
             raise RecordingPlanError(
                 f"{field}.{kind} does not support audio capture"
             )

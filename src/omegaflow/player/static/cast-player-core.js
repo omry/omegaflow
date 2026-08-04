@@ -1486,6 +1486,7 @@
       focus: null,
       text: null,
       key: null,
+      chromeReload: null,
       displayUrl: payload.initial_display_url,
     };
     let previousState = payload.initial_state;
@@ -1569,6 +1570,8 @@
         } : null;
       } else if (event.kind === 'key') {
         scene.key = progress < 1 ? {label: event.label, progress} : null;
+      } else if (event.kind === 'chrome_reload') {
+        scene.chromeReload = progress < 1 ? {progress} : null;
       } else if (event.kind === 'display_url') {
         scene.displayUrl = event.value;
       }
@@ -2071,6 +2074,10 @@
       elements.viewport.style.transform = 'none';
       renderVisual(scene);
       renderOverlay(scene);
+      elements.reload.dataset.active = scene.chromeReload ? 'true' : 'false';
+      elements.reload.style.transform = scene.chromeReload
+        ? `rotate(${Math.round(scene.chromeReload.progress * 270)}deg) scale(0.9)`
+        : 'none';
       applyEntryTransition(scene);
     }
 
@@ -2125,7 +2132,13 @@
         chrome.hidden = chromeConfig.mode === 'hidden';
         const navigation = element('span', 'browser-chrome-navigation');
         navigation.setAttribute('aria-hidden', 'true');
-        navigation.textContent = '‹  ›  ↻';
+        const back = element('span', 'browser-chrome-control');
+        back.textContent = '‹';
+        const forward = element('span', 'browser-chrome-control');
+        forward.textContent = '›';
+        const reload = element('span', 'browser-chrome-control browser-chrome-reload');
+        reload.textContent = '↻';
+        navigation.append(back, forward, reload);
         const url = element('span', 'browser-chrome-url');
         chrome.append(navigation, url);
         const host = element('div', 'browser-viewport-host');
@@ -2172,6 +2185,7 @@
           layout: windowLayout,
           window: windowFrame,
           chrome,
+          reload,
           url,
           host,
           viewport,

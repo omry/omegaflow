@@ -688,6 +688,7 @@ Each action has an `id` and exactly one operation:
 | Operation | Purpose |
 | --- | --- |
 | `open_page` | Navigate, optionally show loading, and wait for a readiness boundary. |
+| `reload_page` | Reload the current URL and show the browser chrome refresh control. |
 | `click` | Click a semantic target. |
 | `move_pointer` | Move the pointer to viewport-relative coordinates or a normalized position within a semantic target. |
 | `drag` | Hold the primary pointer button while moving between two semantic targets. |
@@ -782,6 +783,9 @@ has an application-specific readiness condition. `loading: show` includes the
 loading stage in the presentation; the default `hide` starts the visible action
 at the ready state. `display_url` changes only the safe URL shown in browser
 chrome and never changes navigation.
+
+`reload_page` reloads the current URL and accepts the same `lifecycle`, `ready`,
+and `timeout_ms` readiness fields.
 
 Actions use presentation timing by default: OmegaFlow reconstructs their
 visible state and can retime it with narration. Set `timing: realtime` when the
@@ -1041,6 +1045,13 @@ class BrowserOpenPageConfig:
 
 
 @dataclass
+class BrowserReloadPageConfig:
+    lifecycle: str = "domcontentloaded"
+    ready: BrowserConditionConfig | None = None
+    timeout_ms: int | None = None
+
+
+@dataclass
 class BrowserClickConfig:
     target: BrowserTargetConfig = field(default_factory=BrowserTargetConfig)
     button: str = "left"
@@ -1114,6 +1125,7 @@ class BrowserWaitForConfig(BrowserConditionConfig):
 class BrowserActionConfig:
     id: str = ""
     open_page: BrowserOpenPageConfig | None = None
+    reload_page: BrowserReloadPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
     drag: dict[str, BrowserDragEndpointConfig] | None = None
@@ -1160,6 +1172,7 @@ class RecordingActionConfig(RecordingStepConfig):
     timing: ActionTiming | None = None
     audio: BrowserAudioMode | None = None
     open_page: BrowserOpenPageConfig | None = None
+    reload_page: BrowserReloadPageConfig | None = None
     click: BrowserClickConfig | None = None
     move_pointer: BrowserMovePointerConfig | None = None
     drag: dict[str, BrowserDragEndpointConfig] | None = None

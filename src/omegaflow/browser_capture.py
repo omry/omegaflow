@@ -694,6 +694,10 @@ class PersistentBrowserRunner:
                 completion = self._open_page(
                     payload, beat_id=beat_id, action_id=action.id
                 )
+            elif action.kind == "reload_page":
+                completion = self._reload_page(
+                    payload, beat_id=beat_id, action_id=action.id
+                )
             elif action.kind == "click":
                 locator, target_fact = self._strict_target(
                     payload.get("target"), beat_id=beat_id, action_id=action.id
@@ -1041,6 +1045,30 @@ class PersistentBrowserRunner:
                 action_id=action_id,
             )
         completion["url"] = capture_url
+        completion["lifecycle"] = lifecycle
+        return completion
+
+    def _reload_page(
+        self, payload: Mapping[str, Any], *, beat_id: str, action_id: str
+    ) -> dict[str, Any]:
+        if self.page is None:
+            raise BrowserCaptureError("BROWSER_SCHEMA", "browser runner is not started")
+        lifecycle = payload.get("lifecycle", "domcontentloaded")
+        if lifecycle not in {"domcontentloaded", "load"}:
+            raise BrowserCaptureError("BROWSER_SCHEMA", "reload_page.lifecycle is invalid")
+        timeout = self._timeout(payload, readiness=True)
+        response_start = len(self.responses)
+        self.page.reload(wait_until=lifecycle, timeout=timeout)
+        ready = payload.get("ready")
+        completion: dict[str, Any] = {"kind": "navigation", "lifecycle": lifecycle}
+        if ready is not None:
+            completion = self._wait_condition(
+                _mapping(ready, field="reload_page.ready"),
+                response_start=response_start,
+                beat_id=beat_id,
+                action_id=action_id,
+            )
+        completion["url"] = self.page.url
         completion["lifecycle"] = lifecycle
         return completion
 

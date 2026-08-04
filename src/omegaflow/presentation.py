@@ -73,6 +73,7 @@ EVENT_KIND_PRIORITY = (
     "pointer_move",
     "drag",
     "click",
+    "chrome_reload",
     "display_url",
     "complete",
 )

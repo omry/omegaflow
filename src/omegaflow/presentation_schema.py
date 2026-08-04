@@ -123,6 +123,11 @@ class BrowserClickEventV1(BrowserEventV1):
 
 
 @dataclass
+class BrowserChromeReloadEventV1(BrowserEventV1):
+    pass
+
+
+@dataclass
 class BrowserPointerVisibilityEventV1(BrowserEventV1):
     visible: bool = True
 
@@ -180,6 +185,7 @@ BROWSER_EVENT_SCHEMAS_V1: dict[str, type[BrowserEventV1]] = {
     "drag": BrowserDragEventV1,
     "pointer_visibility": BrowserPointerVisibilityEventV1,
     "click": BrowserClickEventV1,
+    "chrome_reload": BrowserChromeReloadEventV1,
     "focus": BrowserFocusEventV1,
     "text": BrowserTextEventV1,
     "key": BrowserKeyEventV1,

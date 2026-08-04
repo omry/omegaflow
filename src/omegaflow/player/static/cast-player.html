@@ -559,6 +559,32 @@
         display: none;
       }
 
+      .browser-chrome-navigation {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+
+      .browser-chrome-control {
+        display: inline-grid;
+        width: 1.35rem;
+        height: 1.35rem;
+        place-items: center;
+        border-radius: 50%;
+        color: #cbd2df;
+        font-size: 1.05rem;
+        line-height: 1;
+      }
+
+      .browser-chrome-reload {
+        transform-origin: center;
+      }
+
+      .browser-chrome-reload[data-active="true"] {
+        background: rgba(139, 255, 158, 0.2);
+        color: #8bff9e;
+      }
+
       .browser-chrome-url {
         flex: 1;
         overflow: hidden;

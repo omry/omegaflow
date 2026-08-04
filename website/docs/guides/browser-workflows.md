@@ -12,8 +12,8 @@ arbitrary screen pixels.
    named browser pane.
 2. Open the page with an explicit readiness condition.
 3. Prefer stable semantic targets such as `test_id`, role, label, or text.
-4. Use browser primitives such as `click`, `type_text`, `drag`, and
-   `move_pointer`.
+4. Use browser primitives such as `click`, `type_text`, `drag`,
+   `move_pointer`, and `reload_page`.
 5. Wait for the state caused by an interaction before continuing.
 6. Add checks for the visible or persisted result.
 
@@ -24,3 +24,7 @@ configuration.
 
 See the [recording schema](/reference/recording-files/schema/#browser-beats)
 for exact browser targets, completion conditions, and timing fields.
+
+Use `reload_page` when the workflow republishes content at the current URL.
+With full browser chrome, the presentation activates the refresh control and
+then shows the reloaded state.
