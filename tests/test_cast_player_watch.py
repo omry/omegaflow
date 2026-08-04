@@ -948,6 +948,37 @@ if (restored !== edited) {
     assert result.returncode == 0, result.stderr
 
 
+def test_terminal_tui_scrolls_only_inside_the_configured_region() -> None:
+    result = run_player_script(
+        r"""
+element('terminal').dataset.terminalRows = '6';
+vm.runInContext(`
+resetTerminalBuffer();
+appendChunk(
+  '\u001b[1;1Hheader' +
+  '\u001b[2;1Hone' +
+  '\u001b[3;1Htwo' +
+  '\u001b[4;1Hthree' +
+  '\u001b[5;1Hfour' +
+  '\u001b[6;1Hfooter' +
+  '\\u001b[2;5r\\u001b[5;1H\\n'
+);
+`, context);
+const lines = vm.runInContext(`terminalLines.map(
+  (line) => line.map((cell) => cell?.char || ' ').join('').trimEnd()
+)`, context);
+if (JSON.stringify(lines) !== JSON.stringify([
+  'header', 'two', 'three', 'four', '', 'footer',
+])) {
+  console.error(JSON.stringify({lines}));
+  process.exit(1);
+}
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_terminal_tui_renders_and_honors_cursor_visibility() -> None:
     result = run_player_script(
         r"""

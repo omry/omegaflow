@@ -8,6 +8,7 @@
   const browserMediaDiagnosticSampleLimit = 600;
   const presentationPaneLimit = 64;
   const presentationItemLimit = 100000;
+  const terminalBoundaryOutputByteLimit = 8 * 1024 * 1024;
   const visualizationTextLimit = 100000;
   const visualizationTokenLimit = 10000;
   const visualizationTokenKinds = new Set([
@@ -1280,6 +1281,7 @@
   function createTerminalRendererAdapter(options = {}) {
     let cast = null;
     let container = null;
+    let initialState = null;
     let playbackRate = 1;
     let disposed = false;
 
@@ -1295,6 +1297,38 @@
         if (!cast || !cast.header || !Array.isArray(cast.events)) {
           throw new Error('terminal payload is invalid');
         }
+        const boundaryOutput = cast.header.omegaflow_boundary_output;
+        if (boundaryOutput !== undefined) {
+          if (
+            !Array.isArray(boundaryOutput) ||
+            boundaryOutput.some((chunk) => typeof chunk !== 'string')
+          ) {
+            throw new Error('terminal boundary output is invalid');
+          }
+          if (boundaryOutput.length > presentationItemLimit) {
+            throw new Error(
+              `terminal boundary output exceeds ${presentationItemLimit} entries`,
+            );
+          }
+          const encoder = new TextEncoder();
+          let boundaryOutputBytes = 0;
+          for (const chunk of boundaryOutput) {
+            boundaryOutputBytes += encoder.encode(chunk).byteLength;
+            if (boundaryOutputBytes > terminalBoundaryOutputByteLimit) {
+              throw new Error(
+                `terminal boundary output exceeds ${terminalBoundaryOutputByteLimit} bytes`,
+              );
+            }
+          }
+          if (typeof options.createInitialState !== 'function') {
+            throw new Error('terminal boundary state is unsupported');
+          }
+          initialState = options.createInitialState({
+            container,
+            header: cast.header,
+            output: boundaryOutput,
+          });
+        }
       },
       renderAt(localMs) {
         if (!cast || disposed) {
@@ -1302,6 +1336,12 @@
         }
         if (typeof options.reset === 'function') {
           options.reset({container, header: cast.header});
+        }
+        if (initialState !== null) {
+          if (typeof options.restoreInitialState !== 'function') {
+            throw new Error('terminal boundary restore is unsupported');
+          }
+          options.restoreInitialState({container, state: initialState});
         }
         for (const event of cast.events) {
           if (event.atMs > localMs) {
@@ -1325,6 +1365,7 @@
         }
         cast = null;
         container = null;
+        initialState = null;
         disposed = true;
       },
       state() {

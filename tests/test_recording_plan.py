@@ -2875,3 +2875,153 @@ def test_terminal_output_dependency_rejects_forward_reference_in_one_stream() ->
                 ],
             }
         )
+
+
+def test_recording_plan_rejects_non_adjacent_terminal_continuation() -> None:
+    with pytest.raises(
+        RecordingPlanError,
+        match="must continue the immediately preceding action 'intervening'",
+    ):
+        normalize_recording_plan(
+            {
+                "id": "invalid-continuation",
+                "panes": [{"id": "terminal", "kind": "terminal"}],
+                "beats": [
+                    {
+                        "id": "first",
+                        "layout": {"areas": [["terminal"]]},
+                        "panes": {
+                            "terminal": [
+                                {
+                                    "id": "first-pane",
+                                    "actions": [
+                                        {
+                                            "id": "start-editor",
+                                            "run": "read -rsn1 value",
+                                            "timing": "realtime",
+                                            "input": [{"pause": 0}],
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                    },
+                    {
+                        "id": "second",
+                        "layout": {"areas": [["terminal"]]},
+                        "panes": {
+                            "terminal": [
+                                {
+                                    "id": "second-pane",
+                                    "actions": [
+                                        {
+                                            "id": "intervening",
+                                            "run": "true",
+                                        },
+                                        {
+                                            "id": "finish-editor",
+                                            "continue_from": "start-editor",
+                                            "timing": "realtime",
+                                            "input": [{"control": "x"}],
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                    },
+                ],
+            }
+        )
+
+
+@pytest.mark.parametrize("continue_from", ["", "bad id", 42])
+def test_recording_plan_rejects_invalid_terminal_continuation_reference(
+    continue_from: object,
+) -> None:
+    with pytest.raises(
+        RecordingPlanError,
+        match=r"continue_from must be identifier-like",
+    ):
+        normalize_recording_plan(
+            {
+                "id": "invalid-continuation",
+                "panes": [{"id": "terminal", "kind": "terminal"}],
+                "beats": [
+                    {
+                        "id": "first",
+                        "layout": {"areas": [["terminal"]]},
+                        "panes": {
+                            "terminal": [
+                                {
+                                    "id": "first-pane",
+                                    "actions": [
+                                        {
+                                            "id": "start-editor",
+                                            "run": "true",
+                                            "continue_from": continue_from,
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+        )
+
+
+def test_recording_plan_rejects_checks_before_cross_beat_continuation() -> None:
+    with pytest.raises(
+        RecordingPlanError,
+        match=(
+            r"terminal pane beat 'first-pane' cannot run checks while action "
+            r"'start-editor' is awaiting continue_from"
+        ),
+    ):
+        normalize_recording_plan(
+            {
+                "id": "invalid-continuation-checks",
+                "panes": [{"id": "terminal", "kind": "terminal"}],
+                "beats": [
+                    {
+                        "id": "first",
+                        "layout": {"areas": [["terminal"]]},
+                        "panes": {
+                            "terminal": [
+                                {
+                                    "id": "first-pane",
+                                    "actions": [
+                                        {
+                                            "id": "start-editor",
+                                            "run": "read -rsn1 value",
+                                            "timing": "realtime",
+                                            "input": [{"pause": 0}],
+                                        }
+                                    ],
+                                    "checks": [{"run": "true"}],
+                                }
+                            ]
+                        },
+                    },
+                    {
+                        "id": "second",
+                        "layout": {"areas": [["terminal"]]},
+                        "panes": {
+                            "terminal": [
+                                {
+                                    "id": "second-pane",
+                                    "actions": [
+                                        {
+                                            "id": "finish-editor",
+                                            "continue_from": "start-editor",
+                                            "timing": "realtime",
+                                            "input": [{"control": "x"}],
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                    },
+                ],
+            }
+        )

@@ -582,6 +582,7 @@ class RecordingOutputReferenceConfig:
 class RecordingInvocationConfig:
     run: str | None = None
     run_file: str | None = None
+    continue_from: str | None = None
     display: str | None = None
     after: str | None = None
     inputs: list[str | RecordingOutputReferenceConfig] = field(default_factory=list)
@@ -896,6 +897,7 @@ class VisualizationShowConfig:
 class PaneActionConfig(RecordingActionConfig):
     show: VisualizationShowConfig | None = None
     browser_handoff: bool | BrowserHandoffConfig = False
+    show_prompt_after: bool = True
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     input: list[TerminalInputStepConfig] = field(default_factory=list)

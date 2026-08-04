@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import omegaflow.presentation_compiler as presentation_compiler
 from omegaflow.presentation import serialize_presentation_manifest
 from omegaflow.presentation_compiler import (
     artifact_freshness,
@@ -1297,6 +1298,91 @@ def test_terminal_materialization_preserves_local_events_and_extends_hold(
     assert result.captured_duration_ms == 800
     assert result.duration_ms == 1200
     assert result.sha256 == hashlib.sha256(destination.read_bytes()).hexdigest()
+
+
+def test_terminal_materialization_preserves_boundary_output(tmp_path: Path) -> None:
+    source = tmp_path / "source.cast"
+    destination = tmp_path / "beats" / "beat.cast"
+    source.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "version": 3,
+                        "term": {"cols": 80, "rows": 24},
+                        "omegaflow_boundary_output": ["first", " second"],
+                    }
+                ),
+                json.dumps([0.1, "o", " delta"]),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    materialize_terminal_beat(source, destination, duration_ms=100)
+
+    header = json.loads(destination.read_text(encoding="utf-8").splitlines()[0])
+    assert header["omegaflow_boundary_output"] == ["first", " second"]
+
+
+def test_terminal_materialization_rejects_oversized_boundary_output(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.cast"
+    source.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "term": {"cols": 80, "rows": 24},
+                "omegaflow_boundary_output": [""] * 100_001,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        PresentationCompileError,
+        match="terminal boundary output exceeds 100000 entries",
+    ):
+        materialize_terminal_beat(
+            source,
+            tmp_path / "beats" / "beat.cast",
+            duration_ms=100,
+        )
+
+
+def test_terminal_materialization_rejects_boundary_output_over_byte_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        presentation_compiler,
+        "TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT",
+        3,
+    )
+    source = tmp_path / "source.cast"
+    source.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "term": {"cols": 80, "rows": 24},
+                "omegaflow_boundary_output": ["éé"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        PresentationCompileError,
+        match="terminal boundary output exceeds 3 bytes",
+    ):
+        materialize_terminal_beat(
+            source,
+            tmp_path / "beats" / "beat.cast",
+            duration_ms=100,
+        )
 
 
 def test_terminal_materialization_rejects_visual_overflow(tmp_path: Path) -> None:

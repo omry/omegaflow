@@ -533,6 +533,117 @@ const renderer = core.createTerminalRendererAdapter({
     assert result.returncode == 0, result.stderr
 
 
+def test_terminal_renderer_restores_cached_boundary_state_before_beat_events() -> None:
+    result = run_core_script(
+        r"""
+const calls = [];
+const renderer = core.createTerminalRendererAdapter({
+  createInitialState({output}) {
+    calls.push(`create:${output.join('')}`);
+    return {screen: output.join('')};
+  },
+  reset() { calls.push('reset'); },
+  restoreInitialState({state}) { calls.push(`restore:${state.screen}`); },
+  applyEvent({event}) { calls.push(`event:${event.data}`); },
+});
+(async () => {
+  await renderer.load({
+    container: {},
+    payload: '{"version":3,"term":{"cols":80,"rows":24},"omegaflow_boundary_output":["old ","screen"]}\n[0.1,"o","delta"]\n',
+  });
+  renderer.renderAt(0);
+  renderer.renderAt(100);
+  const expected = [
+    'create:old screen',
+    'reset', 'restore:old screen',
+    'reset', 'restore:old screen', 'event:delta',
+  ];
+  if (JSON.stringify(calls) !== JSON.stringify(expected)) {
+    console.error(JSON.stringify({expected, calls}));
+    process.exit(1);
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_renderer_rejects_oversized_boundary_output() -> None:
+    result = run_core_script(
+        r"""
+const renderer = core.createTerminalRendererAdapter({
+  createInitialState() { return {}; },
+});
+(async () => {
+  try {
+    await renderer.load({
+      container: {},
+      payload: {
+        header: {
+          version: 3,
+          omegaflow_boundary_output: Array.from({length: 100001}, () => ''),
+        },
+        events: [],
+      },
+    });
+    console.error('oversized terminal boundary output was accepted');
+    process.exit(1);
+  } catch (error) {
+    if (!String(error).includes('exceeds 100000 entries')) {
+      console.error(error.stack);
+      process.exit(1);
+    }
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_terminal_renderer_rejects_boundary_output_over_byte_limit() -> None:
+    result = run_core_script(
+        r"""
+const renderer = core.createTerminalRendererAdapter({
+  createInitialState() { return {}; },
+});
+(async () => {
+  try {
+    await renderer.load({
+      container: {},
+      payload: {
+        header: {
+          version: 3,
+          omegaflow_boundary_output: ['x'.repeat(8 * 1024 * 1024 + 1)],
+        },
+        events: [],
+      },
+    });
+    console.error('oversized terminal boundary output was accepted');
+    process.exit(1);
+  } catch (error) {
+    if (!String(error).includes('exceeds 8388608 bytes')) {
+      console.error(error.stack);
+      process.exit(1);
+    }
+  }
+})().catch((error) => {
+  console.error(error.stack);
+  process.exit(1);
+});
+"""
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_browser_renderer_is_seek_pure_and_reconstructs_layered_scene() -> None:
     result = run_core_script(
         r"""

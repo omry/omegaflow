@@ -103,6 +103,113 @@ def test_handoff_marker_ends_visible_terminal_beat_before_watch_process_exits(
     ]
 
 
+def test_terminal_continuation_cast_carries_prior_output_as_boundary_state(
+    tmp_path: Path,
+) -> None:
+    cast_path = tmp_path / "terminal.cast"
+    cast_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"version": 3, "width": 80, "height": 24}),
+                json.dumps(
+                    [
+                        0.1,
+                        "o",
+                        "\x1b]1337;OmegaFlow;1;beat;start;open\x07"
+                        "\x1b]1337;OmegaFlowAction;open;editor;start\x07"
+                        "\x1b[2J\x1b[Hcomplete editor screen"
+                        "\x1b]1337;OmegaFlowAction;open;editor;end\x07"
+                        "\x1b]1337;OmegaFlow;1;beat;end;open\x07",
+                    ]
+                ),
+                json.dumps(
+                    [
+                        0.2,
+                        "o",
+                        "\x1b]1337;OmegaFlow;2;beat;start;edit\x07"
+                        "\x1b]1337;OmegaFlowAction;edit;type;start\x07"
+                        " incremental update"
+                        "\x1b]1337;OmegaFlowAction;edit;type;end\x07"
+                        "\x1b]1337;OmegaFlow;2;beat;end;edit\x07",
+                    ]
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    extract_terminal_beat_casts(
+        cast_path,
+        tmp_path / "beats",
+        expected_beat_ids=("open", "edit"),
+        boundary_state_beat_ids={"edit"},
+    )
+
+    lines = (tmp_path / "beats" / "edit.cast").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    header = json.loads(lines[0])
+    events = [json.loads(line) for line in lines[1:]]
+    assert header["omegaflow_boundary_output"] == [
+        "\x1b[2J\x1b[Hcomplete editor screen"
+    ]
+    assert events == [[0.0, "o", " incremental update"]]
+
+
+def test_terminal_continuation_rejects_boundary_output_over_byte_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        terminal_capture,
+        "TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT",
+        3,
+    )
+    cast_path = tmp_path / "terminal.cast"
+    cast_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"version": 3, "width": 80, "height": 24}),
+                json.dumps(
+                    [
+                        0.1,
+                        "o",
+                        "\x1b]1337;OmegaFlow;1;beat;start;open\x07"
+                        "\x1b]1337;OmegaFlowAction;open;editor;start\x07"
+                        "éé"
+                        "\x1b]1337;OmegaFlowAction;open;editor;end\x07"
+                        "\x1b]1337;OmegaFlow;1;beat;end;open\x07",
+                    ]
+                ),
+                json.dumps(
+                    [
+                        0.2,
+                        "o",
+                        "\x1b]1337;OmegaFlow;2;beat;start;edit\x07"
+                        "\x1b]1337;OmegaFlowAction;edit;type;start\x07"
+                        "update"
+                        "\x1b]1337;OmegaFlowAction;edit;type;end\x07"
+                        "\x1b]1337;OmegaFlow;2;beat;end;edit\x07",
+                    ]
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        TerminalCaptureError,
+        match="terminal boundary output exceeds 3 bytes",
+    ):
+        extract_terminal_beat_casts(
+            cast_path,
+            tmp_path / "beats",
+            expected_beat_ids=("open", "edit"),
+            boundary_state_beat_ids={"edit"},
+        )
+
+
 def test_terminal_session_launch_error_names_the_missing_dependency(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -588,6 +695,102 @@ def test_persistent_terminal_protocol_preserves_state_and_marks_hidden_intervals
     assert [
         event.get("op") for event in events if event["phase"] == "hidden_start"
     ] == ["setup", "checks", "cleanup"]
+    assert not (tmp_path / "run" / "capture" / ".terminal-control").exists()
+
+
+def test_realtime_terminal_action_continues_across_pane_beats(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "continued-terminal",
+            "panes": [{"id": "editor", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "open-editor",
+                    "layout": {"areas": [["editor"]]},
+                    "panes": {
+                        "editor": [
+                            {
+                                "id": "open-editor-pane",
+                                "actions": [
+                                    {
+                                        "id": "start-editor",
+                                        "run": (
+                                            "printf 'ready\\n'; "
+                                            "read -rsn1 first; "
+                                            "printf 'first:%s\\n' \"$first\"; "
+                                            "read -rsn1 second; "
+                                            "printf 'second:%s\\n' \"$second\""
+                                        ),
+                                        "timing": "realtime",
+                                        "input": [
+                                            {"wait_for": "ready", "timeout": 5},
+                                            {"text": "a", "interval": 0},
+                                            {"wait_for": "first:a", "timeout": 5},
+                                        ],
+                                        "expect": {
+                                            "output_contains": [
+                                                "first:a",
+                                                "second:b",
+                                            ]
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                },
+                {
+                    "id": "finish-editor",
+                    "layout": {"areas": [["editor"]]},
+                    "panes": {
+                        "editor": [
+                            {
+                                "id": "finish-editor-pane",
+                                "actions": [
+                                    {
+                                        "id": "finish-editor",
+                                        "continue_from": "start-editor",
+                                        "timing": "realtime",
+                                        "input": [
+                                            {"text": "b", "interval": 0},
+                                            {"wait_for": "second:b", "timeout": 5},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                },
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(record_cast=False, timeout_seconds=10.0)
+
+    result = CaptureCoordinator(terminal_runner_factory=lambda: runner).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert [capture.beat_id for capture in result.beats] == [
+        "open-editor--editor--open-editor-pane",
+        "finish-editor--editor--finish-editor-pane",
+    ]
+    output = (
+        tmp_path / "run/capture/runners/editor/terminal.stdout.log"
+    ).read_text(encoding="utf-8")
+    assert "first:a" in output
+    assert "second:b" in output
+    first_command = plan.beats[0].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert first_command["_suspend_for_continuation"] is True
+    final_command = plan.beats[1].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert final_command["_continuation_boundary"] is True
     assert not (tmp_path / "run" / "capture" / ".terminal-control").exists()
 
 

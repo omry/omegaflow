@@ -14,6 +14,7 @@ from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
 from .studio_config import (
+    ActionTiming,
     BeatPlayerConfig,
     BrowserActionConfig,
     BrowserCheckConfig,
@@ -331,9 +332,17 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     has_run_file = isinstance(mapping.get("run_file"), str) and bool(
         mapping["run_file"]
     )
-    if has_run == has_run_file:
+    continue_from = mapping.get("continue_from")
+    if continue_from is not None and (
+        not isinstance(continue_from, str)
+        or not continue_from
+        or ACTION_ID_RE.fullmatch(continue_from) is None
+    ):
+        raise RecordingPlanError(f"{field}.continue_from must be identifier-like")
+    has_continuation = isinstance(continue_from, str) and bool(continue_from)
+    if sum((has_run, has_run_file, has_continuation)) != 1:
         raise RecordingPlanError(
-            f"{field} must define exactly one of run or run_file"
+            f"{field} must define exactly one of run, run_file, or continue_from"
         )
     command_id = mapping.get("id")
     if command_id not in {None, ""} and (
@@ -457,6 +466,27 @@ def validate_terminal_command(value: object, *, field: str) -> None:
         raise RecordingPlanError(f"{field}.input must be a list")
     if input_steps and timing != "realtime":
         raise RecordingPlanError(f"{field}.input requires timing: realtime")
+    if has_continuation and not input_steps:
+        raise RecordingPlanError(f"{field}.continue_from requires input steps")
+    if has_continuation:
+        forbidden = (
+            "display",
+            "inputs",
+            "produces",
+            "with_env",
+            "browser_handoff",
+            "output",
+            "pre_command_pause",
+            "pre_enter_pause",
+        )
+        present = [name for name in forbidden if mapping.get(name)]
+        if mapping.get("expect"):
+            present.append("expect")
+        if present:
+            raise RecordingPlanError(
+                f"{field}.continue_from cannot be combined with "
+                + ", ".join(present)
+            )
     if (
         input_steps
         and mapping.get("output") is not None
@@ -489,6 +519,10 @@ def validate_terminal_step(
     commands = mapping.get("commands")
     if commands is None:
         validate_terminal_command(mapping, field=field)
+        if mapping.get("continue_from") and not action:
+            raise RecordingPlanError(
+                f"{field}.continue_from is valid only for terminal actions"
+            )
     else:
         if not isinstance(commands, list) or not commands:
             raise RecordingPlanError(f"{field}.commands must be a non-empty list")
@@ -501,6 +535,11 @@ def validate_terminal_step(
             )
         for index, command in enumerate(commands):
             validate_terminal_command(command, field=f"{field}.commands.{index}")
+            if command.get("continue_from") and not action:
+                raise RecordingPlanError(
+                    f"{field}.commands.{index}.continue_from is valid only for "
+                    "terminal actions"
+                )
         validate_terminal_expectation(
             mapping.get("expect", {}), field=f"{field}.expect"
         )
@@ -1586,6 +1625,14 @@ def freeze_value(value: Any) -> Any:
         )
     if isinstance(value, (list, tuple)):
         return tuple(freeze_value(item) for item in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    if isinstance(value, FrozenMapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(item) for item in value]
     return value
 
 
@@ -3435,6 +3482,173 @@ def _plan_output_dependencies(
     return tuple(dependencies)
 
 
+def _annotate_terminal_continuations(
+    beats: tuple[OuterBeatPlan, ...],
+    *,
+    explicit_panes: bool,
+) -> tuple[OuterBeatPlan, ...]:
+    """Validate local continuation chains and mark commands that stay active."""
+
+    if not explicit_panes:
+        for beat in beats:
+            for action in beat.actions:
+                if not isinstance(action, TerminalActionPlan):
+                    continue
+                for command in action.config.get("commands") or (action.config,):
+                    if command.get("continue_from"):
+                        raise RecordingPlanError(
+                            "continue_from requires explicit pane beats"
+                        )
+        return beats
+
+    locations_by_pane: dict[
+        str,
+        list[tuple[tuple[int, int, int, int, int], str, dict[str, Any]]],
+    ] = {}
+    for outer_index, outer in enumerate(beats):
+        for track_index, track in enumerate(outer.pane_tracks):
+            if track.kind is not PaneKind.terminal:
+                continue
+            pane_locations = locations_by_pane.setdefault(track.pane_id, [])
+            for pane_beat_index, pane_beat in enumerate(track.beats):
+                for action_index, action in enumerate(pane_beat.actions):
+                    if not isinstance(action, TerminalActionPlan):
+                        continue
+                    commands = action.config.get("commands") or ()
+                    for command_index, frozen_command in enumerate(commands):
+                        command = _thaw(frozen_command)
+                        command_id = command.get("id")
+                        if not isinstance(command_id, str) or not command_id:
+                            continue
+                        pane_locations.append(
+                            (
+                                (
+                                    outer_index,
+                                    track_index,
+                                    pane_beat_index,
+                                    action_index,
+                                    command_index,
+                                ),
+                                command_id,
+                                command,
+                            )
+                        )
+
+    updates: dict[tuple[int, int, int, int, int], dict[str, Any]] = {}
+    root_by_location: dict[
+        tuple[int, int, int, int, int], dict[str, Any]
+    ] = {}
+    for pane_id, locations in locations_by_pane.items():
+        for index, (location, command_id, command) in enumerate(locations):
+            continue_from = command.get("continue_from")
+            if continue_from is None:
+                root_by_location[location] = command
+                continue
+            if index == 0:
+                raise RecordingPlanError(
+                    f"terminal action {command_id!r} in pane {pane_id!r} "
+                    "cannot continue before another action"
+                )
+            previous_location, previous_id, previous_command = locations[index - 1]
+            if continue_from != previous_id:
+                raise RecordingPlanError(
+                    f"terminal action {command_id!r} in pane {pane_id!r} must "
+                    f"continue the immediately preceding action {previous_id!r}"
+                )
+            if previous_command.get("timing") != ActionTiming.realtime.value:
+                raise RecordingPlanError(
+                    f"terminal action {previous_id!r} continued by {command_id!r} "
+                    "requires timing: realtime"
+                )
+            if previous_command.get("browser_handoff"):
+                raise RecordingPlanError(
+                    f"terminal action {previous_id!r} cannot combine browser_handoff "
+                    "with continue_from"
+                )
+            continuation_boundary = location[:3] != previous_location[:3]
+            if continuation_boundary:
+                previous_outer, previous_track, previous_pane_beat, _, _ = (
+                    previous_location
+                )
+                source_pane_beat = beats[previous_outer].pane_tracks[
+                    previous_track
+                ].beats[previous_pane_beat]
+                if source_pane_beat.checks:
+                    raise RecordingPlanError(
+                        f"terminal pane beat {source_pane_beat.id!r} cannot run "
+                        f"checks while action {previous_id!r} is awaiting "
+                        "continue_from"
+                    )
+            root = root_by_location[previous_location]
+            root_by_location[location] = root
+            previous_update = dict(updates.get(previous_location, previous_command))
+            previous_update["_suspend_for_continuation"] = True
+            updates[previous_location] = previous_update
+            current_update = dict(command)
+            current_update["_continuation_expect"] = _thaw(root.get("expect", {}))
+            current_update["_continuation_producer_id"] = str(root.get("id") or "")
+            current_update["_continuation_produces"] = _thaw(
+                root.get("produces", {})
+            )
+            current_update["_continuation_boundary"] = continuation_boundary
+            updates[location] = current_update
+
+    if not updates:
+        return beats
+
+    annotated_beats: list[OuterBeatPlan] = []
+    for outer_index, outer in enumerate(beats):
+        annotated_tracks: list[OuterPaneTrackPlan] = []
+        for track_index, track in enumerate(outer.pane_tracks):
+            annotated_pane_beats: list[PaneBeatPlan] = []
+            for pane_beat_index, pane_beat in enumerate(track.beats):
+                if not isinstance(pane_beat.recording, TerminalPaneRecordingPlan):
+                    annotated_pane_beats.append(pane_beat)
+                    continue
+                annotated_actions: list[TerminalActionPlan] = []
+                for action_index, action in enumerate(pane_beat.recording.actions):
+                    config = _thaw(action.config)
+                    commands = config.get("commands") or []
+                    changed = False
+                    for command_index in range(len(commands)):
+                        location = (
+                            outer_index,
+                            track_index,
+                            pane_beat_index,
+                            action_index,
+                            command_index,
+                        )
+                        replacement = updates.get(location)
+                        if replacement is None:
+                            continue
+                        commands[command_index] = replacement
+                        changed = True
+                    annotated_actions.append(
+                        replace(
+                            action,
+                            config=freeze_value(config),
+                        )
+                        if changed
+                        else action
+                    )
+                annotated_pane_beats.append(
+                    replace(
+                        pane_beat,
+                        recording=replace(
+                            pane_beat.recording,
+                            actions=tuple(annotated_actions),
+                        ),
+                    )
+                )
+            annotated_tracks.append(
+                replace(track, beats=tuple(annotated_pane_beats))
+            )
+        annotated_beats.append(
+            replace(outer, pane_tracks=tuple(annotated_tracks))
+        )
+    return tuple(annotated_beats)
+
+
 def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
     """Validate cross-references and return a deeply immutable execution plan."""
 
@@ -3769,7 +3983,10 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             f"internal narration references unknown beat(s): {unknown}"
         )
 
-    frozen_beats = tuple(beat_plans)
+    frozen_beats = _annotate_terminal_continuations(
+        tuple(beat_plans),
+        explicit_panes=bool(pane_plans),
+    )
     narration_stream = plan_narration_stream(
         frozen_beats,
         narration_id=narration_id,

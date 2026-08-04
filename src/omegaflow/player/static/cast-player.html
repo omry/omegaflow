@@ -1444,6 +1444,8 @@
       const terminalResizeObservers = new WeakMap();
       let cursorRow = 0;
       let cursorColumn = 0;
+      let terminalScrollTop = 0;
+      let terminalScrollBottom = null;
       let terminalCursorVisible = true;
       let savedCursor = {row: 0, column: 0};
       let savedTerminalCharacterState = null;
@@ -1742,6 +1744,11 @@
         }
         cursorRow = 0;
         cursorColumn = 0;
+        terminalScrollTop = 0;
+        const configuredRows = Number(container?.dataset.terminalRows);
+        terminalScrollBottom = Number.isInteger(configuredRows) && configuredRows > 0
+          ? configuredRows - 1
+          : null;
         terminalCursorVisible = true;
         savedCursor = {row: 0, column: 0};
         savedTerminalCharacterState = null;
@@ -1824,11 +1831,90 @@
         return terminalLines[cursorRow];
       }
 
+      function configuredTerminalRowCount() {
+        const configuredRows = Number(activeTerminalElement?.dataset.terminalRows);
+        if (Number.isInteger(configuredRows) && configuredRows > 0) {
+          return configuredRows;
+        }
+        return null;
+      }
+
+      function terminalRowCount() {
+        return configuredTerminalRowCount() ?? Math.max(
+          1,
+          terminalLines.length,
+          cursorRow + 1,
+          terminalScrollBottom === null ? 0 : terminalScrollBottom + 1,
+        );
+      }
+
+      function terminalScrollBounds() {
+        const lastRow = terminalRowCount() - 1;
+        return {
+          top: Math.min(lastRow, Math.max(0, terminalScrollTop)),
+          bottom: Math.min(
+            lastRow,
+            Math.max(0, terminalScrollBottom ?? lastRow),
+          ),
+        };
+      }
+
+      function ensureTerminalRows(count = terminalRowCount()) {
+        while (terminalLines.length < count) {
+          terminalLines.push([]);
+        }
+      }
+
+      function scrollTerminalRegion(direction, count = 1) {
+        const {top, bottom} = terminalScrollBounds();
+        const height = bottom - top + 1;
+        if (height <= 0) {
+          return;
+        }
+        ensureTerminalRows(bottom + 1);
+        const lines = Math.min(Math.max(1, count), height);
+        if (direction === 'up') {
+          terminalLines.splice(top, lines);
+          terminalLines.splice(
+            bottom - lines + 1,
+            0,
+            ...Array.from({length: lines}, () => []),
+          );
+          return;
+        }
+        terminalLines.splice(
+          bottom - lines + 1,
+          lines,
+        );
+        terminalLines.splice(
+          top,
+          0,
+          ...Array.from({length: lines}, () => []),
+        );
+      }
+
+      function terminalLineFeed() {
+        const {top, bottom} = terminalScrollBounds();
+        if (
+          terminalScrollBottom !== null &&
+          cursorRow === bottom &&
+          cursorRow >= top
+        ) {
+          scrollTerminalRegion('up');
+        } else {
+          const configuredRows = configuredTerminalRowCount();
+          cursorRow = configuredRows === null
+            ? cursorRow + 1
+            : Math.min(configuredRows - 1, cursorRow + 1);
+          currentTerminalLine();
+        }
+        cursorColumn = 0;
+      }
+
       function putTerminalChar(char) {
         const columns = Number(activeTerminalElement?.dataset.terminalColumns);
         if (Number.isInteger(columns) && columns > 0 && cursorColumn >= columns) {
-          cursorRow += 1;
-          cursorColumn = 0;
+          terminalLineFeed();
         }
         const line = currentTerminalLine();
         const characterSet = singleShiftTerminalCharacterSet ??
@@ -1886,7 +1972,10 @@
       }
 
       function setTerminalCursor(row, column) {
-        cursorRow = Math.max(0, row);
+        const configuredRows = configuredTerminalRowCount();
+        cursorRow = configuredRows === null
+          ? Math.max(0, row)
+          : Math.min(configuredRows - 1, Math.max(0, row));
         cursorColumn = Math.max(0, column);
         currentTerminalLine();
       }
@@ -1901,6 +1990,8 @@
             activeStyle,
             cursorColumn,
             cursorRow,
+            scrollTop: terminalScrollTop,
+            scrollBottom: terminalScrollBottom,
             activeTerminalCharacterSet,
             characterSets: [...terminalCharacterSets],
             singleShiftTerminalCharacterSet,
@@ -1911,6 +2002,8 @@
           terminalLines = [[]];
           cursorRow = 0;
           cursorColumn = 0;
+          terminalScrollTop = 0;
+          terminalScrollBottom = terminalRowCount() - 1;
           savedCursor = {row: 0, column: 0};
           savedTerminalCharacterState = null;
           terminalCharacterSets = ['ascii', 'ascii', 'ascii', 'ascii'];
@@ -1928,6 +2021,8 @@
           activeStyle,
           cursorColumn,
           cursorRow,
+          scrollTop: terminalScrollTop,
+          scrollBottom: terminalScrollBottom,
           activeTerminalCharacterSet,
           characterSets: terminalCharacterSets,
           singleShiftTerminalCharacterSet,
@@ -1936,6 +2031,84 @@
           savedTerminalCharacterState,
         } = primaryTerminalState);
         primaryTerminalState = null;
+      }
+
+      function cloneTerminalLines(lines) {
+        return lines.map(
+          (line) => line.map(
+            (cell) => cell ? {...cell} : undefined,
+          ),
+        );
+      }
+
+      function cloneTerminalCharacterState(state) {
+        if (state === null) {
+          return null;
+        }
+        return {
+          activeTerminalCharacterSet: state.activeTerminalCharacterSet,
+          characterSets: [...state.characterSets],
+          singleShiftTerminalCharacterSet: state.singleShiftTerminalCharacterSet,
+        };
+      }
+
+      function clonePrimaryTerminalState(state) {
+        if (state === null) {
+          return null;
+        }
+        return {
+          ...state,
+          characterSets: [...state.characterSets],
+          lines: cloneTerminalLines(state.lines),
+          savedCursor: {...state.savedCursor},
+          savedTerminalCharacterState: cloneTerminalCharacterState(
+            state.savedTerminalCharacterState,
+          ),
+        };
+      }
+
+      function snapshotTerminalBuffer() {
+        return {
+          activeClass,
+          activeStyle,
+          cursorColumn,
+          cursorRow,
+          scrollTop: terminalScrollTop,
+          scrollBottom: terminalScrollBottom,
+          cursorVisible: terminalCursorVisible,
+          savedCursor: {...savedCursor},
+          savedTerminalCharacterState: cloneTerminalCharacterState(
+            savedTerminalCharacterState,
+          ),
+          pendingInput: terminalPendingInput,
+          characterSets: [...terminalCharacterSets],
+          activeTerminalCharacterSet,
+          singleShiftTerminalCharacterSet,
+          lines: cloneTerminalLines(terminalLines),
+          primaryState: clonePrimaryTerminalState(primaryTerminalState),
+        };
+      }
+
+      function restoreTerminalBuffer(snapshot, {container = terminal} = {}) {
+        activeTerminalElement = container;
+        activeClass = snapshot.activeClass;
+        activeStyle = snapshot.activeStyle;
+        cursorColumn = snapshot.cursorColumn;
+        cursorRow = snapshot.cursorRow;
+        terminalScrollTop = snapshot.scrollTop;
+        terminalScrollBottom = snapshot.scrollBottom;
+        terminalCursorVisible = snapshot.cursorVisible;
+        savedCursor = {...snapshot.savedCursor};
+        savedTerminalCharacterState = cloneTerminalCharacterState(
+          snapshot.savedTerminalCharacterState,
+        );
+        terminalPendingInput = snapshot.pendingInput;
+        terminalCharacterSets = [...snapshot.characterSets];
+        activeTerminalCharacterSet = snapshot.activeTerminalCharacterSet;
+        singleShiftTerminalCharacterSet = snapshot.singleShiftTerminalCharacterSet;
+        terminalLines = cloneTerminalLines(snapshot.lines);
+        primaryTerminalState = clonePrimaryTerminalState(snapshot.primaryState);
+        renderTerminalBuffer();
       }
 
       function designateTerminalCharacterSet(intermediate, finalByte) {
@@ -1987,13 +2160,29 @@
         } else if (command === 'K') {
           clearTerminalLine(Number(params[0] || 0));
         } else if (command === 'L') {
-          terminalLines.splice(cursorRow, 0, ...Array.from({length: count}, () => []));
-        } else if (command === 'M') {
-          terminalLines.splice(cursorRow, count);
-          if (!terminalLines.length) {
-            terminalLines.push([]);
+          const {top, bottom} = terminalScrollBounds();
+          if (cursorRow >= top && cursorRow <= bottom) {
+            ensureTerminalRows(bottom + 1);
+            const lines = Math.min(count, bottom - cursorRow + 1);
+            terminalLines.splice(
+              cursorRow,
+              0,
+              ...Array.from({length: lines}, () => []),
+            );
+            terminalLines.splice(bottom + 1, lines);
           }
-          cursorRow = Math.min(cursorRow, terminalLines.length - 1);
+        } else if (command === 'M') {
+          const {top, bottom} = terminalScrollBounds();
+          if (cursorRow >= top && cursorRow <= bottom) {
+            ensureTerminalRows(bottom + 1);
+            const lines = Math.min(count, bottom - cursorRow + 1);
+            terminalLines.splice(cursorRow, lines);
+            terminalLines.splice(
+              bottom - lines + 1,
+              0,
+              ...Array.from({length: lines}, () => []),
+            );
+          }
         } else if (command === 'P') {
           currentTerminalLine().splice(cursorColumn, count);
         } else if (command === '@') {
@@ -2010,10 +2199,22 @@
           }
           line.length = width;
         } else if (command === 'S') {
-          terminalLines.splice(0, count);
-          terminalLines.push(...Array.from({length: count}, () => []));
+          scrollTerminalRegion('up', count);
         } else if (command === 'T') {
-          terminalLines.unshift(...Array.from({length: count}, () => []));
+          scrollTerminalRegion('down', count);
+        } else if (command === 'r' && !privateMode) {
+          const configuredRows = configuredTerminalRowCount();
+          const rows = configuredRows ?? Math.max(
+            terminalRowCount(),
+            csiNumber(params, 1),
+          );
+          const top = csiNumber(params, 0) - 1;
+          const bottom = csiNumber(params, 1, rows) - 1;
+          if (top >= 0 && bottom < rows && top < bottom) {
+            terminalScrollTop = top;
+            terminalScrollBottom = bottom;
+            setTerminalCursor(0, 0);
+          }
         } else if (command === 's') {
           savedCursor = {row: cursorRow, column: cursorColumn};
         } else if (command === 'u') {
@@ -2376,9 +2577,7 @@
             continue;
           }
           if (char === '\n') {
-            cursorRow += 1;
-            cursorColumn = 0;
-            currentTerminalLine();
+            terminalLineFeed();
             continue;
           }
           if (char === '\b') {
@@ -4356,6 +4555,23 @@
             rendererFactories: {
               visualization: () => CastPlayerCore.createVisualizationDomRenderer(),
               terminal: () => CastPlayerCore.createTerminalRendererAdapter({
+                createInitialState({container, header, output}) {
+                  if (!container) {
+                    throw new Error('terminal boundary state has no container');
+                  }
+                  if (!Array.isArray(output) || output.some(
+                    (chunk) => typeof chunk !== 'string'
+                  )) {
+                    throw new Error('terminal boundary output is invalid');
+                  }
+                  configureTerminalGrid(container, header);
+                  resetTerminalBuffer({container});
+                  container.innerHTML = '';
+                  appendChunk(output.join(''));
+                  const snapshot = snapshotTerminalBuffer();
+                  container.innerHTML = '';
+                  return snapshot;
+                },
                 reset({container, header}) {
                   if (!container) {
                     throw new Error('terminal renderer reset has no container');
@@ -4363,6 +4579,12 @@
                   configureTerminalGrid(container, header);
                   resetTerminalBuffer({container});
                   container.innerHTML = '';
+                },
+                restoreInitialState({container, state}) {
+                  if (!container) {
+                    throw new Error('terminal boundary restore has no container');
+                  }
+                  restoreTerminalBuffer(state, {container});
                 },
                 applyEvent({container, event}) {
                   if (!container) {

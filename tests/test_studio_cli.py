@@ -4618,6 +4618,7 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
         {
             "run": None,
             "run_file": "scripts/setup-demo-environment.sh",
+            "continue_from": None,
             "display": None,
             "after": None,
             "inputs": [],

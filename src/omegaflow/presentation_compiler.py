@@ -33,7 +33,10 @@ from .recording_plan import (
     pane_action_id,
     terminal_action_id,
 )
-from .terminal_capture import terminal_typing_delays
+from .terminal_capture import (
+    TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT,
+    terminal_typing_delays,
+)
 
 
 class PresentationCompileError(RuntimeError):
@@ -42,6 +45,9 @@ class PresentationCompileError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
         super().__init__(f"{code}: {message}")
+
+
+TERMINAL_BOUNDARY_OUTPUT_ENTRY_LIMIT = 100_000
 
 
 def milliseconds_half_up(value: int | float | Decimal) -> int:
@@ -1797,6 +1803,31 @@ def materialize_terminal_beat(
         for key in ("version", "width", "height", "term", "title")
         if key in header
     }
+    boundary_output = header.get("omegaflow_boundary_output")
+    if boundary_output is not None:
+        if not isinstance(boundary_output, list) or any(
+            not isinstance(chunk, str) for chunk in boundary_output
+        ):
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                "terminal boundary output must be a list of strings",
+            )
+        if len(boundary_output) > TERMINAL_BOUNDARY_OUTPUT_ENTRY_LIMIT:
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                "terminal boundary output exceeds "
+                f"{TERMINAL_BOUNDARY_OUTPUT_ENTRY_LIMIT} entries",
+            )
+        boundary_output_bytes = sum(
+            len(chunk.encode("utf-8")) for chunk in boundary_output
+        )
+        if boundary_output_bytes > TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT:
+            raise PresentationCompileError(
+                "PRESENTATION_SCHEMA",
+                "terminal boundary output exceeds "
+                f"{TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT} bytes",
+            )
+        public_header["omegaflow_boundary_output"] = boundary_output
     events: list[list[object]] = []
     event_absolute_ms: list[int] = []
     captured_seconds = 0.0

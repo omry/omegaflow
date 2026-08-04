@@ -341,6 +341,7 @@ Step fields:
 | --- | --- | --- |
 | `run` | string | Inline shell command. |
 | `run_file` | string | Shell script file to read and execute. |
+| `continue_from` | string | Continue the immediately preceding realtime action in the same terminal pane. |
 | `display` | string | Command text shown in the terminal. |
 | `name` | string | Check/setup/cleanup label. |
 | `after` | string | Anchor syntax such as `@server@`. |
@@ -428,6 +429,42 @@ and terminal interfaces that redraw in place. Output replacement and suppression
 remain non-streaming.
 
 #### Drive a realtime terminal interface
+
+An explicit terminal pane can keep one realtime interface open across beat
+boundaries. Start the command normally, then give the next terminal action a
+`continue_from` reference and only the additional input to send:
+
+```yaml
+panes:
+  editor:
+  - id: introduce-file
+    actions:
+    - id: open-editor
+      run: nano index.md
+      timing: realtime
+      input:
+      - {wait_for: Write Out}
+  # In the next outer beat:
+  - id: demonstrate-edit
+    actions:
+    - id: edit-file
+      continue_from: open-editor
+      timing: realtime
+      input:
+      - {control: _}
+      - {text: "25"}
+      - {key: enter}
+      - {control: x}
+```
+
+The continuation must be the next terminal action in that pane. OmegaFlow ends
+the first beat without closing the pseudo-terminal, does not print another
+command for the continuation, and preserves the interface exactly as it was.
+Because the command still owns that pane's pseudo-terminal, an intermediate
+pane beat that waits for `continue_from` cannot also define terminal checks.
+Put those checks on the pane beat that finishes the command instead.
+The last continuation must provide input that lets the original command exit;
+its exit status and expectations are then validated normally.
 
 Add ordered `input` steps to a realtime command when OmegaFlow needs to operate
 an interactive terminal program:
@@ -893,6 +930,7 @@ class RecordingOutputReferenceConfig:
 class RecordingInvocationConfig:
     run: str | None = None
     run_file: str | None = None
+    continue_from: str | None = None
     display: str | None = None
     after: str | None = None
     inputs: list[str | RecordingOutputReferenceConfig] = field(default_factory=list)
@@ -1218,6 +1256,7 @@ class VisualizationShowConfig:
 class PaneActionConfig(RecordingActionConfig):
     show: VisualizationShowConfig | None = None
     browser_handoff: bool | BrowserHandoffConfig = False
+    show_prompt_after: bool = True
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
     input: list[TerminalInputStepConfig] = field(default_factory=list)

@@ -33,6 +33,7 @@ from .studio_config import RecordingMedium
 CONTROL_STREAM_MODE = 0o600
 CONTROL_TIMEOUT_SECONDS = 30.0
 SHUTDOWN_GRACE_SECONDS = 5.0
+TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT = 8 * 1024 * 1024
 CONTROL_OPERATIONS = frozenset({"setup", "beat", "checks", "cleanup", "shutdown"})
 TERMINAL_MARKER_RE = re.compile(
     r"\x1b\]1337;OmegaFlow;(?P<seq>[0-9]+);"
@@ -163,6 +164,18 @@ exec 9<>"$OMEGAFLOW_RESPONSE_STREAM"
 OMEGAFLOW_PROMPT_VISIBLE=0
 OMEGAFLOW_USER_COMMAND_SEQ=0
 OMEGAFLOW_LAST_COMMAND_CWD=""
+OMEGAFLOW_ACTIVE_STATUS_PIPE=""
+OMEGAFLOW_ACTIVE_STATUS_RESULT=""
+OMEGAFLOW_ACTIVE_CWD_RESULT=""
+OMEGAFLOW_ACTIVE_PTY_READY=""
+OMEGAFLOW_ACTIVE_PTY_OPENED=""
+OMEGAFLOW_ACTIVE_SECRET_LEAK=""
+OMEGAFLOW_ACTIVE_INPUT_ERROR=""
+OMEGAFLOW_ACTIVE_RELAY_PID=""
+OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID=""
+OMEGAFLOW_ACTIVE_INPUT_SEQ=0
+OMEGAFLOW_ACTIVE_STDOUT_START=""
+OMEGAFLOW_ACTIVE_STDERR_START=""
 OMEGAFLOW_VISIBLE=0
 : "${OMEGAFLOW_COLOR:=0}"
 : "${OMEGAFLOW_TYPING:=0}"
@@ -205,6 +218,10 @@ omegaflow_cleanup_user_shell() {
   local ignored_status=$?
   trap - EXIT
   set +e
+  if [[ -n "$OMEGAFLOW_ACTIVE_RELAY_PID" ]]; then
+    kill -TERM "$OMEGAFLOW_ACTIVE_RELAY_PID" 2>/dev/null || true
+    wait "$OMEGAFLOW_ACTIVE_RELAY_PID" 2>/dev/null || true
+  fi
   exec 7>&- 2>/dev/null || true
   local wait_index
   for ((wait_index = 0; wait_index < 20; wait_index += 1)); do
@@ -224,6 +241,121 @@ omegaflow_cleanup_user_shell() {
 }
 trap omegaflow_cleanup_user_shell EXIT
 
+omegaflow_reset_active_user_command() {
+  OMEGAFLOW_ACTIVE_STATUS_PIPE=""
+  OMEGAFLOW_ACTIVE_STATUS_RESULT=""
+  OMEGAFLOW_ACTIVE_CWD_RESULT=""
+  OMEGAFLOW_ACTIVE_PTY_READY=""
+  OMEGAFLOW_ACTIVE_PTY_OPENED=""
+  OMEGAFLOW_ACTIVE_SECRET_LEAK=""
+  OMEGAFLOW_ACTIVE_INPUT_ERROR=""
+  OMEGAFLOW_ACTIVE_RELAY_PID=""
+  OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID=""
+  OMEGAFLOW_ACTIVE_INPUT_SEQ=0
+  OMEGAFLOW_ACTIVE_STDOUT_START=""
+  OMEGAFLOW_ACTIVE_STDERR_START=""
+}
+
+omegaflow_wait_active_input_response() {
+  local response_path="${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-response-${OMEGAFLOW_ACTIVE_INPUT_SEQ}"
+  while [[ ! -s "$response_path" ]]; do
+    if [[ -n "$OMEGAFLOW_ACTIVE_RELAY_PID" ]] && \
+      ! kill -0 "$OMEGAFLOW_ACTIVE_RELAY_PID" 2>/dev/null; then
+      printf '%s\n' 'continued terminal input relay exited before responding' \
+        >"$OMEGAFLOW_ACTIVE_INPUT_ERROR"
+      return 125
+    fi
+    sleep 0.01
+  done
+  local response_status
+  response_status=$("$OMEGAFLOW_PYTHON" - "$response_path" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    response = json.load(handle)
+print(response.get("status", "error"))
+PY
+  )
+  [[ "$response_status" == "suspended" || "$response_status" == "completed" ]]
+}
+
+omegaflow_finalize_active_user_command() {
+  if [[ -n "$OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID" ]]; then
+    wait "$OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$OMEGAFLOW_ACTIVE_RELAY_PID" ]]; then
+    wait "$OMEGAFLOW_ACTIVE_RELAY_PID" 2>/dev/null || true
+  fi
+  local status=125
+  if [[ -f "$OMEGAFLOW_ACTIVE_STATUS_RESULT" ]]; then
+    IFS= read -r status <"$OMEGAFLOW_ACTIVE_STATUS_RESULT" || status=125
+  fi
+  if [[ -f "$OMEGAFLOW_ACTIVE_SECRET_LEAK" ]]; then
+    printf '%s\n' 'recording secret appeared in terminal command output' \
+      >>"$OMEGAFLOW_TERMINAL_STDERR"
+    status=125
+  fi
+  if [[ -f "$OMEGAFLOW_ACTIVE_INPUT_ERROR" ]]; then
+    printf '%s' 'terminal input failed: ' >>"$OMEGAFLOW_TERMINAL_STDERR"
+    cat "$OMEGAFLOW_ACTIVE_INPUT_ERROR" >>"$OMEGAFLOW_TERMINAL_STDERR"
+    status=125
+  fi
+  OMEGAFLOW_LAST_COMMAND_CWD=""
+  if [[ -f "$OMEGAFLOW_ACTIVE_CWD_RESULT" ]]; then
+    IFS= read -r OMEGAFLOW_LAST_COMMAND_CWD \
+      <"$OMEGAFLOW_ACTIVE_CWD_RESULT" || OMEGAFLOW_LAST_COMMAND_CWD=""
+  fi
+  rm -f \
+    "$OMEGAFLOW_ACTIVE_STATUS_PIPE" "$OMEGAFLOW_ACTIVE_STATUS_RESULT" \
+    "$OMEGAFLOW_ACTIVE_CWD_RESULT" "$OMEGAFLOW_ACTIVE_PTY_READY" \
+    "$OMEGAFLOW_ACTIVE_PTY_OPENED" "$OMEGAFLOW_ACTIVE_SECRET_LEAK" \
+    "$OMEGAFLOW_ACTIVE_INPUT_ERROR" \
+    "${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-request-"* \
+    "${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-response-"*
+  omegaflow_reset_active_user_command
+  return "$status"
+}
+
+omegaflow_continue_user_command() {
+  local input_json="$1"
+  local suspend="$2"
+  if [[ -z "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
+    printf '%s\n' 'continue_from has no active terminal command' \
+      >"$OMEGAFLOW_TERMINAL_STDERR"
+    return 125
+  fi
+  OMEGAFLOW_ACTIVE_INPUT_SEQ=$((OMEGAFLOW_ACTIVE_INPUT_SEQ + 1))
+  local request_path="${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-request-${OMEGAFLOW_ACTIVE_INPUT_SEQ}"
+  "$OMEGAFLOW_PYTHON" - \
+    "$request_path" "$input_json" "$suspend" <<'PY'
+import json
+import os
+import sys
+
+path, input_json, suspend = sys.argv[1:]
+temporary = path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "actions": json.loads(input_json),
+            "finish": suspend != "true",
+        },
+        handle,
+        separators=(",", ":"),
+    )
+os.replace(temporary, path)
+PY
+  if ! omegaflow_wait_active_input_response; then
+    omegaflow_finalize_active_user_command
+    return 125
+  fi
+  if [[ "$suspend" == "true" ]]; then
+    return 0
+  fi
+  omegaflow_finalize_active_user_command
+}
+
 omegaflow_run_user_command() {
   local command="$1"
   local stdout_target="$2"
@@ -231,6 +363,12 @@ omegaflow_run_user_command() {
   local timing="${4:-presentation}"
   local encoded_environment="${5:-}"
   local input_json="${6:-[]}"
+  local suspend="${7:-false}"
+  if [[ -n "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
+    printf '%s\n' 'terminal command started before continued command completed' \
+      >"$OMEGAFLOW_TERMINAL_STDERR"
+    return 125
+  fi
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
   local status_pipe="$TMPDIR/omegaflow-user-command-${OMEGAFLOW_USER_COMMAND_SEQ}.pipe"
   local status_result="${status_pipe}.result"
@@ -331,11 +469,21 @@ PY
   local pty_opened="${status_pipe}.pty-opened"
   local secret_leak="${status_pipe}.secret-leak"
   local input_error="${status_pipe}.input-error"
+  OMEGAFLOW_ACTIVE_STATUS_PIPE="$status_pipe"
+  OMEGAFLOW_ACTIVE_STATUS_RESULT="$status_result"
+  OMEGAFLOW_ACTIVE_CWD_RESULT="$cwd_result"
+  OMEGAFLOW_ACTIVE_PTY_READY="$pty_ready"
+  OMEGAFLOW_ACTIVE_PTY_OPENED="$pty_opened"
+  OMEGAFLOW_ACTIVE_SECRET_LEAK="$secret_leak"
+  OMEGAFLOW_ACTIVE_INPUT_ERROR="$input_error"
+  OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID="$status_monitor_pid"
+  OMEGAFLOW_ACTIVE_INPUT_SEQ=1
   if [[ "$timing" == "realtime" ]]; then
     rm -f "$pty_ready" "$pty_opened" "$secret_leak" "$input_error"
     "$OMEGAFLOW_PYTHON" - \
       "$pty_ready" "$pty_opened" "$stdout_target" \
-      "$encoded_environment" "$secret_leak" "$input_json" "$input_error" <<'PY' &
+      "$encoded_environment" "$secret_leak" "$input_json" "$input_error" \
+      "$status_pipe" "$suspend" <<'PY' &
 import base64
 import errno
 import fcntl
@@ -358,6 +506,8 @@ from pathlib import Path
     leak_path,
     input_json,
     input_error_path,
+    control_root,
+    suspend,
 ) = sys.argv[1:]
 environment = (
     json.loads(base64.b64decode(encoded_environment).decode())
@@ -365,6 +515,7 @@ environment = (
     else {}
 )
 actions = json.loads(input_json)
+finish_after_actions = suspend != "true"
 secrets = tuple(
     value.encode()
     for value in environment.values()
@@ -479,92 +630,156 @@ try:
             return bytes(output)
 
         command_closed = False
-        while not command_closed:
-            readable, _, _ = select.select([master_fd], [], [], 0.01)
-            if readable:
-                try:
-                    chunk = os.read(master_fd, 4096)
-                except OSError as exc:
-                    if exc.errno == errno.EIO:
+        input_seq = 1
+
+        def respond(status, error=None):
+            response_path = f"{control_root}.input-response-{input_seq}"
+            payload = {"status": status}
+            if error is not None:
+                payload["error"] = str(error)
+            temporary = response_path + ".tmp"
+            Path(temporary).write_text(
+                json.dumps(payload, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            os.replace(temporary, response_path)
+
+        while True:
+            if not command_closed:
+                readable, _, _ = select.select([master_fd], [], [], 0.01)
+                if readable:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError as exc:
+                        if exc.errno == errno.EIO:
+                            command_closed = True
+                            chunk = b""
+                        else:
+                            raise
+                    if not chunk:
                         command_closed = True
-                        chunk = b""
                     else:
-                        raise
-                if not chunk:
-                    command_closed = True
-                else:
-                    emit(redact(chunk))
-                    visible_raw = (
-                        visible_raw + chunk.decode("utf-8", errors="replace")
-                    )[-131072:]
+                        emit(redact(chunk))
+                        visible_raw = (
+                            visible_raw + chunk.decode("utf-8", errors="replace")
+                        )[-131072:]
+            else:
+                time.sleep(0.01)
 
             now = time.monotonic()
-            if (
-                command_closed
-                or action_index >= len(actions)
-                or now < next_send
-            ):
-                continue
-            action = actions[action_index]
-            if action.get("wait_for") is not None:
-                timeout = action.get("timeout")
-                timeout = 10.0 if timeout is None else float(timeout)
-                visible_text, raw_ends = visible_terminal_text(visible_raw)
-                match_at = visible_text.find(action["wait_for"])
-                if match_at >= 0:
-                    match_end = match_at + len(action["wait_for"])
-                    visible_raw = visible_raw[raw_ends[match_end - 1] :]
-                    action_index += 1
-                    action_started = now
-                elif now - action_started >= timeout:
-                    raise TimeoutError(
-                        f"terminal input step {action_index + 1} timed out "
-                        "waiting for terminal output"
+            if action_index < len(actions):
+                if command_closed:
+                    raise RuntimeError(
+                        f"terminal command exited before input step "
+                        f"{action_index + 1} completed"
                     )
-            elif action.get("pause") is not None:
-                next_send = now + float(action["pause"])
-                action_index += 1
-                action_started = next_send
-            elif action.get("text") is not None:
-                if not pending_text:
+                if now < next_send:
+                    continue
+                action = actions[action_index]
+                if action.get("wait_for") is not None:
+                    timeout = action.get("timeout")
+                    timeout = 10.0 if timeout is None else float(timeout)
+                    visible_text, raw_ends = visible_terminal_text(visible_raw)
+                    match_at = visible_text.find(action["wait_for"])
+                    if match_at >= 0:
+                        match_end = match_at + len(action["wait_for"])
+                        visible_raw = visible_raw[raw_ends[match_end - 1] :]
+                        action_index += 1
+                        action_started = now
+                    elif now - action_started >= timeout:
+                        raise TimeoutError(
+                            f"terminal input step {action_index + 1} timed out "
+                            "waiting for terminal output"
+                        )
+                elif action.get("pause") is not None:
+                    next_send = now + float(action["pause"])
+                    action_index += 1
+                    action_started = next_send
+                elif action.get("text") is not None:
+                    if not pending_text:
+                        visible_raw = ""
+                        pending_text = action["text"]
+                    char, pending_text = pending_text[0], pending_text[1:]
+                    os.write(
+                        master_fd,
+                        b"\r" if char == "\n" else char.encode("utf-8"),
+                    )
+                    interval = action.get("interval")
+                    next_send = now + (
+                        0.035 if interval is None else float(interval)
+                    )
+                    if not pending_text:
+                        action_index += 1
+                        action_started = now
+                elif action.get("key") is not None:
                     visible_raw = ""
-                    pending_text = action["text"]
-                char, pending_text = pending_text[0], pending_text[1:]
-                os.write(
-                    master_fd,
-                    b"\r" if char == "\n" else char.encode("utf-8"),
-                )
-                interval = action.get("interval")
-                next_send = now + (
-                    0.035 if interval is None else float(interval)
-                )
-                if not pending_text:
+                    os.write(master_fd, key_bytes[action["key"]])
                     action_index += 1
                     action_started = now
-            elif action.get("key") is not None:
-                visible_raw = ""
-                os.write(master_fd, key_bytes[action["key"]])
-                action_index += 1
-                action_started = now
-            elif action.get("control") is not None:
-                visible_raw = ""
-                os.write(
-                    master_fd,
-                    bytes([ord(action["control"].lower()) & 0x1F]),
+                elif action.get("control") is not None:
+                    visible_raw = ""
+                    os.write(
+                        master_fd,
+                        bytes([ord(action["control"].lower()) & 0x1F]),
+                    )
+                    action_index += 1
+                    action_started = now
+                continue
+
+            if finish_after_actions:
+                if not command_closed:
+                    continue
+                respond("completed")
+                break
+            if command_closed:
+                raise RuntimeError(
+                    "terminal command exited before its continuation"
                 )
-                action_index += 1
-                action_started = now
+            respond("suspended")
+            input_seq += 1
+            request_path = f"{control_root}.input-request-{input_seq}"
+            while not os.path.exists(request_path):
+                readable, _, _ = select.select([master_fd], [], [], 0.01)
+                if readable:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError as exc:
+                        if exc.errno == errno.EIO:
+                            command_closed = True
+                            chunk = b""
+                        else:
+                            raise
+                    if not chunk:
+                        command_closed = True
+                    else:
+                        emit(redact(chunk))
+                        visible_raw = (
+                            visible_raw + chunk.decode("utf-8", errors="replace")
+                        )[-131072:]
+                if command_closed:
+                    break
+            if not os.path.exists(request_path):
+                continue
+            request = json.loads(Path(request_path).read_text(encoding="utf-8"))
+            actions = request["actions"]
+            finish_after_actions = bool(request["finish"])
+            action_index = 0
+            action_started = time.monotonic()
+            next_send = action_started
+            pending_text = ""
+            visible_raw = ""
         emit(redact(b"", final=True))
-    if action_index < len(actions):
-        raise RuntimeError(
-            f"terminal command exited before input step {action_index + 1} completed"
-        )
     if state["leaked"]:
         Path(leak_path).write_text("redacted\n", encoding="utf-8")
 except Exception as exc:
     if "state" in locals() and state["leaked"]:
         Path(leak_path).write_text("redacted\n", encoding="utf-8")
     Path(input_error_path).write_text(f"{exc}\n", encoding="utf-8")
+    if "input_seq" in locals():
+        try:
+            respond("error", exc)
+        except Exception:
+            pass
     raise
 finally:
     if slave_fd >= 0:
@@ -572,6 +787,7 @@ finally:
     os.close(master_fd)
 PY
     relay_pid=$!
+    OMEGAFLOW_ACTIVE_RELAY_PID="$relay_pid"
     local ready_index
     for ((ready_index = 0; ready_index < 1000; ready_index += 1)); do
       [[ -s "$pty_ready" ]] && break
@@ -586,6 +802,7 @@ PY
       rm -f \
         "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" \
         "$input_error" "$cwd_result"
+      omegaflow_reset_active_user_command
       return 125
     fi
     local pty_slave
@@ -593,39 +810,20 @@ PY
     printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
       "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" "$decoder" \
       "$encoded_command" "$cwd_result" "$status_pipe" >&7 || true
+    if ! omegaflow_wait_active_input_response; then
+      omegaflow_finalize_active_user_command
+      return 125
+    fi
+    if [[ "$suspend" == "true" ]]; then
+      return 0
+    fi
   else
     printf 'eval "$(%q -c %q %q)" >>%q 2>>%q\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\n' \
       "$OMEGAFLOW_PYTHON" "$decoder" "$encoded_command" \
       "$stdout_target" "$stderr_target" "$cwd_result" "$status_pipe" \
       >&7 || true
   fi
-  wait "$status_monitor_pid" 2>/dev/null || true
-  if [[ -n "$relay_pid" ]]; then
-    wait "$relay_pid" 2>/dev/null || true
-  fi
-  local status=125
-  if [[ -f "$status_result" ]]; then
-    IFS= read -r status <"$status_result" || status=125
-  fi
-  if [[ -f "$secret_leak" ]]; then
-    printf '%s\n' 'recording secret appeared in terminal command output' \
-      >>"$stderr_target"
-    status=125
-  fi
-  if [[ -f "$input_error" ]]; then
-    printf '%s' 'terminal input failed: ' >>"$stderr_target"
-    cat "$input_error" >>"$stderr_target"
-    status=125
-  fi
-  OMEGAFLOW_LAST_COMMAND_CWD=""
-  if [[ -f "$cwd_result" ]]; then
-    IFS= read -r OMEGAFLOW_LAST_COMMAND_CWD <"$cwd_result" || \
-      OMEGAFLOW_LAST_COMMAND_CWD=""
-  fi
-  rm -f \
-    "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" "$secret_leak" \
-    "$input_error" "$cwd_result"
-  return "$status"
+  omegaflow_finalize_active_user_command
 }
 
 omegaflow_validate_no_secret_output() {
@@ -913,33 +1111,50 @@ omegaflow_run_step() {
   local input_json="${13}"
   local producer_id="${14}"
   local produces_json="${15}"
+  local continue_from="${16}"
+  local suspend="${17}"
   local stdout_start
   local stderr_start
   local status
   local output_streamed=false
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
-  if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
-    omegaflow_print_prompt
-  fi
-  omegaflow_pause "$pre_command_pause" "$timing"
-  omegaflow_command_marker typing_start
-  omegaflow_print_command "$display" "$pre_enter_pause" "$timing"
-  omegaflow_command_marker typing_end
-  OMEGAFLOW_PROMPT_VISIBLE=0
-  if [[ "$timing" == "realtime" && "$output_mode" == "real" ]]; then
-    omegaflow_run_user_command \
-      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
-      realtime "$encoded_environment" "$input_json"
+  if [[ -n "$continue_from" ]]; then
+    stdout_start="$OMEGAFLOW_ACTIVE_STDOUT_START"
+    stderr_start="$OMEGAFLOW_ACTIVE_STDERR_START"
+    omegaflow_continue_user_command "$input_json" "$suspend"
     status=$?
     output_streamed=true
   else
+    if [[ "$OMEGAFLOW_PROMPT_VISIBLE" -ne 1 ]]; then
+      omegaflow_print_prompt
+    fi
+    omegaflow_pause "$pre_command_pause" "$timing"
+    omegaflow_command_marker typing_start
+    omegaflow_print_command "$display" "$pre_enter_pause" "$timing"
+    omegaflow_command_marker typing_end
+    OMEGAFLOW_PROMPT_VISIBLE=0
+  fi
+  if [[ -z "$continue_from" && "$timing" == "realtime" && "$output_mode" == "real" ]]; then
+    OMEGAFLOW_ACTIVE_STDOUT_START="$stdout_start"
+    OMEGAFLOW_ACTIVE_STDERR_START="$stderr_start"
+    omegaflow_run_user_command \
+      "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
+      realtime "$encoded_environment" "$input_json" "$suspend"
+    status=$?
+    output_streamed=true
+  elif [[ -z "$continue_from" ]]; then
     omegaflow_run_user_command \
       "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
       presentation "$encoded_environment"
     status=$?
   fi
-  if ! omegaflow_validate_no_secret_output \
+  if [[ "$suspend" == "true" ]]; then
+    omegaflow_command_marker output_start
+    omegaflow_command_marker output_end
+    return "$status"
+  fi
+  if [[ -z "$continue_from" ]] && ! omegaflow_validate_no_secret_output \
     "$encoded_environment" \
     "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
     "$stdout_start" "$stderr_start"; then
@@ -1517,6 +1732,7 @@ class PersistentTerminalRunner:
         self.session: TerminalControlSession | None = None
         self._captured_beat_ids: list[str] = []
         self._command_snapshots: dict[str, dict[str, dict[str, Any]]] = {}
+        self._continuation_boundary_beat_ids: set[str] = set()
 
     def start(self, context: CaptureContext) -> None:
         if self.session is not None:
@@ -1569,6 +1785,12 @@ class PersistentTerminalRunner:
             check for check in beat.checks if isinstance(check, TerminalCheckPlan)
         )
         self._captured_beat_ids.append(beat.id)
+        if any(
+            command.get("_continuation_boundary")
+            for action in actions
+            for command in (action.config.get("commands") or ())
+        ):
+            self._continuation_boundary_beat_ids.add(beat.id)
         command_snapshots = resolve_terminal_command_snapshots(
             actions,
             working_directory=self.context.working_directory,
@@ -1634,6 +1856,7 @@ class PersistentTerminalRunner:
                     self.context.paths.capture / "terminal-beats",
                     expected_beat_ids=tuple(self._captured_beat_ids),
                     command_snapshots=self._command_snapshots,
+                    boundary_state_beat_ids=self._continuation_boundary_beat_ids,
                 )
         finally:
             self.session = None
@@ -1734,12 +1957,17 @@ def _beat_script(
     if context is None:
         raise TerminalCaptureError("terminal capture context is unavailable")
     steps: list[str] = []
+    starts_with_continuation = False
+    found_first_command = False
     for action_index, action in enumerate(actions):
         value = _thaw(action.config)
         command_entries = value.get("commands")
         if command_entries:
             commands: list[str] = []
             for command_index, command in enumerate(command_entries):
+                if not found_first_command:
+                    starts_with_continuation = bool(command.get("continue_from"))
+                    found_first_command = True
                 action_id = terminal_action_id(
                     action_index, command_index, command
                 )
@@ -1760,6 +1988,9 @@ def _beat_script(
                 _validated_group_script(" && ".join(commands), value.get("expect", {}))
             )
         else:
+            if not found_first_command:
+                starts_with_continuation = bool(value.get("continue_from"))
+                found_first_command = True
             action_id = terminal_action_id(action_index, None)
             steps.append(
                 _marked_step_script(
@@ -1776,6 +2007,8 @@ def _beat_script(
             )
     if not steps:
         return "omegaflow_begin_beat"
+    if starts_with_continuation:
+        return " && ".join(steps)
     return "omegaflow_begin_beat && " + " && ".join(steps)
 
 
@@ -1805,10 +2038,13 @@ def resolve_terminal_command_snapshots(
             commands = ((None, value),)
         for command_index, command in commands:
             action_id = terminal_action_id(action_index, command_index, command)
-            command_text = _step_command_in_directory(
-                command, working_directory
+            continue_from = command.get("continue_from")
+            command_text = (
+                ""
+                if continue_from
+                else _step_command_in_directory(command, working_directory)
             )
-            display = _step_display(command, command_text)
+            display = "" if continue_from else _step_display(command, command_text)
             timing = command.get("timing", "presentation")
             if timing not in {"presentation", "realtime"}:
                 raise TerminalCaptureError(
@@ -1888,7 +2124,12 @@ def _validated_step_script(
     delegated_environment: Mapping[str, str] | None = None,
     secret_environment: Mapping[str, str] | None = None,
 ) -> str:
-    command = snapshot["command"] if snapshot is not None else _step_command(step, context)
+    continue_from = step.get("continue_from")
+    command = (
+        snapshot["command"]
+        if snapshot is not None
+        else "" if continue_from else _step_command(step, context)
+    )
     if step.get("browser_handoff"):
         handoff_id = step.get("id")
         if not isinstance(handoff_id, str) or not handoff_id:
@@ -1905,7 +2146,7 @@ def _validated_step_script(
         if snapshot is not None
         else _step_display(step, command)
     )
-    expect = step.get("expect", {})
+    expect = step.get("_continuation_expect", step.get("expect", {}))
     if not isinstance(expect, dict):
         raise TerminalCaptureError("terminal step expect must be a mapping")
     _validate_expect(expect)
@@ -1978,10 +2219,14 @@ def _validated_step_script(
     if input_steps and output["mode"] != "real":
         raise TerminalCaptureError("terminal step input requires output: real")
     input_json = json.dumps(_thaw(input_steps), separators=(",", ":"))
-    produces = step.get("produces", {})
+    produces = step.get("_continuation_produces", step.get("produces", {}))
     if not isinstance(produces, Mapping):
         raise TerminalCaptureError("terminal step produces must be a mapping")
-    producer_id = step.get("id", "")
+    producer_id = step.get(
+        "_continuation_producer_id",
+        step.get("id", ""),
+    )
+    suspend = bool(step.get("_suspend_for_continuation"))
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
@@ -1997,6 +2242,8 @@ def _validated_step_script(
             input_json,
             str(producer_id or ""),
             json.dumps(_thaw(produces), separators=(",", ":")),
+            str(continue_from or ""),
+            "true" if suspend else "false",
         )
     )
 
@@ -2109,6 +2356,7 @@ def extract_terminal_beat_casts(
     *,
     expected_beat_ids: tuple[str, ...],
     command_snapshots: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+    boundary_state_beat_ids: Iterable[str] = (),
 ) -> dict[str, Path]:
     """Split the physical persistent cast into beat-local, zero-based casts."""
 
@@ -2127,8 +2375,15 @@ def extract_terminal_beat_casts(
 
     expected = list(expected_beat_ids)
     expected_set = set(expected)
+    boundary_state_set = set(boundary_state_beat_ids)
     if len(expected_set) != len(expected):
         raise TerminalCaptureError("terminal beat extraction received duplicate beat ids")
+    unknown_boundaries = boundary_state_set - expected_set
+    if unknown_boundaries:
+        raise TerminalCaptureError(
+            "terminal state boundaries reference unknown beat ids: "
+            + repr(sorted(unknown_boundaries))
+        )
     captured: dict[str, list[list[Any]]] = {}
     action_timings: dict[str, list[dict[str, Any]]] = {}
     previous_times: dict[str, float] = {}
@@ -2137,7 +2392,22 @@ def extract_terminal_beat_casts(
     active_action: tuple[str, str, float, int] | None = None
     active_command_boundaries: dict[str, int] = {}
     ended_handoffs: set[tuple[str, str]] = set()
+    boundary_output: dict[str, list[str]] = {}
+    output_history: list[str] = []
+    output_history_bytes = 0
     absolute_time = 0.0
+
+    def append_output_history(chunk: str) -> None:
+        nonlocal output_history_bytes
+        if not boundary_state_set:
+            return
+        output_history_bytes += len(chunk.encode("utf-8"))
+        if output_history_bytes > TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT:
+            raise TerminalCaptureError(
+                "terminal boundary output exceeds "
+                f"{TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT} bytes"
+            )
+        output_history.append(chunk)
 
     def append_event(beat_id: str, timestamp: float, kind: Any, data: Any) -> None:
         previous = previous_times[beat_id]
@@ -2166,6 +2436,12 @@ def extract_terminal_beat_casts(
                     f"terminal beat {beat_id!r} has duplicate or nested start marker"
                 )
             active = beat_id
+            if beat_id in boundary_state_set:
+                if not output_history:
+                    raise TerminalCaptureError(
+                        f"terminal beat {beat_id!r} has no prior terminal state"
+                    )
+                boundary_output[beat_id] = list(output_history)
             captured[beat_id] = []
             action_timings[beat_id] = []
             previous_times[beat_id] = absolute_time
@@ -2315,8 +2591,10 @@ def extract_terminal_beat_casts(
         cursor = 0
         for marker in TERMINAL_ANY_MARKER_RE.finditer(data):
             prefix = data[cursor : marker.start()]
-            if prefix and active is not None:
-                append_event(active, absolute_time, kind, prefix)
+            if prefix:
+                if active is not None:
+                    append_event(active, absolute_time, kind, prefix)
+                append_output_history(prefix)
             beat_marker = TERMINAL_MARKER_RE.fullmatch(marker.group(0))
             if beat_marker is not None:
                 handle_beat_marker(beat_marker)
@@ -2343,8 +2621,10 @@ def extract_terminal_beat_casts(
                         handle_handoff_marker(handoff_marker)
             cursor = marker.end()
         suffix = data[cursor:]
-        if suffix and active is not None:
-            append_event(active, absolute_time, kind, suffix)
+        if suffix:
+            if active is not None:
+                append_event(active, absolute_time, kind, suffix)
+            append_output_history(suffix)
     if active is not None:
         raise TerminalCaptureError(f"terminal beat {active!r} has no end marker")
     if list(captured) != expected:
@@ -2356,9 +2636,12 @@ def extract_terminal_beat_casts(
     output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     output_dir.chmod(0o700)
     outputs: dict[str, Path] = {}
-    header_line = json.dumps(header, separators=(",", ":"))
     for beat_id in expected:
         output = output_dir / f"{beat_id}.cast"
+        beat_header = dict(header)
+        if beat_id in boundary_output:
+            beat_header["omegaflow_boundary_output"] = boundary_output[beat_id]
+        header_line = json.dumps(beat_header, separators=(",", ":"))
         event_lines = [json.dumps(event, separators=(",", ":")) for event in captured[beat_id]]
         output.write_text(
             "\n".join([header_line, *event_lines]) + "\n",
