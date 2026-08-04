@@ -697,6 +697,43 @@ def test_capture_failure_message_surfaces_stderr_and_recovery_command() -> None:
     )
 
 
+def test_capture_failure_message_prefers_failed_request_output() -> None:
+    pane_error = studio.CapturePaneStreamError(
+        "build",
+        studio.RecordingMedium.terminal,
+        TerminalCaptureError(
+            "terminal beat request 3 failed for nested-build: exit 1"
+        ),
+    )
+    error = CaptureFailed(
+        primary=CaptureFailureDetail(
+            "capture concurrent pane streams",
+            pane_error,
+        ),
+        cleanup=(),
+    )
+
+    message = studio.capture_failure_message(
+        error,
+        {
+            "failure_output": (
+                "error: Capture failed during capture beat open-canvas\n"
+                "  BROWSER_CHECK_FAILED: starter title loaded did not pass\n"
+                "terminal step exited 1, expected 0\n"
+            ),
+            "stderr": (
+                "error: invalid studio-directive block near line 54:\n"
+                "  beat.medium: Invalid value 'term'\n"
+            ),
+            "recording_id": "tutorial",
+            "run_id": "20260803-002504",
+        },
+    )
+
+    assert "BROWSER_CHECK_FAILED" in message
+    assert "Invalid value 'term'" not in message
+
+
 def test_capture_failure_message_collapses_terminal_progress_redraws() -> None:
     report = {
         "output": (

@@ -82,6 +82,17 @@ TERMINAL_ANY_MARKER_RE = re.compile(
 class TerminalCaptureError(RuntimeError):
     """Raised when the persistent terminal session or its protocol fails."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        output: str | None = None,
+        output_truncated: bool = False,
+    ) -> None:
+        self.output = output
+        self.output_truncated = output_truncated
+        super().__init__(message)
+
 
 class TerminalLifecycleStepError(TerminalCaptureError):
     """A named setup or cleanup step failed in the terminal session."""
@@ -99,7 +110,11 @@ class TerminalLifecycleStepError(TerminalCaptureError):
         self.step_index = step_index
         self.error = error
         self.run_file = run_file
-        super().__init__(f"{operation} step {step_name!r} failed: {error}")
+        super().__init__(
+            f"{operation} step {step_name!r} failed: {error}",
+            output=error.output,
+            output_truncated=error.output_truncated,
+        )
 
 
 @dataclass(frozen=True)
@@ -1285,6 +1300,28 @@ done
 '''
 
 
+def _file_size_or_zero(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+TERMINAL_FAILURE_OUTPUT_MAX_BYTES = 12_000
+
+
+def _read_text_since(path: Path, offset: int) -> tuple[str, bool]:
+    try:
+        end = path.stat().st_size
+        start = max(offset, end - TERMINAL_FAILURE_OUTPUT_MAX_BYTES)
+        with path.open("rb") as handle:
+            handle.seek(start)
+            value = handle.read(end - start).decode("utf-8", errors="replace")
+        return value, start > offset
+    except OSError:
+        return "", False
+
+
 class TerminalControlSession:
     """One request-at-a-time JSON protocol over private named pipes."""
 
@@ -1469,6 +1506,10 @@ class TerminalControlSession:
             raise ValueError(f"invalid terminal execution operation: {op}")
         if not self.started or self._closed:
             raise TerminalCaptureError("terminal control session is not running")
+        stdout_path = self.context.runner_capture / "terminal.stdout.log"
+        stderr_path = self.context.runner_capture / "terminal.stderr.log"
+        stdout_start = _file_size_or_zero(stdout_path)
+        stderr_start = _file_size_or_zero(stderr_path)
         self._seq += 1
         seq = self._seq
         request = json.dumps(
@@ -1499,13 +1540,12 @@ class TerminalControlSession:
         )
         if status != "completed":
             error = completed.get("error", "unknown terminal failure")
-            stderr_path = self.context.runner_capture / "terminal.stderr.log"
-            try:
-                stderr_text = stderr_path.read_text(
-                    encoding="utf-8", errors="replace"
-                )
-            except OSError:
-                stderr_text = ""
+            stdout_text, stdout_truncated = _read_text_since(
+                stdout_path, stdout_start
+            )
+            stderr_text, stderr_truncated = _read_text_since(
+                stderr_path, stderr_start
+            )
             input_errors = re.findall(
                 r"^terminal input failed: (.+)$",
                 stderr_text,
@@ -1522,8 +1562,14 @@ class TerminalControlSession:
                 error = produced_output_errors[-1]
             if "recording secret appeared in terminal command output" in stderr_text:
                 error = "recording secret appeared in terminal command output"
+            output_parts = [
+                value.rstrip("\n") for value in (stdout_text, stderr_text) if value
+            ]
             raise TerminalCaptureError(
-                f"terminal {op} request {seq} failed for {beat_id or '<recording>'}: {error}"
+                f"terminal {op} request {seq} failed for "
+                f"{beat_id or '<recording>'}: {error}",
+                output="\n".join(output_parts) or None,
+                output_truncated=stdout_truncated or stderr_truncated,
             )
         return start_ms, end_ms
 
@@ -1641,14 +1687,14 @@ class TerminalControlSession:
                 raise TerminalCaptureError(f"terminal request {seq} timed out")
             if self._response_fd is None:
                 raise TerminalCaptureError("terminal response stream is unavailable")
-            wait_seconds = 0.25 if wait_indefinitely else remaining
+            wait_seconds = 0.25 if wait_indefinitely else min(0.25, remaining)
             readable, _, _ = select.select(
                 [self._response_fd], [], [], wait_seconds
             )
             if not readable:
-                if wait_indefinitely:
-                    continue
-                raise TerminalCaptureError(f"terminal request {seq} timed out")
+                if not wait_indefinitely and time.monotonic() >= deadline:
+                    raise TerminalCaptureError(f"terminal request {seq} timed out")
+                continue
             chunk = os.read(self._response_fd, 65536)
             if chunk:
                 self._response_buffer += chunk

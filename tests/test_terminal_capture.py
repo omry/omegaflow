@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -566,6 +567,73 @@ def test_terminal_action_gate_does_not_disable_command_timeout(
         runner.cancel_capture()
         with contextlib.suppress(TerminalCaptureError):
             runner.close()
+
+
+def test_terminal_cancellation_interrupts_response_wait(tmp_path: Path) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "cancel-response-wait",
+            "beats": [
+                {
+                    "id": "slow",
+                    "actions": [{"id": "sleep", "run": "sleep 30"}],
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=120,
+    )
+    runner.start(CaptureContext.create(tmp_path / "run", workspace=tmp_path))
+    action_started = threading.Event()
+    errors: list[BaseException] = []
+
+    def capture() -> None:
+        try:
+            runner.capture_beat(
+                plan.beats[0],
+                on_progress=lambda state, _action_id: (
+                    action_started.set() if state == "started" else None
+                ),
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=capture)
+    thread.start()
+    assert action_started.wait(timeout=2)
+
+    runner.cancel_capture()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], TerminalCaptureError)
+    with contextlib.suppress(TerminalCaptureError):
+        runner.close()
+
+
+def test_failure_output_read_is_bounded_to_the_request_tail(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "terminal.stdout.log"
+    previous = b"previous request\n"
+    current = b"x" * (terminal_capture.TERMINAL_FAILURE_OUTPUT_MAX_BYTES + 100)
+    output.write_bytes(previous + current + b"failure tail\n")
+
+    value, truncated = terminal_capture._read_text_since(output, len(previous))
+
+    assert truncated is True
+    assert "previous request" not in value
+    assert value.endswith("failure tail\n")
+    assert (
+        len(value.encode())
+        <= terminal_capture.TERMINAL_FAILURE_OUTPUT_MAX_BYTES
+    )
 
 
 def test_terminal_action_gate_gets_a_fresh_command_timeout(
@@ -1405,6 +1473,17 @@ def test_terminal_failure_preserves_postmortem_artifacts(
         "style": {"color": False},
         "beats": [
             {
+                "id": "handled-demo",
+                "actions": [
+                    {
+                        "run": (
+                            "sh -c \"printf 'handled demo error\\\\n' >&2; exit 3\""
+                        ),
+                        "expect": {"exit_code": 3},
+                    },
+                ],
+            },
+            {
                 "id": "failure",
                 "actions": [
                     {
@@ -1435,6 +1514,9 @@ def test_terminal_failure_preserves_postmortem_artifacts(
     assert failure["postmortem_path"] == str(run_dir / "enter")
     assert "terminal step exited 7, expected 0" in failure["message"]
     assert "terminal step exited 7, expected 0" in failure["stderr"]
+    assert "failure stdout" in failure["failure_output"]
+    assert "failure stderr" in failure["failure_output"]
+    assert "handled demo error" not in failure["failure_output"]
 
 
 def test_persistent_terminal_preserves_user_shell_state(tmp_path: Path) -> None:

@@ -540,7 +540,11 @@ def capture_failure_message(
         if run_file is not None:
             heading += f" while running {run_file!r}"
 
-    output_value = report.get("stderr") or report.get("output")
+    output_value = (
+        report.get("failure_output")
+        or report.get("stderr")
+        or report.get("output")
+    )
     if (
         isinstance(primary_error, CapturePaneStreamError)
         and primary_error.medium is not RecordingMedium.terminal

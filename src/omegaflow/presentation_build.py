@@ -42,6 +42,7 @@ from .browser_runtime import (
 from .capture import (
     CaptureCoordinator,
     CaptureFailed,
+    CapturePaneStreamError,
     CaptureProgressCallback,
     CaptureResult,
 )
@@ -114,6 +115,7 @@ from .service_environment import (
 from .terminal_capture import (
     TERMINAL_PRESENTATION_SNAPSHOT_FIELDS,
     PersistentTerminalRunner,
+    TerminalCaptureError,
     TerminalPresentationDefaults,
     resolve_terminal_command_snapshots,
 )
@@ -777,6 +779,16 @@ def _read_capped_failure_output(path: Path, *, max_chars: int = 12_000) -> tuple
     return (value[-max_chars:] if truncated else value), truncated
 
 
+def _terminal_failure_output(error: BaseException) -> tuple[str | None, bool]:
+    if isinstance(error, CaptureFailed) and error.primary is not None:
+        error = error.primary.error
+    if isinstance(error, CapturePaneStreamError):
+        error = error.error
+    if isinstance(error, TerminalCaptureError):
+        return error.output, error.output_truncated
+    return None, False
+
+
 def _preserve_capture_diagnostics(
     spec: Mapping[str, Any],
     run_dir: Path,
@@ -832,6 +844,12 @@ def _preserve_capture_diagnostics(
         output, output_truncated = _read_capped_failure_output(output_path)
         stderr, stderr_truncated = _read_capped_failure_output(stderr_path)
         progress, progress_truncated = _read_capped_failure_output(progress_path)
+        failure_output, failure_output_truncated = _terminal_failure_output(
+            error
+        )
+        if failure_output is not None and len(failure_output) > 12_000:
+            failure_output_truncated = True
+            failure_output = failure_output[-12_000:]
         operation = "capture"
         if isinstance(error, CaptureFailed) and error.primary is not None:
             operation = error.primary.operation
@@ -855,6 +873,8 @@ def _preserve_capture_diagnostics(
             "stderr": stderr,
             "stderr_path": str(stderr_path),
             "stderr_truncated": stderr_truncated,
+            "failure_output": failure_output,
+            "failure_output_truncated": failure_output_truncated,
             "progress": progress,
             "progress_path": str(progress_path),
             "progress_truncated": progress_truncated,
