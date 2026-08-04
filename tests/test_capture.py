@@ -803,6 +803,9 @@ def test_handoff_close_failure_does_not_mask_pane_failure_or_skip_cancellation(
         ).capture(plan, tmp_path / "run", workspace=tmp_path)
 
     assert isinstance(caught.value.__cause__, CaptureSetupError)
+    assert str(caught.value.__cause__) == (
+        "capture pane stream 'primary' failed: primary failed"
+    )
     assert isinstance(caught.value.__cause__.__cause__, RuntimeError)
     assert str(caught.value.__cause__.__cause__) == "primary failed"
     assert "terminal.cancel" in calls

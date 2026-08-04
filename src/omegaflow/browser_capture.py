@@ -56,6 +56,7 @@ GRAPHICAL_RUNTIME_ENVIRONMENT = (
 DRAG_MIN_DURATION_MS = 700
 DRAG_MAX_DURATION_MS = 1400
 DRAG_FRAME_INTERVAL_MS = 1000 / 30
+REALTIME_START_FRAME_HOLD_MS = 350
 
 
 def _linear_curve(
@@ -670,6 +671,14 @@ class PersistentBrowserRunner:
                     action_id=action.id,
                     extra_redactions=extra_redactions,
                 )
+                if config.get("timing") == "realtime":
+                    # A screenshot synchronizes page rendering, but Playwright's
+                    # video encoder may not retain that state before the action
+                    # mutates the page. Keep the authored boundary visible long
+                    # enough to provide the consecutive frames required by
+                    # dynamic-fragment alignment.
+                    self.page.wait_for_timeout(REALTIME_START_FRAME_HOLD_MS)
+                    video_started_ms = self._video_elapsed_ms()
             if config.get("audio") == "capture":
                 try:
                     start_page_audio_capture(self.page)

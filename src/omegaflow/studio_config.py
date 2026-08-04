@@ -890,6 +890,7 @@ class PaneActionConfig(RecordingActionConfig):
     browser_handoff: bool | BrowserHandoffConfig = False
     pre_command_pause: float | None = None
     pre_enter_pause: float | None = None
+    input: list[TerminalInputStepConfig] = field(default_factory=list)
 
 
 @dataclass

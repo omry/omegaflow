@@ -1045,6 +1045,9 @@ def write_capture_fingerprint(
         json.dumps(
             {
                 **fingerprints.payload(),
+                "presentation_source_fingerprint": (
+                    fingerprints.presentation_fingerprint
+                ),
                 "recording": plan.id,
                 "dependencies": [
                     {"path": key, "sha256": value}
@@ -2509,6 +2512,7 @@ def compile_presentation_bundle(
             narration_take_hashes=take_hashes,
             timestamp_hashes=timestamp_hashes,
         )
+        source_fingerprints = artifact_fingerprints(spec, plan)
         warnings = sorted(
             {
                 warning
@@ -2554,6 +2558,9 @@ def compile_presentation_bundle(
         )
         fingerprint_payload = {
             **fingerprints.payload(),
+            "presentation_source_fingerprint": (
+                source_fingerprints.presentation_fingerprint
+            ),
             "recording": plan.id,
             "dependencies": [
                 {"path": key, "sha256": value}

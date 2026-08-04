@@ -2124,6 +2124,13 @@ def _relocate_terminal_events(
             default=0,
         ),
     )
+    if previous_ms < materialized_ms:
+        timestamp_ms = (
+            materialized_ms - previous_ms
+            if version == 3
+            else materialized_ms
+        )
+        relocated.append([timestamp_ms / 1000, "o", ""])
     return relocated, materialized_ms
 
 

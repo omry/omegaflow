@@ -726,6 +726,39 @@ def test_capture_failure_message_collapses_terminal_progress_redraws() -> None:
     assert "publish html: updated" in message
 
 
+def test_capture_failure_message_keeps_browser_cause_without_terminal_output() -> None:
+    pane_error = studio.CapturePaneStreamError(
+        "player",
+        studio.RecordingMedium.browser,
+        RuntimeError(
+            "BROWSER_UNSUPPORTED_MOTION: beat 'review', action 'play': "
+            "could not align the initial browser frame"
+        ),
+    )
+    error = CaptureFailed(
+        primary=CaptureFailureDetail("capture concurrent pane streams", pane_error),
+        cleanup=(),
+    )
+
+    message = studio.capture_failure_message(
+        error,
+        {
+            "output": "nested build progress\nnested watch server stopped\n",
+            "recording_id": "tutorial",
+            "run_id": "20260731-200837",
+        },
+    )
+
+    assert "capture pane stream 'player' failed" in message
+    assert "could not align the initial browser frame" in message
+    assert "nested build progress" not in message
+    assert "nested watch server stopped" not in message
+    assert message.endswith(
+        "Run: omegaflow recording=tutorial action=output "
+        "run_id=20260731-200837"
+    )
+
+
 def test_cleanup_only_failure_does_not_repeat_primary_cleanup_as_warning() -> None:
     error = CaptureFailed(
         primary=None,
@@ -3687,6 +3720,67 @@ beat:
     assert plan.browser_handoffs[0].target_pane_id == "preview"
 
 
+def test_studio_directive_accepts_realtime_input_on_explicit_terminal_pane(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "hello"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        """
+---
+id: hello
+---
+
+```yaml studio-directive
+scene: Hello Video
+panes:
+- id: terminal
+  kind: terminal
+```
+
+```yaml studio-directive
+beat:
+  id: edit
+  heading: Edit a file
+  layout:
+    areas:
+    - [terminal]
+  panes:
+    terminal:
+    - id: editor
+      actions:
+      - id: edit-file
+        run: nano example.txt
+        timing: realtime
+        input:
+        - wait_for: GNU nano
+          timeout: 2
+        - text: updated
+          interval: 0.01
+        - {control: x}
+```
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        studio_config_module,
+        "RECORDING_SCRIPT_DIR",
+        recordings_dir,
+    )
+
+    plan = normalize_recording_plan(recording_from_script("hello"))
+
+    action = plan.beats[0].pane_tracks[0].beats[0].actions[0]
+    input_steps = action.config["commands"][0]["input"]
+    assert input_steps[0]["wait_for"] == "GNU nano"
+    assert input_steps[0]["timeout"] == 2
+    assert input_steps[1]["text"] == "updated"
+    assert input_steps[1]["interval"] == 0.01
+    assert input_steps[2]["control"] == "x"
+
+
 def test_recording_frontmatter_rejects_pane_declarations(
     tmp_path: Path,
     monkeypatch,
@@ -4483,6 +4577,167 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     }
 
 
+def test_guided_tutorial_builds_and_reviews_repeatable_terminal_baseline() -> None:
+    assert [beat["id"] for beat in beats[:5]] == [
+        "build-baseline",
+        "open-baseline",
+        "review-baseline",
+    ]
+    build = beats_by_id["build-baseline"]
+    build_commands = build["panes"]["terminal"][0]["actions"]
+    assert [command["id"] for command in build_commands] == [
+        "build-baseline-command"
+    assert build_commands[0]["display"] == (
+        "omegaflow recording=sunset-beach action=build"
+    )
+    assert build_commands[0]["timing"] == "realtime"
+    open_baseline = beats_by_id["open-baseline"]
+    watch_command = open_baseline["panes"]["terminal"][0]["actions"][0]
+    assert watch_command["id"] == "watch-baseline-command"
+    assert watch_command["browser_handoff"] is True
+    assert watch_command["timing"] == "realtime"
+
+    review = beats_by_id["review-baseline"]
+    review_actions = review["panes"]["player"][0]["actions"]
+    assert review_actions[0]["open_page"]["handoff"] == (
+        "watch-baseline-command"
+    )
+    assert review_actions[1]["timing"] == "realtime"
+    assert review_actions[1]["click"]["target"] == {
+        "role": "button",
+        "name": "Play",
+        "exact": True,
+    }
+    assert review_actions[1]["until"] == {
+        "visible": {
+            "role": "button",
+            "name": "Play again",
+            "exact": True,
+        }
+    plan = normalize_recording_plan(
+        recording_from_script("tutorial", recording_dir=root / "recordings")
+    assert [pane.id for pane in plan.panes] == [
+        "overview",
+        "terminal",
+        "player",
+    assert [beat.id for beat in plan.beats[:5]] == [
+        "orientation",
+        "prepare-workspace",
+        "build-baseline",
+        "open-baseline",
+        "review-baseline",
+
+def test_guided_tutorial_authors_and_reviews_silent_browser_workflow(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "recordings" / "tutorial" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    beats = [
+        block["beat"]
+        for block in studio_directive_blocks(source)
+        if "beat" in block
+    beats_by_id = {beat["id"]: beat for beat in beats}
+    expected_ids = [
+        "orientation",
+        "prepare-workspace",
+        "build-baseline",
+        "open-baseline",
+        "review-baseline",
+        "author-browser-workflow",
+        "build-browser-workflow",
+        "open-browser-workflow",
+        "review-browser-workflow",
+    assert [beat["id"] for beat in beats] == expected_ids
+
+    author = beats_by_id["author-browser-workflow"]
+    author_action = author["panes"]["terminal"][0]["actions"][0]
+    assert author_action["run"] == (
+        "nano --rcfile recordings/sunset-beach/.nanorc "
+        "recordings/sunset-beach/index.md"
+    )
+    input_steps = author_action["input"]
+    typed_source = "".join(
+        step["text"] for step in input_steps if step.get("text") is not None
+    )
+    expected_source = (
+        root / "tests" / "fixtures" / "tutorial" / "sunset-beach-browser.md"
+    ).read_text(encoding="utf-8")
+    assert typed_source + "\n" == expected_source
+    assert sum(step.get("control") == "k" for step in input_steps) == 33
+
+    build = beats_by_id["build-browser-workflow"]
+    build_action = build["panes"]["terminal"][0]["actions"][0]
+    assert build_action["display"] == (
+        "omegaflow recording=sunset-beach action=build"
+    )
+    assert build_action["timing"] == "realtime"
+
+    open_workflow = beats_by_id["open-browser-workflow"]
+    watch_action = open_workflow["panes"]["terminal"][0]["actions"][0]
+    assert watch_action["display"] == (
+        "omegaflow recording=sunset-beach action=watch beat=edit-artwork"
+    )
+    assert watch_action["browser_handoff"] is True
+
+    review = beats_by_id["review-browser-workflow"]
+    review_actions = review["panes"]["player"][0]["actions"]
+    assert review_actions[0]["open_page"]["handoff"] == "watch-browser-command"
+    assert review_actions[1]["until"] == {
+        "visible": {
+            "role": "button",
+            "name": "Play again",
+            "exact": True,
+        }
+
+    tutorial_plan = normalize_recording_plan(
+        recording_from_script("tutorial", recording_dir=root / "recordings")
+    assert [beat.id for beat in tutorial_plan.beats] == expected_ids
+    recordings_dir = tmp_path / "recordings"
+    recording_dir = recordings_dir / "sunset-beach"
+    recording_dir.mkdir(parents=True)
+    (recording_dir / "index.md").write_text(
+        expected_source,
+        encoding="utf-8",
+    )
+    browser_spec = recording_from_script(
+        "sunset-beach",
+        recording_dir=recordings_dir,
+    browser_plan = normalize_recording_plan(browser_spec)
+    assert browser_spec["audio"]["enabled"] is False
+    assert [beat.id for beat in browser_plan.beats] == [
+        "inspect-draft",
+        "edit-artwork",
+    assert browser_plan.browser_handoffs[0].id == "open-editor"
+    browser_actions = browser_plan.beats[1].pane_tracks[0].beats[0].actions
+    assert [action.id for action in browser_actions] == [
+        "open-editor",
+        "rename-artwork",
+        "move-sun",
+        "move-tree",
+        "save-new-file",
+        "saved-new-file",
+def test_guided_tutorial_editor_input_materializes_silent_browser_source(
+    author = next(
+        if block.get("beat", {}).get("id") == "author-browser-workflow"
+    authored_action = author["panes"]["terminal"][0]["actions"][0]
+    shutil.copy2(
+        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / "index.md",
+        recording_dir / "index.md",
+    )
+    command = {
+        key: authored_action[key]
+        for key in ("id", "run", "display", "timing", "input")
+    }
+                    "id": "edit-browser-source",
+                    "actions": [{"commands": [command]}],
+        tmp_path / "run",
+    expected = (
+        root / "tests" / "fixtures" / "tutorial" / "sunset-beach-browser.md"
+    ).read_text(encoding="utf-8")
+    assert (recording_dir / "index.md").read_text(encoding="utf-8") == expected
+        / "run/capture/terminal-beats/edit-browser-source.cast"
 def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
     tmp_path,
 ) -> None:
@@ -6331,6 +6586,14 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
         "watch_presentation_artifacts",
         lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
     )
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "plan")
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_freshness",
+        lambda _spec, _plan: studio.WatchPlanFreshness(
+            "fresh", "fresh", Path("/run")
+        ),
+    )
 
     def fake_run_watch_server(
         _cfg,
@@ -6370,6 +6633,154 @@ def test_run_watch_enables_countdown_autoplay(monkeypatch) -> None:
     }
 
 
+@pytest.mark.parametrize("fresh", [True, False])
+def test_run_watch_checks_freshness_before_serving(
+    monkeypatch,
+    capsys,
+    fresh: bool,
+) -> None:
+    events: list[str] = []
+    spec = {"id": "hello", "_recording_id": "hello", "beats": []}
+    plan = object()
+    monkeypatch.setattr(
+        studio,
+        "recording_spec_from_config",
+        lambda _config, recording_id=None, overrides=(): spec,
+    )
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: plan)
+
+    def fake_freshness(_spec, checked_plan) -> studio.WatchPlanFreshness:
+        assert checked_plan is plan
+        events.append("freshness")
+        state = "fresh" if fresh else "stale"
+        return studio.WatchPlanFreshness(state, state, Path("/run"))
+
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_freshness",
+        fake_freshness,
+    )
+
+    def fake_rebuild(_cfg, recording_id, *, beat_id=None):
+        assert recording_id == "hello"
+        assert beat_id is None
+        events.append("rebuild")
+        return Path("/rebuilt")
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+
+    def fake_artifacts(_spec, *, run_dir=None):
+        events.append("artifacts")
+        return Path("/presentation"), {}
+
+    monkeypatch.setattr(studio, "watch_presentation_artifacts", fake_artifacts)
+
+    @contextmanager
+    def fake_rebuilds(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(studio, "watch_recording_rebuilds", fake_rebuilds)
+    monkeypatch.setattr(studio, "run_watch_server", lambda *_args, **_kwargs: 0)
+
+    assert (
+        studio.run_watch(
+            OmegaConf.create({"output_format": "text"}),
+            {"recording": "hello", "open": False},
+        )
+        == 0
+    )
+    assert events == (
+        ["freshness", "artifacts"]
+        if fresh
+        else ["freshness", "rebuild", "artifacts"]
+    )
+    output = capsys.readouterr().out
+    state = "fresh" if fresh else "stale"
+    assert (
+        f"watch freshness: capture={state}, presentation={state}"
+        in output
+    )
+    assert ("watch build plan" in output) is not fresh
+
+
+def test_watch_freshness_rejects_presentation_only_source_change(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    original_spec = {
+        "id": "hello",
+        "beats": [
+            {
+                "id": "intro",
+                "viewer_hold": 1,
+                "actions": [{"run": "printf hello"}],
+            }
+        ],
+    }
+    changed_spec = {
+        **original_spec,
+        "beats": [
+            {
+                **original_spec["beats"][0],
+                "viewer_hold": 2,
+            }
+        ],
+    }
+    original_plan = studio.normalized_recording_plan(original_spec)
+    changed_plan = studio.normalized_recording_plan(changed_spec)
+    run_dir = tmp_path / "run"
+    manifest = run_dir / "presentation" / "recording.presentation.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        json.dumps({"beats": [{"id": "intro"}]}) + "\n",
+        encoding="utf-8",
+    )
+    fingerprint = studio.presentation_build.artifact_fingerprints(
+        original_spec,
+        original_plan,
+    )
+    (run_dir / "recording.fingerprint.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                **fingerprint.payload(),
+                "presentation_source_fingerprint": (
+                    fingerprint.presentation_fingerprint
+                ),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_is_fresh",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        studio.presentation_build,
+        "capture_artifacts_exist",
+        lambda *_args: True,
+    )
+
+    original_freshness = studio.watch_plan_freshness(
+        original_spec,
+        original_plan,
+        run_dir=run_dir,
+    )
+    changed_freshness = studio.watch_plan_freshness(
+        changed_spec,
+        changed_plan,
+        run_dir=run_dir,
+    )
+    assert original_freshness.capture == "fresh"
+    assert original_freshness.presentation == "fresh"
+    assert original_freshness.ready
+    assert changed_freshness.capture == "fresh"
+    assert changed_freshness.presentation == "stale"
+    assert not changed_freshness.ready
+
+
 def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
     requested: dict[str, object] = {}
     spec = {
@@ -6392,8 +6803,10 @@ def test_run_watch_targets_a_named_source_beat(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         studio,
-        "watch_plan_has_fresh_presentation",
-        lambda _spec, _plan: True,
+        "watch_plan_freshness",
+        lambda _spec, _plan: studio.WatchPlanFreshness(
+            "fresh", "fresh", Path("/run")
+        ),
     )
 
     def fake_run_watch_server(_cfg, url, _artifacts, **_kwargs):
@@ -6469,6 +6882,13 @@ def test_run_watch_builds_missing_selected_beat_prefix(monkeypatch) -> None:
         studio,
         "recording_spec_from_config",
         lambda _config, recording_id=None, overrides=(): spec,
+    )
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_freshness",
+        lambda _spec, _plan: studio.WatchPlanFreshness(
+            "stale", "stale", Path("/run")
+        ),
     )
     monkeypatch.setattr(
         studio,
@@ -6882,6 +7302,14 @@ def test_run_watch_can_disable_countdown_autoplay(monkeypatch) -> None:
         "watch_presentation_artifacts",
         lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
     )
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "plan")
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_freshness",
+        lambda _spec, _plan: studio.WatchPlanFreshness(
+            "fresh", "fresh", Path("/run")
+        ),
+    )
 
     def fake_run_watch_server(
         _cfg,
@@ -6955,6 +7383,14 @@ def test_run_watch_can_serve_without_opening_browser(monkeypatch) -> None:
         studio,
         "watch_presentation_artifacts",
         lambda _spec, *, run_dir=None: (Path("/presentation"), {}),
+    )
+    monkeypatch.setattr(studio, "normalized_recording_plan", lambda _spec: "plan")
+    monkeypatch.setattr(
+        studio,
+        "watch_plan_freshness",
+        lambda _spec, _plan: studio.WatchPlanFreshness(
+            "fresh", "fresh", Path("/run")
+        ),
     )
 
     def fake_run_watch_server(

@@ -22,6 +22,7 @@ import omegaflow.browser_visuals as browser_visuals
 from omegaflow.browser_capture import (
     BrowserCaptureError,
     PersistentBrowserRunner,
+    REALTIME_START_FRAME_HOLD_MS,
     browser_runtime_environment,
     resolve_browser_authentication,
 )
@@ -1532,6 +1533,7 @@ def test_browser_audio_capture_reports_the_start_failure(
 
 def test_dynamic_fragment_retains_the_frame_before_animation_starts(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with fixture_site() as base_url:
         plan = normalize_recording_plan(
@@ -1558,6 +1560,15 @@ def test_dynamic_fragment_retains_the_frame_before_animation_starts(
         )
         runner = PersistentBrowserRunner(plan.browser)
         runner.start(capture_context(tmp_path))
+        assert runner.page is not None
+        waits: list[int] = []
+        wait_for_timeout = runner.page.wait_for_timeout
+
+        def tracked_wait(duration_ms: int) -> None:
+            waits.append(duration_ms)
+            wait_for_timeout(duration_ms)
+
+        monkeypatch.setattr(runner.page, "wait_for_timeout", tracked_wait)
         try:
             actions = runner.capture_beat(plan.beats[0]).metadata["actions"]
         finally:
@@ -1596,6 +1607,7 @@ def test_dynamic_fragment_retains_the_frame_before_animation_starts(
     ).stdout
 
     assert actions[1]["visual"]["kind"] == "clip"
+    assert REALTIME_START_FRAME_HOLD_MS in waits
     assert len(first_pixel) == 3
     red, green, _blue = first_pixel
     assert red > 200

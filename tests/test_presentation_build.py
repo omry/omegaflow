@@ -890,6 +890,13 @@ def test_mixed_capture_compiles_validates_and_publishes(tmp_path: Path) -> None:
     result = compile_presentation_bundle(spec, plan, run_dir)
 
     manifest = validate_run_bundle(spec, run_dir)
+    fingerprint = json.loads(
+        (run_dir / "recording.fingerprint.json").read_text(encoding="utf-8")
+    )
+    assert len(fingerprint["presentation_source_fingerprint"]) == 64
+    assert fingerprint["presentation_source_fingerprint"] != (
+        fingerprint["presentation_fingerprint"]
+    )
     pane_renderers = {
         pane["id"]: pane["renderer"] for pane in manifest["panes"]
     }

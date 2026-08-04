@@ -43,6 +43,25 @@ class CaptureSetupError(RuntimeError):
     """Raised when the private staged run directory cannot be prepared."""
 
 
+class CapturePaneStreamError(CaptureSetupError):
+    """Raised when one explicit pane stream fails during concurrent capture."""
+
+    def __init__(
+        self,
+        pane_id: str,
+        medium: RecordingMedium | None,
+        error: BaseException,
+    ) -> None:
+        self.pane_id = pane_id
+        self.medium = medium
+        self.error = error
+        detail = str(error).strip()
+        message = f"capture pane stream {pane_id!r} failed"
+        if detail:
+            message += f": {detail}"
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class CapturePaths:
     """Private paths allocated for one capture run."""
@@ -856,8 +875,10 @@ class CaptureCoordinator:
                 executor.shutdown(wait=True, cancel_futures=True)
             if first_failure:
                 failed_pane, error = first_failure[0]
-                raise CaptureSetupError(
-                    f"capture pane stream {failed_pane!r} failed"
+                raise CapturePaneStreamError(
+                    failed_pane,
+                    medium_by_pane.get(failed_pane),
+                    error,
                 ) from error
             if future_errors:
                 raise CaptureSetupError(

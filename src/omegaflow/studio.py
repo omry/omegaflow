@@ -37,7 +37,12 @@ from . import audio
 from . import record
 from . import presentation_build
 from . import studio_config as studio_config_module
-from .capture import CaptureActionItem, CaptureFailed, capture_action_items
+from .capture import (
+    CaptureActionItem,
+    CaptureFailed,
+    CapturePaneStreamError,
+    capture_action_items,
+)
 from .recording_plan import (
     RecordingPlan,
     RecordingPlanError,
@@ -49,6 +54,7 @@ from .studio_config import (
     BootstrapMode,
     CONFIG_DIR,
     STUDIO_CONFIG_NAME,
+    RecordingMedium,
     RecordingSourceKind,
     StudioAction,
     StudioConfigError,
@@ -535,6 +541,11 @@ def capture_failure_message(
             heading += f" while running {run_file!r}"
 
     output_value = report.get("stderr") or report.get("output")
+    if (
+        isinstance(primary_error, CapturePaneStreamError)
+        and primary_error.medium is not RecordingMedium.terminal
+    ):
+        output_value = None
     output_lines: list[str] = []
     if isinstance(output_value, str):
         progress_index: int | None = None
@@ -3354,38 +3365,102 @@ def recording_plan_through_beat(
     )
 
 
+@dataclass(frozen=True)
+class WatchPlanFreshness:
+    capture: str
+    presentation: str
+    run_dir: Path | None
+
+    @property
+    def ready(self) -> bool:
+        return self.capture == "fresh" and self.presentation == "fresh"
+
+
+def watch_plan_freshness(
+    spec: dict[str, Any],
+    plan: RecordingPlan,
+    *,
+    run_dir: Path | None = None,
+) -> WatchPlanFreshness:
+    resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
+    if resolved_run_dir is None:
+        return WatchPlanFreshness("missing", "missing", None)
+    paths = presentation_build.run_paths(resolved_run_dir)
+    manifest = paths["manifest"]
+    try:
+        stored = presentation_build.read_fingerprint(resolved_run_dir)
+        capture_exists = presentation_build.capture_artifacts_exist(
+            plan,
+            resolved_run_dir,
+        )
+        capture_fresh = presentation_build.capture_is_fresh(
+            spec,
+            plan,
+            resolved_run_dir,
+        )
+        current = presentation_build.artifact_fingerprints(spec, plan)
+    except presentation_build.PresentationBuildError:
+        return WatchPlanFreshness("stale", "stale", resolved_run_dir)
+    capture_state = (
+        "missing"
+        if stored is None or not capture_exists
+        else "fresh" if capture_fresh else "stale"
+    )
+    if not manifest.is_file() or stored is None:
+        return WatchPlanFreshness(capture_state, "missing", resolved_run_dir)
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return WatchPlanFreshness(capture_state, "stale", resolved_run_dir)
+    beats = payload.get("beats") if isinstance(payload, dict) else None
+    if not isinstance(beats, list):
+        return WatchPlanFreshness(capture_state, "stale", resolved_run_dir)
+    manifest_beat_ids = [
+        beat.get("id")
+        for beat in beats
+        if isinstance(beat, dict) and isinstance(beat.get("id"), str)
+    ]
+    presentation_fresh = (
+        capture_fresh
+        and manifest_beat_ids == [beat.id for beat in plan.beats]
+        and stored.get("presentation_source_fingerprint")
+        == current.presentation_fingerprint
+    )
+    return WatchPlanFreshness(
+        capture_state,
+        "fresh" if presentation_fresh else "stale",
+        resolved_run_dir,
+    )
+
+
 def watch_plan_has_fresh_presentation(
     spec: dict[str, Any],
     plan: RecordingPlan,
     *,
     run_dir: Path | None = None,
 ) -> bool:
-    resolved_run_dir = run_dir or latest_successful_recording_run_dir(spec)
-    if resolved_run_dir is None:
-        return False
-    manifest = presentation_build.run_paths(resolved_run_dir)["manifest"]
-    try:
-        payload = json.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    beats = payload.get("beats") if isinstance(payload, dict) else None
-    if not isinstance(beats, list):
-        return False
-    manifest_beat_ids = [
-        beat.get("id")
-        for beat in beats
-        if isinstance(beat, dict) and isinstance(beat.get("id"), str)
-    ]
-    if manifest_beat_ids != [beat.id for beat in plan.beats]:
-        return False
-    try:
-        return presentation_build.capture_is_fresh(
-            spec,
-            plan,
-            resolved_run_dir,
-        )
-    except presentation_build.PresentationBuildError:
-        return False
+    return watch_plan_freshness(spec, plan, run_dir=run_dir).ready
+
+
+def report_watch_freshness(
+    cfg: DictConfig,
+    freshness: WatchPlanFreshness,
+) -> None:
+    if not text_output_enabled(cfg):
+        return
+    summary = (
+        f"watch freshness: capture={freshness.capture}, "
+        f"presentation={freshness.presentation}"
+    )
+    if freshness.ready:
+        pass_line(summary)
+        return
+    info_line(summary)
+    capture_decision = "reuse" if freshness.capture == "fresh" else "rebuild"
+    step_line(
+        "watch build plan: "
+        f"capture={capture_decision}, presentation=rebuild"
+    )
 
 
 def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
@@ -3402,11 +3477,13 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
         spec,
         recording_id=recording_id,
     )
+    plan = normalized_recording_plan(spec)
+    freshness = watch_plan_freshness(spec, plan)
+    report_watch_freshness(cfg, freshness)
     target_beats: dict[str, str] | None = None
     if beat_id is not None:
-        plan = normalized_recording_plan(spec)
         target_plan = recording_plan_through_beat(plan, beat_id)
-        if not watch_plan_has_fresh_presentation(spec, plan):
+        if not freshness.ready:
             target_run = latest_watch_build_run_dir(
                 config,
                 recording_id,
@@ -3424,6 +3501,8 @@ def run_watch(cfg: DictConfig, config: dict[str, Any]) -> int:
                 )
             spec["_watch_run_dir"] = str(target_run)
         target_beats = {recording_id: beat_id}
+    elif not freshness.ready:
+        run_watch_rebuild(cfg, recording_id)
     watch_presentation_artifacts(spec)
     url_path = watch_recording_url_path(
         recording_id,

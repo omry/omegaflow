@@ -1283,6 +1283,54 @@ def test_terminal_materialization_relocates_events_to_solved_action_start(
     ]
 
 
+def test_realtime_terminal_action_extends_cast_to_its_logical_end(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.cast"
+    destination = tmp_path / "published.cast"
+    write_cast(source, 3, [[0.1, "o", "command"], [0.15, "o", "output"]])
+
+    materialize_terminal_beat(
+        source,
+        destination,
+        duration_ms=1000,
+        captured_actions={
+            "command": TerminalActionMaterialization(
+                id="command",
+                timing="realtime",
+                capture_start_ms=0,
+                capture_end_ms=300,
+                presentation_duration_ms=300,
+                event_indexes={
+                    "action_start": 0,
+                    "action_end": 2,
+                },
+                display="command",
+                color=False,
+                typing=False,
+                typing_min_delay=0,
+                typing_max_delay=0,
+                typing_space_delay=0,
+                typing_punctuation_delay=0,
+                typing_newline_delay=0,
+                typing_seed=17,
+                pre_command_pause=0,
+                pre_enter_pause=0,
+                post_enter_pause=0,
+                post_command_pause=0,
+            )
+        },
+        action_starts_ms={"command": 700},
+    )
+
+    output = [json.loads(line) for line in destination.read_text().splitlines()]
+    assert output[1:] == [
+        [0.8, "o", "command"],
+        [0.15, "o", "output"],
+        [0.05, "o", ""],
+    ]
+
+
 def test_presentation_terminal_action_preserves_prompt_before_next_command(
     tmp_path: Path,
 ) -> None:
