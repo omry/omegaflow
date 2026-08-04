@@ -88,9 +88,13 @@ class TerminalCaptureError(RuntimeError):
         *,
         output: str | None = None,
         output_truncated: bool = False,
+        failure_kind: str | None = None,
+        exit_code: int | None = None,
     ) -> None:
         self.output = output
         self.output_truncated = output_truncated
+        self.failure_kind = failure_kind
+        self.exit_code = exit_code
         super().__init__(message)
 
 
@@ -114,6 +118,8 @@ class TerminalLifecycleStepError(TerminalCaptureError):
             f"{operation} step {step_name!r} failed: {error}",
             output=error.output,
             output_truncated=error.output_truncated,
+            failure_kind=error.failure_kind,
+            exit_code=error.exit_code,
         )
 
 
@@ -191,6 +197,11 @@ OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID=""
 OMEGAFLOW_ACTIVE_INPUT_SEQ=0
 OMEGAFLOW_ACTIVE_STDOUT_START=""
 OMEGAFLOW_ACTIVE_STDERR_START=""
+OMEGAFLOW_LAST_FAILURE_KIND=""
+OMEGAFLOW_LAST_FAILURE_ERROR=""
+OMEGAFLOW_LAST_COMMAND_STATUS=""
+OMEGAFLOW_LAST_STDOUT_END=""
+OMEGAFLOW_LAST_STDERR_END=""
 OMEGAFLOW_VISIBLE=0
 : "${OMEGAFLOW_COLOR:=0}"
 : "${OMEGAFLOW_TYPING:=0}"
@@ -271,6 +282,51 @@ omegaflow_reset_active_user_command() {
   OMEGAFLOW_ACTIVE_STDERR_START=""
 }
 
+omegaflow_write_command_failure() {
+  local kind="$1"
+  local error="$2"
+  local exit_code="$3"
+  local stdout_start="$4"
+  local stdout_end="$5"
+  local stderr_start="$6"
+  local stderr_end="$7"
+  [[ -s "$OMEGAFLOW_COMMAND_FAILURE" ]] && return 0
+  "$OMEGAFLOW_PYTHON" - \
+    "$OMEGAFLOW_COMMAND_FAILURE" "$kind" "$error" "$exit_code" \
+    "$stdout_start" "$stdout_end" "$stderr_start" "$stderr_end" <<'PY'
+import json
+import os
+import sys
+
+(
+    path,
+    kind,
+    error,
+    exit_code,
+    stdout_start,
+    stdout_end,
+    stderr_start,
+    stderr_end,
+) = sys.argv[1:]
+temporary = path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "failure_kind": kind,
+            "error": error,
+            "exit_code": int(exit_code),
+            "stdout_start": int(stdout_start),
+            "stdout_end": int(stdout_end),
+            "stderr_start": int(stderr_start),
+            "stderr_end": int(stderr_end),
+        },
+        handle,
+        separators=(",", ":"),
+    )
+os.replace(temporary, path)
+PY
+}
+
 omegaflow_wait_active_input_response() {
   local response_path="${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-response-${OMEGAFLOW_ACTIVE_INPUT_SEQ}"
   while [[ ! -s "$response_path" ]]; do
@@ -306,14 +362,24 @@ omegaflow_finalize_active_user_command() {
   if [[ -f "$OMEGAFLOW_ACTIVE_STATUS_RESULT" ]]; then
     IFS= read -r status <"$OMEGAFLOW_ACTIVE_STATUS_RESULT" || status=125
   fi
+  OMEGAFLOW_LAST_COMMAND_STATUS="$status"
+  OMEGAFLOW_LAST_STDOUT_END="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
+  OMEGAFLOW_LAST_STDERR_END="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   if [[ -f "$OMEGAFLOW_ACTIVE_SECRET_LEAK" ]]; then
-    printf '%s\n' 'recording secret appeared in terminal command output' \
-      >>"$OMEGAFLOW_TERMINAL_STDERR"
+    OMEGAFLOW_LAST_FAILURE_KIND="secret"
+    OMEGAFLOW_LAST_FAILURE_ERROR="recording secret appeared in terminal command output"
+    printf '%s\n' "$OMEGAFLOW_LAST_FAILURE_ERROR" >>"$OMEGAFLOW_TERMINAL_STDERR"
     status=125
   fi
   if [[ -f "$OMEGAFLOW_ACTIVE_INPUT_ERROR" ]]; then
-    printf '%s' 'terminal input failed: ' >>"$OMEGAFLOW_TERMINAL_STDERR"
-    cat "$OMEGAFLOW_ACTIVE_INPUT_ERROR" >>"$OMEGAFLOW_TERMINAL_STDERR"
+    local input_error
+    input_error="$(cat "$OMEGAFLOW_ACTIVE_INPUT_ERROR")"
+    if [[ -z "$OMEGAFLOW_LAST_FAILURE_KIND" ]]; then
+      OMEGAFLOW_LAST_FAILURE_KIND="input"
+      OMEGAFLOW_LAST_FAILURE_ERROR="terminal input failed: $input_error"
+    fi
+    printf '%s\n' "terminal input failed: $input_error" \
+      >>"$OMEGAFLOW_TERMINAL_STDERR"
     status=125
   fi
   OMEGAFLOW_LAST_COMMAND_CWD=""
@@ -336,8 +402,9 @@ omegaflow_continue_user_command() {
   local input_json="$1"
   local suspend="$2"
   if [[ -z "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
-    printf '%s\n' 'continue_from has no active terminal command' \
-      >"$OMEGAFLOW_TERMINAL_STDERR"
+    OMEGAFLOW_LAST_FAILURE_KIND="continuation"
+    OMEGAFLOW_LAST_FAILURE_ERROR="continue_from has no active terminal command"
+    printf '%s\n' "$OMEGAFLOW_LAST_FAILURE_ERROR" >"$OMEGAFLOW_TERMINAL_STDERR"
     return 125
   fi
   OMEGAFLOW_ACTIVE_INPUT_SEQ=$((OMEGAFLOW_ACTIVE_INPUT_SEQ + 1))
@@ -380,8 +447,9 @@ omegaflow_run_user_command() {
   local input_json="${6:-[]}"
   local suspend="${7:-false}"
   if [[ -n "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
-    printf '%s\n' 'terminal command started before continued command completed' \
-      >"$OMEGAFLOW_TERMINAL_STDERR"
+    OMEGAFLOW_LAST_FAILURE_KIND="continuation"
+    OMEGAFLOW_LAST_FAILURE_ERROR="terminal command started before continued command completed"
+    printf '%s\n' "$OMEGAFLOW_LAST_FAILURE_ERROR" >"$OMEGAFLOW_TERMINAL_STDERR"
     return 125
   fi
   OMEGAFLOW_USER_COMMAND_SEQ=$((OMEGAFLOW_USER_COMMAND_SEQ + 1))
@@ -1003,7 +1071,7 @@ with open(stderr_path, "rb") as handle:
 combined = stdout + stderr
 
 def fail(message):
-    print(message, file=sys.stderr)
+    print(message)
     with open(stderr_path, "a", encoding="utf-8") as handle:
         handle.write(message + "\\n")
     raise SystemExit(1)
@@ -1044,7 +1112,7 @@ produces = json.loads(produces_json)
 
 
 def fail(message):
-    print(message, file=sys.stderr)
+    print(message)
     with open(stderr_path, "a", encoding="utf-8") as handle:
         handle.write(message + "\n")
     raise SystemExit(1)
@@ -1129,9 +1197,19 @@ omegaflow_run_step() {
   local continue_from="${16}"
   local suspend="${17}"
   local stdout_start
+  local stdout_end
   local stderr_start
+  local stderr_end
   local status
+  local command_status
+  local validation_error
   local output_streamed=false
+  rm -f "$OMEGAFLOW_COMMAND_FAILURE"
+  OMEGAFLOW_LAST_FAILURE_KIND=""
+  OMEGAFLOW_LAST_FAILURE_ERROR=""
+  OMEGAFLOW_LAST_COMMAND_STATUS=""
+  OMEGAFLOW_LAST_STDOUT_END=""
+  OMEGAFLOW_LAST_STDERR_END=""
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   if [[ -n "$continue_from" ]]; then
@@ -1164,6 +1242,27 @@ omegaflow_run_step() {
       presentation "$encoded_environment"
     status=$?
   fi
+  command_status="${OMEGAFLOW_LAST_COMMAND_STATUS:-$status}"
+  if [[ -n "$OMEGAFLOW_LAST_STDOUT_END" ]]; then
+    stdout_end="$OMEGAFLOW_LAST_STDOUT_END"
+  else
+    stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
+  fi
+  if [[ -n "$OMEGAFLOW_LAST_STDERR_END" ]]; then
+    stderr_end="$OMEGAFLOW_LAST_STDERR_END"
+  else
+    stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
+  fi
+  if [[ -n "$OMEGAFLOW_LAST_FAILURE_KIND" ]]; then
+    if [[ "$OMEGAFLOW_LAST_FAILURE_KIND" == "secret" ]]; then
+      stdout_end="$stdout_start"
+      stderr_end="$stderr_start"
+    fi
+    omegaflow_write_command_failure \
+      "$OMEGAFLOW_LAST_FAILURE_KIND" "$OMEGAFLOW_LAST_FAILURE_ERROR" \
+      "$command_status" "$stdout_start" "$stdout_end" \
+      "$stderr_start" "$stderr_end"
+  fi
   if [[ "$suspend" == "true" ]]; then
     omegaflow_command_marker output_start
     omegaflow_command_marker output_end
@@ -1174,6 +1273,10 @@ omegaflow_run_step() {
     "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
     "$stdout_start" "$stderr_start"; then
     status=125
+    omegaflow_write_command_failure \
+      secret 'recording secret appeared in terminal command output' \
+      "$command_status" "$stdout_start" "$stdout_start" \
+      "$stderr_start" "$stderr_start"
   fi
   if [[ -z "$post_enter_pause" ]]; then
     post_enter_pause="$OMEGAFLOW_POST_ENTER_PAUSE"
@@ -1198,22 +1301,55 @@ omegaflow_run_step() {
     post_command_pause="$OMEGAFLOW_POST_COMMAND_PAUSE"
   fi
   omegaflow_pause "$post_command_pause" "$timing"
-  omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start" || return $?
-  omegaflow_validate_produces \
-    "$producer_id" "$produces_json" "$OMEGAFLOW_LAST_COMMAND_CWD"
+  validation_error="$(omegaflow_validate_step \
+    "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" \
+    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start")"
+  local validation_status=$?
+  if [[ "$validation_status" -ne 0 ]]; then
+    printf '%s\n' "$validation_error" >&2
+    omegaflow_write_command_failure \
+      expectation "$validation_error" "$command_status" \
+      "$stdout_start" "$stdout_end" "$stderr_start" "$stderr_end"
+    return "$validation_status"
+  fi
+  validation_error="$(omegaflow_validate_produces \
+    "$producer_id" "$produces_json" "$OMEGAFLOW_LAST_COMMAND_CWD")"
+  validation_status=$?
+  if [[ "$validation_status" -ne 0 ]]; then
+    printf '%s\n' "$validation_error" >&2
+    omegaflow_write_command_failure \
+      produces "$validation_error" "$command_status" \
+      "$stdout_start" "$stdout_end" "$stderr_start" "$stderr_end"
+    return "$validation_status"
+  fi
 }
 
 omegaflow_run_group() {
   local script="$1"
   local expect="$2"
   local stdout_start
+  local stdout_end
   local stderr_start
+  local stderr_end
   local status
+  local validation_error
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   eval "$script"
   status=$?
-  omegaflow_validate_step "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start"
+  stdout_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
+  stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
+  validation_error="$(omegaflow_validate_step \
+    "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" \
+    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start")"
+  local validation_status=$?
+  if [[ "$validation_status" -ne 0 ]]; then
+    printf '%s\n' "$validation_error" >&2
+    omegaflow_write_command_failure \
+      expectation "$validation_error" "$status" \
+      "$stdout_start" "$stdout_end" "$stderr_start" "$stderr_end"
+  fi
+  return "$validation_status"
 }
 
 omegaflow_run_marked() {
@@ -1282,6 +1418,7 @@ PY
     break
   fi
   OMEGAFLOW_PROMPT_VISIBLE=0
+  rm -f "$OMEGAFLOW_COMMAND_FAILURE"
   if [[ "$op" == "beat" ]]; then
     OMEGAFLOW_VISIBLE=1
   else
@@ -1293,6 +1430,17 @@ PY
   printf '\033]1337;OmegaFlow;%s;%s;end;%s\007' "$seq" "$op" "$beat_id"
   if [[ "$status" -eq 0 ]]; then
     printf '{"seq":%s,"status":"completed"}\n' "$seq" >&9
+  elif [[ -s "$OMEGAFLOW_COMMAND_FAILURE" ]]; then
+    "$OMEGAFLOW_PYTHON" - "$seq" "$OMEGAFLOW_COMMAND_FAILURE" <<'PY' >&9
+import json
+import sys
+
+seq, path = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    response = json.load(handle)
+response.update({"seq": int(seq), "status": "failed"})
+print(json.dumps(response, separators=(",", ":")))
+PY
   else
     printf '{"seq":%s,"status":"failed","error":"exit %s"}\n' "$seq" "$status" >&9
   fi
@@ -1300,26 +1448,40 @@ done
 '''
 
 
-def _file_size_or_zero(path: Path) -> int:
-    try:
-        return path.stat().st_size
-    except OSError:
-        return 0
-
-
 TERMINAL_FAILURE_OUTPUT_MAX_BYTES = 12_000
 
 
-def _read_text_since(path: Path, offset: int) -> tuple[str, bool]:
+def _read_text_range(path: Path, start: int, end: int) -> tuple[str, bool]:
     try:
-        end = path.stat().st_size
-        start = max(offset, end - TERMINAL_FAILURE_OUTPUT_MAX_BYTES)
+        read_start = max(start, end - TERMINAL_FAILURE_OUTPUT_MAX_BYTES)
         with path.open("rb") as handle:
-            handle.seek(start)
-            value = handle.read(end - start).decode("utf-8", errors="replace")
-        return value, start > offset
+            handle.seek(read_start)
+            value = handle.read(end - read_start).decode(
+                "utf-8", errors="replace"
+            )
+        return value, read_start > start
     except OSError:
         return "", False
+
+
+def _response_output_range(
+    response: Mapping[str, Any],
+    stream: str,
+) -> tuple[int, int]:
+    start = response.get(f"{stream}_start")
+    end = response.get(f"{stream}_end")
+    if (
+        isinstance(start, bool)
+        or not isinstance(start, int)
+        or isinstance(end, bool)
+        or not isinstance(end, int)
+        or start < 0
+        or end < start
+    ):
+        raise TerminalCaptureError(
+            f"terminal failure response has an invalid {stream} range"
+        )
+    return start, end
 
 
 class TerminalControlSession:
@@ -1424,6 +1586,9 @@ class TerminalControlSession:
                 "OMEGAFLOW_PRODUCED_OUTPUTS": str(
                     self.context.runner_capture / "produced-outputs.jsonl"
                 ),
+                "OMEGAFLOW_COMMAND_FAILURE": str(
+                    self.control_dir / "command-failure.json"
+                ),
             }
         )
         command: list[str]
@@ -1506,10 +1671,6 @@ class TerminalControlSession:
             raise ValueError(f"invalid terminal execution operation: {op}")
         if not self.started or self._closed:
             raise TerminalCaptureError("terminal control session is not running")
-        stdout_path = self.context.runner_capture / "terminal.stdout.log"
-        stderr_path = self.context.runner_capture / "terminal.stderr.log"
-        stdout_start = _file_size_or_zero(stdout_path)
-        stderr_start = _file_size_or_zero(stderr_path)
         self._seq += 1
         seq = self._seq
         request = json.dumps(
@@ -1540,28 +1701,41 @@ class TerminalControlSession:
         )
         if status != "completed":
             error = completed.get("error", "unknown terminal failure")
-            stdout_text, stdout_truncated = _read_text_since(
-                stdout_path, stdout_start
-            )
-            stderr_text, stderr_truncated = _read_text_since(
-                stderr_path, stderr_start
-            )
-            input_errors = re.findall(
-                r"^terminal input failed: (.+)$",
-                stderr_text,
-                flags=re.MULTILINE,
-            )
-            if input_errors:
-                error = input_errors[-1]
-            produced_output_errors = re.findall(
-                r"^(terminal producer .+ (?:did not create|is not) .+)$",
-                stderr_text,
-                flags=re.MULTILINE,
-            )
-            if produced_output_errors:
-                error = produced_output_errors[-1]
-            if "recording secret appeared in terminal command output" in stderr_text:
-                error = "recording secret appeared in terminal command output"
+            if not isinstance(error, str) or not error:
+                raise TerminalCaptureError(
+                    "terminal failure response has an invalid error"
+                )
+            failure_kind = completed.get("failure_kind")
+            exit_code = completed.get("exit_code")
+            stdout_text = ""
+            stderr_text = ""
+            stdout_truncated = False
+            stderr_truncated = False
+            if failure_kind is not None:
+                if not isinstance(failure_kind, str) or not failure_kind:
+                    raise TerminalCaptureError(
+                        "terminal failure response has an invalid failure kind"
+                    )
+                if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                    raise TerminalCaptureError(
+                        "terminal failure response has an invalid exit code"
+                    )
+                stdout_start, stdout_end = _response_output_range(
+                    completed, "stdout"
+                )
+                stderr_start, stderr_end = _response_output_range(
+                    completed, "stderr"
+                )
+                stdout_text, stdout_truncated = _read_text_range(
+                    self.context.runner_capture / "terminal.stdout.log",
+                    stdout_start,
+                    stdout_end,
+                )
+                stderr_text, stderr_truncated = _read_text_range(
+                    self.context.runner_capture / "terminal.stderr.log",
+                    stderr_start,
+                    stderr_end,
+                )
             output_parts = [
                 value.rstrip("\n") for value in (stdout_text, stderr_text) if value
             ]
@@ -1570,6 +1744,8 @@ class TerminalControlSession:
                 f"{beat_id or '<recording>'}: {error}",
                 output="\n".join(output_parts) or None,
                 output_truncated=stdout_truncated or stderr_truncated,
+                failure_kind=failure_kind,
+                exit_code=exit_code if isinstance(exit_code, int) else None,
             )
         return start_ms, end_ms
 
@@ -1720,7 +1896,13 @@ class TerminalControlSession:
             process.wait()
 
     def _remove_control_streams(self) -> None:
-        for path in (self.request_path, self.response_path, self.script_path):
+        for path in (
+            self.request_path,
+            self.response_path,
+            self.script_path,
+            self.control_dir / "command-failure.json",
+            self.control_dir / "command-failure.json.tmp",
+        ):
             try:
                 path.unlink()
             except FileNotFoundError:

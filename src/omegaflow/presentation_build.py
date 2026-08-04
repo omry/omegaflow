@@ -779,14 +779,21 @@ def _read_capped_failure_output(path: Path, *, max_chars: int = 12_000) -> tuple
     return (value[-max_chars:] if truncated else value), truncated
 
 
-def _terminal_failure_output(error: BaseException) -> tuple[str | None, bool]:
+def _terminal_failure_details(
+    error: BaseException,
+) -> tuple[str | None, bool, str | None, int | None]:
     if isinstance(error, CaptureFailed) and error.primary is not None:
         error = error.primary.error
     if isinstance(error, CapturePaneStreamError):
         error = error.error
     if isinstance(error, TerminalCaptureError):
-        return error.output, error.output_truncated
-    return None, False
+        return (
+            error.output,
+            error.output_truncated,
+            error.failure_kind,
+            error.exit_code,
+        )
+    return None, False, None, None
 
 
 def _preserve_capture_diagnostics(
@@ -844,9 +851,12 @@ def _preserve_capture_diagnostics(
         output, output_truncated = _read_capped_failure_output(output_path)
         stderr, stderr_truncated = _read_capped_failure_output(stderr_path)
         progress, progress_truncated = _read_capped_failure_output(progress_path)
-        failure_output, failure_output_truncated = _terminal_failure_output(
-            error
-        )
+        (
+            failure_output,
+            failure_output_truncated,
+            failure_kind,
+            failure_exit_code,
+        ) = _terminal_failure_details(error)
         if failure_output is not None and len(failure_output) > 12_000:
             failure_output_truncated = True
             failure_output = failure_output[-12_000:]
@@ -875,6 +885,8 @@ def _preserve_capture_diagnostics(
             "stderr_truncated": stderr_truncated,
             "failure_output": failure_output,
             "failure_output_truncated": failure_output_truncated,
+            "failure_kind": failure_kind,
+            "failure_exit_code": failure_exit_code,
             "progress": progress,
             "progress_path": str(progress_path),
             "progress_truncated": progress_truncated,

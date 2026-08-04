@@ -49,17 +49,6 @@ server, client, plugin, deployment, and product-security work.
 
 ## Release backlog
 
-- [ ] `P2` Return structured per-command terminal failures instead of
-      reconstructing them from shared request logs. Command output should begin
-      when that command starts and end when it exits; expectation, produced
-      output, input, and secret-validation failures should be separate
-      structured fields in the terminal response. Acceptance checks: return the
-      command exit status and bounded stdout/stderr tails directly from the
-      terminal runner; exclude output from earlier commands in the same beat;
-      remove Python-side regex scanning of aggregate terminal logs; preserve
-      useful CLI and `failure.json` diagnostics; and cover noisy output,
-      multi-command beats, lifecycle steps, cancellation, and secret redaction.
-
 - [ ] `P1` Add an authored player-size and undersized-viewing policy.
       Dense multi-pane recordings can become unreadable when a website embed
       scales them into a narrow container, even though the player controls

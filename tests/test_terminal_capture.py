@@ -471,7 +471,7 @@ def test_terminal_producer_fails_when_declared_output_is_missing(
         with pytest.raises(
             TerminalCaptureError,
             match="did not create 'site': build/site",
-        ):
+        ) as raised:
             runner.capture_beat(
                 plan.beats[0],
                 on_progress=lambda state, action_id: progress.append(
@@ -481,6 +481,8 @@ def test_terminal_producer_fails_when_declared_output_is_missing(
     finally:
         runner.close()
 
+    assert raised.value.failure_kind == "produces"
+    assert raised.value.exit_code == 0
     assert progress == [("started", "__step_0")]
 
 
@@ -625,7 +627,11 @@ def test_failure_output_read_is_bounded_to_the_request_tail(
     current = b"x" * (terminal_capture.TERMINAL_FAILURE_OUTPUT_MAX_BYTES + 100)
     output.write_bytes(previous + current + b"failure tail\n")
 
-    value, truncated = terminal_capture._read_text_since(output, len(previous))
+    value, truncated = terminal_capture._read_text_range(
+        output,
+        len(previous),
+        output.stat().st_size,
+    )
 
     assert truncated is True
     assert "previous request" not in value
@@ -901,7 +907,9 @@ def test_persistent_terminal_failure_identifies_named_setup_step(
     assert error.operation == "setup"
     assert error.step_name == "prepare isolated demo environment"
     assert error.step_index == 2
-    assert "exit 1" in str(error)
+    assert "exited 1, expected 0" in str(error)
+    assert error.failure_kind == "expectation"
+    assert error.exit_code == 1
 
 
 def test_delegated_environment_is_scoped_to_one_command_and_its_children(
@@ -1284,7 +1292,7 @@ def test_application_secret_output_from_a_terminal_check_fails_closed(
     )
     coordinator = CaptureCoordinator(terminal_runner_factory=lambda: runner)
 
-    with pytest.raises(CaptureFailed, match="recording secret"):
+    with pytest.raises(CaptureFailed, match="recording secret") as caught:
         coordinator.capture(
             plan,
             tmp_path / "run",
@@ -1292,6 +1300,10 @@ def test_application_secret_output_from_a_terminal_check_fails_closed(
             environment={secret_name: secret_value},
         )
 
+    assert caught.value.primary is not None
+    assert isinstance(caught.value.primary.error, TerminalCaptureError)
+    assert caught.value.primary.error.failure_kind == "secret"
+    assert caught.value.primary.error.exit_code == 0
     retained = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in (tmp_path / "run").rglob("*")
@@ -1473,24 +1485,24 @@ def test_terminal_failure_preserves_postmortem_artifacts(
         "style": {"color": False},
         "beats": [
             {
-                "id": "handled-demo",
-                "actions": [
-                    {
-                        "run": (
-                            "sh -c \"printf 'handled demo error\\\\n' >&2; exit 3\""
-                        ),
-                        "expect": {"exit_code": 3},
-                    },
-                ],
-            },
-            {
                 "id": "failure",
                 "actions": [
                     {
-                        "run": (
-                            "printf 'failure stdout\\n'; "
-                            "printf 'failure stderr\\n' >&2; exit 7"
-                        )
+                        "commands": [
+                            {
+                                "run": (
+                                    "sh -c \"printf 'handled demo error\\\\n' "
+                                    ">&2; exit 3\""
+                                ),
+                                "expect": {"exit_code": 3},
+                            },
+                            {
+                                "run": (
+                                    "printf 'failure stdout\\n'; "
+                                    "printf 'failure stderr\\n' >&2; exit 7"
+                                )
+                            },
+                        ]
                     }
                 ],
             }
@@ -1517,6 +1529,8 @@ def test_terminal_failure_preserves_postmortem_artifacts(
     assert "failure stdout" in failure["failure_output"]
     assert "failure stderr" in failure["failure_output"]
     assert "handled demo error" not in failure["failure_output"]
+    assert failure["failure_kind"] == "expectation"
+    assert failure["failure_exit_code"] == 7
 
 
 def test_persistent_terminal_preserves_user_shell_state(tmp_path: Path) -> None:
@@ -1607,9 +1621,15 @@ def test_persistent_terminal_reports_expected_exit_without_hanging(
     assert time.monotonic() - started < 3.0
 
 
-@pytest.mark.parametrize("command", ["if then", "set -e; false; printf should-not-run"])
+@pytest.mark.parametrize(
+    ("command", "exit_code"),
+    [
+        ("if then", 2),
+        ("set -e; false; printf should-not-run", 1),
+    ],
+)
 def test_persistent_terminal_shell_failure_is_bounded(
-    tmp_path: Path, command: str
+    tmp_path: Path, command: str, exit_code: int
 ) -> None:
     plan = normalize_recording_plan(
         {
@@ -1621,7 +1641,10 @@ def test_persistent_terminal_shell_failure_is_bounded(
     )
     started = time.monotonic()
 
-    with pytest.raises(Exception, match="exit 1"):
+    with pytest.raises(
+        Exception,
+        match=rf"terminal step exited {exit_code}, expected 0",
+    ):
         CaptureCoordinator(
             terminal_runner_factory=lambda: PersistentTerminalRunner(
                 record_cast=False, timeout_seconds=2.0
@@ -2511,6 +2534,11 @@ def test_terminal_realtime_input_timeout_is_bounded_and_cleans_up(
     assert "terminal input step 1 timed out waiting for terminal output" in str(
         caught.value.primary.error
     )
+    assert isinstance(caught.value.primary.error, TerminalCaptureError)
+    assert caught.value.primary.error.failure_kind == "input"
+    assert caught.value.primary.error.output is not None
+    assert "Different text" in caught.value.primary.error.output
+    assert "terminal input failed" not in caught.value.primary.error.output
     assert not (tmp_path / "run/capture/.terminal-control").exists()
 
 
