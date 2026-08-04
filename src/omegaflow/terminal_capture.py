@@ -192,9 +192,11 @@ OMEGAFLOW_ACTIVE_PTY_READY=""
 OMEGAFLOW_ACTIVE_PTY_OPENED=""
 OMEGAFLOW_ACTIVE_SECRET_LEAK=""
 OMEGAFLOW_ACTIVE_INPUT_ERROR=""
+OMEGAFLOW_ACTIVE_COMMAND_PID=""
 OMEGAFLOW_ACTIVE_RELAY_PID=""
 OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID=""
 OMEGAFLOW_ACTIVE_INPUT_SEQ=0
+OMEGAFLOW_ACTIVE_INPUT_RESPONSE_STATUS=""
 OMEGAFLOW_ACTIVE_STDOUT_START=""
 OMEGAFLOW_ACTIVE_STDERR_START=""
 OMEGAFLOW_LAST_FAILURE_KIND=""
@@ -202,6 +204,7 @@ OMEGAFLOW_LAST_FAILURE_ERROR=""
 OMEGAFLOW_LAST_COMMAND_STATUS=""
 OMEGAFLOW_LAST_STDOUT_END=""
 OMEGAFLOW_LAST_STDERR_END=""
+OMEGAFLOW_LAST_COMMAND_FINALIZED_OPEN=0
 OMEGAFLOW_VISIBLE=0
 : "${OMEGAFLOW_COLOR:=0}"
 : "${OMEGAFLOW_TYPING:=0}"
@@ -275,9 +278,11 @@ omegaflow_reset_active_user_command() {
   OMEGAFLOW_ACTIVE_PTY_OPENED=""
   OMEGAFLOW_ACTIVE_SECRET_LEAK=""
   OMEGAFLOW_ACTIVE_INPUT_ERROR=""
+  OMEGAFLOW_ACTIVE_COMMAND_PID=""
   OMEGAFLOW_ACTIVE_RELAY_PID=""
   OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID=""
   OMEGAFLOW_ACTIVE_INPUT_SEQ=0
+  OMEGAFLOW_ACTIVE_INPUT_RESPONSE_STATUS=""
   OMEGAFLOW_ACTIVE_STDOUT_START=""
   OMEGAFLOW_ACTIVE_STDERR_START=""
 }
@@ -348,7 +353,10 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 print(response.get("status", "error"))
 PY
   )
-  [[ "$response_status" == "suspended" || "$response_status" == "completed" ]]
+  OMEGAFLOW_ACTIVE_INPUT_RESPONSE_STATUS="$response_status"
+  [[ "$response_status" == "suspended" || \
+     "$response_status" == "completed" || \
+     "$response_status" == "finalized" ]]
 }
 
 omegaflow_finalize_active_user_command() {
@@ -391,7 +399,7 @@ omegaflow_finalize_active_user_command() {
     "$OMEGAFLOW_ACTIVE_STATUS_PIPE" "$OMEGAFLOW_ACTIVE_STATUS_RESULT" \
     "$OMEGAFLOW_ACTIVE_CWD_RESULT" "$OMEGAFLOW_ACTIVE_PTY_READY" \
     "$OMEGAFLOW_ACTIVE_PTY_OPENED" "$OMEGAFLOW_ACTIVE_SECRET_LEAK" \
-    "$OMEGAFLOW_ACTIVE_INPUT_ERROR" \
+    "$OMEGAFLOW_ACTIVE_INPUT_ERROR" "$OMEGAFLOW_ACTIVE_COMMAND_PID" \
     "${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-request-"* \
     "${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-response-"*
   omegaflow_reset_active_user_command
@@ -401,6 +409,7 @@ omegaflow_finalize_active_user_command() {
 omegaflow_continue_user_command() {
   local input_json="$1"
   local suspend="$2"
+  local finalize_open="$3"
   if [[ -z "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
     OMEGAFLOW_LAST_FAILURE_KIND="continuation"
     OMEGAFLOW_LAST_FAILURE_ERROR="continue_from has no active terminal command"
@@ -410,18 +419,19 @@ omegaflow_continue_user_command() {
   OMEGAFLOW_ACTIVE_INPUT_SEQ=$((OMEGAFLOW_ACTIVE_INPUT_SEQ + 1))
   local request_path="${OMEGAFLOW_ACTIVE_STATUS_PIPE}.input-request-${OMEGAFLOW_ACTIVE_INPUT_SEQ}"
   "$OMEGAFLOW_PYTHON" - \
-    "$request_path" "$input_json" "$suspend" <<'PY'
+    "$request_path" "$input_json" "$suspend" "$finalize_open" <<'PY'
 import json
 import os
 import sys
 
-path, input_json, suspend = sys.argv[1:]
+path, input_json, suspend, finalize_open = sys.argv[1:]
 temporary = path + ".tmp"
 with open(temporary, "w", encoding="utf-8") as handle:
     json.dump(
         {
             "actions": json.loads(input_json),
-            "finish": suspend != "true",
+            "finish": suspend != "true" and finalize_open != "true",
+            "finalize_open": finalize_open == "true",
         },
         handle,
         separators=(",", ":"),
@@ -432,10 +442,18 @@ PY
     omegaflow_finalize_active_user_command
     return 125
   fi
+  local response_status="$OMEGAFLOW_ACTIVE_INPUT_RESPONSE_STATUS"
   if [[ "$suspend" == "true" ]]; then
     return 0
   fi
   omegaflow_finalize_active_user_command
+  local status=$?
+  if [[ "$response_status" == "finalized" && \
+        -z "$OMEGAFLOW_LAST_FAILURE_KIND" ]]; then
+    OMEGAFLOW_LAST_COMMAND_FINALIZED_OPEN=1
+    return 0
+  fi
+  return "$status"
 }
 
 omegaflow_run_user_command() {
@@ -446,6 +464,8 @@ omegaflow_run_user_command() {
   local encoded_environment="${5:-}"
   local input_json="${6:-[]}"
   local suspend="${7:-false}"
+  local finalize_open="${8:-false}"
+  local isolate_for_finalization="${9:-false}"
   if [[ -n "$OMEGAFLOW_ACTIVE_STATUS_PIPE" ]]; then
     OMEGAFLOW_LAST_FAILURE_KIND="continuation"
     OMEGAFLOW_LAST_FAILURE_ERROR="terminal command started before continued command completed"
@@ -552,6 +572,7 @@ PY
   local pty_opened="${status_pipe}.pty-opened"
   local secret_leak="${status_pipe}.secret-leak"
   local input_error="${status_pipe}.input-error"
+  local command_pid="${status_pipe}.command-pid"
   OMEGAFLOW_ACTIVE_STATUS_PIPE="$status_pipe"
   OMEGAFLOW_ACTIVE_STATUS_RESULT="$status_result"
   OMEGAFLOW_ACTIVE_CWD_RESULT="$cwd_result"
@@ -559,14 +580,17 @@ PY
   OMEGAFLOW_ACTIVE_PTY_OPENED="$pty_opened"
   OMEGAFLOW_ACTIVE_SECRET_LEAK="$secret_leak"
   OMEGAFLOW_ACTIVE_INPUT_ERROR="$input_error"
+  OMEGAFLOW_ACTIVE_COMMAND_PID="$command_pid"
   OMEGAFLOW_ACTIVE_STATUS_MONITOR_PID="$status_monitor_pid"
   OMEGAFLOW_ACTIVE_INPUT_SEQ=1
   if [[ "$timing" == "realtime" ]]; then
-    rm -f "$pty_ready" "$pty_opened" "$secret_leak" "$input_error"
+    rm -f \
+      "$pty_ready" "$pty_opened" "$secret_leak" "$input_error" \
+      "$command_pid"
     "$OMEGAFLOW_PYTHON" - \
       "$pty_ready" "$pty_opened" "$stdout_target" \
       "$encoded_environment" "$secret_leak" "$input_json" "$input_error" \
-      "$status_pipe" "$suspend" <<'PY' &
+      "$status_pipe" "$suspend" "$finalize_open" "$command_pid" <<'PY' &
 import base64
 import errno
 import fcntl
@@ -575,6 +599,7 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import sys
 import termios
@@ -591,6 +616,8 @@ from pathlib import Path
     input_error_path,
     control_root,
     suspend,
+    finalize_open,
+    command_pid_path,
 ) = sys.argv[1:]
 environment = (
     json.loads(base64.b64decode(encoded_environment).decode())
@@ -598,7 +625,8 @@ environment = (
     else {}
 )
 actions = json.loads(input_json)
-finish_after_actions = suspend != "true"
+finish_after_actions = suspend != "true" and finalize_open != "true"
+finalize_after_actions = finalize_open == "true"
 secrets = tuple(
     value.encode()
     for value in environment.values()
@@ -809,6 +837,26 @@ try:
                     action_started = now
                 continue
 
+            if finalize_after_actions:
+                if not command_closed and command_pid_path:
+                    try:
+                        command_pid = int(
+                            Path(command_pid_path).read_text(encoding="utf-8")
+                        )
+                    except (FileNotFoundError, ValueError):
+                        continue
+                    try:
+                        os.killpg(command_pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        command_closed = True
+                    if not command_closed:
+                        time.sleep(0.1)
+                        try:
+                            os.killpg(command_pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                respond("completed" if command_closed else "finalized")
+                break
             if finish_after_actions:
                 if not command_closed:
                     continue
@@ -846,6 +894,7 @@ try:
             request = json.loads(Path(request_path).read_text(encoding="utf-8"))
             actions = request["actions"]
             finish_after_actions = bool(request["finish"])
+            finalize_after_actions = bool(request["finalize_open"])
             action_index = 0
             action_started = time.monotonic()
             next_send = action_started
@@ -884,19 +933,28 @@ PY
       wait "$status_monitor_pid" 2>/dev/null || true
       rm -f \
         "$status_pipe" "$status_result" "$pty_ready" "$pty_opened" \
-        "$input_error" "$cwd_result"
+        "$input_error" "$command_pid" "$cwd_result"
       omegaflow_reset_active_user_command
       return 125
     fi
     local pty_slave
     IFS= read -r pty_slave <"$pty_ready"
-    printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
-      "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" "$decoder" \
-      "$encoded_command" "$cwd_result" "$status_pipe" >&7 || true
+    if [[ "$isolate_for_finalization" == "true" ]]; then
+      local isolate_launcher='import base64,subprocess,sys; pid_path,encoded=sys.argv[1:]; process=subprocess.Popen(["/bin/bash","--noprofile","--norc","-c",base64.b64decode(encoded).decode()],stdin=6,stdout=6,stderr=6,start_new_session=True); open(pid_path,"w",encoding="utf-8").write(f"{process.pid}\n"); raise SystemExit(process.wait())'
+      printf 'exec 6<>%q\n: >%q\n%q -c %q %q %q <&6 >&6 2>&1\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
+        "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" \
+        "$isolate_launcher" "$command_pid" "$encoded_command" \
+        "$cwd_result" "$status_pipe" >&7 || true
+    else
+      printf 'exec 6<>%q\n: >%q\neval "$(%q -c %q %q)" <&6 >&6 2>&1\n__omegaflow_status=$?\npwd -P >%q\nprintf "%%s\\n" "$__omegaflow_status" >%q\nexec 6>&-\n' \
+        "$pty_slave" "$pty_opened" "$OMEGAFLOW_PYTHON" "$decoder" \
+        "$encoded_command" "$cwd_result" "$status_pipe" >&7 || true
+    fi
     if ! omegaflow_wait_active_input_response; then
       omegaflow_finalize_active_user_command
       return 125
     fi
+    local response_status="$OMEGAFLOW_ACTIVE_INPUT_RESPONSE_STATUS"
     if [[ "$suspend" == "true" ]]; then
       return 0
     fi
@@ -907,6 +965,13 @@ PY
       >&7 || true
   fi
   omegaflow_finalize_active_user_command
+  local status=$?
+  if [[ "$response_status" == "finalized" && \
+        -z "$OMEGAFLOW_LAST_FAILURE_KIND" ]]; then
+    OMEGAFLOW_LAST_COMMAND_FINALIZED_OPEN=1
+    return 0
+  fi
+  return "$status"
 }
 
 omegaflow_validate_no_secret_output() {
@@ -1062,6 +1127,7 @@ status = int(sys.argv[1])
 expect = json.loads(sys.argv[2])
 stdout_path, stderr_path = sys.argv[3], sys.argv[4]
 stdout_offset, stderr_offset = int(sys.argv[5]), int(sys.argv[6])
+validate_exit = sys.argv[7] == "true"
 with open(stdout_path, "rb") as handle:
     handle.seek(stdout_offset)
     stdout = handle.read().decode("utf-8", errors="replace")
@@ -1077,7 +1143,7 @@ def fail(message):
     raise SystemExit(1)
 
 expected_exit = expect.get("exit_code", 0)
-if status != expected_exit:
+if validate_exit and status != expected_exit:
     fail(f"terminal step exited {status}, expected {expected_exit}")
 for text in expect.get("output_contains", []):
     if text not in combined:
@@ -1196,6 +1262,8 @@ omegaflow_run_step() {
   local produces_json="${15}"
   local continue_from="${16}"
   local suspend="${17}"
+  local finalize_open="${18}"
+  local isolate_for_finalization="${19}"
   local stdout_start
   local stdout_end
   local stderr_start
@@ -1203,6 +1271,8 @@ omegaflow_run_step() {
   local status
   local command_status
   local validation_error
+  local finalized_open=false
+  local validate_exit=true
   local output_streamed=false
   rm -f "$OMEGAFLOW_COMMAND_FAILURE"
   OMEGAFLOW_LAST_FAILURE_KIND=""
@@ -1210,12 +1280,14 @@ omegaflow_run_step() {
   OMEGAFLOW_LAST_COMMAND_STATUS=""
   OMEGAFLOW_LAST_STDOUT_END=""
   OMEGAFLOW_LAST_STDERR_END=""
+  OMEGAFLOW_LAST_COMMAND_FINALIZED_OPEN=0
   stdout_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDOUT")"
   stderr_start="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   if [[ -n "$continue_from" ]]; then
     stdout_start="$OMEGAFLOW_ACTIVE_STDOUT_START"
     stderr_start="$OMEGAFLOW_ACTIVE_STDERR_START"
-    omegaflow_continue_user_command "$input_json" "$suspend"
+    omegaflow_continue_user_command \
+      "$input_json" "$suspend" "$finalize_open"
     status=$?
     output_streamed=true
   else
@@ -1233,7 +1305,8 @@ omegaflow_run_step() {
     OMEGAFLOW_ACTIVE_STDERR_START="$stderr_start"
     omegaflow_run_user_command \
       "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
-      realtime "$encoded_environment" "$input_json" "$suspend"
+      realtime "$encoded_environment" "$input_json" "$suspend" \
+      "$finalize_open" "$isolate_for_finalization"
     status=$?
     output_streamed=true
   elif [[ -z "$continue_from" ]]; then
@@ -1241,6 +1314,10 @@ omegaflow_run_step() {
       "$command" "$OMEGAFLOW_TERMINAL_STDOUT" "$OMEGAFLOW_TERMINAL_STDERR" \
       presentation "$encoded_environment"
     status=$?
+  fi
+  if [[ "$OMEGAFLOW_LAST_COMMAND_FINALIZED_OPEN" == "1" ]]; then
+    finalized_open=true
+    validate_exit=false
   fi
   command_status="${OMEGAFLOW_LAST_COMMAND_STATUS:-$status}"
   if [[ -n "$OMEGAFLOW_LAST_STDOUT_END" ]]; then
@@ -1292,7 +1369,7 @@ omegaflow_run_step() {
       printf '\n'
     fi
   fi
-  if [[ "$show_prompt_after" == "true" ]]; then
+  if [[ "$show_prompt_after" == "true" && "$finalized_open" != "true" ]]; then
     omegaflow_print_prompt
     OMEGAFLOW_PROMPT_VISIBLE=1
   fi
@@ -1303,7 +1380,8 @@ omegaflow_run_step() {
   omegaflow_pause "$post_command_pause" "$timing"
   validation_error="$(omegaflow_validate_step \
     "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" \
-    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start")"
+    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start" \
+    "$validate_exit")"
   local validation_status=$?
   if [[ "$validation_status" -ne 0 ]]; then
     printf '%s\n' "$validation_error" >&2
@@ -1341,7 +1419,7 @@ omegaflow_run_group() {
   stderr_end="$(wc -c <"$OMEGAFLOW_TERMINAL_STDERR")"
   validation_error="$(omegaflow_validate_step \
     "$status" "$expect" "$OMEGAFLOW_TERMINAL_STDOUT" \
-    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start")"
+    "$OMEGAFLOW_TERMINAL_STDERR" "$stdout_start" "$stderr_start" true)"
   local validation_status=$?
   if [[ "$validation_status" -ne 0 ]]; then
     printf '%s\n' "$validation_error" >&2
@@ -2455,6 +2533,10 @@ def _validated_step_script(
         step.get("id", ""),
     )
     suspend = bool(step.get("_suspend_for_continuation"))
+    finalize_open = bool(step.get("_finalize_open_at_recording_end"))
+    isolate_for_finalization = bool(
+        step.get("_isolate_for_open_finalization")
+    )
     return "omegaflow_run_step " + " ".join(
         shlex.quote(value)
         for value in (
@@ -2472,6 +2554,8 @@ def _validated_step_script(
             json.dumps(_thaw(produces), separators=(",", ":")),
             str(continue_from or ""),
             "true" if suspend else "false",
+            "true" if finalize_open else "false",
+            "true" if isolate_for_finalization else "false",
         )
     )
 

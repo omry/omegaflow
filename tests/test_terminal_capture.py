@@ -865,7 +865,245 @@ def test_realtime_terminal_action_continues_across_pane_beats(
         "commands"
     ][0]
     assert final_command["_continuation_boundary"] is True
+    assert final_command["_finalize_open_at_recording_end"] is True
     assert not (tmp_path / "run" / "capture" / ".terminal-control").exists()
+
+
+@pytest.mark.skipif(
+    shutil.which(asciinema_command()) is None,
+    reason="asciinema is unavailable",
+)
+def test_persistent_terminal_finalizes_an_open_interface_at_recording_end(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "final-open-terminal",
+            "panes": [{"id": "editor", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "edit",
+                    "layout": {"areas": [["editor"]]},
+                    "panes": {
+                        "editor": [
+                            {
+                                "id": "edit-pane",
+                                "actions": [
+                                    {
+                                        "id": "open-editor",
+                                        "run": (
+                                            "printf 'editor ready\\n'; "
+                                            "while :; do sleep 60; done"
+                                        ),
+                                        "timing": "realtime",
+                                        "input": [
+                                            {
+                                                "wait_for": "editor ready",
+                                                "timeout": 5,
+                                            }
+                                        ],
+                                        "expect": {
+                                            "output_contains": ["editor ready"]
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=True,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=3.0,
+    )
+    started = time.monotonic()
+
+    CaptureCoordinator(terminal_runner_factory=lambda: runner).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert time.monotonic() - started < 3.0
+    command = plan.beats[0].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert command["_finalize_open_at_recording_end"] is True
+    cast = (
+        tmp_path
+        / "run/capture/terminal-beats/edit--editor--edit-pane.cast"
+    ).read_text(encoding="utf-8")
+    output = _cast_output(cast)
+    assert "editor ready" in output
+    assert not output.endswith("$ ")
+    assert not (tmp_path / "run/capture/.terminal-control").exists()
+
+
+@pytest.mark.skipif(
+    shutil.which(asciinema_command()) is None,
+    reason="asciinema is unavailable",
+)
+def test_persistent_terminal_waits_for_process_group_before_finalizing(
+    tmp_path: Path,
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "immediate-final-open-terminal",
+            "panes": [{"id": "editor", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "edit",
+                    "layout": {"areas": [["editor"]]},
+                    "panes": {
+                        "editor": [
+                            {
+                                "id": "edit-pane",
+                                "actions": [
+                                    {
+                                        "id": "open-editor",
+                                        "run": "while :; do sleep 60; done",
+                                        "timing": "realtime",
+                                        "input": [{"pause": 0}],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+    runner = PersistentTerminalRunner(
+        record_cast=False,
+        typing=False,
+        post_enter_pause=0,
+        post_command_pause=0,
+        timeout_seconds=3.0,
+    )
+
+    CaptureCoordinator(terminal_runner_factory=lambda: runner).capture(
+        plan,
+        tmp_path / "run",
+        workspace=tmp_path,
+    )
+
+    assert not (tmp_path / "run/capture/.terminal-control").exists()
+
+
+@pytest.mark.parametrize(
+    "completion_contract",
+    [
+        {"expect": {"exit_code": 0}},
+        {"produces": {"result": "result.txt"}},
+    ],
+)
+def test_terminal_completion_contract_prevents_implicit_finalization(
+    completion_contract: dict[str, object],
+) -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "explicit-terminal-completion",
+            "panes": [{"id": "editor", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "edit",
+                    "layout": {"areas": [["editor"]]},
+                    "panes": {
+                        "editor": [
+                            {
+                                "id": "edit-pane",
+                                "actions": [
+                                    {
+                                        "id": "open-editor",
+                                        "run": "printf 'ready\\n'; read -r value",
+                                        "timing": "realtime",
+                                        "input": [
+                                            {"wait_for": "ready", "timeout": 5}
+                                        ],
+                                        **completion_contract,
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+
+    command = plan.beats[0].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert "_finalize_open_at_recording_end" not in command
+
+
+def test_single_pane_terminal_finalizes_an_open_last_action() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "single-pane-open-terminal",
+            "beats": [
+                {
+                    "id": "edit",
+                    "medium": "terminal",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "open-editor",
+                                    "run": "nano example.txt",
+                                    "timing": "realtime",
+                                    "input": [{"pause": 0.1}],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    command = plan.beats[0].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert command["_finalize_open_at_recording_end"] is True
+    assert command["_isolate_for_open_finalization"] is True
+
+
+def test_action_level_expectation_requires_last_command_to_exit() -> None:
+    plan = normalize_recording_plan(
+        {
+            "id": "group-terminal-expectation",
+            "beats": [
+                {
+                    "id": "edit",
+                    "medium": "terminal",
+                    "actions": [
+                        {
+                            "commands": [
+                                {
+                                    "id": "open-editor",
+                                    "run": "nano example.txt",
+                                    "timing": "realtime",
+                                    "input": [{"pause": 0.1}],
+                                }
+                            ],
+                            "expect": {"output_contains": ["saved"]},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    command = plan.beats[0].pane_tracks[0].beats[0].actions[0].config[
+        "commands"
+    ][0]
+    assert "_finalize_open_at_recording_end" not in command
 
 
 def test_persistent_terminal_failure_identifies_named_setup_step(

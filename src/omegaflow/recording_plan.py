@@ -1180,6 +1180,37 @@ def _terminal_action_with_timing_default(
     return action
 
 
+def _terminal_action_plan_config(
+    action: RecordingStepConfig,
+    *,
+    authored: object,
+) -> FrozenMapping:
+    """Freeze a terminal action while retaining authored completion contracts."""
+
+    authored_action = _mapping(authored, field="terminal action")
+    config = _thaw(freeze_value(action))
+    authored_commands = authored_action.get("commands")
+    if authored_commands is None:
+        expect = authored_action.get("expect")
+        config["_expect_exit_code_explicit"] = (
+            isinstance(expect, dict) and "exit_code" in expect
+        )
+        return freeze_value(config)
+
+    config["_group_expect_explicit"] = "expect" in authored_action
+    if not isinstance(authored_commands, list):
+        return freeze_value(config)
+    for command, authored_command in zip(
+        config.get("commands", []), authored_commands, strict=True
+    ):
+        authored_mapping = _mapping(authored_command, field="terminal command")
+        expect = authored_mapping.get("expect")
+        command["_expect_exit_code_explicit"] = (
+            isinstance(expect, dict) and "exit_code" in expect
+        )
+    return freeze_value(config)
+
+
 def normalize_beat_actions(
     beat: dict[str, Any],
     *,
@@ -2632,8 +2663,9 @@ def _terminal_pane_beat(
     )
     actions = tuple(
         TerminalActionPlan(
-            config=freeze_value(
-                _resolve_terminal_run_files(action, source_dir=source_dir)
+            config=_terminal_action_plan_config(
+                _resolve_terminal_run_files(action, source_dir=source_dir),
+                authored=transformed_actions[action_index],
             ),
             start_join=_cross_stream_join(
                 action_after[action_index],
@@ -3550,12 +3582,12 @@ def _annotate_terminal_continuations(
                         raise RecordingPlanError(
                             "continue_from requires explicit pane beats"
                         )
-        return beats
 
     locations_by_pane: dict[
         str,
         list[tuple[tuple[int, int, int, int, int], str, dict[str, Any]]],
     ] = {}
+    group_expect_by_location: dict[tuple[int, int, int, int, int], bool] = {}
     for outer_index, outer in enumerate(beats):
         for track_index, track in enumerate(outer.pane_tracks):
             if track.kind is not PaneKind.terminal:
@@ -3565,21 +3597,25 @@ def _annotate_terminal_continuations(
                 for action_index, action in enumerate(pane_beat.actions):
                     if not isinstance(action, TerminalActionPlan):
                         continue
-                    commands = action.config.get("commands") or ()
+                    commands = action.config.get("commands") or (action.config,)
                     for command_index, frozen_command in enumerate(commands):
                         command = _thaw(frozen_command)
                         command_id = command.get("id")
                         if not isinstance(command_id, str) or not command_id:
                             continue
+                        location = (
+                            outer_index,
+                            track_index,
+                            pane_beat_index,
+                            action_index,
+                            command_index,
+                        )
+                        group_expect_by_location[location] = bool(
+                            action.config.get("_group_expect_explicit", False)
+                        )
                         pane_locations.append(
                             (
-                                (
-                                    outer_index,
-                                    track_index,
-                                    pane_beat_index,
-                                    action_index,
-                                    command_index,
-                                ),
+                                location,
                                 command_id,
                                 command,
                             )
@@ -3589,11 +3625,15 @@ def _annotate_terminal_continuations(
     root_by_location: dict[
         tuple[int, int, int, int, int], dict[str, Any]
     ] = {}
+    root_location_by_location: dict[
+        tuple[int, int, int, int, int], tuple[int, int, int, int, int]
+    ] = {}
     for pane_id, locations in locations_by_pane.items():
         for index, (location, command_id, command) in enumerate(locations):
             continue_from = command.get("continue_from")
             if continue_from is None:
                 root_by_location[location] = command
+                root_location_by_location[location] = location
                 continue
             if index == 0:
                 raise RecordingPlanError(
@@ -3632,6 +3672,9 @@ def _annotate_terminal_continuations(
                     )
             root = root_by_location[previous_location]
             root_by_location[location] = root
+            root_location_by_location[location] = root_location_by_location[
+                previous_location
+            ]
             previous_update = dict(updates.get(previous_location, previous_command))
             previous_update["_suspend_for_continuation"] = True
             updates[previous_location] = previous_update
@@ -3643,6 +3686,28 @@ def _annotate_terminal_continuations(
             )
             current_update["_continuation_boundary"] = continuation_boundary
             updates[location] = current_update
+
+        if locations:
+            final_location, _, final_command = locations[-1]
+            root = root_by_location[final_location]
+            root_produces = _thaw(root.get("produces", {}))
+            if (
+                final_command.get("timing") == ActionTiming.realtime.value
+                and bool(final_command.get("input"))
+                and not final_command.get("browser_handoff")
+                and not root.get("_expect_exit_code_explicit", False)
+                and not root_produces
+                and not group_expect_by_location[final_location]
+            ):
+                final_update = dict(updates.get(final_location, final_command))
+                final_update["_finalize_open_at_recording_end"] = True
+                updates[final_location] = final_update
+                root_location = root_location_by_location[final_location]
+                root_update = dict(
+                    updates.get(root_location, root_by_location[final_location])
+                )
+                root_update["_isolate_for_open_finalization"] = True
+                updates[root_location] = root_update
 
     if not updates:
         return beats
@@ -3659,9 +3724,10 @@ def _annotate_terminal_continuations(
                 annotated_actions: list[TerminalActionPlan] = []
                 for action_index, action in enumerate(pane_beat.recording.actions):
                     config = _thaw(action.config)
-                    commands = config.get("commands") or []
+                    commands = config.get("commands")
                     changed = False
-                    for command_index in range(len(commands)):
+                    command_count = len(commands) if commands else 1
+                    for command_index in range(command_count):
                         location = (
                             outer_index,
                             track_index,
@@ -3672,7 +3738,10 @@ def _annotate_terminal_continuations(
                         replacement = updates.get(location)
                         if replacement is None:
                             continue
-                        commands[command_index] = replacement
+                        if commands:
+                            commands[command_index] = replacement
+                        else:
+                            config = replacement
                         changed = True
                     annotated_actions.append(
                         replace(
@@ -3908,8 +3977,13 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
             anchor_refs: list[str] = []
         else:
             actions = tuple(
-                TerminalActionPlan(config=freeze_value(action))
-                for action in normalized.terminal_actions
+                TerminalActionPlan(
+                    config=_terminal_action_plan_config(
+                        action,
+                        authored=beat["actions"][action_index],
+                    )
+                )
+                for action_index, action in enumerate(normalized.terminal_actions)
             )
             checks = tuple(
                 TerminalCheckPlan(config=freeze_value(check))

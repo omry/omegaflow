@@ -473,9 +473,11 @@ the first beat without closing the pseudo-terminal, does not print another
 command for the continuation, and preserves the interface exactly as it was.
 Because the command still owns that pane's pseudo-terminal, an intermediate
 pane beat that waits for `continue_from` cannot also define terminal checks.
-Put those checks on the pane beat that finishes the command instead.
-The last continuation must provide input that lets the original command exit;
-its exit status and expectations are then validated normally.
+Put those checks on the pane beat that finishes the command instead. If the
+last realtime action still has the interface open after its authored input,
+OmegaFlow preserves that final frame and closes the pseudo-terminal during
+teardown. A command with an explicit `expect.exit_code`, declared `produces`,
+or an action-level expectation must still exit normally.
 
 Add ordered `input` steps to a realtime command when OmegaFlow needs to operate
 an interactive terminal program:
@@ -513,9 +515,13 @@ Each input step defines exactly one operation:
 | `pause` | Wait for the specified number of seconds before the next input step. |
 
 Input is supported only on `timing: realtime` command entries with real output.
-OmegaFlow waits for the program to exit after all input has been sent. A
-readiness timeout or a program that exits before its remaining input steps
-fails the recording and identifies the unfinished step.
+OmegaFlow normally waits for the program to exit after all input has been sent.
+For the last command in a terminal pane, the end of the authored input is also
+a valid recording boundary: OmegaFlow retains the visible terminal state and
+closes a program that remains open. Add a final `wait_for` or `pause` when the
+recording must retain output produced after its last keystroke. A readiness
+timeout or a program that exits before its remaining input steps fails the
+recording and identifies the unfinished step.
 
 #### Hand a browser URL to a browser pane
 
