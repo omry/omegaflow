@@ -33,6 +33,7 @@ from .recording_plan import (
     pane_action_id,
     terminal_action_id,
 )
+from .studio_config import PaneKind
 from .terminal_capture import (
     TERMINAL_BOUNDARY_OUTPUT_BYTE_LIMIT,
     terminal_typing_delays,
@@ -1558,13 +1559,21 @@ def _capture_plan_value(plan: RecordingPlan) -> dict[str, Any]:
             }
             for beat in plan.beats
         ]
-    return {
+    value = {
         "id": plan.id,
         "browser": _canonical_value(plan.browser),
         "setup": _canonical_value(plan.setup),
         "beats": beats,
         "cleanup": _canonical_value(plan.cleanup),
     }
+    terminal_pane_window_sizes = [
+        {"id": pane.id, "window_size": pane.window_size}
+        for pane in plan.panes
+        if pane.kind is PaneKind.terminal and pane.window_size is not None
+    ]
+    if terminal_pane_window_sizes:
+        value["terminal_pane_window_sizes"] = terminal_pane_window_sizes
+    return value
 
 
 def _capture_action_value(action: TerminalActionPlan | BrowserActionPlan) -> Any:

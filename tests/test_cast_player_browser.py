@@ -875,6 +875,71 @@ def test_player_composes_terminal_and_browser_fixture_panes_side_by_side(
         browser.close()
 
 
+def test_player_applies_weighted_layout_rows(tmp_path: Path) -> None:
+    sync_api = pytest.importorskip("playwright.sync_api")
+    write_browser_player_fixture(tmp_path)
+    terminal_path = tmp_path / "beats/terminal.cast"
+    terminal_path.write_text(
+        '{"version":3,"term":{"cols":80,"rows":24}}\n'
+        '[0.0,"o","watch output"]\n',
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "recording.presentation.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["renderers"]["terminal"] = {"payload_version": 1}
+    manifest["panes"][0]["id"] = "auto"
+    manifest["beats"][0]["pane_tracks"][0]["pane_id"] = "auto"
+    manifest["panes"].append({"id": "watch", "renderer": "terminal"})
+    manifest["beats"][0]["layout"] = {
+        "areas": [["auto"], ["watch"]],
+        "rows": [4, 1],
+    }
+    manifest["beats"][0]["pane_tracks"].append(
+        {
+            "pane_id": "watch",
+            "initial": "first",
+            "beats": [
+                {
+                    "id": "watch",
+                    "offset_ms": 0,
+                    "duration_ms": 1200,
+                    "payload": "beats/terminal.cast",
+                    "transition": {"kind": "cut", "duration_ms": 0},
+                }
+            ],
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    signatures_path = tmp_path / "signatures.json"
+    signatures = json.loads(signatures_path.read_text(encoding="utf-8"))
+    signatures["files"]["beats/terminal.cast"] = {
+        "sha256": hashlib.sha256(terminal_path.read_bytes()).hexdigest(),
+        "bytes": terminal_path.stat().st_size,
+    }
+    signatures_path.write_text(json.dumps(signatures), encoding="utf-8")
+
+    with player_site(tmp_path) as base_url, sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1000, "height": 700})
+        page.goto(
+            f"{base_url}/cast-player.html?manifest="
+            f"{base_url}/recording.presentation.json"
+        )
+        page.wait_for_function("!document.querySelector('#play').disabled")
+        browser_box = page.locator(
+            ".browser-renderer-host:not([hidden])"
+        ).bounding_box()
+        watch_box = page.locator(
+            ".terminal-renderer-host:not([hidden])"
+        ).bounding_box()
+        assert browser_box is not None and watch_box is not None
+        assert page.locator(".stage").evaluate(
+            "element => element.style.gridTemplateRows"
+        ) == "minmax(0px, 4fr) minmax(0px, 1fr)"
+        assert 3.8 <= browser_box["height"] / watch_box["height"] <= 4.2
+        browser.close()
+
+
 def test_player_composes_sequential_terminal_pane_beats_during_fade(
     tmp_path: Path,
 ) -> None:

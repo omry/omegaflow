@@ -344,6 +344,7 @@ class PresentationPaneV1:
 @dataclass
 class PresentationPaneLayoutV1:
     areas: list[list[str]] = field(default_factory=list)
+    rows: list[float] | None = None
 
 
 @dataclass

@@ -64,6 +64,7 @@ panes:
 - id: output
   kind: terminal
   title: Live output
+  window_size: 90x16
 ```
 
 Omitting `title` derives a label from the pane ID. Use a string for explicit
@@ -82,6 +83,11 @@ pane frame:
 ```
 
 The full title form defaults to `right`, `top`, `0.25rem`, and `0.25rem`.
+
+For terminal panes, optional `window_size: COLSxROWS` sets that pane's recorded
+terminal grid. Use it when differently sized panes need different readable row
+counts. A terminal pane without this field inherits `capture.window_size`;
+browser and visualization panes do not accept it.
 
 Pane IDs are stable across the recording. Every declared pane must be used by
 at least one outer beat. The outer beat owns narration and layout. Each pane
@@ -106,6 +112,7 @@ beat:
     areas:
     - [definition]
     - [output]
+    rows: [3, 1]
   panes:
     definition:
     - id: show-definition
@@ -125,6 +132,10 @@ beat:
       - id: run-status
         run: printf 'Renderer: ready\n'
 ```
+
+`layout.rows` optionally assigns a positive relative height to each row in
+`layout.areas`. It must contain one weight per row; `[3, 1]` gives the first row
+three quarters of the available grid height. Omit it for equal-height rows.
 
 Effects belong to the outer beat because their timing comes from its narration.
 Set `highlight.pane` to the pane whose recording surface contains the target
@@ -157,9 +168,9 @@ panes:
 segment introduced by `@pattern@`, and `started` selects the segment's start
 event. Use `ended` to wait for its end instead.
 
-The pane declaration is authoring structure, not recording configuration. It
-cannot be placed in frontmatter, inherited from `recordings/config.yaml`, or
-changed with a `rec.*` override.
+The pane declaration is authored recording structure, including any terminal
+grid size. It cannot be placed in frontmatter, inherited from
+`recordings/config.yaml`, or changed with a `rec.*` override.
 
 ### Presentation And Realtime Timing
 
@@ -1233,6 +1244,7 @@ class PaneConfig:
     id: str = ""
     kind: PaneKind = PaneKind.visualization
     title: Literal["hidden"] | str | PaneTitleConfig | None = None
+    window_size: str | None = None
 
 
 @dataclass
@@ -1244,6 +1256,7 @@ class PaneTransitionConfig:
 @dataclass
 class PaneLayoutConfig:
     areas: list[list[str]] = field(default_factory=list)
+    rows: list[float] | None = None
 
 
 @dataclass

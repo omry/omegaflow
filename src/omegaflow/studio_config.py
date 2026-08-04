@@ -874,6 +874,7 @@ class PaneConfig:
     id: str = ""
     kind: PaneKind = PaneKind.visualization
     title: Literal["hidden"] | str | PaneTitleConfig | None = None
+    window_size: str | None = None
 
 
 @dataclass
@@ -885,6 +886,7 @@ class PaneTransitionConfig:
 @dataclass
 class PaneLayoutConfig:
     areas: list[list[str]] = field(default_factory=list)
+    rows: list[float] | None = None
 
 
 @dataclass

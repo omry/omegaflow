@@ -1172,6 +1172,26 @@ def validate_presentation_manifest(
                         f"{pane_id!r}"
                     )
                 layout_panes.add(pane_id)
+        if "rows" in layout:
+            rows = layout.get("rows")
+            if not isinstance(rows, list) or not rows:
+                raise PresentationValidationError(
+                    f"{field}.layout.rows must be a non-empty list"
+                )
+            if len(rows) != len(areas):
+                raise PresentationValidationError(
+                    f"{field}.layout.rows must contain one weight per area row"
+                )
+            if any(
+                isinstance(weight, bool)
+                or not isinstance(weight, (int, float))
+                or not math.isfinite(weight)
+                or weight <= 0
+                for weight in rows
+            ):
+                raise PresentationValidationError(
+                    f"{field}.layout.rows weights must be positive finite numbers"
+                )
         for pane_id in layout_panes:
             positions = [
                 (row_index, column_index)
@@ -1504,6 +1524,10 @@ def serialize_presentation_manifest(
     manifest: PresentationManifestV1,
 ) -> dict[str, Any]:
     result = _structured_payload(manifest, field="presentation manifest")
+    for beat in result.get("beats", []):
+        layout = beat.get("layout", {})
+        if layout.get("rows") is None:
+            layout.pop("rows", None)
     if result.get("audio") is None:
         result.pop("audio", None)
     validate_presentation_manifest(result)

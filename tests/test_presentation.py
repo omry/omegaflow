@@ -179,6 +179,7 @@ def write_browser_bundle(tmp_path: Path, *, with_audio: bool = False) -> dict:
         ],
     )
     serialized = serialize_presentation_manifest(manifest)
+    assert "rows" not in serialized["beats"][0]["layout"]
     write_presentation_signatures(tmp_path)
     return serialized
 
@@ -443,14 +444,26 @@ def test_manifest_rejects_invalid_visualization_tokens(
 
 
 def test_manifest_accepts_multi_pane_outer_beats_and_sequential_pane_beats() -> None:
-    parsed = validate_presentation_manifest(multi_pane_manifest())
+    manifest = multi_pane_manifest()
+    manifest["beats"][0]["layout"]["rows"] = [1]
+    parsed = validate_presentation_manifest(manifest)
 
     assert [pane.id for pane in parsed.panes] == ["source", "preview"]
     assert parsed.beats[0].layout.areas == [["source", "preview"]]
+    assert parsed.beats[0].layout.rows == [1.0]
     assert [beat.id for beat in parsed.beats[0].pane_tracks[0].beats] == [
         "definition",
         "result",
     ]
+
+
+@pytest.mark.parametrize("rows", [[], None, [1, 1], [0], [-1]])
+def test_manifest_rejects_invalid_layout_row_weights(rows) -> None:
+    manifest = multi_pane_manifest()
+    manifest["beats"][0]["layout"]["rows"] = rows
+
+    with pytest.raises(PresentationValidationError, match="layout.rows"):
+        validate_presentation_manifest(manifest)
 
 
 def test_manifest_rejects_duplicate_pane_beat_ids_across_outer_beats() -> None:

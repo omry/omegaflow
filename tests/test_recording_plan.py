@@ -1506,6 +1506,24 @@ def test_single_pane_shorthand_normalizes_to_implicit_main_track() -> None:
     assert not hasattr(pane_beat, "viewer_hold_ms")
 
 
+def test_explicit_pane_layout_normalizes_row_weights() -> None:
+    spec = visualization_terminal_spec()
+    spec["beats"][0]["layout"]["rows"] = [4, 1]
+
+    plan = normalize_recording_plan(spec)
+
+    assert plan.beats[0].layout.rows == (4.0, 1.0)
+
+
+@pytest.mark.parametrize("rows", [[], None, [1], [1, 0], [1, -1]])
+def test_explicit_pane_layout_rejects_invalid_row_weights(rows) -> None:
+    spec = visualization_terminal_spec()
+    spec["beats"][0]["layout"]["rows"] = rows
+
+    with pytest.raises(RecordingPlanError, match="layout.rows"):
+        normalize_recording_plan(spec)
+
+
 def visualization_terminal_spec() -> dict[str, object]:
     return {
         "id": "visualization-terminal",
@@ -1681,7 +1699,9 @@ def cross_capture_spec() -> dict[str, object]:
 
 
 def test_explicit_visualization_and_terminal_authoring_normalizes_to_typed_plan() -> None:
-    plan = normalize_recording_plan(visualization_terminal_spec())
+    spec = visualization_terminal_spec()
+    spec["panes"][1]["window_size"] = "90x16"
+    plan = normalize_recording_plan(spec)
 
     assert plan.presentation["pane_chrome"]["style"] == "framed"
     assert plan.panes == (
@@ -1700,6 +1720,7 @@ def test_explicit_visualization_and_terminal_authoring_normalizes_to_typed_plan(
             id="terminal",
             kind=PaneKind.terminal,
             title=PaneTitlePlan(visible=False),
+            window_size="90x16",
         ),
     )
     beat = plan.beats[0]
@@ -1718,6 +1739,31 @@ def test_explicit_visualization_and_terminal_authoring_normalizes_to_typed_plan(
     assert action.text.startswith("effects:\n")
     terminal = beat.pane_tracks[1].beats[0]
     assert terminal.actions[0].config["commands"][0]["id"] == "run-status"
+
+
+@pytest.mark.parametrize("window_size", ["90", "90x", "x16", "0x16", "90x0"])
+def test_terminal_pane_window_size_requires_positive_columns_and_rows(
+    window_size: str,
+) -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"][1]["window_size"] = window_size
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="window_size must look like positive COLSxROWS",
+    ):
+        normalize_recording_plan(spec)
+
+
+def test_non_terminal_pane_rejects_window_size() -> None:
+    spec = visualization_terminal_spec()
+    spec["panes"][0]["window_size"] = "90x16"
+
+    with pytest.raises(
+        RecordingPlanError,
+        match="window_size is only supported for terminal panes",
+    ):
+        normalize_recording_plan(spec)
 
 
 def test_container_beat_owns_highlight_for_visualization_pane() -> None:

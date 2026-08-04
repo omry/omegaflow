@@ -681,10 +681,16 @@ def capture_recording(
         )
     except ServiceEnvironmentError as exc:
         raise PresentationBuildError(str(exc)) from exc
-    coordinator = CaptureCoordinator(
-        terminal_runner_factory=lambda: PersistentTerminalRunner(
+    terminal_window_sizes = {
+        pane.id: pane.window_size
+        for pane in plan.panes
+        if pane.kind is PaneKind.terminal and pane.window_size is not None
+    }
+
+    def terminal_runner(pane_id: str | None = None) -> PersistentTerminalRunner:
+        return PersistentTerminalRunner(
             title=title,
-            window_size=window_size,
+            window_size=terminal_window_sizes.get(pane_id, window_size),
             idle_time_limit=idle_time_limit,
             timeout_seconds=float(timeout),
             headless=effective_headless,
@@ -692,7 +698,11 @@ def capture_recording(
             delegated_environment=delegated_environment,
             secret_environment=application_environment,
             **terminal_options,
-        ),
+        )
+
+    coordinator = CaptureCoordinator(
+        terminal_runner_factory=terminal_runner,
+        terminal_pane_runner_factory=terminal_runner,
         browser_runner_factory=(
             None
             if plan.browser is None
@@ -2367,7 +2377,12 @@ def compile_presentation_bundle(
                         offset_ms=beat_timing.offset_ms,
                         duration_ms=beat_timing.duration_ms,
                         layout=PresentationPaneLayoutV1(
-                            areas=[list(row) for row in beat.layout.areas]
+                            areas=[list(row) for row in beat.layout.areas],
+                            rows=(
+                                None
+                                if beat.layout.rows is None
+                                else list(beat.layout.rows)
+                            ),
                         ),
                         pane_tracks=_explicit_pane_tracks(
                             beat,

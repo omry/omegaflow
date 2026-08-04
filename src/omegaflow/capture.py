@@ -351,6 +351,7 @@ def _failure_detail(operation: str, error: BaseException) -> CaptureFailureDetai
 RunnerProgressCallback = Callable[[str, str], None]
 RunnerActionGate = Callable[[str], None]
 CaptureRunnerFactory = Callable[[], CaptureRunner]
+PaneCaptureRunnerFactory = Callable[[str], CaptureRunner]
 
 
 @dataclass(frozen=True)
@@ -436,11 +437,16 @@ class CaptureCoordinator:
         self,
         *,
         terminal_runner_factory: CaptureRunnerFactory | None = None,
+        terminal_pane_runner_factory: PaneCaptureRunnerFactory | None = None,
         browser_runner_factory: CaptureRunnerFactory | None = None,
     ) -> None:
         self._runner_factories = {
             RecordingMedium.terminal: terminal_runner_factory,
             RecordingMedium.browser: browser_runner_factory,
+        }
+        self._pane_runner_factories = {
+            RecordingMedium.terminal: terminal_pane_runner_factory,
+            RecordingMedium.browser: None,
         }
 
     def capture(
@@ -704,7 +710,8 @@ class CaptureCoordinator:
                 runner: CaptureRunner | None = None
                 primary: BaseException | None = None
                 try:
-                    runner = factory()
+                    pane_factory = self._pane_runner_factories[medium]
+                    runner = pane_factory(pane_id) if pane_factory else factory()
                     with runners_lock:
                         runners_by_pane[pane_id] = runner
                     runner.start(context.for_runner(pane_id))

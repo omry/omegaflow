@@ -4689,7 +4689,14 @@
                 .map((row) => `"${row.map((paneId) => paneAreaNames.get(paneId)).join(' ')}"`)
                 .join(' ');
               stage.style.gridTemplateColumns = `repeat(${layout.areas[0].length}, minmax(0, 1fr))`;
-              stage.style.gridTemplateRows = `repeat(${layout.areas.length}, minmax(0, 1fr))`;
+              const rowWeights = (
+                Array.isArray(layout.rows) && layout.rows.length === layout.areas.length
+                  ? layout.rows
+                  : layout.areas.map(() => 1)
+              );
+              stage.style.gridTemplateRows = rowWeights
+                .map((weight) => `minmax(0, ${weight}fr)`)
+                .join(' ');
               terminal.hidden = true;
               stage.querySelectorAll('.visualization-renderer-host').forEach((host) => {
                 const layerIndex = visualizationLayers.findIndex(

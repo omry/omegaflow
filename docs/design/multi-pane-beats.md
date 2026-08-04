@@ -408,6 +408,11 @@ recording-global authored pane. This preserves existing recordings that move
 from a terminal beat to a browser beat. Explicit pane declarations remain
 recording-global, stable, single-kind streams.
 
+Terminal panes may declare `window_size: COLSxROWS`. This controls the terminal
+grid recorded for that pane and therefore its fitted text size when panes have
+different visual heights. If omitted, the pane inherits
+`capture.window_size`; non-terminal panes do not accept this field.
+
 This is authoring shorthand, not a second internal model. A recording cannot
 combine a beat's single-pane shorthand with explicit pane beats.
 
@@ -429,6 +434,7 @@ class NarrationStreamPlan:
 class PanePlan:
     id: str
     kind: PaneKind
+    window_size: str | None
 
 
 @dataclass(frozen=True)

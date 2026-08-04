@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields, is_dataclass, replace
@@ -1883,14 +1884,21 @@ class PanePlan:
     id: str
     kind: PaneKind
     title: PaneTitlePlan = field(default_factory=PaneTitlePlan)
+    window_size: str | None = None
 
     def __post_init__(self) -> None:
         _validate_plan_id(self.id, field_name="pane id")
+        if self.window_size is not None:
+            if self.kind is not PaneKind.terminal:
+                raise ValueError("window_size is only supported for terminal panes")
+            if not re.fullmatch(r"[1-9]\d*x[1-9]\d*", self.window_size):
+                raise ValueError("window_size must look like positive COLSxROWS")
 
 
 @dataclass(frozen=True)
 class PaneLayoutPlan:
     areas: tuple[tuple[str, ...], ...]
+    rows: tuple[float, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -2441,6 +2449,7 @@ def _declared_panes(
             plan = PanePlan(
                 id=pane.id,
                 kind=pane.kind,
+                window_size=pane.window_size,
                 title=PaneTitlePlan(
                     visible=title.visible,
                     text=title.text,
@@ -2866,6 +2875,24 @@ def _explicit_outer_beat(
         raise RecordingPlanError(
             f"beats.{index}.layout.areas must be a non-empty rectangular grid"
         )
+    if "rows" in layout_mapping:
+        if layout.rows is None:
+            raise RecordingPlanError(
+                f"beats.{index}.layout.rows must be a non-empty list"
+            )
+        if len(layout.rows) != len(layout.areas):
+            raise RecordingPlanError(
+                f"beats.{index}.layout.rows must contain one weight per area row"
+            )
+        if any(
+            isinstance(weight, bool)
+            or not math.isfinite(weight)
+            or weight <= 0
+            for weight in layout.rows
+        ):
+            raise RecordingPlanError(
+                f"beats.{index}.layout.rows weights must be positive finite numbers"
+            )
     layout_ids = {pane_id for row in layout.areas for pane_id in row}
     if layout_ids != set(raw_tracks):
         raise RecordingPlanError(
@@ -3048,7 +3075,8 @@ def _explicit_outer_beat(
         effects=effects,
         pane_tracks=tuple(tracks),
         layout=PaneLayoutPlan(
-            areas=tuple(tuple(row) for row in layout.areas)
+            areas=tuple(tuple(row) for row in layout.areas),
+            rows=None if layout.rows is None else tuple(layout.rows),
         ),
     )
 

@@ -462,6 +462,16 @@
           layoutPanes.add(paneId);
         }
       }
+      if (beat.layout.rows !== undefined) {
+        requirePresentation(
+          Array.isArray(beat.layout.rows)
+            && beat.layout.rows.length === beat.layout.areas.length
+            && beat.layout.rows.every(
+              (weight) => typeof weight === 'number' && Number.isFinite(weight) && weight > 0,
+            ),
+          `beat ${beat.id} layout row weights are invalid`,
+        );
+      }
       for (const paneId of layoutPanes) {
         const positions = [];
         for (let rowIndex = 0; rowIndex < beat.layout.areas.length; rowIndex += 1) {

@@ -509,8 +509,15 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
             observed["browser"] = kwargs
 
     class FakeCoordinator:
-        def __init__(self, *, terminal_runner_factory, browser_runner_factory) -> None:
+        def __init__(
+            self,
+            *,
+            terminal_runner_factory,
+            terminal_pane_runner_factory,
+            browser_runner_factory,
+        ) -> None:
             self.terminal_runner_factory = terminal_runner_factory
+            self.terminal_pane_runner_factory = terminal_pane_runner_factory
             self.browser_runner_factory = browser_runner_factory
 
         def capture(self, *_args, **_kwargs):
@@ -564,6 +571,127 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
     assert observed["browser"]["headless"] is False
     assert observed["browser"]["secret_values"] == ("ci-token",)
     assert observed["browser_plan"] == plan.browser
+
+
+def test_capture_recording_uses_terminal_pane_window_sizes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    spec = {
+        "id": "terminal-pane-sizes",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(tmp_path),
+        "capture": {"window_size": "100x28"},
+        "panes": [
+            {"id": "source", "kind": "terminal", "window_size": "90x24"},
+            {"id": "terminal", "kind": "terminal", "window_size": "90x16"},
+        ],
+        "beats": [
+            {
+                "id": "both",
+                "layout": {"areas": [["source"], ["terminal"]]},
+                "panes": {
+                    "source": [
+                        {
+                            "id": "edit",
+                            "actions": [
+                                {"id": "show-source", "run": "printf source"}
+                            ],
+                        }
+                    ],
+                    "terminal": [
+                        {
+                            "id": "build",
+                            "actions": [
+                                {"id": "run-build", "run": "printf terminal"}
+                            ],
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    observed: dict[str, str] = {}
+
+    class FakeTerminalRunner:
+        def __init__(self, **kwargs) -> None:
+            self.window_size = kwargs["window_size"]
+
+    class FakeCoordinator:
+        def __init__(
+            self,
+            *,
+            terminal_runner_factory,
+            terminal_pane_runner_factory,
+            browser_runner_factory,
+        ) -> None:
+            self.terminal_runner_factory = terminal_runner_factory
+            self.terminal_pane_runner_factory = terminal_pane_runner_factory
+            assert browser_runner_factory is None
+
+        def capture(self, *_args, **_kwargs):
+            for pane_id in ("source", "terminal", "undeclared"):
+                runner = self.terminal_pane_runner_factory(pane_id)
+                observed[pane_id] = runner.window_size
+            return object()
+
+    monkeypatch.setattr(presentation_build, "PersistentTerminalRunner", FakeTerminalRunner)
+    monkeypatch.setattr(presentation_build, "CaptureCoordinator", FakeCoordinator)
+    result = capture_recording(spec, plan, tmp_path / "run")
+
+    assert result is not None
+    assert observed == {
+        "source": "90x24",
+        "terminal": "90x16",
+        "undeclared": "100x28",
+    }
+
+
+def test_terminal_pane_window_size_participates_in_capture_fingerprint(
+    tmp_path: Path,
+) -> None:
+    def spec(window_size: str) -> dict[str, object]:
+        return {
+            "id": "terminal-pane-size-fingerprint",
+            "_project_root": str(tmp_path),
+            "_script_dir": str(tmp_path),
+            "panes": [
+                {
+                    "id": "terminal",
+                    "kind": "terminal",
+                    "window_size": window_size,
+                }
+            ],
+            "beats": [
+                {
+                    "id": "build",
+                    "layout": {"areas": [["terminal"]]},
+                    "panes": {
+                        "terminal": [
+                            {
+                                "id": "command",
+                                "actions": [
+                                    {"id": "run", "run": "printf ready"}
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+
+    original_spec = spec("90x16")
+    updated_spec = spec("90x11")
+    original = presentation_build.artifact_fingerprints(
+        original_spec,
+        normalize_recording_plan(original_spec),
+    )
+    updated = presentation_build.artifact_fingerprints(
+        updated_spec,
+        normalize_recording_plan(updated_spec),
+    )
+
+    assert original.capture_fingerprint != updated.capture_fingerprint
 
 
 def test_capture_environment_applies_color_and_removes_no_color(
@@ -1066,7 +1194,10 @@ def test_visualization_and_terminal_authoring_compiles_end_to_end(
             {
                 "id": "compose",
                 "heading": "Explain the definition",
-                "layout": {"areas": [["definition"], ["terminal"]]},
+                "layout": {
+                    "areas": [["definition"], ["terminal"]],
+                    "rows": [4, 1],
+                },
                 "panes": {
                     "definition": [
                         {
@@ -1134,7 +1265,8 @@ def test_visualization_and_terminal_authoring_compiles_end_to_end(
         },
     ]
     assert manifest["beats"][0]["layout"] == {
-        "areas": [["definition"], ["terminal"]]
+        "areas": [["definition"], ["terminal"]],
+        "rows": [4.0, 1.0],
     }
     tracks = manifest["beats"][0]["pane_tracks"]
     assert [track["pane_id"] for track in tracks] == [
