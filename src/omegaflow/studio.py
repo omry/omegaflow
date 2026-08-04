@@ -3203,10 +3203,10 @@ def run_watch_rebuild_loop(
             except Exception as exc:
                 if text_output_enabled(cfg):
                     fail_line(f"watch rebuild failed: {exc}")
-        fingerprints = {
-            recording_id: watch_source_fingerprint(source_roots)
-            for recording_id, source_roots in roots.items()
-        }
+        # Keep the fingerprint that this rebuild actually consumed. If a source
+        # changes while capture is running, the next poll must observe and build
+        # that newer state instead of treating it as already handled.
+        fingerprints = pending
 
 
 @contextmanager

@@ -7208,6 +7208,54 @@ def test_watch_rebuilds_after_recording_source_changes(
         assert target_spec["_watch_run_dir"] == "/rebuilt-prefix"
 
 
+def test_watch_rebuilds_again_when_source_changes_during_rebuild(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    recording_source = tmp_path / "recordings" / "hello"
+    recording_source.mkdir(parents=True)
+    source = recording_source / "index.md"
+    source.write_text("initial\n", encoding="utf-8")
+    config = {
+        "recording": "hello",
+        "studio": {"recording_dir": str(tmp_path / "recordings")},
+    }
+    stop_event = threading.Event()
+    rebuilt: list[str] = []
+
+    class ChangingEvent:
+        def __init__(self) -> None:
+            self.wait_count = 0
+
+        def wait(self, _timeout) -> bool:
+            self.wait_count += 1
+            if self.wait_count == 1:
+                source.write_text("first edit\n", encoding="utf-8")
+            return stop_event.is_set()
+
+    def fake_rebuild(_cfg, recording_id, *, beat_id=None) -> Path:
+        assert beat_id is None
+        rebuilt.append(recording_id)
+        if len(rebuilt) == 1:
+            source.write_text("edit during rebuild\n", encoding="utf-8")
+        else:
+            stop_event.set()
+        return Path("/rebuilt")
+
+    monkeypatch.setattr(studio, "run_watch_rebuild", fake_rebuild)
+
+    studio.run_watch_rebuild_loop(
+        OmegaConf.create(config),
+        config,
+        ("hello",),
+        ChangingEvent(),
+        poll_interval=0.001,
+        quiet_interval=0.001,
+    )
+
+    assert rebuilt == ["hello", "hello"]
+
+
 def test_watch_rebuilds_after_declared_external_input_changes(
     tmp_path,
     monkeypatch,
