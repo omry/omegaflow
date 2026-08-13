@@ -1,0 +1,13 @@
+{
+  "schema": "omegaflow-vendored-reploy-fixtures-v1",
+  "reploy_version": "0.7.0.dev1",
+  "source_commit": "cb4ed96519b97ecdee6dca28edc78a74c045f7c2",
+  "source_directory": "testdata/controlled-session",
+  "files": {
+    "client-v1-events.jsonl": "b500baba452570df760197ae5b6be9a843d4a8d85f4fc63d35cd11c920d4ba7e",
+    "client-v1-invalid-requests.jsonl": "fec8ce23574360403fca8f42de985efc9be2efe8922153a5edd5cd0b3cdb786f",
+    "client-v1-requests.jsonl": "4581392265ff67e6f24c6c0cebd8af91ed58ec6a3e735ee70e1cd2def0c1fd95",
+    "omegaflow-conformance-v1.json": "6f932c112346cf3cd9dcc0111656bf17cb6f4fb34d00412d0d15b6bb6e384aa0",
+    "run-results-v1.jsonl": "1fac0f974d0bf2917763ed345708a2b4b018b227b07539194261c73f8338520b"
+  }
+}
