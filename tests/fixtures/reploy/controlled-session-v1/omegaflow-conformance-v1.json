@@ -1,0 +1,17 @@
+{
+  "schema": "reploy-omegaflow-conformance-fixture-v1",
+  "playwright_version": "1.55.0",
+  "controller_image": "mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29",
+  "packages": [
+    {
+      "name": "playwright",
+      "url": "https://registry.npmjs.org/playwright/-/playwright-1.55.0.tgz",
+      "sha256": "f9b9876bde4f0508941775648c673a2a94d34aefe38312a1fa3c9440d686d073"
+    },
+    {
+      "name": "playwright-core",
+      "url": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.55.0.tgz",
+      "sha256": "6b63fdf41725afb924880728d39cf560d770f785a861d18c15611e99dd3172bd"
+    }
+  ]
+}
