@@ -52,7 +52,7 @@ awsh-v1, gate_ready, OPERATION_ID, GATE_ID
 awsh-v1, gate_continued, OPERATION_ID, GATE_ID
 awsh-v1, completed, OPERATION_ID, STATUS, CWD
 awsh-v1, protocol_error, CODE, MESSAGE
-awsh-v1, closed, eof|shutdown, CWD
+awsh-v1, closed, shutdown, CWD
 ```
 
 Commas above separate fields for readability; the wire delimiter is a NUL byte.
