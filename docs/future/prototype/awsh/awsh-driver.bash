@@ -146,6 +146,8 @@ awsh_control_write_fd=${AWSH_CONTROL[1]}
 awsh_control_pid=$AWSH_CONTROL_PID
 readonly awsh_control_read_fd awsh_control_write_fd awsh_control_pid
 disown "$awsh_control_pid" 2>/dev/null || true
+awsh_in_control=0
+awsh_interrupted=0
 
 # The broker now owns these. Closing the originals here is what prevents fixed
 # request/result descriptors from reaching operation children.
@@ -154,7 +156,18 @@ exec {awsh_result_fd}>&-
 
 awsh_control_read_field() {
   local target=$1
-  IFS= read -r -d '' -u "$awsh_control_read_fd" "$target"
+  local awsh_read_status
+
+  while true; do
+    IFS= read -r -d '' -u "$awsh_control_read_fd" "$target"
+    awsh_read_status=$?
+    if (( awsh_read_status == 0 )); then
+      return 0
+    fi
+    if (( awsh_read_status <= 128 )); then
+      return "$awsh_read_status"
+    fi
+  done
 }
 
 awsh_read_field() {
@@ -174,13 +187,21 @@ awsh_read_field() {
 
 awsh_emit() {
   local field_count=$(( $# + 1 ))
-  local status
+  local status interrupted_before=$awsh_interrupted
+  awsh_in_control=1
   if ! printf '%s\0' emit "$field_count" "$AWSH_SCHEMA" "$@" >&"$awsh_control_write_fd"; then
+    awsh_in_control=0
     exit "$AWSH_IO_ERROR_STATUS"
   fi
   status=''
   if ! awsh_control_read_field status || [[ $status != ok ]]; then
+    awsh_in_control=0
     exit "$AWSH_IO_ERROR_STATUS"
+  fi
+  awsh_in_control=0
+  if (( awsh_interrupted != interrupted_before )); then
+    trap '' INT
+    return 130
   fi
 }
 
@@ -195,6 +216,27 @@ awsh_protocol_error() {
   local message=$2
   awsh_emit protocol_error "$code" "$message"
   exit "$AWSH_PROTOCOL_ERROR_STATUS"
+}
+
+awsh_install_interrupt_trap() {
+  awsh_interrupted=0
+  trap 'if (( awsh_in_control )); then awsh_interrupted=1; else trap "" INT; return 130; fi' INT
+}
+
+awsh_run_operation() {
+  local operation_id=$1
+  local operation=$2
+
+  # Keep the complete started-to-result interval inside one function return
+  # boundary. An immediate controller cancellation may arrive as soon as the
+  # started result is visible; it must not land before the SIGINT trap exists.
+  # A signal received during the private started exchange is remembered until
+  # the broker acknowledgement is complete. Outside control exchange, the
+  # first accepted interrupt makes later cancellation pulses harmless before
+  # unwinding the sourced operation.
+  awsh_install_interrupt_trap
+  awsh_emit started "$operation_id" || return $?
+  source <(printf '%s' "$operation")
 }
 
 awsh_read_request_header() {
@@ -256,8 +298,8 @@ awsh_gate() {
       if [[ $operation_id != "$awsh_active_operation_id" || $request_gate_id != "$gate_id" ]]; then
         awsh_protocol_error wrong-gate 'continue request does not match the active gate'
       fi
-      awsh_emit gate_continued "$awsh_active_operation_id" "$gate_id"
-      trap 'return 130' INT
+      awsh_install_interrupt_trap
+      awsh_emit gate_continued "$awsh_active_operation_id" "$gate_id" || return $?
       return 0
       ;;
     cancel)
@@ -270,7 +312,7 @@ awsh_gate() {
         awsh_protocol_error wrong-operation 'cancel request does not match the active operation'
       fi
       awsh_cancel_reason=$reason
-      trap 'return 130' INT
+      trap '' INT
       return 130
       ;;
     *)
@@ -284,10 +326,16 @@ readonly -f \
   awsh_control_read_field \
   awsh_emit \
   awsh_gate \
+  awsh_install_interrupt_trap \
   awsh_protocol_error \
   awsh_read_field \
-  awsh_read_request_header
+  awsh_read_request_header \
+  awsh_run_operation
 
+# The persistent shell never treats a terminal interrupt as an instruction to
+# exit while idle. Each operation installs its cancellable trap before it
+# reports started.
+trap '' INT
 awsh_emit ready "$$" "$PWD"
 
 while true; do
@@ -309,19 +357,17 @@ while true; do
       awsh_active_operation_id=$awsh_operation_id
       awsh_cancel_reason=''
       awsh_used_gate_ids=()
-      awsh_emit started "$awsh_operation_id"
       # A caught SIGINT is reset to its default disposition in external
       # commands, so the terminal's foreground-process-group signal reaches
       # the active command without killing this driver. Sourcing gives the
       # trap a return boundary that aborts the rest of the operation while
       # preserving state in this Bash process.
-      trap 'return 130' INT
-      if source <(printf '%s' "$awsh_operation"); then
+      if awsh_run_operation "$awsh_operation_id" "$awsh_operation"; then
         awsh_operation_status=0
       else
         awsh_operation_status=$?
       fi
-      trap - INT
+      trap '' INT
       awsh_active_operation_id=''
       awsh_emit completed "$awsh_operation_id" "$awsh_operation_status" "$PWD"
       ;;

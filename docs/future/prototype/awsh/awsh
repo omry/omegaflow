@@ -3,7 +3,7 @@
 
 set -eu
 
-awsh_bash=${AWSH_BASH:-bash}
+awsh_bash=${AWSH_BASH:-/bin/bash}
 case $0 in
   */*) awsh_driver=${0%/*}/awsh-driver.bash ;;
   *)

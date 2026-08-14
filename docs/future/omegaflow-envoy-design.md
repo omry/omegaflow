@@ -2,10 +2,10 @@
 
 ## Status
 
-- Approved direction with an implementation plan; the protocol implementation
-  and Bash adapter prototype are complete, and the production Envoy is not
-  started
-- Updated: 2026-08-14
+- Approved direction with an implementation plan; the protocol, Bash adapter,
+  and production Envoy are implemented pending final review, while runtime
+  materialization and controller integration have not started
+- Updated: 2026-08-15
 - Initial scope: one persistent Bash backend for terminal execution and
   structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -21,6 +21,12 @@ The first implementation supports Bash only. Additional top-level shell
 backends and a generalized backend plugin framework are deferred. An operation
 may still start another shell or interactive program, but OmegaFlow treats that
 child as opaque until control returns to the persistent Bash.
+
+The initial controller and workload blueprint contract is frozen in
+[Reploy Recording Environments Design](reploy-environments-design.md). General
+project discovery, source transfer, cache policy, default-image selection, and
+public bootstrap UX remain separate product work; they do not block the bounded
+Envoy integration slices.
 
 ## Problem
 
@@ -122,9 +128,9 @@ not part of Envoy capture. The controller also retains a private raw
 terminal-output byte log as the lossless source for workload-output byte ranges
 and diagnostics. Synthesized prompt and command events carry distinct timeline
 provenance and never enter that raw log or its byte offsets. Because asciicast
-events are UTF-8 JSON text, slice 1 must freeze the incremental decoding and
-invalid-byte policy used for the presentation cast; that conversion never
-weakens the raw transport or byte-log contract.
+events are UTF-8 JSON text, the frozen protocol specifies the incremental
+decoding and invalid-byte policy used for the presentation cast; that
+conversion never weakens the raw transport or byte-log contract.
 
 The Envoy and `awsh` are separate roles even though OmegaFlow distributes them
 together. The Envoy owns networking, framing, the PTY master, byte ordering,
@@ -224,7 +230,8 @@ environment. It must neutralize shell startup and option injection such as
 `BASH_ENV`, `ENV`, `SHELLOPTS`, and `BASHOPTS`, and it must not honor the
 prototype-only `AWSH_BASH` override. Application environment required by
 planned operations is delegated explicitly after this control-plane baseline is
-established. Slice 1 freezes the exact filtering and delegation contract.
+established. The frozen protocol specifies the exact filtering and delegation
+contract.
 
 All OmegaFlow-supplied workload executables, scripts, helpers, and their manifest
 are mounted read-only and executable at `/omegaflow-runtime`. This prevents the
@@ -259,11 +266,13 @@ OmegaFlow continues to use `reploy controlled-session run` for:
 - cancellation, lifecycle observation, cleanup, and crash recovery; and
 - the authoritative final host result.
 
-The prepared workload blueprint adds two private Envoy endpoints and the
-read-only `/omegaflow-runtime` mount. Controller OmegaFlow obtains their
-lease-local coordinates from `opened.endpoints` and connects with a bounded
-startup deadline. The Envoy does not accept an arbitrary destination or expose
-its listener outside the lease-private network.
+Runtime integration requires a prepared workload blueprint that adds two
+private Envoy endpoints and the read-only `/omegaflow-runtime` mount.
+Controller OmegaFlow obtains their lease-local coordinates from
+`opened.endpoints` and connects with a bounded startup deadline. The Envoy does
+not accept an arbitrary destination or expose its listener outside the
+lease-private network. The frozen Hydra blueprint contract below defines the
+exact Reploy representation used by this integration.
 
 Reploy controlled-session v1 starts `/bin/sh` as the workload and requires the
 controller to attach to its host-owned PTY. After Reploy reports `ready`,
@@ -340,20 +349,39 @@ The telemetry channel carries typed messages for at least:
 - execute, continue, and cancel operation requests;
 - operation started, ready, completed, and failed events;
 - operation status and resulting cwd;
-- action gates used to coordinate terminal and browser work;
+- generic action gates used to pause an operation for planned controller work;
 - resize requests and applied dimensions;
 - bounded diagnostics; and
 - graceful shutdown and final-drain confirmation.
 
-Exact schemas, limits, ordering rules, and timeout values belong in the first
-protocol implementation slice. They must be frozen with golden fixtures before
-the full terminal adapter is built.
+Exact schemas, limits, ordering rules, timeout values, the Go build contract,
+and golden fixtures are frozen by
+[OmegaFlow Envoy Protocol v1](../design/envoy-protocol-v1.md). Later slices
+implement that contract rather than reopening it.
 
 The Envoy-to-`awsh` protocol is private to the mounted runtime and is not a
 third network service. The Envoy translates validated telemetry requests into
 bounded operations on the dedicated request descriptor and translates driver
 results back into typed telemetry. `awsh` does not parse TCP, authenticate the
 controller, own the PTY master, or interpret Reploy lifecycle messages.
+
+### Browser ownership and action gates
+
+Browser automation belongs entirely to controller OmegaFlow. The compiled
+recording plan selects each browser action and application endpoint ID. The
+controller resolves only that ID through trusted `opened.endpoints`, constructs
+the target from the granted scheme, host, and port plus controller-owned path
+intent, and drives Playwright. Workload output and Envoy telemetry cannot replace
+the granted host, port, or planned navigation target.
+
+Envoy protocol v1 has no browser-specific message and does not carry
+workload-originated navigation intent. An `awsh` action gate is only a generic,
+planned pause inside one running Bash operation. When the operation reaches a
+named gate, controller OmegaFlow may perform the browser or controller action
+already associated with that gate in the recording plan and then send
+`continue`. Ordinary terminal-then-browser sequencing uses operation completion
+and needs no shell gate. Dynamic workload-selected browser navigation is
+deferred.
 
 ## Runtime Mount and Injection
 
@@ -381,13 +409,104 @@ source, the application working copy, caches, and controller capture outputs use
 separate declared locations. Blueprint validation rejects an application mount
 that conflicts with `/omegaflow-runtime`.
 
-The selected application blueprint must provide Bash and the configured
-non-root workload identity. The Envoy should be a standalone executable so the
-workload does not need Python or an OmegaFlow installation. Selecting its
-implementation language and reproducible build is part of the first
-implementation slice; Go is the leading option, not yet a locked contract.
+Runtime integration requires the selected application blueprint to provide
+Bash and the configured non-root workload identity. The Envoy is a standalone
+executable so the workload does not need Python or an OmegaFlow installation.
+The frozen protocol contract selects a dependency-free Go executable, Linux
+`amd64` and `arm64`, and its reproducible build settings. The design no longer
+treats the language as open.
 Distribution and identity materialization remain environment-construction
 concerns, not additions to Reploy's controlled-session protocol.
+
+### Runtime artifact manifest
+
+The installed OmegaFlow distribution carries one manifest for each supported
+workload platform. Its schema is `omegaflow-runtime-manifest-v1` and it records:
+
+- the OmegaFlow version and source revision;
+- the Envoy telemetry and private `awsh` protocol schemas;
+- the target operating system and architecture;
+- the pinned Go toolchain version used for the Envoy binary; and
+- every runtime-relative regular file with its byte size, executable mode, and
+  lowercase SHA-256 digest.
+
+Paths are unique, normalized relative POSIX paths and may name only the fixed
+`bin` and `libexec` layout. The manifest itself is not listed as a payload file.
+Staging rejects missing or additional payload files, symlinks, special files,
+escaping paths, duplicate paths, invalid modes, and any size or digest mismatch.
+Host OmegaFlow copies verified installed artifacts into a fresh private
+directory, writes the manifest last, makes the staged tree non-writable, and
+uses that exact directory as the read-only bind source. A staged runtime is
+never assembled from a project checkout.
+
+### Workload-blueprint requirements
+
+The frozen Hydra blueprint contract provides all of the following:
+
+- a Linux workload for the selected supported architecture;
+- `/bin/sh` for Reploy's bootstrap and `/bin/bash` for the fixed `awsh` backend;
+- one configured non-root workload identity;
+- the verified runtime directory mounted read-only and executable at
+  `/omegaflow-runtime`;
+- writable ephemeral state, when required, outside that mount, provisionally at
+  `/run/omegaflow`;
+- two private TCP endpoint declarations reserved for the Envoy terminal and
+  telemetry listeners;
+- ordinary application and browser-service endpoints declared independently of
+  those Envoy endpoints; and
+- no application mount that equals, contains, or is contained by
+  `/omegaflow-runtime`, `/run/omegaflow`, or another reserved OmegaFlow path.
+
+Hydra produces the final typed controller and workload blueprint objects.
+OmegaFlow's built-in Envoy defaults compose before the selected `reploy/app`
+configuration, and application configuration may override normal Reploy
+fields. OmegaFlow serializes the final objects without a post-composition merge
+or injection step. The complete composition, materialization, and retained-
+evidence contract lives in the Reploy environment design linked above.
+
+### Envoy invocation contract
+
+The production command is `/omegaflow-runtime/bin/envoy`. Its local integration
+surface accepts explicit terminal and telemetry listen coordinates plus initial
+columns and rows. The listen hosts and ports must be values frozen into the
+prepared workload blueprint; they are not accepted from terminal content or an
+untrusted runtime destination. The runtime root, `awsh` path, driver path, and
+`/bin/bash` executable are fixed and have no workload-controlled override.
+The exact flags are `--terminal-listen`, `--telemetry-listen`, `--columns`, and
+`--rows`; their defaults are the built-in Envoy blueprint coordinates and an
+80-by-24 terminal.
+
+The Envoy exits zero only after structured shutdown, final PTY drain, terminal
+EOF, final telemetry, and process-group cleanup succeed. Startup, channel,
+protocol, PTY, shell, cancellation, resize, drain, and cleanup failures exit
+nonzero and retain a stable failure class. When possible, the Envoy emits a
+bounded diagnostic before closing and writes an outer diagnostic to the
+Reploy-owned bootstrap PTY; neither delivery path converts failure to success.
+
+## Controller Run Input
+
+Per-run recording input is not placed in Reploy's controller output directory,
+which must start empty. Host OmegaFlow prepares a versioned regular JSON file
+and mounts it read-only and only into the trusted controller deployment at:
+
+```text
+/omegaflow-input/run-manifest.json
+```
+
+The schema is `omegaflow-controller-run-v1`. It contains the recording identity,
+the compiled recording plan, initial terminal dimensions, the two reserved
+Envoy endpoint IDs, selected application endpoint IDs, artifact policy, and the
+relative names of any separately declared controller input assets. It contains
+no secrets, host output path, Reploy session socket, endpoint coordinates, or
+Docker information. Referenced controller assets are mounted read-only below
+`/omegaflow-input/assets`, carry expected size and SHA-256 evidence in the
+manifest, and cannot escape that directory.
+
+The complete manifest is bounded to 8 MiB. Controller OmegaFlow validates the
+schema, paths, bounds, hashes, and recording-plan model before starting the
+Reploy session client. `/omegaflow-input` and `REPLOY_OUTPUT_DIR` are distinct,
+non-overlapping mounts. The input mount is a public prepared-blueprint grant,
+not a Reploy-private channel or a workload mount.
 
 ## Implementation Plan
 
@@ -397,7 +516,8 @@ second permanent capture model.
 
 ### 1. Freeze protocols and implementation constraints
 
-- Select the Envoy implementation language and reproducible standalone build.
+- Record the dependency-free Go implementation and reproducible standalone
+  build frozen by the protocol contract.
 - Specify bounded, versioned controller-to-Envoy terminal and telemetry
   protocols, including state machines, limits, timeouts, cancellation, resize,
   diagnostics, shutdown, final drain, and output-range ordering.
@@ -438,20 +558,47 @@ prompt parsing, controller-local FIFOs, or in-band telemetry markers.
   diagnostics.
 - Order operation completion against PTY output, drain remaining bytes at
   shutdown, and report shell, channel, and Envoy failures distinctly.
+- Implement the fixed invocation and exit contract, including stable failure
+  classes for connection, handshake, protocol, PTY, `awsh`, shell, resize,
+  cancellation, drain, and process-group cleanup failures.
+- Prove that the Envoy sockets are close-on-exec and that ordinary operation
+  descendants inherit neither those sockets nor the private `awsh`
+  request/result descriptors.
 
 Completion gate: local Envoy/`awsh` integration passes streaming, interactive,
 resize, interruption, output-range, orderly shutdown, and injected-failure
 tests.
 
+### Hydra blueprint contract
+
+The Reploy environment design freezes the blueprint prerequisite for slices 4
+through 8:
+
+- plain Python dataclasses model the supported public Reploy blueprint syntax;
+- the final config exposes `reploy.controller` and `reploy.workload` objects;
+- the OmegaFlow-owned controller object is read-only after Hydra composition;
+- built-in Envoy defaults add Bash, a non-root default identity, the runtime
+  mount, command, and the two fixed endpoint IDs and default coordinates;
+- selected application configuration composes afterward through `reploy/app`;
+- normal Hydra composition, overrides, and interpolation produce the complete
+  objects without later injection or repair; and
+- each run retains both resolved YAML documents and uses fresh prepared Reploy
+  deployment directories with normal Reploy cache reuse.
+
+Slice 4 may begin after the local Envoy completion gate. A change to this
+contract requires an explicit design revision, but no separate blueprint
+approval gate remains.
+
 ### 4. Materialize the workload runtime
 
-- Package every workload-side artifact and its hashes with OmegaFlow.
+- Package every OmegaFlow-owned workload artifact and its platform manifest
+  with OmegaFlow; do not vendor or duplicate Reploy.
 - Stage the exact installed release into a fresh runtime directory and mount it
   read-only and executable at `/omegaflow-runtime`.
-- Require Bash, reserve the mount point, declare the two Envoy endpoints, and
-  keep writable state outside the runtime mount.
-- Support a task-specific application blueprint; multi-shell and all-shell
-  blueprint generation are deferred.
+- Compose the built-in Envoy defaults with one selected internal demo or
+  tutorial application config, including Bash, the non-root identity, reserved
+  runtime paths, and the two Envoy endpoints.
+- Keep general project discovery, multi-shell, and all-shell support deferred.
 
 Completion gate: a clean prepared workload starts only the validated mounted
 artifacts, cannot modify them, and needs no Python or OmegaFlow installation.
@@ -461,6 +608,8 @@ artifacts, cannot modify them, and needs no Python or OmegaFlow installation.
 - Add strict OmegaFlow-owned models for the Envoy protocols and reuse Reploy's
   public controlled-session host, client, endpoint, attachment, output, and
   diagnostic contracts.
+- Validate the read-only `omegaflow-controller-run-v1` input before starting the
+  controller client; never use `REPLOY_OUTPUT_DIR` as an input channel.
 - Start and drain the Reploy bootstrap attachment, execute the mounted Envoy,
   connect both declared endpoints, and enforce readiness deadlines.
 - Implement an Envoy-backed `PersistentTerminalRunner` boundary preserving
@@ -477,9 +626,14 @@ exit, cancellation, and partial output.
 
 ### 6. Integrate browser coordination and artifacts
 
-- Resolve browser and Envoy destinations only from trusted `opened.endpoints`.
-- Preserve terminal/browser joins, readiness gates, screenshots, pointer state,
-  and presentation ordering through structured telemetry.
+- Resolve the plan-selected browser and Envoy endpoint IDs only from trusted
+  `opened.endpoints`.
+- Keep navigation intent and Playwright control in controller OmegaFlow. Use
+  operation completion for ordinary sequencing and generic Envoy action gates
+  only for a planned pause inside a running shell operation.
+- Preserve terminal/browser joins, browser readiness checks, screenshots,
+  pointer state, and presentation ordering without browser-specific Envoy
+  messages or a cross-container file handoff.
 - Finalize casts, timelines, browser media, narration, diagnostics, and the
   publication candidate before sending Reploy `complete`.
 - Retain partial artifacts and structured causes on recorder, media, channel,
@@ -504,18 +658,20 @@ Completion gate: the Linux conformance run retains correct artifacts and
 diagnostics across the success and failure matrix, and all Reploy resources are
 accounted for after teardown.
 
-### 8. Package, document, and migrate
+### 8. Package, document, and establish cutover readiness
 
-- Verify that installing OmegaFlow installs compatible Reploy support and that
-  Docker is the only normal external host dependency.
+- Package the OmegaFlow-owned runtime artifacts. Declare and validate a
+  compatible Reploy Python dependency without vendoring Reploy, so Docker is
+  the only normal external host dependency.
 - Document the runtime mount, Bash requirement, blueprint endpoints, trust
-  boundary, diagnostics, and failure recovery.
-- Compare representative recordings through the native and Envoy paths during
-  migration, then remove the redundant native dependency model on a separately
-  approved cutover.
+  boundary, controller input, diagnostics, and failure recovery.
+- Compare representative recordings through the native and Envoy paths and
+  produce cutover evidence. Do not remove the native path in this slice.
 
 Completion gate: release packaging and documented examples pass from a clean
-host, and the standard Reploy path is ready for an explicit migration decision.
+host, representative comparison evidence is retained, and the standard Reploy
+path is ready for an explicit migration decision. Native-path removal is a
+separate approved change.
 
 ## Cross-slice Acceptance Validation
 
@@ -528,17 +684,20 @@ Before replacing the native terminal runner, a bounded prototype must prove:
 3. interactive input, Ctrl-C, resize, and `SIGWINCH` behavior;
 4. curses applications and one nested interactive shell;
 5. separation of terminal output from telemetry messages;
-6. the same-identity threat boundary and non-inheritance of Envoy sockets and
-   private descriptors;
+6. documentation that same-identity workload processes can deliberately
+   interfere and that telemetry is not security evidence, plus a mechanical
+   conformance test proving that ordinary exec'd descendants inherit neither
+   Envoy TCP sockets nor private `awsh` request/result descriptors;
 7. ordered terminal drain and EOF during graceful shutdown;
 8. useful partial diagnostics after Envoy, shell, channel, and controller
    failures; and
 9. end-to-end Reploy termination, acknowledgement, retained output, and cleanup.
 
 The implementation must also record the deferred Reploy capability needed for a
-future privileged Envoy/non-root workload split. Only after these checks pass
-and the remaining slice-1 choices are resolved should OmegaFlow replace the
-local FIFO-backed `PersistentTerminalRunner` path.
+future privileged Envoy/non-root workload split. Only after these checks pass,
+the frozen Hydra blueprint contract passes conformance, and the explicit
+cutover is approved should OmegaFlow replace the local FIFO-backed
+`PersistentTerminalRunner` path.
 
 ## Decisions and Deferrals
 
@@ -564,3 +723,16 @@ local FIFO-backed `PersistentTerminalRunner` path.
    Envoy path merges provenance-marked controller presentation events with
    terminal output, retains the exact private raw workload output separately,
    and does not add an `asciinema record` process or controller-side PTY.
+9. Browser actions, navigation intent, checks, and endpoint selection are
+   controller-owned. Envoy action gates provide only generic planned
+   synchronization; protocol v1 carries no browser-specific messages.
+10. Per-run controller input is a bounded, versioned, read-only prepared
+    deployment mount at `/omegaflow-input`; Reploy's initially empty controller
+    output directory is never repurposed as input.
+11. Hydra produces complete typed `reploy.controller` and `reploy.workload`
+    blueprint objects. The controller is OmegaFlow-owned and read-only after
+    composition; Envoy defaults compose before the user-owned `reploy/app`
+    workload config. No post-composition injection or repair step exists.
+12. OmegaFlow packages only its own runtime. Reploy remains a separately
+    released Python dependency, and native-path removal requires a distinct
+    cutover approval.
