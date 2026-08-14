@@ -30,6 +30,8 @@ RESULT_FD = 21
 EVENT_FIELDS = {
     "ready": ("pid", "cwd"),
     "started": ("operation_id",),
+    "gate_ready": ("operation_id", "gate_id"),
+    "gate_continued": ("operation_id", "gate_id"),
     "completed": ("operation_id", "status", "cwd"),
     "protocol_error": ("code", "message"),
     "closed": ("reason", "cwd"),
@@ -312,6 +314,16 @@ def _relay_operation(
                             cwd = event["cwd"]
                             if event["operation_id"] == operation_id:
                                 completed = True
+                        elif (
+                            event["type"] == "gate_ready"
+                            and event["operation_id"] == operation_id
+                        ):
+                            event_log.diagnostic(
+                                f"auto-continuing gate {event['gate_id']}"
+                            )
+                            session.send(
+                                "continue", operation_id, event["gate_id"]
+                            )
                         elif event["type"] == "closed":
                             cwd = event["cwd"]
                             closed = True
