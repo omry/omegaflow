@@ -197,6 +197,18 @@ awsh_protocol_error() {
   exit "$AWSH_PROTOCOL_ERROR_STATUS"
 }
 
+awsh_run_operation() {
+  local operation_id=$1
+  local operation=$2
+
+  # Keep the complete started-to-result interval inside one function return
+  # boundary. An immediate controller cancellation may arrive as soon as the
+  # started result is visible; it must not land before the SIGINT trap exists.
+  trap 'return 130' INT
+  awsh_emit started "$operation_id" || return $?
+  source <(printf '%s' "$operation")
+}
+
 awsh_read_request_header() {
   local schema_target=$1
   local kind_target=$2
@@ -256,8 +268,8 @@ awsh_gate() {
       if [[ $operation_id != "$awsh_active_operation_id" || $request_gate_id != "$gate_id" ]]; then
         awsh_protocol_error wrong-gate 'continue request does not match the active gate'
       fi
-      awsh_emit gate_continued "$awsh_active_operation_id" "$gate_id"
       trap 'return 130' INT
+      awsh_emit gate_continued "$awsh_active_operation_id" "$gate_id" || return $?
       return 0
       ;;
     cancel)
@@ -286,7 +298,8 @@ readonly -f \
   awsh_gate \
   awsh_protocol_error \
   awsh_read_field \
-  awsh_read_request_header
+  awsh_read_request_header \
+  awsh_run_operation
 
 awsh_emit ready "$$" "$PWD"
 
@@ -309,14 +322,12 @@ while true; do
       awsh_active_operation_id=$awsh_operation_id
       awsh_cancel_reason=''
       awsh_used_gate_ids=()
-      awsh_emit started "$awsh_operation_id"
       # A caught SIGINT is reset to its default disposition in external
       # commands, so the terminal's foreground-process-group signal reaches
       # the active command without killing this driver. Sourcing gives the
       # trap a return boundary that aborts the rest of the operation while
       # preserving state in this Bash process.
-      trap 'return 130' INT
-      if source <(printf '%s' "$awsh_operation"); then
+      if awsh_run_operation "$awsh_operation_id" "$awsh_operation"; then
         awsh_operation_status=0
       else
         awsh_operation_status=$?
