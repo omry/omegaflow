@@ -425,8 +425,8 @@ Every recording serializes both resolved dataclasses as native Reploy YAML and
 retains them in its private Hydra run directory:
 
 ```text
-<run>/reploy/blueprints/controller.yaml
-<run>/reploy/blueprints/workload.yaml
+<run>/reploy/blueprints/controller.blueprint.yaml
+<run>/reploy/blueprints/workload.blueprint.yaml
 <run>/reploy/deployments/controller/
 <run>/reploy/deployments/workload/
 <run>/reploy/controller-output/

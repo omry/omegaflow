@@ -19,7 +19,9 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
+from . import __version__
 from .presentation_schema import PlayerToolbarControl
+from .reploy_blueprint import ReployConfig
 
 
 @dataclass(frozen=True)
@@ -195,6 +197,8 @@ def register_resolvers() -> None:
             "omegaflow_project_root",
             lambda: str(discover_project_layout().root),
         )
+    if not OmegaConf.has_resolver("omegaflow_version"):
+        OmegaConf.register_resolver("omegaflow_version", lambda: __version__)
 
 
 class StudioAction(str, Enum):
@@ -286,6 +290,10 @@ class RunGarbageCollectionConfig:
 class StudioRuntimeConfig:
     recording_dir: str = "recordings"
     data_dir: str = "recordings/.omegaflow"
+    run_dir: str = (
+        "${studio_run_dir:${project_root},${studio.data_dir},${action},${step},"
+        "${dry_run},${recording},${now:%Y%m%d-%H%M%S}}"
+    )
     keep_output_dir: bool = True
     asciinema_path: str | None = None
     run_gc: RunGarbageCollectionConfig = field(
@@ -317,6 +325,7 @@ class StudioConfig:
     runs_limit: int | None = 10
     workspace: str | None = None
     studio: StudioRuntimeConfig = field(default_factory=StudioRuntimeConfig)
+    reploy: ReployConfig = field(default_factory=ReployConfig)
     script_params: Any = field(default_factory=dict)
     rec: Any = field(default_factory=dict)
     recording: str | None = None
@@ -1210,6 +1219,17 @@ def compose_studio_config(
     recording_id: str | None,
     overrides: Sequence[str] = (),
 ) -> dict[str, Any]:
+    cfg = compose_studio_hydra_config(recording_id, overrides)
+    data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
+    if not isinstance(data, dict):
+        raise StudioConfigError("composed media config must be a mapping")
+    return data
+
+
+def compose_studio_hydra_config(
+    recording_id: str | None,
+    overrides: Sequence[str] = (),
+) -> DictConfig:
     if not CONFIG_DIR.exists():
         raise StudioConfigError(f"studio config directory not found: {CONFIG_DIR}")
 
@@ -1227,15 +1247,14 @@ def compose_studio_config(
             config_dir=str(CONFIG_DIR),
         ):
             cfg = compose(config_name=STUDIO_CONFIG_NAME, overrides=hydra_overrides)
-            data = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
+            OmegaConf.resolve(cfg)
+            OmegaConf.set_readonly(cfg.reploy.controller, True)
     except Exception as exc:
         details = f"recording {recording_id!r}" if recording_id else "default recording"
         raise StudioConfigError(
             f"failed to compose media config for {details}"
         ) from exc
-    if not isinstance(data, dict):
-        raise StudioConfigError("composed media config must be a mapping")
-    return data
+    return cfg
 
 
 def container_from_hydra_cfg(cfg: DictConfig) -> dict[str, Any]:
