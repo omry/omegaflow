@@ -8,10 +8,12 @@ reads operations from a private file descriptor, evaluates them in its own
 process, leaves terminal I/O on its controlling PTY, and reports structured
 results on another file descriptor.
 
-This directory is not part of the OmegaFlow package and is not production code.
-The experiment intentionally does not implement the Envoy TCP protocol,
-authentication, bounded frames, cancellation, resize, reconnect, or Reploy
-integration.
+The launcher and Bash driver in this directory are now the reviewed source
+inputs for the platform runtime assembled by OmegaFlow's package build. They
+are not imported as Python package modules or mounted from the source checkout.
+The demo controller and its split-screen UI remain prototype-only. The
+production Envoy supplies the bounded TCP protocol, cancellation, resize, and
+supervision around the packaged launcher and driver.
 
 ## Running it
 
@@ -28,9 +30,10 @@ workload requirement even though `/bin/sh` is sufficient to enter `awsh`.
 `AWSH_BASH` is prototype-only; the production Envoy removes that override and
 therefore always uses the fixed `/bin/bash` executable with a controlled launch
 environment.
-The prototype launcher must be invoked with an absolute or relative path so it
-can locate the adjacent driver without running helper commands that might reuse
-its inherited private descriptors. The examples reserve descriptors 20 and 21;
+The launcher must be invoked with an absolute or relative path so it can locate
+either the adjacent prototype driver or the packaged `../libexec` driver
+without running helper commands that might reuse its inherited private
+descriptors. The examples reserve descriptors 20 and 21;
 low descriptors such as 3 and 4 are unsafe because a script interpreter may use
 them internally while opening the launcher or driver.
 
