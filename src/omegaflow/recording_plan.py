@@ -2787,10 +2787,14 @@ def _browser_pane_beat(
         if (
             capture_url is not None
             and not urlsplit(capture_url).scheme
-            and (browser_config is None or not browser_config.base_url)
+            and (
+                browser_config is None
+                or not (browser_config.base_url or browser_config.endpoint_id)
+            )
         ):
             raise RecordingPlanError(
-                f"relative open_page URL in {action.id!r} requires browser.base_url"
+                f"relative open_page URL in {action.id!r} requires "
+                "browser.base_url or browser.endpoint_id"
             )
         if effective_chrome_mode == "full" and payload.get("display_url") is None:
             raise RecordingPlanError(
@@ -3956,10 +3960,12 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                     payload = action.config["open_page"]
                     capture_url = payload.get("url")
                     if capture_url is not None and not urlsplit(capture_url).scheme and (
-                        browser_config is None or not browser_config.base_url
+                        browser_config is None
+                        or not (browser_config.base_url or browser_config.endpoint_id)
                     ):
                         raise RecordingPlanError(
-                            f"relative open_page URL in {action.id!r} requires browser.base_url"
+                            f"relative open_page URL in {action.id!r} requires "
+                            "browser.base_url or browser.endpoint_id"
                         )
                     effective_chrome_mode = (
                         presentation.browser.chrome.mode
