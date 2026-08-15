@@ -5,7 +5,14 @@ set -eu
 
 awsh_bash=${AWSH_BASH:-/bin/bash}
 case $0 in
-  */*) awsh_driver=${0%/*}/awsh-driver.bash ;;
+  */*)
+    awsh_dir=${0%/*}
+    if [ -f "$awsh_dir/../libexec/awsh-driver.bash" ]; then
+      awsh_driver=$awsh_dir/../libexec/awsh-driver.bash
+    else
+      awsh_driver=$awsh_dir/awsh-driver.bash
+    fi
+    ;;
   *)
     printf 'awsh: invoke the prototype with a path so it can locate awsh-driver.bash\n' >&2
     exit 64

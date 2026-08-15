@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import shutil
 import sys
 import tomllib
+import zipfile
 
 import nox
 
@@ -19,6 +21,10 @@ RELEASE_PLATFORMS = (
 VENDORED_RECORDER_PATHS = (
     Path("src/omegaflow/bin/asciinema"),
     Path("src/omegaflow/bin/asciinema.platform"),
+)
+GENERATED_RUNTIME_PATHS = (
+    Path("src/omegaflow/_runtime"),
+    Path("src/omegaflow/_source_revision"),
 )
 
 
@@ -61,6 +67,7 @@ def package(session: nox.Session) -> None:
         shutil.rmtree(dist_dir)
 
     clean_vendored_recorder()
+    clean_generated_runtime()
     session.run(sys.executable, "-m", "build", "--sdist", "--no-isolation")
     try:
         for platform in RELEASE_PLATFORMS:
@@ -69,6 +76,7 @@ def package(session: nox.Session) -> None:
         verify_release_artifacts()
     finally:
         clean_vendored_recorder()
+        clean_generated_runtime()
 
 
 @nox.session(venv_backend="none")
@@ -92,6 +100,23 @@ def website(session: nox.Session) -> None:
 def clean_vendored_recorder() -> None:
     for path in VENDORED_RECORDER_PATHS:
         path.unlink(missing_ok=True)
+
+
+def clean_generated_runtime() -> None:
+    for path in GENERATED_RUNTIME_PATHS:
+        if path.is_dir():
+            for item in sorted(
+                path.rglob("*"),
+                key=lambda value: len(value.parts),
+                reverse=True,
+            ):
+                if item.is_symlink():
+                    continue
+                item.chmod(0o700 if item.is_dir() else 0o600)
+            path.chmod(0o700)
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
 
 
 def validate_release_notes(
@@ -137,3 +162,32 @@ def verify_release_artifacts() -> None:
                 + ", ".join(sorted(unexpected_pure_wheels))
             )
         raise RuntimeError("invalid release artifacts; " + "; ".join(details))
+    for path in Path("dist").glob("*.whl"):
+        verify_workload_runtime_artifact(path)
+
+
+def verify_workload_runtime_artifact(path: Path) -> None:
+    architecture = "arm64" if "aarch64" in path.name or "arm64" in path.name else "amd64"
+    root = f"omegaflow/_runtime/linux-{architecture}"
+    expected = {
+        f"{root}/manifest.json",
+        f"{root}/bin/envoy",
+        f"{root}/bin/awsh",
+        f"{root}/libexec/awsh-driver.bash",
+    }
+    with zipfile.ZipFile(path) as wheel:
+        names = set(wheel.namelist())
+        missing = expected - names
+        other_runtimes = {
+            name
+            for name in names
+            if name.startswith("omegaflow/_runtime/") and not name.startswith(root + "/")
+        }
+        if missing or other_runtimes:
+            raise RuntimeError(
+                f"invalid workload runtime in {path.name}: "
+                f"missing={sorted(missing)}, unexpected={sorted(other_runtimes)}"
+            )
+        manifest = json.loads(wheel.read(f"{root}/manifest.json"))
+        if manifest.get("os") != "linux" or manifest.get("architecture") != architecture:
+            raise RuntimeError(f"invalid workload runtime platform in {path.name}")
