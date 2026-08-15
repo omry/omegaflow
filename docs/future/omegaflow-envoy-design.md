@@ -635,8 +635,10 @@ exit, cancellation, and partial output.
 - Preserve terminal/browser joins, browser readiness checks, screenshots,
   pointer state, and presentation ordering without browser-specific Envoy
   messages or a cross-container file handoff.
-- Finalize casts, timelines, browser media, narration, diagnostics, and the
-  publication candidate before sending Reploy `complete`.
+- Finalize casts, timelines, browser media, supported staged narration,
+  diagnostics, and the publication candidate before sending Reploy `complete`.
+  The initial path rejects enabled narration with authored takes before staging;
+  secret or prebuilt-artifact delegation remains a separate design boundary.
 - Retain partial artifacts and structured causes on recorder, media, channel,
   controller, or workload failure.
 

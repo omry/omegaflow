@@ -62,6 +62,30 @@ PRESENTATION_PANE_LIMIT = 64
 PRESENTATION_ITEM_LIMIT = 100_000
 
 
+def declared_recording_source_inputs(spec: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return path-based command inputs without resolving host filesystem state."""
+
+    result: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                if key == "inputs" and isinstance(item, list):
+                    result.extend(
+                        dependency
+                        for dependency in item
+                        if isinstance(dependency, str) and dependency
+                    )
+                else:
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(spec)
+    return tuple(result)
+
+
 class StreamKind(str, Enum):
     narration = "narration"
     pane = "pane"
@@ -2787,10 +2811,14 @@ def _browser_pane_beat(
         if (
             capture_url is not None
             and not urlsplit(capture_url).scheme
-            and (browser_config is None or not browser_config.base_url)
+            and (
+                browser_config is None
+                or not (browser_config.base_url or browser_config.endpoint_id)
+            )
         ):
             raise RecordingPlanError(
-                f"relative open_page URL in {action.id!r} requires browser.base_url"
+                f"relative open_page URL in {action.id!r} requires "
+                "browser.base_url or browser.endpoint_id"
             )
         if effective_chrome_mode == "full" and payload.get("display_url") is None:
             raise RecordingPlanError(
@@ -3956,10 +3984,12 @@ def normalize_recording_plan(spec: dict[str, Any]) -> RecordingPlan:
                     payload = action.config["open_page"]
                     capture_url = payload.get("url")
                     if capture_url is not None and not urlsplit(capture_url).scheme and (
-                        browser_config is None or not browser_config.base_url
+                        browser_config is None
+                        or not (browser_config.base_url or browser_config.endpoint_id)
                     ):
                         raise RecordingPlanError(
-                            f"relative open_page URL in {action.id!r} requires browser.base_url"
+                            f"relative open_page URL in {action.id!r} requires "
+                            "browser.base_url or browser.endpoint_id"
                         )
                     effective_chrome_mode = (
                         presentation.browser.chrome.mode
