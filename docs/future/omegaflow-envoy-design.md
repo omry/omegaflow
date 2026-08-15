@@ -2,8 +2,9 @@
 
 ## Status
 
-- Approved direction with an implementation plan; production implementation is
-  not started
+- Approved direction with an implementation plan; the protocol implementation
+  and Bash adapter prototype are complete, and the production Envoy is not
+  started
 - Updated: 2026-08-16
 - Initial scope: one persistent Bash backend for terminal execution and
   structured telemetry in Reploy-backed OmegaFlow recordings
@@ -206,10 +207,13 @@ The bounded experiment for this adapter is named **`awsh`** (the "awful
 shell") and lives in [`prototype/awsh`](prototype/awsh/README.md). Its portable
 entrypoint is POSIX `sh` and replaces itself with an explicitly selected Bash;
 the stateful driver necessarily runs inside that Bash. The prototype establishes
-persistent state, streaming PTY output, interactive PTY input, structured status
-and cwd, terminal/telemetry separation, Ctrl-C survival, and clean shutdown. It
-remains outside the production package until the remaining PTY, descriptor,
-failure, and Reploy integration cases pass.
+persistent state and supported background-job state, streaming PTY output,
+interactive PTY input, structured status and cwd, action gates and gated
+cancellation, terminal/telemetry separation, Ctrl-C survival, resize and
+`SIGWINCH`, curses and nested interactive Bash behavior, ordinary child
+descriptor non-inheritance, partial `exit`/`exec` results, and clean shutdown.
+It remains outside the production package until the Envoy, runtime, controller,
+failure, and Reploy integration slices pass.
 
 The POSIX entrypoint is a portable bootstrap, not a promise that arbitrary
 operations have POSIX-shell semantics. Initial operation source is Bash source.
