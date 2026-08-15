@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from .envoy_session import EnvoyTerminalSession
 from .reploy_protocol import (
@@ -148,7 +150,7 @@ def load_controller_manifest(
     if not isinstance(plan, dict) or plan.get("id") != recording_id:
         raise ControllerRunError("recording_plan must be an object matching recording_id")
     try:
-        normalize_recording_plan(plan)
+        normalized_plan = normalize_recording_plan(plan)
     except RecordingPlanError as exc:
         raise ControllerRunError(f"recording_plan is invalid: {exc}") from exc
     terminal = _exact_object(value["terminal"], {"columns", "rows"}, "terminal")
@@ -171,6 +173,16 @@ def load_controller_manifest(
         raise ControllerRunError("application_endpoint_ids contains duplicates")
     if {terminal_id, telemetry_id} & set(decoded_application_ids):
         raise ControllerRunError("application endpoint ids overlap Envoy endpoint ids")
+    if normalized_plan.browser is not None:
+        endpoint_id = normalized_plan.browser.get("endpoint_id")
+        if not isinstance(endpoint_id, str) or endpoint_id not in decoded_application_ids:
+            raise ControllerRunError(
+                "browser.endpoint_id must select one declared application endpoint"
+            )
+        if normalized_plan.browser.get("base_url") not in (None, ""):
+            raise ControllerRunError(
+                "controller browser base_url must come from opened.endpoints"
+            )
     raw_assets = value["assets"]
     if not isinstance(raw_assets, list):
         raise ControllerRunError("assets must be an array")
@@ -514,24 +526,61 @@ def controller_main(
 
 
 def capture_controller_recording(context: ControllerContext) -> None:
-    """Capture the manifest plan through the Envoy-backed terminal boundary."""
+    """Capture and finalize a publication candidate inside the controller."""
 
     from . import presentation_build
+    from .browser_capture import PersistentBrowserRunner
     from .envoy_terminal_capture import EnvoyPersistentTerminalRunner
-    from .recording_plan import captured_pane_beats
+    from .recording_plan import (
+        BrowserActionPlan,
+        capture_runner_beat,
+        captured_pane_beats,
+    )
 
     spec = context.manifest.recording_plan
     try:
         plan = normalize_recording_plan(spec)
     except RecordingPlanError as exc:  # already validated; protects API callers
         raise ControllerRunError(f"recording_plan is invalid: {exc}") from exc
-    if plan.browser is not None:
-        raise ControllerRunError("browser capture belongs to Reploy integration slice 6")
-    terminal_panes = {
-        item.pane_id for item in captured_pane_beats(plan) if item.kind.value == "terminal"
-    }
+    captured = captured_pane_beats(plan)
+    terminal_panes = {item.pane_id for item in captured if item.kind.value == "terminal"}
     if len(terminal_panes) > 1:
         raise ControllerRunError("Reploy migration currently supports one terminal pane")
+    browser_panes = {item.pane_id for item in captured if item.kind.value == "browser"}
+    if len(browser_panes) > 1:
+        raise ControllerRunError("Reploy migration currently supports one browser pane")
+
+    browser_config: dict[str, Any] | None = None
+    if plan.browser is not None:
+        if plan.browser_handoffs:
+            raise ControllerRunError(
+                "Reploy browser capture does not accept workload-selected handoff URLs"
+            )
+        browser_config = dict(plan.browser)
+        endpoint_id = browser_config.pop("endpoint_id", None)
+        if not isinstance(endpoint_id, str):  # protected by manifest validation
+            raise ControllerRunError("browser.endpoint_id is required")
+        endpoint = context.endpoint(endpoint_id)
+        if endpoint.scheme not in {"http", "https"}:
+            raise ControllerRunError(
+                f"browser endpoint {endpoint_id!r} must use http or https"
+            )
+        browser_config["base_url"] = _endpoint_base_url(endpoint)
+        for item in captured:
+            if item.kind.value != "browser":
+                continue
+            beat = capture_runner_beat(plan, item)
+            for action in beat.actions:
+                if not isinstance(action, BrowserActionPlan) or action.kind != "open_page":
+                    continue
+                payload = action.config["open_page"]
+                capture_url = payload.get("url")
+                if capture_url is not None:
+                    _validate_relative_browser_url(capture_url)
+                if payload.get("handoff") is not None:
+                    raise ControllerRunError(
+                        "Reploy browser capture does not accept workload-selected handoff URLs"
+                    )
 
     capture_config = spec.get("capture", {})
     if not isinstance(capture_config, dict):
@@ -564,7 +613,56 @@ def capture_controller_recording(context: ControllerContext) -> None:
         context.output_dir,
         headed=False,
         terminal_runner_factory=terminal_runner,
+        browser_runner_factory=(
+            None
+            if browser_config is None
+            else lambda: PersistentBrowserRunner(browser_config, headless=True)
+        ),
     )
+    audio_artifacts = presentation_build.prepare_narration_audio(
+        spec,
+        plan,
+        context.output_dir,
+    )
+    presentation_build.compile_presentation_bundle(
+        spec,
+        plan,
+        context.output_dir,
+        audio_artifacts=audio_artifacts,
+    )
+
+
+def _endpoint_base_url(endpoint: ReployEndpoint) -> str:
+    host = endpoint.host
+    if ":" in host:
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError as exc:
+            raise ControllerRunError(
+                f"endpoint {endpoint.id!r} has an invalid host"
+            ) from exc
+        rendered_host = f"[{host}]"
+    elif re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,252}", host):
+        rendered_host = host
+    else:
+        raise ControllerRunError(f"endpoint {endpoint.id!r} has an invalid host")
+    return f"{endpoint.scheme}://{rendered_host}:{endpoint.port}/"
+
+
+def _validate_relative_browser_url(value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        raise ControllerRunError("Reploy browser open_page URLs must be non-empty")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or value.startswith("//")
+        or "\\" in value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise ControllerRunError(
+            "Reploy browser open_page URLs must be relative to the granted endpoint"
+        )
 
 
 def _identifier(value: Any, name: str) -> str:

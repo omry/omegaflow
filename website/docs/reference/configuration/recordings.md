@@ -449,6 +449,7 @@ class BrowserRedactionConfig:
 class BrowserRecordingConfig:
     profile: str = "desktop-v1"
     base_url: str | None = None
+    endpoint_id: str | None = None
     viewport: BrowserViewportConfig | None = None
     context: BrowserContextConfig | None = None
     auth: BrowserAuthConfig = field(default_factory=BrowserAuthConfig)
