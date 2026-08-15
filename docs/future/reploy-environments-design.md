@@ -2,8 +2,10 @@
 
 ## Status
 
-- Approved environment and Hydra blueprint contract; terminal implementation
-  delegated to the Envoy design
+- Approved environment and Hydra blueprint contract; runtime materialization,
+  the public controlled-session controller lifecycle, and the Envoy terminal
+  boundary are implemented and undergoing conformance review. Browser,
+  publishing, bootstrap, and migration work remains.
 - Updated: 2026-08-15
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap

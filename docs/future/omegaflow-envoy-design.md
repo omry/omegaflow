@@ -3,8 +3,9 @@
 ## Status
 
 - Approved direction with an implementation plan; the protocol, Bash adapter,
-  and production Envoy are implemented pending final review, while runtime
-  materialization and controller integration have not started
+  production Envoy, and runtime materialization are implemented. Controller,
+  public Reploy lifecycle, and terminal-runner integration are implemented and
+  undergoing conformance review before the remaining browser and cutover work.
 - Updated: 2026-08-15
 - Initial scope: one persistent Bash backend for terminal execution and
   structured telemetry in Reploy-backed OmegaFlow recordings
