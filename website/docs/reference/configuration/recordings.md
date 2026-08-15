@@ -99,6 +99,10 @@ provide the same name in the parent process environment. `env_file` remains an
 explicit advanced override and is loaded without modifying the process
 environment.
 
+The initial Reploy capture path rejects enabled narration with authored takes
+before staging. Supplying narration credentials or prebuilt narration artifacts
+to the protected controller requires a separate approved delegation contract.
+
 ## Recording Frontmatter
 
 Each `<id>/index.md` recording starts with YAML frontmatter:
@@ -449,6 +453,7 @@ class BrowserRedactionConfig:
 class BrowserRecordingConfig:
     profile: str = "desktop-v1"
     base_url: str | None = None
+    endpoint_id: str | None = None
     viewport: BrowserViewportConfig | None = None
     context: BrowserContextConfig | None = None
     auth: BrowserAuthConfig = field(default_factory=BrowserAuthConfig)

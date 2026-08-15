@@ -5,18 +5,22 @@ import json
 import os
 import stat
 import textwrap
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from omegaflow.controller_run import (
     ControllerAsset,
+    ControllerContext,
     ControllerRunError,
     ControllerRunManifest,
+    capture_controller_recording,
     load_controller_manifest,
     run_controller_session,
     write_controller_manifest,
 )
+from omegaflow.reploy_protocol import Opened, ReployEndpoint
 
 
 def _manifest(*, assets: tuple[ControllerAsset, ...] = ()) -> ControllerRunManifest:
@@ -126,6 +130,175 @@ def test_controller_manifest_rejects_symlinked_assets_root(tmp_path: Path) -> No
 
     with pytest.raises(ControllerRunError, match="assets root"):
         load_controller_manifest(path)
+
+
+def _browser_manifest(*, url: str = "/demo") -> ControllerRunManifest:
+    return ControllerRunManifest(
+        recording_id="browser-demo",
+        recording_plan={
+            "id": "browser-demo",
+            "browser": {"endpoint_id": "web"},
+            "beats": [
+                {
+                    "id": "terminal",
+                    "actions": [{"id": "prepare", "run": "printf ready"}],
+                },
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [{"id": "open", "open_page": {"url": url}}],
+                }
+            ],
+        },
+        columns=80,
+        rows=24,
+        terminal_endpoint_id="omegaflow-terminal",
+        telemetry_endpoint_id="omegaflow-telemetry",
+        application_endpoint_ids=("web",),
+        assets=(),
+    )
+
+
+def _browser_context(tmp_path: Path, *, url: str = "/demo") -> ControllerContext:
+    return ControllerContext(
+        _browser_manifest(url=url),
+        Opened(
+            operations=("complete", "terminate"),
+            endpoints=(
+                ReployEndpoint("omegaflow-terminal", "tcp", "workload", 47001),
+                ReployEndpoint("omegaflow-telemetry", "tcp", "workload", 47002),
+                ReployEndpoint("web", "http", "workload", 8080),
+            ),
+            columns=80,
+            rows=24,
+            output_finalization_timeout_milliseconds=30_000,
+        ),
+        tmp_path / "output",
+    )
+
+
+def test_controller_manifest_requires_selected_browser_endpoint(tmp_path: Path) -> None:
+    path = tmp_path / "run-manifest.json"
+    write_controller_manifest(
+        path,
+        replace(_browser_manifest(), application_endpoint_ids=()),
+    )
+
+    with pytest.raises(ControllerRunError, match="browser.endpoint_id"):
+        load_controller_manifest(path)
+
+
+def test_controller_browser_uses_granted_endpoint_and_finalizes_before_return(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import omegaflow.browser_capture as browser_capture
+    import omegaflow.presentation_build as presentation_build
+
+    observed: dict[str, object] = {}
+    order: list[str] = []
+
+    class FakeBrowserRunner:
+        def __init__(self, browser_config: object, **kwargs: object) -> None:
+            observed["browser_config"] = browser_config
+            observed["browser_kwargs"] = kwargs
+
+    def capture(*_args: object, **kwargs: object) -> None:
+        order.append("capture")
+        terminal_factory = kwargs["terminal_runner_factory"]
+        factory = kwargs["browser_runner_factory"]
+        assert callable(terminal_factory)
+        assert callable(factory)
+        observed["terminal_runner"] = terminal_factory(None)
+        factory()
+
+    monkeypatch.setattr(browser_capture, "PersistentBrowserRunner", FakeBrowserRunner)
+    monkeypatch.setattr(presentation_build, "capture_recording", capture)
+    monkeypatch.setattr(
+        presentation_build,
+        "prepare_narration_audio",
+        lambda *_args, **_kwargs: order.append("narration") or "audio",
+    )
+    monkeypatch.setattr(
+        presentation_build,
+        "compile_presentation_bundle",
+        lambda *_args, **kwargs: (
+            order.append("compile")
+            or observed.setdefault("audio_artifacts", kwargs["audio_artifacts"])
+        ),
+    )
+
+    capture_controller_recording(_browser_context(tmp_path))
+
+    assert order == ["capture", "narration", "compile"]
+    browser_config = observed["browser_config"]
+    assert isinstance(browser_config, dict)
+    assert browser_config["base_url"] == "http://workload:8080/"
+    assert "endpoint_id" not in browser_config
+    assert type(observed["terminal_runner"]).__name__ == "EnvoyPersistentTerminalRunner"
+    assert observed["browser_kwargs"] == {"headless": True}
+    assert observed["audio_artifacts"] == "audio"
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://substituted.invalid/demo",
+        "//substituted.invalid/demo",
+        r"\\substituted.invalid\demo",
+    ),
+)
+def test_controller_browser_rejects_navigation_substitution(
+    tmp_path: Path, url: str
+) -> None:
+    with pytest.raises(ControllerRunError, match="must be relative"):
+        capture_controller_recording(_browser_context(tmp_path, url=url))
+
+
+def test_controller_browser_rejects_malformed_granted_host(tmp_path: Path) -> None:
+    context = ControllerContext(
+        _browser_manifest(),
+        replace(
+            _browser_context(tmp_path).opened,
+            endpoints=(ReployEndpoint("web", "http", "workload/other", 8080),),
+        ),
+        tmp_path / "output",
+    )
+
+    with pytest.raises(ControllerRunError, match="invalid host"):
+        capture_controller_recording(context)
+
+
+def test_controller_rejects_enabled_narration_without_delegation(
+    tmp_path: Path,
+) -> None:
+    manifest = replace(
+        _manifest(),
+        recording_id="narrated-demo",
+        recording_plan={
+            "id": "narrated-demo",
+            "audio": {"enabled": True},
+            "beats": [
+                {
+                    "id": "intro",
+                    "narration": "Introduce the demo.",
+                    "actions": [{"run": "true"}],
+                }
+            ],
+        },
+        application_endpoint_ids=(),
+    )
+    context = ControllerContext(
+        manifest,
+        replace(_browser_context(tmp_path).opened, endpoints=()),
+        tmp_path / "output",
+    )
+    manifest_path = tmp_path / "run-manifest.json"
+    write_controller_manifest(manifest_path, manifest)
+
+    with pytest.raises(ControllerRunError, match="does not accept enabled narration"):
+        load_controller_manifest(manifest_path)
+    with pytest.raises(ControllerRunError, match="does not accept enabled narration"):
+        capture_controller_recording(context)
 
 
 def _fake_session_client(tmp_path: Path) -> Path:
