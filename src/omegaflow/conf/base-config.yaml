@@ -1,5 +1,8 @@
 defaults:
   - studio_schema
+  - reploy/controller@reploy.controller: omegaflow
+  - reploy/envoy@reploy.workload: default
+  - reploy/app@reploy.workload: internal-demo
   - _self_
   - optional /.omegaflow@_here_: config
   - override hydra/job_logging: disabled
@@ -10,7 +13,7 @@ hydra:
     - file://.
   output_subdir: null
   run:
-    dir: ${studio_run_dir:${project_root},${studio.data_dir},${action},${step},${dry_run},${recording},${now:%Y%m%d-%H%M%S}}
+    dir: ${studio.run_dir}
   job:
     name: omegaflow
     chdir: false
