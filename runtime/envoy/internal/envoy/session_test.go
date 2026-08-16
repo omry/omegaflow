@@ -32,6 +32,15 @@ type testSession struct {
 	done      <-chan error
 }
 
+func testExecutionPolicy() protocol.ExecutionPolicy {
+	return protocol.ExecutionPolicy{
+		ExecutionShape: protocol.ExecutionPTY,
+		Timing:         protocol.TimingRealtime,
+		Publication:    protocol.PublicationReal,
+		Observation:    protocol.ObservationShared,
+	}
+}
+
 func startTestSession(t *testing.T) *testSession {
 	t.Helper()
 	awshPath, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "docs", "future", "prototype", "awsh", "awsh"))
@@ -215,10 +224,11 @@ func (session *testSession) event() any {
 
 func (session *testSession) execute(operationID, source string) (protocol.OperationStarted, protocol.OperationCompleted) {
 	session.t.Helper()
-	session.send(session.client.Execute(operationID, source))
-	started, ok := session.event().(protocol.OperationStarted)
+	session.send(session.client.Execute(operationID, source, testExecutionPolicy()))
+	first := session.event()
+	started, ok := first.(protocol.OperationStarted)
 	if !ok {
-		session.t.Fatal("execute did not emit operation_started")
+		session.t.Fatalf("execute did not emit operation_started: %#v", first)
 	}
 	completed, ok := session.event().(protocol.OperationCompleted)
 	if !ok {
@@ -336,7 +346,7 @@ func TestOutputBarrierWaitsForInFlightBytesAfterPTYClose(t *testing.T) {
 func TestEnvoySupportsInteractiveInputGatesAndResize(t *testing.T) {
 	session := startTestSession(t)
 
-	session.send(session.client.Execute("interactive", "IFS= read -r value; printf 'read:%s' \"$value\""))
+	session.send(session.client.Execute("interactive", "IFS= read -r value; printf 'read:%s' \"$value\"", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("interactive operation did not start")
 	}
@@ -351,7 +361,7 @@ func TestEnvoySupportsInteractiveInputGatesAndResize(t *testing.T) {
 		t.Fatalf("interactive output missing from %q", output)
 	}
 
-	session.send(session.client.Execute("gate", "printf before; awsh_gate gate-1 || return $?; printf after"))
+	session.send(session.client.Execute("gate", "printf before; awsh_gate gate-1 || return $?; printf after", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("gated operation did not start")
 	}
@@ -385,7 +395,7 @@ func TestEnvoySupportsInteractiveInputGatesAndResize(t *testing.T) {
 
 func TestEnvoyCancelsForegroundProcessAndKeepsShell(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("slow", "sleep 30; printf should-not-run"))
+	session.send(session.client.Execute("slow", "sleep 30; printf should-not-run", testExecutionPolicy()))
 	started, ok := session.event().(protocol.OperationStarted)
 	if !ok {
 		t.Fatal("slow operation did not start")
@@ -408,7 +418,7 @@ func TestEnvoyCancelsForegroundProcessAndKeepsShell(t *testing.T) {
 
 func TestEnvoyCancelsOperationWaitingAtGate(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("gated-cancel", "printf before; awsh_gate stop || return $?; printf after"))
+	session.send(session.client.Execute("gated-cancel", "printf before; awsh_gate stop || return $?; printf after", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("gated cancellation operation did not start")
 	}
@@ -433,7 +443,7 @@ func TestEnvoyCancelsOperationWaitingAtGate(t *testing.T) {
 
 func TestEnvoyClosesCancelRaceWhenOperationEntersGate(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("gate-race", "awsh_gate immediate || return $?; sleep 30; printf after"))
+	session.send(session.client.Execute("gate-race", "awsh_gate immediate || return $?; sleep 30; printf after", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("gate-race operation did not start")
 	}
@@ -452,7 +462,7 @@ func TestEnvoyClosesCancelRaceWhenOperationEntersGate(t *testing.T) {
 
 func TestEnvoyClosesCancelRaceWhileGateContinues(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("continue-race", "awsh_gate pause || return $?; sleep 30; printf after"))
+	session.send(session.client.Execute("continue-race", "awsh_gate pause || return $?; sleep 30; printf after", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("continue-race operation did not start")
 	}
@@ -474,7 +484,7 @@ func TestEnvoyClosesCancelRaceWhileGateContinues(t *testing.T) {
 
 func TestEnvoyCancellationTimeoutEmitsOperationFailure(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("ignore-int", "trap '' INT; printf armed; sleep 30"))
+	session.send(session.client.Execute("ignore-int", "trap '' INT; printf armed; sleep 30", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("ignore-int operation did not start")
 	}
@@ -564,7 +574,7 @@ for target in /proc/self/fd/*; do readlink "$target" 2>/dev/null || :; done`
 
 func TestEnvoyClassifiesShellExitAndRetainsDiagnostic(t *testing.T) {
 	session := startTestSession(t)
-	session.send(session.client.Execute("exit-shell", "exit 7"))
+	session.send(session.client.Execute("exit-shell", "exit 7", testExecutionPolicy()))
 	if _, ok := session.event().(protocol.OperationStarted); !ok {
 		t.Fatal("shell-exit operation did not start")
 	}

@@ -432,7 +432,12 @@ func (s *session) handleController(message any) error {
 	switch value := message.(type) {
 	case protocol.Execute:
 		s.operationID = value.OperationID
-		return s.writeAwsh(protocol.AwshExecute{OperationID: value.OperationID, Source: value.Source})
+		return s.writeAwsh(protocol.AwshExecute{
+			OperationID:    value.OperationID,
+			ExecutionShape: value.ExecutionShape,
+			Observation:    value.Observation,
+			Source:         value.Source,
+		})
 	case protocol.Continue:
 		return s.writeAwsh(protocol.AwshContinue{OperationID: value.OperationID, GateID: value.GateID})
 	case protocol.Cancel:

@@ -356,12 +356,23 @@ while true; do
   case "$awsh_request_kind" in
     execute)
       awsh_operation_id=''
+      awsh_execution_shape=''
+      awsh_observation=''
       awsh_operation=''
-      if ! awsh_read_field awsh_operation_id || ! awsh_read_field awsh_operation; then
-        awsh_protocol_error truncated-execute 'execute request requires id and operation fields'
+      if ! awsh_read_field awsh_operation_id \
+        || ! awsh_read_field awsh_execution_shape \
+        || ! awsh_read_field awsh_observation \
+        || ! awsh_read_field awsh_operation; then
+        awsh_protocol_error truncated-execute 'execute request requires id, shape, observation, and operation fields'
       fi
       if [[ ! $awsh_operation_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
         awsh_protocol_error invalid-operation-id "invalid operation id: $awsh_operation_id"
+      fi
+      if [[ $awsh_execution_shape != pty && $awsh_execution_shape != split ]]; then
+        awsh_protocol_error invalid-execution-shape "invalid execution shape: $awsh_execution_shape"
+      fi
+      if [[ $awsh_observation != shared && $awsh_observation != exclusive ]]; then
+        awsh_protocol_error invalid-observation "invalid observation mode: $awsh_observation"
       fi
 
       awsh_active_operation_id=$awsh_operation_id

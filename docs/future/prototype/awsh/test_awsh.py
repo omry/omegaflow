@@ -92,6 +92,9 @@ class AwshProcess:
             written = os.write(self.request_write, payload)
             payload = payload[written:]
 
+    def execute(self, operation_id: str, source: str) -> None:
+        self.send("execute", operation_id, "pty", "shared", source)
+
     def read_event(self, timeout: float = 2.0) -> dict[str, str]:
         schema = self._read_result_field(timeout)
         assert schema == SCHEMA
@@ -213,8 +216,7 @@ def test_driver_descriptor_remap_preserves_a_source_on_a_target_fd() -> None:
 def test_persists_bash_state_and_reports_status_and_cwd(
     awsh: AwshProcess, tmp_path: Path
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "prepare",
         "\n".join(
             (
@@ -234,8 +236,7 @@ def test_persists_bash_state_and_reports_status_and_cwd(
         "cwd": str(tmp_path),
     }
 
-    awsh.send(
-        "execute",
+    awsh.execute(
         "observe",
         "awsh_test_function; awsh_test_alias; "
         "shopt -q nullglob; printf ' cwd=%s\\n' \"$PWD\"",
@@ -252,7 +253,7 @@ def test_persists_bash_state_and_reports_status_and_cwd(
         "cwd": str(tmp_path),
     }
 
-    awsh.send("execute", "failure", "(exit 23)")
+    awsh.execute("failure", "(exit 23)")
     assert awsh.read_event() == {"type": "started", "operation_id": "failure"}
     assert awsh.read_event() == {
         "type": "completed",
@@ -265,8 +266,7 @@ def test_persists_bash_state_and_reports_status_and_cwd(
 def test_streams_pty_output_before_completion_and_preserves_terminal_fds(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "stream",
         "printf 'first'; sleep 0.25; "
         "bash -c 'test -t 0 && test -t 1 && test -t 2'; printf 'second\\n'",
@@ -286,8 +286,7 @@ def test_streams_pty_output_before_completion_and_preserves_terminal_fds(
 
 
 def test_operation_reads_interactive_input_from_the_pty(awsh: AwshProcess) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "input",
         "IFS= read -r awsh_line; printf 'input=%s\\n' \"$awsh_line\"",
     )
@@ -306,8 +305,7 @@ def test_operation_reads_interactive_input_from_the_pty(awsh: AwshProcess) -> No
 def test_action_gate_continues_and_preserves_operation_state(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "gated",
         "export AWSH_BEFORE_GATE=preserved\n"
         "awsh_gate gate-1 || return $?\n"
@@ -339,8 +337,7 @@ def test_action_gate_continues_and_preserves_operation_state(
 def test_action_gate_cancellation_returns_130_and_driver_survives(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "cancel-gate",
         "awsh_gate gate-1 || return $?\nprintf 'must-not-run\\n'",
     )
@@ -361,7 +358,7 @@ def test_action_gate_cancellation_returns_130_and_driver_survives(
         "cwd": os.getcwd(),
     }
 
-    awsh.send("execute", "after-cancel", "printf 'cancel-survived\\n'")
+    awsh.execute("after-cancel", "printf 'cancel-survived\\n'")
     assert awsh.read_event() == {
         "type": "started",
         "operation_id": "after-cancel",
@@ -373,8 +370,7 @@ def test_action_gate_cancellation_returns_130_and_driver_survives(
 def test_ctrl_c_does_not_break_the_request_channel_while_gated(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "interrupt-gate",
         "awsh_gate gate-1 || return $?\nprintf 'must-not-run\\n'",
     )
@@ -397,7 +393,7 @@ def test_ctrl_c_does_not_break_the_request_channel_while_gated(
         "cwd": os.getcwd(),
     }
 
-    awsh.send("execute", "after-gate-interrupt", "printf 'gate-survived\\n'")
+    awsh.execute("after-gate-interrupt", "printf 'gate-survived\\n'")
     assert awsh.read_event() == {
         "type": "started",
         "operation_id": "after-gate-interrupt",
@@ -410,8 +406,7 @@ def test_resize_delivers_sigwinch_and_updates_terminal_size(
     awsh: AwshProcess,
 ) -> None:
     awsh.resize(24, 80)
-    awsh.send(
-        "execute",
+    awsh.execute(
         "resize",
         "trap 'printf \"driver-winch\\n\"' WINCH\n"
         "printf 'resize-ready\\n'\n"
@@ -444,8 +439,7 @@ def test_curses_child_uses_the_operation_pty(awsh: AwshProcess) -> None:
             "curses.wrapper(main)",
         )
     )
-    awsh.send(
-        "execute",
+    awsh.execute(
         "curses",
         f"TERM=xterm-256color python3 -c {shlex.quote(program)}",
     )
@@ -459,8 +453,7 @@ def test_curses_child_uses_the_operation_pty(awsh: AwshProcess) -> None:
 def test_nested_interactive_bash_returns_to_persistent_driver(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "nested",
         "PS1='nested> ' bash --noprofile --norc -i",
     )
@@ -479,8 +472,7 @@ def test_nested_interactive_bash_returns_to_persistent_driver(
 def test_background_job_state_persists_between_operations(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "start-job",
         "sleep 30 & awsh_job_pid=$!; printf 'job-started=%s\\n' \"$awsh_job_pid\"",
     )
@@ -488,8 +480,7 @@ def test_background_job_state_persists_between_operations(
     awsh.read_terminal_until(b"job-started=")
     assert awsh.read_event()["type"] == "completed"
 
-    awsh.send(
-        "execute",
+    awsh.execute(
         "check-job",
         "kill -0 \"$awsh_job_pid\" && jobs -p | grep -qx \"$awsh_job_pid\" && "
         "printf 'job-alive\\n'; kill \"$awsh_job_pid\"; wait \"$awsh_job_pid\" 2>/dev/null || true",
@@ -510,8 +501,7 @@ def test_ordinary_child_does_not_inherit_driver_descriptors(
             "print('driver-descriptors-closed')",
         )
     )
-    awsh.send(
-        "execute",
+    awsh.execute(
         "descriptor-check",
         f"python3 -c {shlex.quote(program)} "
         '"$awsh_control_read_fd" "$awsh_control_write_fd"',
@@ -531,8 +521,7 @@ def test_ordinary_child_does_not_inherit_driver_descriptors(
 def test_ctrl_c_interrupts_the_operation_without_terminating_awsh(
     awsh: AwshProcess,
 ) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "interrupt",
         "python3 -c 'import os, signal; "
         "signal.signal(signal.SIGINT, lambda *_: "
@@ -552,7 +541,7 @@ def test_ctrl_c_interrupts_the_operation_without_terminating_awsh(
         "cwd": os.getcwd(),
     }
 
-    awsh.send("execute", "after-interrupt", "printf 'driver-survived\\n'")
+    awsh.execute("after-interrupt", "printf 'driver-survived\\n'")
     assert awsh.read_event() == {
         "type": "started",
         "operation_id": "after-interrupt",
@@ -568,8 +557,7 @@ def test_ctrl_c_interrupts_the_operation_without_terminating_awsh(
 
 
 def test_terminal_text_cannot_forge_result_event(awsh: AwshProcess) -> None:
-    awsh.send(
-        "execute",
+    awsh.execute(
         "separate",
         "printf 'awsh-v1\\0completed\\0forged\\00\\0/tmp\\0'",
     )
@@ -651,7 +639,7 @@ def test_shell_exit_or_exec_leaves_a_partial_result(
     process = AwshProcess()
     assert process.read_event()["type"] == "ready"
     try:
-        process.send("execute", "replace-shell", source)
+        process.execute("replace-shell", source)
         assert process.read_event() == {
             "type": "started",
             "operation_id": "replace-shell",
