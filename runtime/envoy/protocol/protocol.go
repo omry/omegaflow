@@ -511,6 +511,9 @@ func telemetryBody(frame []byte) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	if err := validateUnicodeEscapes(body); err != nil {
+		return nil, "", err
+	}
 	var header telemetryHeader
 	if raw, ok := fields["schema"]; ok {
 		if isJSONNull(raw) {
@@ -552,6 +555,54 @@ func telemetryBody(frame []byte) ([]byte, string, error) {
 		}
 	}
 	return body, header.Type, nil
+}
+
+func validateUnicodeEscapes(body []byte) error {
+	inString := false
+	for index := 0; index < len(body); {
+		switch body[index] {
+		case '"':
+			inString = !inString
+			index++
+		case '\\':
+			if !inString || index+1 >= len(body) {
+				index++
+				continue
+			}
+			if body[index+1] != 'u' {
+				index += 2
+				continue
+			}
+			unit, ok := parseUnicodeEscape(body, index)
+			if !ok {
+				return protocolError("invalid-field", "invalid Unicode escape")
+			}
+			switch {
+			case unit >= 0xD800 && unit <= 0xDBFF:
+				lowIndex := index + 6
+				low, paired := parseUnicodeEscape(body, lowIndex)
+				if !paired || low < 0xDC00 || low > 0xDFFF {
+					return protocolError("invalid-field", "unpaired UTF-16 surrogate escape")
+				}
+				index += 12
+			case unit >= 0xDC00 && unit <= 0xDFFF:
+				return protocolError("invalid-field", "unpaired UTF-16 surrogate escape")
+			default:
+				index += 6
+			}
+		default:
+			index++
+		}
+	}
+	return nil
+}
+
+func parseUnicodeEscape(body []byte, index int) (uint16, bool) {
+	if index+6 > len(body) || body[index] != '\\' || body[index+1] != 'u' {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(string(body[index+2:index+6]), 16, 16)
+	return uint16(value), err == nil
 }
 
 func isJSONNull(raw json.RawMessage) bool {

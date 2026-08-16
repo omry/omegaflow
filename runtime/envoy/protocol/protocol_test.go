@@ -224,6 +224,8 @@ func TestMalformedTelemetryFailsClosed(t *testing.T) {
 		{"schema", []byte(`{"schema":"other","type":"hello","seq":1,"session_id":"s"}` + "\n"), "unsupported-schema"},
 		{"type", []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"other","seq":1}` + "\n"), "unsupported-message"},
 		{"field-type", []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"hello","seq":"one","session_id":"s"}` + "\n"), "invalid-field"},
+		{"lone-high-surrogate", []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":1,"operation_id":"op","source":"\ud800","execution_shape":"split","timing":"presentation","publication":"real","observation":"shared"}` + "\n"), "invalid-field"},
+		{"lone-low-surrogate", []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":1,"operation_id":"op","source":"\udc00","execution_shape":"split","timing":"presentation","publication":"real","observation":"shared"}` + "\n"), "invalid-field"},
 		{"trailing", []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"hello","seq":1,"session_id":"s"} {}` + "\n"), "invalid-json"},
 	}
 	for _, test := range tests {
@@ -235,6 +237,28 @@ func TestMalformedTelemetryFailsClosed(t *testing.T) {
 			protocolErr, ok := err.(*Error)
 			if !ok || protocolErr.Code != test.code {
 				t.Fatalf("want %s, got %v", test.code, err)
+			}
+		})
+	}
+}
+
+func TestTelemetryUnicodeEscapePairsRemainExact(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{name: "surrogate-pair", source: `\ud83d\ude00`, want: "😀"},
+		{name: "escaped-literal", source: `\\ud800`, want: `\ud800`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			frame := []byte(`{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":1,"operation_id":"op","source":"` + test.source + `","execution_shape":"split","timing":"presentation","publication":"real","observation":"shared"}` + "\n")
+			message, err := DecodeController(frame)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := message.(Execute).Source; got != test.want {
+				t.Fatalf("source = %q, want %q", got, test.want)
 			}
 		})
 	}
