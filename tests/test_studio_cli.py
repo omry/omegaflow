@@ -101,6 +101,31 @@ def test_hydra_entrypoint_protects_reploy_controller(monkeypatch) -> None:
     assert observed == [True]
 
 
+def test_controller_run_dispatches_before_hydra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from omegaflow import controller_run
+
+    called: list[bool] = []
+    monkeypatch.setattr(sys, "argv", ["omegaflow", "controller-run"])
+    monkeypatch.setattr(
+        controller_run,
+        "controller_main",
+        lambda: called.append(True) or 0,
+    )
+    monkeypatch.setattr(
+        studio,
+        "hydra_main",
+        lambda: pytest.fail("controller-run must bypass Hydra"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        studio.main()
+
+    assert exc_info.value.code == 0
+    assert called == [True]
+
+
 def test_version_is_available() -> None:
     assert __version__ == "0.9.0"
 
