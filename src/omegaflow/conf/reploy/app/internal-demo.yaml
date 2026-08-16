@@ -1,0 +1,7 @@
+blueprint:
+  version: "${omegaflow_version:}"
+
+environment:
+  id: omegaflow-internal-demo
+  base:
+    image: debian:13

@@ -1,0 +1,45 @@
+blueprint:
+  schema: 1
+  version: "${omegaflow_version:}"
+  requires_reploy: ">=0.7.0.dev1"
+  compatibility:
+    platforms: [linux/amd64, linux/arm64]
+
+environment:
+  id: omegaflow-controller
+  base:
+    image: python:3.12-slim
+  applications:
+    controller:
+      packages:
+        python:
+          requirements: ["omegaflow==${omegaflow_version:}"]
+      executables:
+        omegaflow:
+          source: python
+          binary: omegaflow
+  allow_concurrent: "no"
+  runtime:
+    user: omegaflow
+    network:
+      public: deny
+      local: deny
+      ambiguous: require-both
+  mounts:
+    omegaflow_input:
+      target: /omegaflow-input
+      writable: false
+      update_policy: unmanaged
+  commands:
+    omegaflow_controller_run:
+      executable: controller.omegaflow
+      trigger: [controller-run]
+      native_command: true
+      argv: [controller-run]
+
+docker:
+  mounts:
+    omegaflow_input:
+      extends: environment.mounts.omegaflow_input
+      mode: bind
+      source: ${studio.run_dir}/reploy/input/controller
