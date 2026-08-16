@@ -3,6 +3,8 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
+import noxfile
+
 from tools.release import (
     ReleaseMetadata,
     ReleaseValidationError,
@@ -168,3 +170,19 @@ def test_pypi_guard_rejects_inconclusive_check() -> None:
 
     with pytest.raises(ReleaseValidationError, match="could not check"):
         pypi_version_exists("omegaflow", "0.9.0", opener=unavailable)
+
+
+def test_runtime_cleanup_preserves_an_existing_sdist_revision(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    revision = tmp_path / noxfile.SOURCE_REVISION_PATH
+    revision.parent.mkdir(parents=True)
+    revision.write_text("a" * 40 + "\n", encoding="utf-8")
+
+    noxfile.clean_generated_runtime(preserve_source_revision=True)
+    assert revision.read_text(encoding="utf-8") == "a" * 40 + "\n"
+
+    noxfile.clean_generated_runtime()
+    assert not revision.exists()
