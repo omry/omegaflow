@@ -2,8 +2,8 @@
 
 ## Status
 
-- Approved environment direction; terminal implementation delegated to the
-  Envoy design
+- Approved environment and Hydra blueprint contract; terminal implementation
+  delegated to the Envoy design
 - Updated: 2026-08-16
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
@@ -46,10 +46,10 @@ The design separates two environments:
    packages, services, and state that appear in the recording. The project owns
    this Reploy blueprint as a Hydra config-group entry.
 
-OmegaFlow composes an application blueprint with Hydra, resolves OmegaConf
-interpolations, materializes the resulting YAML, and hands it to Reploy.
-Reploy remains authoritative for blueprint validation, Reploy interpolation,
-package resolution, environment construction, and execution.
+Hydra produces complete typed controller and workload blueprint objects,
+OmegaFlow materializes their native YAML, and Reploy remains authoritative for
+blueprint semantics, Reploy interpolation, package resolution, environment
+construction, and execution.
 
 For a recording, host OmegaFlow prepares distinct toolchain-controller and
 recorded-workload deployments, then invokes the public
@@ -294,7 +294,12 @@ still active; a terminal result observed first or at handoff fails the capture.
 It then applies the operation's compiled lifetime policy through normal Envoy
 cancellation and output-finalization rules. The handoff consumes no workload
 files, OSC markers, terminal text, or workload-originated navigation telemetry.
-Dynamic workload-selected navigation remains deferred.
+Playwright, browser checks, endpoint selection, and navigation intent remain in
+the controller. A generic Envoy action gate is used only when a running shell
+operation deliberately pauses for a controller action already present in the
+recording plan. Envoy protocol v1 carries no browser-specific message or
+workload-originated navigation intent. Dynamic workload-selected navigation
+remains deferred.
 
 ## Reploy as the Standard Execution Substrate
 
@@ -321,10 +326,10 @@ implementation detail of the OmegaFlow release:
 - fonts and graphical runtime libraries
 - optional narration clients and timing tools
 
-The blueprint is logically hard-coded and not selected through the project's
-Hydra config. It should be stored as readable packaged data rather than as a
-large Python string. OmegaFlow versions and tests it with the release that
-uses it.
+The blueprint is an OmegaFlow-shipped Hydra configuration and is not selected
+or extended through the project's config. It should be stored as readable
+packaged data rather than as a large Python string. OmegaFlow versions and
+tests it with the release that uses it.
 
 The blueprint declares a non-root runtime and one native internal controller
 command. That command is an implementation surface between host and controller
@@ -411,92 +416,127 @@ The existing local requirements are inventoried in
 input to the toolchain blueprint rather than end-user installation
 documentation once the Reploy path is ready.
 
-## Application Blueprints as Hydra Configs
+## Reploy Blueprints as Hydra Structured Configs
 
-Application blueprints use a Hydra config group, provisionally
-`reploy/app`. A project can define one blueprint shared by all recordings or
-several blueprints for distinct recorded applications or environment variants.
+Hydra produces the complete application configuration that OmegaFlow consumes.
+Its final `reploy` node contains two immediately usable native Reploy blueprint
+objects:
 
-An entry is a native Reploy document packaged under a dedicated OmegaFlow
-configuration node:
-
-```yaml
-# recording-dir/reploy/app/arbiter.yaml
-# @package reploy_blueprint
-
-blueprint:
-  schema: 1
-  version: 0.1.0
-  requires_reploy: ">=<supported-version>"
-  compatibility:
-    platforms: [linux/amd64, linux/arm64]
-
-environment:
-  id: arbiter-recording
-  base:
-    image: ubuntu:24.04
-  applications:
-    arbiter:
-      packages:
-        os:
-          - git
-          - make
-        python:
-          requirements:
-            - pytest
-
-docker: {}
+```text
+reploy.controller  # OmegaFlow-owned and read-only after composition
+reploy.workload    # Envoy defaults composed with the selected application
 ```
 
-The placeholder version and base image above are illustrative, not decisions.
-The blueprint contents must follow the Reploy schema supported by the OmegaFlow
-release. The selected environment must contain Bash for OmegaFlow's terminal
-adapter. During preparation, OmegaFlow adds the read-only
-`/omegaflow-runtime` mount and the two private Envoy endpoints without making
-those implementation details part of the project dependency schema. Browser
-recordings declare named workload endpoints; OmegaFlow passes only the endpoint
-IDs required by the recording to `reploy controlled-session run`.
+Both objects use the same plain Python dataclass model of the complete public
+Reploy blueprint syntax supported by the OmegaFlow release. The dataclasses
+have no Hydra dependency; Hydra's `defaults` list remains composition metadata
+outside the Reploy model. OmegaFlow performs structural type checking through
+OmegaConf. Reploy remains authoritative for blueprint semantics, platform
+support, package locking, backend rendering, preparation, and execution.
 
-The first implementation also follows Reploy v1's controlled-session
-limitations: Linux hosts using Docker, Linux `amd64` or `arm64` controller
-images, one attachment per session, no reconnect, and no controller or workload
-deployment with a configured private environment. Unsupported selections fail
-before capture with a targeted capability error.
+The initial dataclasses live in OmegaFlow and are checked against Reploy's
+accepted blueprint fixtures. They are intended to move, without OmegaFlow
+fields, into a Reploy-owned and lockstep-versioned Python distribution such as
+`reploy-blueprint-schema` if the model proves reusable.
 
-Because the initial controlled-session contract rejects private environments,
-the first implementation cannot silently move secret-dependent application,
-narration, or publishing operations into either deployment. Those operations
-remain outside the controlled-session slice or fail with a targeted capability
-error until an approved secret-delegation design exists.
+### Controller blueprint
 
-A project or recording selects the config-group entry through Hydra. The exact
-selection surface remains to be settled; conceptually it is:
+OmegaFlow ships the complete controller configuration. It includes the exact
+OmegaFlow package and compatible Python, browser, media, identity, command, and
+read-only controller-input mount requirements. Application configuration never
+composes into this object. The resolved controller remains visible for
+inspection but OmegaFlow marks it read-only before application code receives
+the final config.
+
+The controller configuration uses ordinary Hydra defaults and OmegaConf
+interpolation. Values such as the running OmegaFlow version and run directory
+come from resolvers; there is no post-composition injection or mutation step.
+
+### Workload blueprint
+
+Application blueprints use the project-selectable `reploy/app` Hydra config
+group. A project can define one blueprint shared by all recordings or several
+for distinct applications or environment variants. Each entry supplies a
+native Reploy blueprint under `reploy.workload`.
+
+OmegaFlow's built-in Envoy config composes before the selected application into
+that same object. It supplies all Envoy defaults, including:
+
+- a Bash package and executable requirement;
+- a default non-root `omegaflow` identity and terminal-only command;
+- the read-only `/omegaflow-runtime` mount;
+- fixed endpoint IDs `omegaflow-terminal` and `omegaflow-telemetry`;
+- private TCP bind and publication defaults for both endpoints; and
+- the fixed Envoy runtime paths and command.
+
+The terminal endpoint defaults to scheme `tcp`, container port `47001`, Docker
+bind address `0.0.0.0`, and staging and deployed publication at
+`127.0.0.1:47001`. The telemetry endpoint uses the same values with port
+`47002`. These are ordinary typed config values: applications may override
+them, and the resolved values remain visible in the final blueprint.
+
+The application config may override normal Reploy fields, including identity,
+command, ports, mounts, packages, and endpoints. The config author owns the
+semantics of the composed blueprint; Hydra owns its structural type checking.
+The built-in defaults are meant to keep ordinary users from needing to know
+Envoy coordinates, while the final values remain visible in the retained
+blueprint.
+
+Hydra's normal mapping and list behavior applies. Envoy additions use reserved
+mapping entries and do not modify an application's existing package lists.
+Lists are not assumed to concatenate implicitly; an application override owns
+the resulting list.
+
+Conceptually, recording configuration selects the application as follows:
 
 ```yaml
 defaults:
-  - reploy/app: arbiter
+  - reploy/app: demo
 ```
 
-OmegaFlow then:
+Hydra composition, explicit overrides, and `${...}` interpolation produce both
+final blueprint dataclasses. Reploy's `{{ ... }}` expressions remain ordinary
+strings and are preserved for Reploy's later resolution. OmegaFlow does not
+merge, inject, repair, or reinterpret either blueprint after Hydra returns the
+final configuration.
 
-1. composes the selected Hydra configuration;
-2. resolves OmegaConf `${...}` interpolation;
-3. extracts the `reploy_blueprint` document;
-4. writes a generated YAML document for the run; and
-5. passes that document to Reploy.
+### Per-run materialization and evidence
 
-OmegaFlow must preserve Reploy's `{{ ... }}` expressions. Reploy owns their
-late resolution together with schema validation, base-image and platform
-resolution, package locking, backend rendering, and execution.
+Every recording serializes both resolved dataclasses as native Reploy YAML and
+retains them in its private Hydra run directory:
 
-OmegaFlow should not duplicate the complete Reploy schema merely to provide
-earlier validation. It may check that a blueprint was selected and materialized
-as a mapping, then surface Reploy's authoritative validation errors with
-project and recording context.
+```text
+<run>/reploy/blueprints/controller.yaml
+<run>/reploy/blueprints/workload.yaml
+<run>/reploy/deployments/controller/
+<run>/reploy/deployments/workload/
+<run>/reploy/controller-output/
+```
 
-Hydra list behavior must remain visible. Lists such as OS packages and Python
-requirements are not assumed to concatenate implicitly across configuration
-layers. A user who overrides such a list owns the composed value.
+The recording uses fresh prepared deployment directories. Reploy's normal
+provider and image caches supply reuse across runs. Blueprint composition is
+not cached separately. The controller output directory is a distinct sibling,
+starts empty when `reploy controlled-session run` begins, and never contains
+host input.
+
+The runtime and controller-input bind sources use run-directory interpolation,
+for example `${omegaflow_run_dir:}/reploy/input/runtime` and
+`${omegaflow_run_dir:}/reploy/input/controller`. Their container targets remain
+`/omegaflow-runtime` and `/omegaflow-input`. Exact resolved YAML and digests are
+private run evidence and are not published by default.
+
+The first conformance workload uses an internal OmegaFlow demo or tutorial with
+audio disabled, a local declared application endpoint, terminal-to-browser-to-
+terminal ordering, and writable shared state. It requires no external service,
+credential, or general project-discovery design.
+
+The first implementation follows Reploy v1's controlled-session limitations:
+Linux hosts using Docker, Linux `amd64` or `arm64` controller images, one
+attachment per session, no reconnect, and no controller or workload deployment
+with a configured private environment. Unsupported selections fail before
+capture with a targeted capability error. Secret-dependent application,
+narration, or publishing operations remain outside this slice until an approved
+secret-delegation design exists.
 
 ## Project and Recording Directory Layout
 
@@ -668,12 +708,12 @@ source input plus a disposable writable working copy.
 Each controlled session uses a fresh private host run directory as Reploy's
 controller `--output-dir`. Reploy exposes it only to the controller, through
 `REPLOY_OUTPUT_DIR`, and retains it across successful and failed teardown. The
-host-to-controller run-manifest mechanism must use a documented controller
-input owned by OmegaFlow; it must not depend on the workload filesystem or a
-Reploy-private socket. Selecting whether that manifest is staged with the
-controller deployment, passed through bounded command arguments, or placed in
-the fresh controller directory remains an implementation decision that the
-first adapter slice must settle and test.
+output directory starts empty and is never used for controller input. Host
+OmegaFlow supplies the bounded `omegaflow-controller-run-v1` manifest through a
+separate read-only, controller-only prepared-deployment mount at
+`/omegaflow-input/run-manifest.json`. `/omegaflow-input` and
+`REPLOY_OUTPUT_DIR` are distinct and non-overlapping; the manifest does not use
+the workload filesystem or a Reploy-private socket.
 
 The controller writes the private raw terminal-byte log, casts, action
 timelines, browser media, narration audio and timestamps, logs, and OmegaFlow
@@ -704,8 +744,8 @@ Failures should name the responsible layer:
 
 - Hydra composition and OmegaConf interpolation failures are OmegaFlow
   configuration errors.
-- Missing or malformed `reploy_blueprint` selection is an OmegaFlow
-  configuration error.
+- Missing or malformed typed `reploy.controller` or `reploy.workload` objects
+  are OmegaFlow configuration errors.
 - Blueprint, provider, platform, package, image, mount, and Reploy runtime
   failures retain Reploy's diagnostics.
 - Recording-plan, action, expectation, media, narration, and publishing
@@ -794,7 +834,8 @@ Reploy internals or opening a private session socket.
   fixed deadline.
 - Implement cancellation, startup-failure handling, output-finalization
   handling, `complete`, `terminated`, and `acknowledge-terminated`.
-- Settle and test the bounded host-to-controller run-manifest mechanism.
+- Validate the bounded `omegaflow-controller-run-v1` manifest from the
+  read-only `/omegaflow-input` mount before starting the session client.
 
 Completion gate: deterministic fake-client tests cover success, startup
 failure, cancellation, malformed input, output-finalization failure, and
@@ -802,9 +843,10 @@ acknowledgement failure.
 
 ### 3. Reploy-backed Envoy terminal adapter
 
-- Follow slices 1 through 5 of the Envoy design for its protocols, Bash adapter,
-  PTY/network supervisor, runtime mount, controller lifecycle, and
-  `PersistentTerminalRunner` boundary.
+- Follow Envoy design slices 1 through 3 for the local protocol, Bash adapter,
+  and PTY/network supervisor, then use this document's frozen Hydra blueprint
+  contract for slices 4 and 5 runtime materialization, controller lifecycle,
+  and the `PersistentTerminalRunner` boundary.
 - Preserve expectation checks, replacement output, produced-output metadata,
   resize, Ctrl-C, typing timing, continuation, checks, setup, cleanup, action
   gates, output ranges, and separate failure diagnostics without terminal
@@ -847,6 +889,10 @@ mount, and single-pane terminal gates all pass.
 - Resolve selected endpoint IDs from the trusted `opened` event.
 - Keep readiness conditions and path/navigation intent in the compiled
   controller plan; workload output cannot replace them.
+- Keep Playwright, browser checks, and path/navigation intent in controller
+  OmegaFlow.
+- Use operation completion for ordinary sequencing and generic Envoy action
+  gates only for planned controller work inside a running shell operation.
 - For a long-running terminal operation, wait for `operation_started`, probe
   the plan-selected granted endpoint from the controller while racing the typed
   operation result, run the planned browser actions only when readiness wins
@@ -882,7 +928,8 @@ partial artifacts and structured causes.
 ### 6. Host orchestration and blueprints
 
 - Package and version the internal non-root toolchain-controller blueprint.
-- Compose, materialize, stage, and build the selected application blueprint.
+- Compose and materialize the final typed controller and workload blueprints,
+  then stage and build their distinct deployments.
 - Prepare distinct controller and workload deployment directories and invoke
   `reploy controlled-session run` with only required endpoint grants.
 - Parse the exact host stdout object and preserve host Reploy stderr.
@@ -942,8 +989,9 @@ multi-pane coverage:
    operation completion or failure beats a stale endpoint readiness success.
 7. Preserve the complete private run, partial failure artifacts, controller
    session result, host result, diagnostics, and published bundle.
-8. Compose a selected `reploy/app` blueprint through Hydra and verify that
-   OmegaConf interpolation resolves while Reploy interpolation remains intact.
+8. Compose typed `reploy.controller` and `reploy.workload` objects, verify that
+   the controller is read-only, OmegaConf interpolation resolves, Reploy
+   interpolation remains intact, and exact native YAML is retained.
 9. Bootstrap both an in-project recording directory and a sibling recording
    directory; detect a synthetic Go/Python project without executing its code.
 10. Refresh discovery deterministically, produce a candidate and diff, and
@@ -957,11 +1005,13 @@ multi-pane coverage:
 1. Reploy is the target standard execution substrate, not a permanently
    optional peer backend.
 2. The toolchain and recorded application environments are distinct.
-3. OmegaFlow owns the stable internal toolchain blueprint.
-4. Project-owned application blueprints are native Reploy YAML managed through
-   a Hydra config group.
-5. OmegaFlow resolves Hydra configuration; Reploy remains authoritative for
-   Reploy semantics and environment realization.
+3. OmegaFlow owns the stable controller structured config, and the resolved
+   controller blueprint is visible but read-only.
+4. Project-owned application structured configs compose through `reploy/app`
+   into the final workload blueprint after OmegaFlow's Envoy defaults.
+5. Hydra produces complete typed controller and workload blueprints without
+   application-side mutation; Reploy remains authoritative for Reploy semantics
+   and environment realization.
 6. Full bootstrap runs from the project root.
 7. `.omegaflow` always belongs to the project root.
 8. The recording directory may be outside the project root and is linked
@@ -982,7 +1032,8 @@ multi-pane coverage:
 15. The first implementation uses one Reploy bootstrap attachment and supports
     one Envoy-owned persistent terminal pane plus browser capture. Shared-state
     multi-terminal-pane support is deferred.
-16. Reploy is distributed as an OmegaFlow Python dependency; Docker is the only
+16. OmegaFlow declares a compatible Reploy Python dependency and normal package
+    resolution installs it; OmegaFlow does not vendor Reploy. Docker is the only
     normal external host dependency.
 17. Host recording remains supported until a complete Reploy-nesting solution
     covers recordings of Reploy and Reploy-backed tools. Its backend UX and any
@@ -992,26 +1043,20 @@ multi-pane coverage:
 ## Open Questions
 
 1. Which Debian or Ubuntu image and release should bootstrap select by default?
-2. What are the final config-group package name and blueprint-selection
-   surface?
-3. What are the final CLI names for the recording-directory override and
+2. What are the final CLI names for the recording-directory override and
    blueprint refresh operation?
-4. How does host OmegaFlow pass the bounded per-run recording manifest into the
-   prepared controller without creating an undeclared host channel?
-5. How is project source transferred or mounted, and when is a writable copy
+3. How is project source transferred or mounted, and when is a writable copy
    created?
-6. Which caches are shared across recordings, and what inputs define safe
+4. Which caches are shared across recordings, and what inputs define safe
    reuse?
-7. Which project detectors are included in the first release?
-8. How should toolchain selection work for a facet that lacks a first-class
+5. Which project detectors are included in the first release?
+6. How should toolchain selection work for a facet that lacks a first-class
    Reploy provider?
-9. Which Reploy operation validates a composed blueprint without performing an
-   unnecessary build?
-10. What nesting capability and migration evidence would allow the native local
-    recording path to leave the supported product surface?
-11. What topology will eventually support multiple terminal panes that share
-    one recorded application state without weakening the persistent-shell and
-    output-ordering contracts?
-12. Which secret-dependent narration, application, and publishing operations
-    remain host-side or deferred until controlled sessions support an approved
-    secret-delegation boundary?
+7. What nesting capability and migration evidence would allow the native local
+   recording path to leave the supported product surface?
+8. What topology will eventually support multiple terminal panes that share
+   one recorded application state without weakening the persistent-shell and
+   output-ordering contracts?
+9. Which secret-dependent narration, application, and publishing operations
+   remain host-side or deferred until controlled sessions support an approved
+   secret-delegation boundary?
