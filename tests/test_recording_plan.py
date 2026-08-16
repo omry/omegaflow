@@ -49,6 +49,7 @@ from omegaflow.recording_plan import (
     TerminalPaneRecordingPlan,
     TextHighlightEffectPlan,
     TextHighlightTargetPlan,
+    declared_recording_source_inputs,
     normalize_recording_plan,
     terminal_action_id,
     validate_recording_modalities,
@@ -69,6 +70,30 @@ from omegaflow.studio_config import (
     RecordingSpec,
     USER_RECORDING_YAML_SCHEMAS,
 )
+
+
+def test_declared_recording_source_inputs_ignores_producer_references() -> None:
+    assert declared_recording_source_inputs(
+        {
+            "setup": [
+                {
+                    "id": "prepare",
+                    "run": "true",
+                    "inputs": ["settings.txt", {"output": "earlier.result"}],
+                }
+            ],
+            "beats": [
+                {
+                    "actions": [
+                        {
+                            "run": "true",
+                            "inputs": ["project://theme", {"output": "prepare.result"}],
+                        }
+                    ]
+                }
+            ],
+        }
+    ) == ("settings.txt", "project://theme")
 
 
 def browser_spec() -> dict:
