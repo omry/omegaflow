@@ -625,6 +625,36 @@ def test_eof_before_shutdown_is_a_protocol_failure() -> None:
 
 
 @pytest.mark.parametrize(
+    ("execution_shape", "observation", "expected_code"),
+    [
+        ("split", "shared", "unsupported-execution-shape"),
+        ("pty", "exclusive", "unsupported-observation"),
+    ],
+)
+def test_rejects_unsupported_execution_policy(
+    execution_shape: str,
+    observation: str,
+    expected_code: str,
+) -> None:
+    process = AwshProcess()
+    assert process.read_event()["type"] == "ready"
+    try:
+        process.send(
+            "execute",
+            "unsupported-policy",
+            execution_shape,
+            observation,
+            "true",
+        )
+        event = process.read_event()
+        assert event["type"] == "protocol_error"
+        assert event["code"] == expected_code
+        assert process.wait() == 64
+    finally:
+        process.close()
+
+
+@pytest.mark.parametrize(
     ("source", "expected_status", "expected_output"),
     [
         ("exit 23", 23, None),

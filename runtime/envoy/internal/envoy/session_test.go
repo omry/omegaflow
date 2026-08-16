@@ -593,6 +593,54 @@ func TestEnvoyClassifiesShellExitAndRetainsDiagnostic(t *testing.T) {
 	}
 }
 
+func TestEnvoyRejectsUnsupportedExecutionPolicies(t *testing.T) {
+	tests := []struct {
+		name   string
+		policy protocol.ExecutionPolicy
+		code   string
+	}{
+		{
+			name: "split execution",
+			policy: protocol.ExecutionPolicy{
+				ExecutionShape: protocol.ExecutionSplit,
+				Timing:         protocol.TimingPresentation,
+				Publication:    protocol.PublicationReal,
+				Observation:    protocol.ObservationShared,
+			},
+			code: "unsupported-execution-shape",
+		},
+		{
+			name: "exclusive observation",
+			policy: protocol.ExecutionPolicy{
+				ExecutionShape: protocol.ExecutionPTY,
+				Timing:         protocol.TimingRealtime,
+				Publication:    protocol.PublicationReal,
+				Observation:    protocol.ObservationExclusive,
+			},
+			code: "unsupported-observation",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session := startTestSession(t)
+			session.send(session.client.Execute("unsupported-policy", "true", test.policy))
+			diagnostic, ok := session.event().(protocol.Diagnostic)
+			if !ok || diagnostic.Code != test.code || diagnostic.Severity != "fatal" {
+				t.Fatalf("unexpected policy diagnostic: %#v", diagnostic)
+			}
+			select {
+			case err := <-session.done:
+				failure, ok := err.(*Failure)
+				if !ok || failure.Class != FailureProtocol || failure.Code != test.code {
+					t.Fatalf("unexpected policy failure: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Envoy did not reject unsupported execution policy")
+			}
+		})
+	}
+}
+
 func TestEnvoyFailsClosedOnMalformedTelemetry(t *testing.T) {
 	awshPath, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "docs", "future", "prototype", "awsh", "awsh"))
 	if err != nil {

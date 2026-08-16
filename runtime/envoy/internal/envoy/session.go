@@ -431,6 +431,20 @@ func (s *session) handleController(message any) error {
 	}
 	switch value := message.(type) {
 	case protocol.Execute:
+		if value.ExecutionShape != protocol.ExecutionPTY {
+			return fail(
+				FailureProtocol,
+				"unsupported-execution-shape",
+				fmt.Errorf("execution shape %q is not implemented", value.ExecutionShape),
+			)
+		}
+		if value.Observation != protocol.ObservationShared {
+			return fail(
+				FailureProtocol,
+				"unsupported-observation",
+				fmt.Errorf("observation mode %q is not implemented", value.Observation),
+			)
+		}
 		s.operationID = value.OperationID
 		return s.writeAwsh(protocol.AwshExecute{
 			OperationID:    value.OperationID,

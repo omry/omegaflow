@@ -368,12 +368,16 @@ while true; do
       if [[ ! $awsh_operation_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
         awsh_protocol_error invalid-operation-id "invalid operation id: $awsh_operation_id"
       fi
-      if [[ $awsh_execution_shape != pty && $awsh_execution_shape != split ]]; then
-        awsh_protocol_error invalid-execution-shape "invalid execution shape: $awsh_execution_shape"
-      fi
-      if [[ $awsh_observation != shared && $awsh_observation != exclusive ]]; then
-        awsh_protocol_error invalid-observation "invalid observation mode: $awsh_observation"
-      fi
+      case "$awsh_execution_shape" in
+        pty) ;;
+        split) awsh_protocol_error unsupported-execution-shape 'split execution is not implemented' ;;
+        *) awsh_protocol_error invalid-execution-shape "invalid execution shape: $awsh_execution_shape" ;;
+      esac
+      case "$awsh_observation" in
+        shared) ;;
+        exclusive) awsh_protocol_error unsupported-observation 'exclusive observation is not implemented' ;;
+        *) awsh_protocol_error invalid-observation "invalid observation mode: $awsh_observation" ;;
+      esac
 
       awsh_active_operation_id=$awsh_operation_id
       awsh_cancel_reason=''
