@@ -45,6 +45,7 @@ from .capture import (
     CapturePaneStreamError,
     CaptureProgressCallback,
     CaptureResult,
+    CaptureRunner,
 )
 from .presentation import (
     serialize_presentation_manifest,
@@ -607,6 +608,7 @@ def capture_recording(
     *,
     headed: bool = False,
     on_progress: CaptureProgressCallback | None = None,
+    terminal_runner_factory: Callable[[str | None], CaptureRunner] | None = None,
 ) -> CaptureResult:
     """Capture every beat in one shared environment with failure diagnostics."""
 
@@ -689,7 +691,9 @@ def capture_recording(
         if pane.kind is PaneKind.terminal and pane.window_size is not None
     }
 
-    def terminal_runner(pane_id: str | None = None) -> PersistentTerminalRunner:
+    def terminal_runner(pane_id: str | None = None) -> CaptureRunner:
+        if terminal_runner_factory is not None:
+            return terminal_runner_factory(pane_id)
         return PersistentTerminalRunner(
             title=title,
             window_size=terminal_window_sizes.get(pane_id, window_size),
