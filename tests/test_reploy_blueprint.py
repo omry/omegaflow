@@ -22,6 +22,18 @@ def test_hydra_composes_complete_controller_and_workload_blueprints() -> None:
     config = compose_studio_hydra_config(None)
 
     assert config.reploy.controller.environment.id == "omegaflow-controller"
+    assert (
+        config.reploy.controller.environment.base.image
+        == "mcr.microsoft.com/playwright/python:v1.61.0-noble"
+    )
+    assert (
+        config.reploy.controller.environment.base.exports.python.executable
+        == "/usr/bin/python3"
+    )
+    assert list(config.reploy.controller.environment.packages.os) == ["ffmpeg"]
+    assert list(
+        config.reploy.controller.environment.applications.controller.packages.python.requirements
+    ) == ["omegaflow[browser]==0.9.0"]
     assert OmegaConf.is_readonly(config.reploy.controller)
     assert config.reploy.workload.environment.id == "omegaflow-internal-demo"
     assert config.reploy.workload.environment.base.image == "debian:13"

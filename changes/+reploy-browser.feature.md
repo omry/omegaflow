@@ -1,0 +1,1 @@
+Drive controller-owned browser capture through a plan-selected Reploy endpoint and a pinned browser/media controller runtime, reject unsupported enabled narration, browser authentication inputs, and path-based recording inputs before staging, and finalize the run-local presentation candidate before completing the controlled session.
