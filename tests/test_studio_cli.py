@@ -1288,23 +1288,17 @@ def test_asciinema_command_prefers_bundled_path(monkeypatch) -> None:
 def test_asciinema_command_uses_parent_resolved_path_inside_isolated_capture(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        record,
-        "bundled_asciinema_path",
-        lambda: "/bundle/asciinema",
-    )
     monkeypatch.setenv(record.ASCIINEMA_PATH_ENV, "/host-tools/asciinema")
     monkeypatch.setattr(record.shutil, "which", lambda _command: None)
 
     assert record.asciinema_command({"studio": {}}) == "/host-tools/asciinema"
 
 
-def test_asciinema_command_resolves_host_fallback_before_environment_isolation(
+def test_asciinema_command_resolves_path_fallback_before_environment_isolation(
     monkeypatch,
     tmp_path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(record, "bundled_asciinema_path", lambda: None)
     monkeypatch.setattr(
         record.shutil,
         "which",
@@ -1328,6 +1322,7 @@ def test_check_asciinema_reports_missing_command(monkeypatch) -> None:
     except record.RecordingError as exc:
         assert "asciinema 3.x is required" in str(exc)
         assert "configured at /missing/asciinema" in str(exc)
+        assert "install asciinema 3.x" in str(exc)
     else:
         raise AssertionError("expected missing asciinema to fail")
 
@@ -1369,21 +1364,19 @@ def test_check_asciinema_accepts_version_3(monkeypatch) -> None:
     assert captured["args"] == ["/opt/asciinema", "--version"]
 
 
-def test_build_hook_marks_bundled_recorder_wheel_as_platform_specific(
+def test_build_hook_uses_explicit_release_platform(
+    monkeypatch,
     tmp_path,
 ) -> None:
-    custom_build_hook = load_custom_build_hook()
-    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
-    bundled.parent.mkdir(parents=True)
-    bundled.write_text("fake recorder", encoding="utf-8")
-    bundled.with_suffix(".platform").write_text("linux-x86_64\n", encoding="utf-8")
+    hatch_build = load_hatch_build_module()
+    monkeypatch.setenv(hatch_build.BUILD_PLATFORM_ENV, "linux-x86_64")
     build_data = {"tag": "py3-none-any", "pure_python": True}
 
     class Hook:
         root = str(tmp_path)
         target_name = "wheel"
 
-    custom_build_hook.initialize(Hook(), "standard", build_data)
+    hatch_build.CustomBuildHook.initialize(Hook(), "standard", build_data)
 
     assert build_data == {
         "tag": "py3-none-manylinux_2_35_x86_64",
@@ -1391,22 +1384,53 @@ def test_build_hook_marks_bundled_recorder_wheel_as_platform_specific(
     }
 
 
-def test_build_hook_vendors_recorder_for_supported_source_wheel(
+def test_build_hook_vendors_matching_recorder_for_explicit_platform(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    monkeypatch.setenv(hatch_build.BUILD_PLATFORM_ENV, "linux-x86_64")
+    vendor_script = tmp_path / "tools" / "vendor_asciinema.py"
+    vendor_script.parent.mkdir()
+    vendor_script.write_text("# test marker\n", encoding="utf-8")
+    observed = {}
+
+    def fake_vendor(root, platform, *, output) -> None:
+        observed.update(root=root, platform=platform, output=output)
+        output.parent.mkdir(parents=True)
+        output.write_text("recorder", encoding="utf-8")
+        output.with_suffix(".platform").write_text(platform + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(hatch_build, "vendor_asciinema", fake_vendor)
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    hook = Hook()
+    build_data = {}
+    hatch_build.CustomBuildHook.initialize(hook, "standard", build_data)
+
+    recorder = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
+    assert observed == {
+        "root": tmp_path,
+        "platform": "linux-x86_64",
+        "output": recorder,
+    }
+    assert recorder.read_text(encoding="utf-8") == "recorder"
+    hatch_build.CustomBuildHook.finalize(hook, "standard", build_data, "wheel")
+    assert not recorder.exists()
+    assert not recorder.with_suffix(".platform").exists()
+
+
+def test_build_hook_uses_supported_native_platform_for_source_wheel(
     monkeypatch,
     tmp_path,
 ) -> None:
     hatch_build = load_hatch_build_module()
     build_data = {"tag": "py3-none-any", "pure_python": True}
 
-    def fake_vendor_asciinema(root, platform, *, output) -> None:
-        assert root == tmp_path
-        assert platform == "linux-x86_64"
-        output.parent.mkdir(parents=True)
-        output.write_text("fake recorder", encoding="utf-8")
-        output.with_suffix(".platform").write_text(platform + "\n", encoding="utf-8")
-
     monkeypatch.setattr(hatch_build, "current_build_platform", lambda: "linux-x86_64")
-    monkeypatch.setattr(hatch_build, "vendor_asciinema", fake_vendor_asciinema)
 
     class Hook:
         root = str(tmp_path)
@@ -1437,56 +1461,24 @@ def test_build_hook_keeps_unsupported_source_wheel_pure(
     assert build_data == {"tag": "py3-none-any", "pure_python": True}
 
 
-def test_build_hook_loads_dataclass_vendor_script(tmp_path) -> None:
-    hatch_build = load_hatch_build_module()
-    tools_dir = tmp_path / "tools"
-    tools_dir.mkdir()
-    (tools_dir / "vendor_asciinema.py").write_text(
-        "\n".join(
-            [
-                "from dataclasses import dataclass",
-                "",
-                "@dataclass",
-                "class Asset:",
-                "    name: str",
-                "",
-                "def vendor(platform, *, output):",
-                "    Asset(platform)",
-                "    output.parent.mkdir(parents=True)",
-                "    output.write_text('fake recorder')",
-                "    output.with_suffix('.platform').write_text(platform + '\\n')",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    output = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
-    hatch_build.vendor_asciinema(tmp_path, "linux-x86_64", output=output)
-
-    assert output.read_text(encoding="utf-8") == "fake recorder"
-    assert output.with_suffix(".platform").read_text(encoding="utf-8") == (
-        "linux-x86_64\n"
-    )
-
-
-def test_build_hook_requires_bundled_recorder_platform_metadata(
+def test_build_hook_rejects_unsupported_explicit_platform(
+    monkeypatch,
     tmp_path,
 ) -> None:
-    custom_build_hook = load_custom_build_hook()
-    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
-    bundled.parent.mkdir(parents=True)
-    bundled.write_text("fake recorder", encoding="utf-8")
+    hatch_build = load_hatch_build_module()
+    monkeypatch.setenv(hatch_build.BUILD_PLATFORM_ENV, "windows-x86_64")
 
     class Hook:
         root = str(tmp_path)
         target_name = "wheel"
 
     try:
-        custom_build_hook.initialize(Hook(), "standard", {})
+        hatch_build.CustomBuildHook.initialize(Hook(), "standard", {})
     except RuntimeError as exc:
-        assert "asciinema.platform" in str(exc)
+        assert "unsupported OMEGAFLOW_BUILD_PLATFORM" in str(exc)
+        assert "windows-x86_64" in str(exc)
     else:
-        raise AssertionError("expected missing platform metadata to fail")
+        raise AssertionError("expected unsupported build platform to fail")
 
 
 def test_build_hook_packages_matching_linux_workload_runtime(
@@ -1494,13 +1486,7 @@ def test_build_hook_packages_matching_linux_workload_runtime(
     tmp_path,
 ) -> None:
     hatch_build = load_hatch_build_module()
-    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
-    bundled.parent.mkdir(parents=True)
-    bundled.write_text("fake recorder", encoding="utf-8")
-    bundled.with_suffix(".platform").write_text(
-        "macos-aarch64\n",
-        encoding="utf-8",
-    )
+    monkeypatch.setenv(hatch_build.BUILD_PLATFORM_ENV, "macos-aarch64")
     envoy = tmp_path / "runtime" / "envoy"
     envoy.mkdir(parents=True)
     (envoy / "go.mod").write_text("module example\n", encoding="utf-8")
@@ -1582,6 +1568,66 @@ def test_source_revision_prefers_explicit_override_then_sdist_record(
 
     monkeypatch.setenv("OMEGAFLOW_SOURCE_REVISION", "d" * 40)
     assert hatch_build.resolve_source_revision(tmp_path) == "d" * 40
+
+
+def test_source_revision_hashes_vcs_free_sdist_inputs(monkeypatch, tmp_path) -> None:
+    hatch_build = load_hatch_build_module()
+    source = tmp_path / "src" / "omegaflow" / "module.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n", encoding="utf-8")
+    monkeypatch.delenv("OMEGAFLOW_SOURCE_REVISION", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+
+    def unavailable(*args, **kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(hatch_build.subprocess, "run", unavailable)
+
+    first = hatch_build.resolve_source_revision(tmp_path)
+    source.write_text("value = 2\n", encoding="utf-8")
+    second = hatch_build.resolve_source_revision(tmp_path)
+
+    assert len(first) == 40
+    assert set(first) <= set("0123456789abcdef")
+    assert second != first
+
+
+def test_source_revision_length_frames_each_file(tmp_path) -> None:
+    hatch_build = load_hatch_build_module()
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    left_a = left / "src" / "omegaflow" / "a"
+    left_b = left / "src" / "omegaflow" / "b"
+    right_a = right / "src" / "omegaflow" / "a"
+    left_a.parent.mkdir(parents=True)
+    right_a.parent.mkdir(parents=True)
+    left_a.write_bytes(b"x")
+    left_b.write_bytes(b"y")
+    relative_b = b"src/omegaflow/b"
+    right_a.write_bytes(
+        b"x" + len(relative_b).to_bytes(8, "big") + relative_b + b"y"
+    )
+
+    assert hatch_build.source_tree_revision(left) != hatch_build.source_tree_revision(
+        right
+    )
+
+
+def test_source_revision_excludes_generated_recorder_artifacts(tmp_path) -> None:
+    hatch_build = load_hatch_build_module()
+    source = tmp_path / "src" / "omegaflow" / "module.py"
+    recorder = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n", encoding="utf-8")
+
+    before = hatch_build.source_tree_revision(tmp_path)
+    recorder.parent.mkdir()
+    recorder.write_bytes(b"generated recorder")
+    recorder.with_suffix(".platform").write_text(
+        "linux-x86_64\n", encoding="utf-8"
+    )
+
+    assert hatch_build.source_tree_revision(tmp_path) == before
 
 
 def test_omegaflow_help_uses_product_name() -> None:

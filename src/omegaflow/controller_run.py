@@ -43,6 +43,7 @@ from .recording_plan import (
 
 MANIFEST_SCHEMA = "omegaflow-controller-run-v1"
 MAX_MANIFEST_BYTES = 8 << 20
+CONTROLLER_PROJECT_ROOT = "/omegaflow-input"
 _ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -322,10 +323,20 @@ class _Attachment:
             raise ControllerRunError("attachment input pipe was not created")
         self.input = self.process.stdin
 
-    def bootstrap(self, manifest: ControllerRunManifest) -> None:
+    def bootstrap(
+        self,
+        manifest: ControllerRunManifest,
+        *,
+        terminal_port: int,
+        telemetry_port: int,
+    ) -> None:
         command = [
             "exec",
             "/omegaflow-runtime/bin/envoy",
+            "--terminal-listen",
+            f"0.0.0.0:{terminal_port}",
+            "--telemetry-listen",
+            f"0.0.0.0:{telemetry_port}",
             "--columns",
             str(manifest.columns),
             "--rows",
@@ -388,7 +399,6 @@ def run_controller_session(
         if not isinstance(event, BrokerReady):
             raise ControllerRunError(f"first Reploy event was {event.type!r}")
         attachment = _Attachment(session_client, event.terminal_socket, output_dir)
-        attachment.bootstrap(manifest)
         opened = broker.read(startup_timeout)
         if not isinstance(opened, Opened):
             raise ControllerRunError(f"Reploy event was {opened.type!r}, expected 'opened'")
@@ -397,11 +407,19 @@ def run_controller_session(
             raise ControllerRunError("Reploy session does not grant required lifecycle operations")
         if (opened.columns, opened.rows) != (manifest.columns, manifest.rows):
             raise ControllerRunError("Reploy terminal dimensions do not match the run manifest")
+        context = ControllerContext(manifest, opened, output_dir)
+        terminal = context.endpoint(manifest.terminal_endpoint_id, scheme="tcp")
+        telemetry = context.endpoint(manifest.telemetry_endpoint_id, scheme="tcp")
+        attachment.bootstrap(
+            manifest,
+            terminal_port=terminal.port,
+            telemetry_port=telemetry.port,
+        )
         ready = broker.read(startup_timeout)
         if not isinstance(ready, Ready):
             raise ControllerRunError(f"Reploy event was {ready.type!r}, expected 'ready'")
         try:
-            capture(ControllerContext(manifest, opened, output_dir))
+            capture(context)
         except BaseException as exc:
             capture_error = exc
             broker.write("terminate")
@@ -543,7 +561,10 @@ def capture_controller_recording(context: ControllerContext) -> None:
         captured_pane_beats,
     )
 
-    spec = context.manifest.recording_plan
+    spec = {
+        **context.manifest.recording_plan,
+        "_project_root": CONTROLLER_PROJECT_ROOT,
+    }
     try:
         plan = normalize_recording_plan(spec)
     except RecordingPlanError as exc:  # already validated; protects API callers
@@ -563,7 +584,9 @@ def capture_controller_recording(context: ControllerContext) -> None:
             raise ControllerRunError(
                 "Reploy browser capture does not accept workload-selected handoff URLs"
             )
-        browser_config = dict(plan.browser)
+        browser_config = presentation_build.thaw(plan.browser)
+        if not isinstance(browser_config, dict):  # normalized-plan invariant
+            raise ControllerRunError("normalized browser config must be a mapping")
         endpoint_id = browser_config.pop("endpoint_id", None)
         if not isinstance(endpoint_id, str):  # protected by manifest validation
             raise ControllerRunError("browser.endpoint_id is required")

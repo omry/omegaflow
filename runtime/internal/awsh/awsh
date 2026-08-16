@@ -1,5 +1,5 @@
 #!/bin/sh
-# POSIX entrypoint for the awsh persistent-Bash driver prototype.
+# POSIX entrypoint for the Awsh persistent-Bash driver.
 
 set -eu
 
@@ -14,7 +14,7 @@ case $0 in
     fi
     ;;
   *)
-    printf 'awsh: invoke the prototype with a path so it can locate awsh-driver.bash\n' >&2
+    printf 'awsh: invoke with a path so it can locate awsh-driver.bash\n' >&2
     exit 64
     ;;
 esac

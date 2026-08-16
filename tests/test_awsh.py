@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 
-AWSH = Path(__file__).with_name("awsh")
+AWSH = Path(__file__).resolve().parents[1] / "runtime" / "internal" / "awsh" / "awsh"
 SCHEMA = "awsh-v1"
 REQUEST_FD = 20
 RESULT_FD = 21
