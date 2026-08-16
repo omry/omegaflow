@@ -204,12 +204,18 @@ def test_controller_browser_uses_granted_endpoint_and_finalizes_before_return(
 
     def capture(*_args: object, **kwargs: object) -> None:
         order.append("capture")
+        observed["capture_project_root"] = _args[0]["_project_root"]
         terminal_factory = kwargs["terminal_runner_factory"]
         factory = kwargs["browser_runner_factory"]
         assert callable(terminal_factory)
         assert callable(factory)
         observed["terminal_runner"] = terminal_factory(None)
         factory()
+
+    def compile_bundle(*args: object, **kwargs: object) -> None:
+        order.append("compile")
+        observed["compile_project_root"] = args[0]["_project_root"]
+        observed["audio_artifacts"] = kwargs["audio_artifacts"]
 
     monkeypatch.setattr(browser_capture, "PersistentBrowserRunner", FakeBrowserRunner)
     monkeypatch.setattr(presentation_build, "capture_recording", capture)
@@ -221,10 +227,7 @@ def test_controller_browser_uses_granted_endpoint_and_finalizes_before_return(
     monkeypatch.setattr(
         presentation_build,
         "compile_presentation_bundle",
-        lambda *_args, **kwargs: (
-            order.append("compile")
-            or observed.setdefault("audio_artifacts", kwargs["audio_artifacts"])
-        ),
+        compile_bundle,
     )
 
     capture_controller_recording(_browser_context(tmp_path))
@@ -234,8 +237,18 @@ def test_controller_browser_uses_granted_endpoint_and_finalizes_before_return(
     assert isinstance(browser_config, dict)
     assert browser_config["base_url"] == "http://workload:8080/"
     assert "endpoint_id" not in browser_config
+    assert browser_config["auth"] == {
+        "storage_state_env": None,
+        "storage_state_path": None,
+    }
+    assert browser_config["timeouts"] == {
+        "action_ms": 10_000,
+        "readiness_ms": 15_000,
+    }
     assert type(observed["terminal_runner"]).__name__ == "EnvoyPersistentTerminalRunner"
     assert observed["browser_kwargs"] == {"headless": True}
+    assert observed["capture_project_root"] == "/omegaflow-input"
+    assert observed["compile_project_root"] == "/omegaflow-input"
     assert observed["audio_artifacts"] == "audio"
 
 
@@ -386,9 +399,9 @@ def _fake_session_client(tmp_path: Path) -> Path:
                     time.sleep(0.005)
 
             if sys.argv[1] == "attach":
+                (root / "attach.started").write_text("yes")
                 command = sys.stdin.readline()
                 (root / "bootstrap.txt").write_text(command)
-                (root / "attach.started").write_text("yes")
                 wait_for("capture.done")
                 raise SystemExit(0)
 
@@ -474,7 +487,10 @@ def test_controller_drives_public_lifecycle_and_bootstrap(
     assert len(observed) == 1
     bootstrap = (fake_root / "bootstrap.txt").read_text(encoding="utf-8")
     assert bootstrap == (
-        "exec /omegaflow-runtime/bin/envoy --columns 80 --rows 24\n"
+        "exec /omegaflow-runtime/bin/envoy "
+        "--terminal-listen 0.0.0.0:47001 "
+        "--telemetry-listen 0.0.0.0:47002 "
+        "--columns 80 --rows 24\n"
     )
     assert (output / "reploy-terminated.json").is_file()
     event_types = [

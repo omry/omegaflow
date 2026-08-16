@@ -64,7 +64,16 @@ class PythonPackages:
 
 
 @dataclass
+class ToolRequirement:
+    tool: str = ""
+    version: str = ""
+    binding: str = ""
+    select: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ApplicationPackages:
+    tools: list[ToolRequirement] = field(default_factory=list)
     os: list[APTPackageRequest | str] = field(default_factory=list)
     python: PythonPackages | None = None
 

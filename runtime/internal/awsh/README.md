@@ -1,19 +1,19 @@
-# awsh prototype
+# Awsh runtime
 
-`awsh` (the "awful shell") is a deliberately small experiment for the
-shell-resident half of the proposed OmegaFlow Envoy architecture. Its entrypoint
+`awsh` (the "awful shell") is the shell-resident half of the OmegaFlow Envoy
+architecture. Its entrypoint
 is POSIX `sh`; it replaces itself with an explicitly selected Bash running the
 stateful driver. The driver is not a new shell implementation: one Bash process
 reads operations from a private file descriptor, evaluates them in its own
 process, leaves terminal I/O on its controlling PTY, and reports structured
 results on another file descriptor.
 
-The launcher and Bash driver in this directory are now the reviewed source
+The launcher and Bash driver in this directory are the reviewed source
 inputs for the platform runtime assembled by OmegaFlow's package build. They
 are not imported as Python package modules or mounted from the source checkout.
-The demo controller and its split-screen UI remain prototype-only. The
-production Envoy supplies the bounded TCP protocol, cancellation, resize, and
-supervision around the packaged launcher and driver.
+The demo controller and its split-screen UI remain testing-only. The Envoy
+supplies the bounded TCP protocol, cancellation, resize, and supervision around
+the packaged launcher and driver.
 
 ## Running it
 
@@ -27,18 +27,18 @@ awsh --request-fd 20 --result-fd 21
 The launcher uses `/bin/bash` by default, or the executable named by
 `AWSH_BASH`, and then executes `awsh-driver.bash`. Bash is therefore an explicit
 workload requirement even though `/bin/sh` is sufficient to enter `awsh`.
-`AWSH_BASH` is prototype-only; the production Envoy removes that override and
+`AWSH_BASH` is testing-only; the production Envoy removes that override and
 therefore always uses the fixed `/bin/bash` executable with a controlled launch
 environment.
 The launcher must be invoked with an absolute or relative path so it can locate
-either the adjacent prototype driver or the packaged `../libexec` driver
+either the adjacent source driver or the packaged `../libexec` driver
 without running helper commands that might reuse its inherited private
 descriptors. The examples reserve descriptors 20 and 21;
 low descriptors such as 3 and 4 are unsafe because a script interpreter may use
 them internally while opening the launcher or driver.
 
 Both directions use NUL-delimited fields. Every message starts with `awsh-v1`.
-The prototype request messages are:
+The request messages are:
 
 ```text
 awsh-v1, execute, OPERATION_ID, BASH_SOURCE
@@ -64,10 +64,10 @@ Bash source may contain newlines but not NUL bytes. Operation IDs are limited to
 1–64 ASCII letters, digits, dots, underscores, or hyphens and must begin with a
 letter or digit.
 
-Run the prototype checks from the repository root:
+Run the runtime checks from the repository root:
 
 ```text
-pytest -q docs/future/prototype/awsh
+pytest -q tests/test_awsh.py tests/test_awsh_demo.py
 ```
 
 ### Split-screen testing console
@@ -148,9 +148,9 @@ next operation starts.
 - The broker prevents accidental descriptor inheritance, not deliberate
   same-shell interference. Cooperative source can still close the broker pipes,
   mutate driver globals, terminate Bash, or inspect same-identity processes.
-- SIGINT is reserved by this cooperative prototype while an operation runs.
-  Operation source can replace the trap, so a production driver must protect or
-  restore that control-plane behavior more strongly.
+- SIGINT is reserved by this cooperative adapter while an operation runs.
+  Operation source can replace the trap; hostile source is outside the
+  supported cooperative boundary.
 - One background-job persistence path is covered, but complete job-control
   semantics and hostile changes to traps, descriptors, or shell control state
   remain outside the supported cooperative boundary.

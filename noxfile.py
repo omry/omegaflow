@@ -18,6 +18,7 @@ RELEASE_PLATFORMS = (
     "macos-x86_64",
     "macos-aarch64",
 )
+BUILD_PLATFORM_ENV = "OMEGAFLOW_BUILD_PLATFORM"
 VENDORED_RECORDER_PATHS = (
     Path("src/omegaflow/bin/asciinema"),
     Path("src/omegaflow/bin/asciinema.platform"),
@@ -72,8 +73,14 @@ def package(session: nox.Session) -> None:
     session.run(sys.executable, "-m", "build", "--sdist", "--no-isolation")
     try:
         for platform in RELEASE_PLATFORMS:
-            session.run(sys.executable, "tools/vendor_asciinema.py", platform)
-            session.run(sys.executable, "-m", "build", "--wheel", "--no-isolation")
+            session.run(
+                sys.executable,
+                "-m",
+                "build",
+                "--wheel",
+                "--no-isolation",
+                env={BUILD_PLATFORM_ENV: platform},
+            )
         verify_release_artifacts()
     finally:
         clean_vendored_recorder()
@@ -189,7 +196,8 @@ def verify_workload_runtime_artifact(path: Path) -> None:
         if missing or other_runtimes:
             raise RuntimeError(
                 f"invalid workload runtime in {path.name}: "
-                f"missing={sorted(missing)}, unexpected={sorted(other_runtimes)}"
+                f"missing={sorted(missing)}, "
+                f"unexpected={sorted(other_runtimes)}"
             )
         manifest = json.loads(wheel.read(f"{root}/manifest.json"))
         if manifest.get("os") != "linux" or manifest.get("architecture") != architecture:

@@ -82,10 +82,10 @@ def build_runtime(
         env=environment,
     )
 
-    prototype = root / "docs" / "future" / "prototype" / "awsh"
-    shutil.copyfile(prototype / "awsh", output / "bin" / "awsh")
+    awsh_root = root / "runtime" / "internal" / "awsh"
+    shutil.copyfile(awsh_root / "awsh", output / "bin" / "awsh")
     shutil.copyfile(
-        prototype / "awsh-driver.bash",
+        awsh_root / "awsh-driver.bash",
         output / "libexec" / "awsh-driver.bash",
     )
     for path in (envoy, output / "bin" / "awsh"):
