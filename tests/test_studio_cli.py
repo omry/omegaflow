@@ -82,6 +82,25 @@ def load_hatch_build_module():
     return module
 
 
+def test_hydra_entrypoint_protects_reploy_controller(monkeypatch) -> None:
+    cfg = OmegaConf.create({"reploy": {"controller": {"environment": {}}}})
+    observed: list[bool] = []
+    monkeypatch.setattr(
+        studio,
+        "run_tool_from_hydra_cfg",
+        lambda received: observed.append(
+            bool(OmegaConf.is_readonly(received.reploy.controller))
+        )
+        or 0,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        studio.hydra_main.__wrapped__(cfg)
+
+    assert exc_info.value.code == 0
+    assert observed == [True]
+
+
 def test_version_is_available() -> None:
     assert __version__ == "0.9.0"
 
@@ -1211,6 +1230,7 @@ def test_package_installs_omegaflow_command() -> None:
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["artifacts"] == [
         "/src/omegaflow/bin/asciinema",
         "/src/omegaflow/bin/asciinema.platform",
+        "/src/omegaflow/_runtime/**",
     ]
 
 
@@ -1442,6 +1462,101 @@ def test_build_hook_requires_bundled_recorder_platform_metadata(
         assert "asciinema.platform" in str(exc)
     else:
         raise AssertionError("expected missing platform metadata to fail")
+
+
+def test_build_hook_packages_matching_linux_workload_runtime(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    bundled = tmp_path / "src" / "omegaflow" / "bin" / "asciinema"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("fake recorder", encoding="utf-8")
+    bundled.with_suffix(".platform").write_text(
+        "macos-aarch64\n",
+        encoding="utf-8",
+    )
+    envoy = tmp_path / "runtime" / "envoy"
+    envoy.mkdir(parents=True)
+    (envoy / "go.mod").write_text("module example\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nversion = '0.9.0'\n",
+        encoding="utf-8",
+    )
+    captured = {}
+
+    def fake_build(root, architecture, *, output, version, source_revision):
+        captured.update(
+            root=root,
+            architecture=architecture,
+            output=output,
+            version=version,
+            source_revision=source_revision,
+        )
+        output.mkdir(parents=True)
+        payload = output / "payload"
+        payload.write_text("generated", encoding="utf-8")
+        payload.chmod(0o444)
+        output.chmod(0o555)
+
+    monkeypatch.setattr(hatch_build, "build_workload_runtime", fake_build)
+    monkeypatch.setattr(hatch_build, "resolve_source_revision", lambda _root: "a" * 40)
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "wheel"
+
+    hook = Hook()
+    build_data = {}
+    hatch_build.CustomBuildHook.initialize(hook, "standard", build_data)
+
+    assert captured == {
+        "root": tmp_path,
+        "architecture": "arm64",
+        "output": tmp_path / "src" / "omegaflow" / "_runtime" / "linux-arm64",
+        "version": "0.9.0",
+        "source_revision": "a" * 40,
+    }
+    assert build_data["tag"] == "py3-none-macosx_11_0_arm64"
+    hatch_build.CustomBuildHook.finalize(hook, "standard", build_data, "wheel")
+    assert not (tmp_path / "src" / "omegaflow" / "_runtime").exists()
+
+
+def test_sdist_build_hook_records_and_cleans_source_revision(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    package = tmp_path / "src" / "omegaflow"
+    package.mkdir(parents=True)
+    monkeypatch.setattr(hatch_build, "resolve_source_revision", lambda _root: "b" * 40)
+
+    class Hook:
+        root = str(tmp_path)
+        target_name = "sdist"
+
+    hook = Hook()
+    hatch_build.CustomBuildHook.initialize(hook, "standard", {})
+    revision = package / "_source_revision"
+    assert revision.read_text(encoding="utf-8") == "b" * 40 + "\n"
+    hatch_build.CustomBuildHook.finalize(hook, "standard", {}, "sdist")
+    assert not revision.exists()
+
+
+def test_source_revision_prefers_explicit_override_then_sdist_record(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    hatch_build = load_hatch_build_module()
+    revision = tmp_path / "src" / "omegaflow" / "_source_revision"
+    revision.parent.mkdir(parents=True)
+    revision.write_text("b" * 40 + "\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_SHA", "c" * 40)
+
+    assert hatch_build.resolve_source_revision(tmp_path) == "b" * 40
+
+    monkeypatch.setenv("OMEGAFLOW_SOURCE_REVISION", "d" * 40)
+    assert hatch_build.resolve_source_revision(tmp_path) == "d" * 40
 
 
 def test_omegaflow_help_uses_product_name() -> None:

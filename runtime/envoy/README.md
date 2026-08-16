@@ -58,7 +58,13 @@ go vet ./...
 ```
 
 The locked production build is Linux-only, has `CGO_ENABLED=0`, trims source
-paths and VCS metadata, and clears the linker build ID. Release materialization
-will build both `linux/amd64` and `linux/arm64` and record their SHA-256 digests.
-The source build target remains `./cmd/omegaflow-envoy`; runtime
-materialization installs that binary as `/omegaflow-runtime/bin/envoy`.
+paths and VCS metadata, and clears the linker build ID. Platform wheel builds
+compile the matching `linux/amd64` or `linux/arm64` Envoy and package it with
+`awsh`, the Bash driver, and an exact versioned manifest. The source build
+target remains `./cmd/omegaflow-envoy`.
+
+Host OmegaFlow validates the installed manifest, rejects missing, additional,
+linked, special, mode-changed, or digest-changed payloads, and copies the exact
+installed files into a fresh non-writable tree. Reploy receives that tree only
+as a read-only executable bind at `/omegaflow-runtime`; it does not receive the
+source checkout and the workload does not need Python or OmegaFlow installed.

@@ -48,6 +48,7 @@ dev-mode-dirs = ["src"]
 artifacts = [
   "/src/omegaflow/bin/asciinema",
   "/src/omegaflow/bin/asciinema.platform",
+  "/src/omegaflow/_runtime/**",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -56,9 +57,12 @@ include = [
   "/LICENSE",
   "/NOTICE.md",
   "/README.md",
+  "/docs/future/prototype/awsh/awsh",
+  "/docs/future/prototype/awsh/awsh-driver.bash",
   "/hatch_build.py",
   "/noxfile.py",
   "/pyproject.toml",
+  "/runtime/envoy",
   "/src",
   "/tests",
   "/tools",
