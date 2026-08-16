@@ -1,0 +1,4 @@
+{"schema":"reploy-controlled-session-client-v1","type":"resize","columns":120,"rows":40}
+{"schema":"reploy-controlled-session-client-v1","type":"terminate"}
+{"schema":"reploy-controlled-session-client-v1","type":"complete"}
+{"schema":"reploy-controlled-session-client-v1","type":"acknowledge-terminated"}

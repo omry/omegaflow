@@ -4382,6 +4382,18 @@ def hydra_main(cfg: DictConfig) -> None:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["controller-run"]:
+        use_color = record.host_color_enabled(sys.stderr)
+        try:
+            from .controller_run import controller_main
+
+            raise SystemExit(controller_main())
+        except Exception as exc:
+            print(
+                color_text("error:", ANSI_RED_BOLD, enabled=use_color) + f" {exc}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from exc
     normalized = normalize_cli_rec_overrides(sys.argv)
     sys.argv[:] = add_project_config_searchpath(normalized)
     hydra_main()
