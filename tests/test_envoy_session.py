@@ -101,6 +101,43 @@ def _session(fake: FakeEnvoy, output_dir: Path) -> EnvoyTerminalSession:
     )
 
 
+def test_session_retries_both_connections_while_envoy_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(terminal: socket.socket, telemetry: socket.socket) -> None:
+        reader = telemetry.makefile("rb")
+        assert _read(reader)["type"] == "hello"
+        _ready(telemetry)
+        assert _read(reader)["type"] == "shutdown"
+        _send(telemetry, "draining", 2, reason="capture-complete", output_through=0)
+        _send(telemetry, "closed", 3, reason="shutdown", output_through=0)
+        terminal.shutdown(socket.SHUT_WR)
+
+    fake = FakeEnvoy(handler)
+    original_connect = socket.create_connection
+    remaining_failures = {
+        fake.terminal_address: 1,
+        fake.telemetry_address: 1,
+    }
+
+    def connect(address: tuple[str, int], timeout: float) -> socket.socket:
+        if remaining_failures.get(address, 0):
+            remaining_failures[address] -= 1
+            raise ConnectionRefusedError("listener is still starting")
+        return original_connect(address, timeout=timeout)
+
+    monkeypatch.setattr(socket, "create_connection", connect)
+    session = _session(fake, tmp_path)
+    session.start()
+    session.close()
+    fake.finish()
+
+    assert remaining_failures == {
+        fake.terminal_address: 0,
+        fake.telemetry_address: 0,
+    }
+
+
 def test_session_keeps_terminal_bytes_out_of_control_protocol(tmp_path: Path) -> None:
     forged = (
         b'{"schema":"omegaflow-envoy-telemetry-v1","type":"closed",'
