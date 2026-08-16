@@ -99,6 +99,10 @@ provide the same name in the parent process environment. `env_file` remains an
 explicit advanced override and is loaded without modifying the process
 environment.
 
+The initial Reploy capture path rejects enabled narration with authored takes
+before staging. Supplying narration credentials or prebuilt narration artifacts
+to the protected controller requires a separate approved delegation contract.
+
 ## Recording Frontmatter
 
 Each `<id>/index.md` recording starts with YAML frontmatter:
@@ -290,6 +294,15 @@ entry whose value is a private Playwright storage-state path. Use
 config. The file content remains private and its hash, not its secrets,
 participates in capture freshness.
 
+The initial Reploy capture path rejects both browser storage-state options
+before staging. Authenticated browser capture requires a separate approved asset
+or secret-delegation contract for the protected controller.
+
+The initial Reploy capture path also rejects path-based command `inputs`. Named
+producer-output references remain supported, but host files and directories
+require a separate controller-asset staging contract before they can participate
+in controller-side compilation.
+
 Presentation framing in workspace defaults or the recording's `config`
 directive supplies defaults for every browser beat:
 
@@ -449,6 +462,7 @@ class BrowserRedactionConfig:
 class BrowserRecordingConfig:
     profile: str = "desktop-v1"
     base_url: str | None = None
+    endpoint_id: str | None = None
     viewport: BrowserViewportConfig | None = None
     context: BrowserContextConfig | None = None
     auth: BrowserAuthConfig = field(default_factory=BrowserAuthConfig)

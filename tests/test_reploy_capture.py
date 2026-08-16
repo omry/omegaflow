@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from omegaconf import open_dict
 
 from omegaflow.controller_run import ControllerRunManifest
+from omegaflow.reploy_blueprint import Endpoint
 from omegaflow.reploy_capture import (
     PreparedReployRun,
     ReployCaptureError,
@@ -77,8 +80,9 @@ def test_public_controlled_session_command_and_result(
         return subprocess.CompletedProcess(command, 0, stdout=success, stderr=b"host details\n")
 
     monkeypatch.setattr(subprocess, "run", run)
+    manifest = replace(_manifest(), application_endpoint_ids=("web",))
     result = run_prepared_reploy_session(
-        prepared, _manifest(), reploy_command="/usr/bin/reploy"
+        prepared, manifest, reploy_command="/usr/bin/reploy"
     )
 
     assert result.ok
@@ -101,6 +105,8 @@ def test_public_controlled_session_command_and_result(
             "omegaflow-terminal",
             "--endpoint",
             "omegaflow-telemetry",
+            "--endpoint",
+            "web",
             "--",
             "omegaflow_controller_run",
         ]
@@ -195,6 +201,203 @@ def test_capture_entrypoint_uses_composed_config_without_repair(
     manifest = observed[0][2]
     assert manifest.columns == 90
     assert manifest.rows == 30
+
+
+def test_capture_entrypoint_rejects_enabled_narration_before_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = compose_studio_hydra_config(None)
+    staged = False
+
+    def prepare(*_args: object, **_kwargs: object) -> PreparedReployRun:
+        nonlocal staged
+        staged = True
+        return _prepared(tmp_path)
+
+    monkeypatch.setattr("omegaflow.reploy_capture.prepare_reploy_run", prepare)
+
+    with pytest.raises(ReployCaptureError, match="does not yet support enabled narration"):
+        capture_recording_via_reploy(
+            config,
+            {
+                "id": "narrated-demo",
+                "audio": {"enabled": True},
+                "beats": [
+                    {
+                        "id": "intro",
+                        "narration": "Introduce the demo.",
+                        "actions": [{"run": "true"}],
+                    }
+                ],
+            },
+            tmp_path / "run",
+            reploy_command="reploy",
+        )
+
+    assert staged is False
+
+
+def test_capture_entrypoint_rejects_path_inputs_before_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = compose_studio_hydra_config(None)
+    staged = False
+
+    def prepare(*_args: object, **_kwargs: object) -> PreparedReployRun:
+        nonlocal staged
+        staged = True
+        return _prepared(tmp_path)
+
+    monkeypatch.setattr("omegaflow.reploy_capture.prepare_reploy_run", prepare)
+
+    with pytest.raises(ReployCaptureError, match="path-based recording inputs"):
+        capture_recording_via_reploy(
+            config,
+            {
+                "id": "input-demo",
+                "beats": [
+                    {
+                        "id": "run",
+                        "actions": [
+                            {
+                                "run": "cat settings.txt",
+                                "inputs": ["settings.txt"],
+                            }
+                        ],
+                    }
+                ],
+            },
+            tmp_path / "run",
+            reploy_command="reploy",
+        )
+
+    assert staged is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("storage_state_env", "BROWSER_STORAGE_STATE"),
+        ("storage_state_path", ".private/browser-state.json"),
+    ),
+)
+def test_capture_entrypoint_rejects_browser_auth_before_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: str,
+) -> None:
+    config = compose_studio_hydra_config(None)
+    with open_dict(config.reploy.workload.environment.workload.endpoints):
+        config.reploy.workload.environment.workload.endpoints["web"] = Endpoint(
+            scheme="http", port=8080
+        )
+    staged = False
+
+    def prepare(*_args: object, **_kwargs: object) -> PreparedReployRun:
+        nonlocal staged
+        staged = True
+        return _prepared(tmp_path)
+
+    monkeypatch.setattr("omegaflow.reploy_capture.prepare_reploy_run", prepare)
+
+    with pytest.raises(ReployCaptureError, match="browser authentication inputs"):
+        capture_recording_via_reploy(
+            config,
+            {
+                "id": "authenticated-browser-demo",
+                "browser": {
+                    "endpoint_id": "web",
+                    "auth": {field: value},
+                },
+                "beats": [
+                    {
+                        "id": "browser",
+                        "medium": "browser",
+                        "actions": [
+                            {"id": "open", "open_page": {"url": "/private"}}
+                        ],
+                    }
+                ],
+            },
+            tmp_path / "run",
+            reploy_command="reploy",
+        )
+
+    assert staged is False
+
+
+def test_capture_entrypoint_selects_declared_browser_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_dir = tmp_path / "run"
+    config = compose_studio_hydra_config(None, (f"studio.run_dir={run_dir}",))
+    with open_dict(config.reploy.workload.environment.workload.endpoints):
+        config.reploy.workload.environment.workload.endpoints["web"] = Endpoint(
+            scheme="http", port=8080
+        )
+    prepared = _prepared(tmp_path)
+    observed: list[ControllerRunManifest] = []
+
+    monkeypatch.setattr(
+        "omegaflow.reploy_capture.prepare_reploy_run",
+        lambda _config, _run_dir, manifest, **_kwargs: (
+            observed.append(manifest) or prepared
+        ),
+    )
+    monkeypatch.setattr(
+        "omegaflow.reploy_capture.run_prepared_reploy_session",
+        lambda *_args, **_kwargs: object(),
+    )
+
+    capture_recording_via_reploy(
+        config,
+        {
+            "id": "browser-demo",
+            "browser": {"endpoint_id": "web"},
+            "beats": [
+                {
+                    "id": "browser",
+                    "medium": "browser",
+                    "actions": [{"id": "open", "open_page": {"url": "/demo"}}],
+                }
+            ],
+        },
+        run_dir,
+        reploy_command="reploy",
+    )
+
+    assert observed[0].application_endpoint_ids == ("web",)
+
+
+def test_capture_entrypoint_rejects_undeclared_or_host_browser_url(
+    tmp_path: Path,
+) -> None:
+    config = compose_studio_hydra_config(None)
+    spec = {
+        "id": "browser-demo",
+        "browser": {"endpoint_id": "web"},
+        "beats": [
+            {
+                "id": "browser",
+                "medium": "browser",
+                "actions": [{"id": "open", "open_page": {"url": "/"}}],
+            }
+        ],
+    }
+    with pytest.raises(ReployCaptureError, match="not declared"):
+        capture_recording_via_reploy(config, spec, tmp_path / "run", reploy_command="reploy")
+
+    with open_dict(config.reploy.workload.environment.workload.endpoints):
+        config.reploy.workload.environment.workload.endpoints["web"] = Endpoint(
+            scheme="http", port=8080
+        )
+    spec["browser"] = {
+        "endpoint_id": "web",
+        "base_url": "http://substituted.invalid",
+    }
+    with pytest.raises(ReployCaptureError, match="opened.endpoints"):
+        capture_recording_via_reploy(config, spec, tmp_path / "run", reploy_command="reploy")
 
 
 def test_capture_entrypoint_compiles_run_files_and_removes_host_metadata(
