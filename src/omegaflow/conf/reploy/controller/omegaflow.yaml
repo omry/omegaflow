@@ -8,12 +8,17 @@ blueprint:
 environment:
   id: omegaflow-controller
   base:
-    image: python:3.12-slim
+    image: mcr.microsoft.com/playwright/python:v1.61.0-noble
+    exports:
+      python:
+        executable: /usr/bin/python3
+  packages:
+    os: [ffmpeg]
   applications:
     controller:
       packages:
         python:
-          requirements: ["omegaflow==${omegaflow_version:}"]
+          requirements: ["omegaflow[browser]==${omegaflow_version:}"]
       executables:
         omegaflow:
           source: python
