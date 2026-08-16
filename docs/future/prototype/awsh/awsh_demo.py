@@ -166,6 +166,9 @@ class AwshSession:
             written = os.write(self.request_write, payload)
             payload = payload[written:]
 
+    def execute(self, operation_id: str, source: str) -> None:
+        self.send("execute", operation_id, "pty", "shared", source)
+
     def read_terminal(self) -> bytes:
         try:
             chunk = os.read(self.terminal_master, 65536)
@@ -538,7 +541,7 @@ def run_controller(event_path: Path, done_path: Path) -> int:
                 operation_id = f"demo-{operation_number}"
                 try:
                     event_log.request(operation_id, source)
-                    session.send("execute", operation_id, source)
+                    session.execute(operation_id, source)
                 except OSError as exc:
                     event_log.diagnostic(f"request write failed: {exc}")
                     break

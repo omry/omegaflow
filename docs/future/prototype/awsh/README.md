@@ -38,7 +38,7 @@ Both directions use NUL-delimited fields. Every message starts with `awsh-v1`.
 The prototype request messages are:
 
 ```text
-awsh-v1, execute, OPERATION_ID, BASH_SOURCE
+awsh-v1, execute, OPERATION_ID, EXECUTION_SHAPE, OBSERVATION, BASH_SOURCE
 awsh-v1, continue, OPERATION_ID, GATE_ID
 awsh-v1, cancel, OPERATION_ID, REASON
 awsh-v1, shutdown

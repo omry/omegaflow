@@ -282,7 +282,7 @@ def test_session_executes_and_shuts_down() -> None:
     terminal = bytearray()
     try:
         _collect_until(session, events, terminal, "ready")
-        session.send("execute", "demo-1", "printf 'wrapper-smoke\\n'")
+        session.execute("demo-1", "printf 'wrapper-smoke\\n'")
         _collect_until(session, events, terminal, "completed")
         session.send("shutdown")
         _collect_until(session, events, terminal, "closed")
@@ -308,8 +308,7 @@ def test_session_poll_detects_driver_exit_before_inherited_fds_close() -> None:
     terminal = bytearray()
     try:
         _collect_until(session, events, terminal, "ready")
-        session.send(
-            "execute",
+        session.execute(
             "demo-exit",
             "(trap '' HUP; sleep 0.5) & kill -KILL $$",
         )
