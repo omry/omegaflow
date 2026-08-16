@@ -22,11 +22,12 @@ POSIX-compatible `awsh` launcher with its standard streams attached to the PTY:
 awsh --request-fd 20 --result-fd 21
 ```
 
-The launcher resolves `bash` through `PATH`, or uses the executable named by
+The launcher uses `/bin/bash` by default, or the executable named by
 `AWSH_BASH`, and then executes `awsh-driver.bash`. Bash is therefore an explicit
 workload requirement even though `/bin/sh` is sufficient to enter `awsh`.
-`AWSH_BASH` is prototype-only; the production Envoy uses a fixed Bash
-executable and a controlled launch environment.
+`AWSH_BASH` is prototype-only; the production Envoy removes that override and
+therefore always uses the fixed `/bin/bash` executable with a controlled launch
+environment.
 The prototype launcher must be invoked with an absolute or relative path so it
 can locate the adjacent driver without running helper commands that might reuse
 its inherited private descriptors. The examples reserve descriptors 20 and 21;
