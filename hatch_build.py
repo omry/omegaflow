@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import os
 import platform as platform_module
@@ -19,6 +20,27 @@ WHEEL_TAGS = {
     "macos-x86_64": "py3-none-macosx_10_12_x86_64",
     "macos-aarch64": "py3-none-macosx_11_0_arm64",
 }
+BUILD_PLATFORM_ENV = "OMEGAFLOW_BUILD_PLATFORM"
+
+SOURCE_REVISION_INPUTS = (
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE.md",
+    "README.md",
+    "hatch_build.py",
+    "noxfile.py",
+    "pyproject.toml",
+    "runtime/envoy",
+    "runtime/internal/awsh",
+    "src",
+    "tests",
+    "tools",
+)
+SOURCE_REVISION_EXCLUDED_PARTS = {
+    ".mypy_cache",
+    ".pytest_cache",
+    "__pycache__",
+}
 
 
 def current_build_platform() -> str | None:
@@ -36,6 +58,19 @@ def current_build_platform() -> str | None:
     if system == "darwin":
         return f"macos-{arch}"
     return None
+
+
+def selected_build_platform() -> str | None:
+    explicit = os.environ.get(BUILD_PLATFORM_ENV, "").strip()
+    if not explicit:
+        return current_build_platform()
+    if explicit not in WHEEL_TAGS:
+        supported = ", ".join(sorted(WHEEL_TAGS))
+        raise RuntimeError(
+            f"unsupported {BUILD_PLATFORM_ENV} value {explicit!r}; "
+            f"expected one of: {supported}"
+        )
+    return explicit
 
 
 def vendor_asciinema(root: Path, platform: str, *, output: Path) -> None:
@@ -82,6 +117,43 @@ def project_version(root: Path) -> str:
     return str(data["project"]["version"])
 
 
+def source_tree_revision(root: Path) -> str:
+    """Return a stable revision for a VCS-free source distribution input."""
+
+    digest = hashlib.sha256()
+    files: list[Path] = []
+    for relative in SOURCE_REVISION_INPUTS:
+        path = root / relative
+        if path.is_file():
+            files.append(path)
+        elif path.is_dir():
+            files.extend(item for item in path.rglob("*") if item.is_file())
+    revision_path = root / "src" / "omegaflow" / "_source_revision"
+    generated_recorder_paths = {
+        root / "src" / "omegaflow" / "bin" / "asciinema",
+        root / "src" / "omegaflow" / "bin" / "asciinema.platform",
+    }
+    files = [
+        path
+        for path in files
+        if path != revision_path
+        and path not in generated_recorder_paths
+        and not SOURCE_REVISION_EXCLUDED_PARTS.intersection(path.parts)
+        and path.suffix not in {".pyc", ".pyo"}
+    ]
+    if not files:
+        raise RuntimeError("could not determine OmegaFlow source revision")
+    for path in sorted(files):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(path.stat().st_size.to_bytes(8, "big"))
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest()[:40]
+
+
 def resolve_source_revision(root: Path) -> str:
     def validate(value: str) -> str:
         if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
@@ -119,10 +191,7 @@ def resolve_source_revision(root: Path) -> str:
         value = result.stdout.strip()
         if value:
             return validate(value)
-    raise RuntimeError(
-        "could not determine OmegaFlow source revision; set "
-        "OMEGAFLOW_SOURCE_REVISION"
-    )
+    return source_tree_revision(root)
 
 
 def workload_architecture(platform: str) -> str:
@@ -159,28 +228,16 @@ class CustomBuildHook(BuildHookInterface):
         if self.target_name != "wheel":
             return
 
-        bin_dir = root / "src" / "omegaflow" / "bin"
-        bundled_recorder = bin_dir / "asciinema"
-        if not bundled_recorder.is_file():
-            platform = current_build_platform()
-            if platform is None:
-                return
-            vendor_asciinema(root, platform, output=bundled_recorder)
+        platform = selected_build_platform()
+        if platform is None:
+            return
+        tag = WHEEL_TAGS[platform]
 
-        platform_file = bin_dir / "asciinema.platform"
-        if not platform_file.is_file():
-            raise RuntimeError(
-                "bundled asciinema is missing src/omegaflow/bin/"
-                "asciinema.platform; run tools/vendor_asciinema.py before "
-                "building a platform wheel"
-            )
-        platform = platform_file.read_text(encoding="utf-8").strip()
-        try:
-            tag = WHEEL_TAGS[platform]
-        except KeyError as exc:
-            raise RuntimeError(
-                f"unsupported bundled asciinema platform: {platform}"
-            ) from exc
+        vendor_script = root / "tools" / "vendor_asciinema.py"
+        if vendor_script.is_file():
+            bundled_recorder = root / "src" / "omegaflow" / "bin" / "asciinema"
+            vendor_asciinema(root, platform, output=bundled_recorder)
+            self._generated_recorder = bundled_recorder
 
         if (root / "runtime" / "envoy" / "go.mod").is_file():
             architecture = workload_architecture(platform)
@@ -204,6 +261,10 @@ class CustomBuildHook(BuildHookInterface):
         build_data: dict[str, Any],
         artifact_path: str,
     ) -> None:
+        generated_recorder = getattr(self, "_generated_recorder", None)
+        if generated_recorder is not None:
+            generated_recorder.unlink(missing_ok=True)
+            generated_recorder.with_suffix(".platform").unlink(missing_ok=True)
         generated_runtime = getattr(self, "_generated_runtime", None)
         if generated_runtime is not None:
             remove_generated_runtime(generated_runtime)
