@@ -1,0 +1,85 @@
+blueprint:
+  schema: 1
+  version: "${omegaflow_version:}"
+  requires_reploy: ">=0.7.0.dev1"
+  compatibility:
+    platforms: [linux/amd64, linux/arm64]
+
+environment:
+  applications:
+    omegaflow_runtime:
+      packages:
+        os:
+          - package: bash
+            exports:
+              bash:
+                executable: /usr/bin/bash
+      executables:
+        bash:
+          source: os
+          binary: bash
+  allow_concurrent: "no"
+  runtime:
+    user: omegaflow
+    network:
+      public: deny
+      local: deny
+      ambiguous: require-both
+  mounts:
+    omegaflow_runtime:
+      target: /omegaflow-runtime
+      writable: false
+      update_policy: unmanaged
+    omegaflow_run:
+      target: /run/omegaflow
+      writable: true
+      update_policy: replace
+  commands:
+    omegaflow_terminal:
+      executable: omegaflow_runtime.bash
+      argv:
+        - -c
+        - 'exec "$1" --terminal-listen "$2:$3" --telemetry-listen "$4:$5" --columns 80 --rows 24'
+        - omegaflow-envoy
+        - /omegaflow-runtime/bin/envoy
+        - ${reploy.workload.docker.workload.endpoints.omegaflow-terminal.bind.address}
+        - ${reploy.workload.environment.workload.endpoints.omegaflow-terminal.port}
+        - ${reploy.workload.docker.workload.endpoints.omegaflow-telemetry.bind.address}
+        - ${reploy.workload.environment.workload.endpoints.omegaflow-telemetry.port}
+  workload:
+    command: omegaflow_terminal
+    endpoints:
+      omegaflow-terminal:
+        scheme: tcp
+        port: 47001
+      omegaflow-telemetry:
+        scheme: tcp
+        port: 47002
+
+docker:
+  mounts:
+    omegaflow_runtime:
+      extends: environment.mounts.omegaflow_runtime
+      mode: bind
+      source: ${studio.run_dir}/reploy/input/runtime
+    omegaflow_run:
+      extends: environment.mounts.omegaflow_run
+      mode: tmpfs
+  workload:
+    endpoints:
+      omegaflow-terminal:
+        extends: environment.workload.endpoints.omegaflow-terminal
+        bind:
+          address: 0.0.0.0
+        publish:
+          address: 127.0.0.1
+          staging: 47001
+          deployed: 47001
+      omegaflow-telemetry:
+        extends: environment.workload.endpoints.omegaflow-telemetry
+        bind:
+          address: 0.0.0.0
+        publish:
+          address: 127.0.0.1
+          staging: 47002
+          deployed: 47002
