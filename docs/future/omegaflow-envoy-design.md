@@ -2,10 +2,12 @@
 
 ## Status
 
-- Approved direction with an implementation plan; the protocol, Bash adapter,
-  production Envoy, and runtime materialization are implemented. Controller,
-  public Reploy lifecycle, and terminal-runner integration are implemented and
-  undergoing conformance review before the remaining browser and cutover work.
+- Approved direction with an implementation plan. The protocol, Bash adapter,
+  production Envoy, runtime materialization, controller, public Reploy
+  lifecycle, terminal runner, and browser coordination are implemented. Real
+  Linux `amd64` terminal-only and ordered terminal/browser controlled sessions
+  complete successfully. The lifecycle failure matrix, packaging, public CLI,
+  and cutover work remain.
 - Updated: 2026-08-16
 - Initial scope: one persistent Bash backend for terminal execution and
   structured telemetry in Reploy-backed OmegaFlow recordings
@@ -23,30 +25,31 @@ backends and a generalized backend plugin framework are deferred. An operation
 may still start another shell or interactive program, but OmegaFlow treats that
 child as opaque until control returns to the persistent Bash.
 
-The initial controller and workload blueprint contract is frozen in
+The controller and isolated-workload blueprint contract is frozen in
 [Reploy Recording Environments Design](reploy-environments-design.md). General
 project discovery, source transfer, cache policy, default-image selection, and
 public bootstrap UX remain separate product work; they do not block the bounded
 Envoy integration slices.
 
-### Host recording retention
+### Recording toolchain and workload placement
 
-OmegaFlow retains a host-recording backend for now. It is needed for recordings
-that exercise Reploy itself, including Reploy-backed Arbiter flows, until a
-complete and appropriately isolated Reploy-nesting model exists. Reploy-backed
-workloads remain the intended standard path for ordinary isolated recordings;
-delivering that path does not authorize removal of host recording.
+`studio.recording_backend` is a typed `reploy` or `host` enum and defaults to
+`reploy`. The recording controller runs in the OmegaFlow-owned Reploy toolchain
+environment. The reserved `host` value currently produces a capability error.
+A supported container runtime is required for recording; OmegaFlow does not
+retain a separate bare-metal browser, media, or publication toolchain.
 
-The recording-backend UX, names, and defaults require a separate design. A
-future host backend may launch the packaged Envoy and `awsh` on the host and
-reuse the same terminal and telemetry contracts as the Reploy workload path.
-The current FIFO-backed host runner remains supported until such a prototype
-proves behavioral parity and a separate migration is approved.
+`studio.workload_backend` selects only workload placement. It defaults to
+`host`, where the packaged Envoy and `awsh` run against the host project
+environment and connect to the Reploy controller. Explicit `reploy` selection
+uses the isolated controlled-session workload implemented by this design and
+requires a complete workload blueprint. Reploy failures never fall back to the
+host after explicit selection.
 
-A later topology may run the capture controller in a Reploy-managed environment
-while connecting to a thin host Envoy, keeping capture and media dependencies
-off the host. Secure launch, endpoint access, lifecycle ownership, and Reploy
-nesting for that topology are intentionally left for future design.
+The current FIFO-backed local capture runner is migration scaffolding until the
+host-Envoy path proves parity. Portable, bounded controller access to host Envoy
+and application endpoints across supported container runtimes is the remaining
+host-workload design boundary.
 
 ## Problem
 
@@ -142,9 +145,9 @@ and makes presentation ordering independent of prompt parsing or PTY echo.
 
 The controller timestamps terminal output at its boundary and records applied
 resize events from telemetry. It does not place an `asciinema record` process
-or another PTY between the controller and the Envoy. The existing host path may
-continue using the bundled asciinema executable while host recording remains
-supported, but it is not part of Envoy capture. The controller also retains a
+or another PTY between the controller and the Envoy. Both workload backends use
+this direct Envoy capture path and no host recording toolchain. The controller
+also retains a
 private raw terminal-output byte log as the lossless source for workload-output
 byte ranges and diagnostics. Synthesized prompt and command events carry
 distinct timeline provenance and never enter that raw log or its byte offsets.
@@ -225,17 +228,17 @@ protect control-plane behavior where practical, and define what happens when an
 operation exits or replaces Bash; it cannot turn same-identity shell telemetry
 into security evidence.
 
-The bounded experiment for this adapter is named **`awsh`** (the "awful
-shell") and lives in [`prototype/awsh`](prototype/awsh/README.md). Its portable
+The adapter is named **`awsh`** (the "awful shell") and lives in
+[`runtime/internal/awsh`](../../runtime/internal/awsh/README.md). Its portable
 entrypoint is POSIX `sh` and replaces itself with an explicitly selected Bash;
-the stateful driver necessarily runs inside that Bash. The prototype establishes
+the stateful driver necessarily runs inside that Bash. Its tests establish
 persistent state and supported background-job state, streaming PTY output,
 interactive PTY input, structured status and cwd, action gates and gated
 cancellation, terminal/telemetry separation, Ctrl-C survival, resize and
 `SIGWINCH`, curses and nested interactive Bash behavior, ordinary child
 descriptor non-inheritance, partial `exit`/`exec` results, and clean shutdown.
-It remains outside the production package until the Envoy, runtime, controller,
-failure, and Reploy integration slices pass.
+The launcher and driver are production runtime inputs; the colocated
+split-screen demo remains testing-only.
 
 The POSIX entrypoint is a portable bootstrap, not a promise that arbitrary
 operations have POSIX-shell semantics. Initial operation source is Bash source.
@@ -558,10 +561,10 @@ not a Reploy-private channel or a workload mount.
 
 ## Implementation Plan
 
-Implementation proceeds through reviewable slices. The existing native runner
-remains available for host recording while the backend UX and Reploy nesting
-model are unresolved. These slices must keep recording-plan, artifact, and
-diagnostic semantics aligned rather than establish divergent capture models.
+Implementation proceeds through reviewable slices. The isolated Reploy
+workload path is implemented first; the host-workload adapter follows and uses
+the same controller and Envoy contracts. The native FIFO runner remains only
+until host-Envoy parity is proven.
 
 ### 1. Freeze protocols and implementation constraints
 
@@ -620,8 +623,8 @@ tests.
 
 ### Hydra blueprint contract
 
-The Reploy environment design freezes the blueprint prerequisite for slices 4
-through 8:
+The Reploy environment design freezes the isolated-workload blueprint
+prerequisite for slices 4 through 8:
 
 - plain Python dataclasses model the supported public Reploy blueprint syntax;
 - the final config exposes `reploy.controller` and `reploy.workload` objects;
@@ -651,6 +654,8 @@ approval gate remains.
 
 Completion gate: a clean prepared workload starts only the validated mounted
 artifacts, cannot modify them, and needs no Python or OmegaFlow installation.
+The host-workload adapter stages the same manifest-validated runtime directly
+on the host rather than using the Reploy workload mount.
 
 ### 5. Integrate the controller and terminal runner
 
@@ -721,18 +726,17 @@ accounted for after teardown.
   the only normal external host dependency.
 - Document the runtime mount, Bash requirement, blueprint endpoints, trust
   boundary, controller input, diagnostics, and failure recovery.
-- Compare representative recordings through the native and Envoy paths and
-  produce cutover evidence. Do not remove the native host path in this slice.
+- Compare representative recordings through host and Reploy workloads and
+  produce parity evidence before removing the native FIFO capture path.
 
 Completion gate: release packaging and documented examples pass from a clean
-host, representative comparison evidence is retained, and the standard Reploy
-path is ready for ordinary recordings. Host recording remains supported until
-Reploy nesting covers recordings of Reploy and Reploy-backed tools; any later
-native-path replacement or removal is a separate approved change.
+host, representative comparison evidence is retained, the Reploy controller is
+used for every recording, and both workload backends produce equivalent
+capture, diagnostic, and publication semantics.
 
 ## Cross-slice Acceptance Validation
 
-Before replacing the native terminal runner, a bounded prototype must prove:
+Before retiring the native FIFO runner, the host-Envoy path must prove:
 
 1. persistent Bash state across multiple operations;
 2. continuous byte-for-byte terminal transport and private raw-output
@@ -768,8 +772,9 @@ prove applicable parity, and replacement remains a separately approved change.
    supervisor.
 3. The first implementation supports Bash only. Other top-level shells and a
    generalized backend framework are deferred.
-4. All OmegaFlow-supplied workload artifacts enter through the version-matched,
-   read-only, executable `/omegaflow-runtime` mount.
+4. Both workload backends use the same version-matched, manifest-validated
+   runtime. Reploy workloads receive it through the read-only executable
+   `/omegaflow-runtime` mount; host workloads stage it directly on the host.
 5. The initial Envoy and Bash use the same non-root workload identity. A
    privileged Envoy/non-root workload split waits for a Reploy identity
    contract.
@@ -795,5 +800,7 @@ prove applicable parity, and replacement remains a separately approved change.
     workload config. No post-composition injection or repair step exists.
 12. OmegaFlow packages only its own runtime. Reploy remains a separately
     released Python dependency.
-13. Host recording remains supported pending a Reploy-nesting solution and
-    explicit backend migration approval.
+13. The recording toolchain always runs in Reploy. Workloads default to the
+    host and use Reploy only when explicitly selected with a complete blueprint.
+    A bare-metal recording controller is deferred until justified by a concrete
+    requirement.

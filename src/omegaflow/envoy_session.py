@@ -36,6 +36,26 @@ class EnvoySessionError(RuntimeError):
     """The controller could not complete a trusted Envoy session."""
 
 
+def _connect_with_retry(
+    address: tuple[str, int],
+    *,
+    timeout: float,
+) -> socket.socket:
+    deadline = time.monotonic() + timeout
+    last_error: OSError | None = None
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            if last_error is None:  # pragma: no cover - positive timeout invariant
+                raise TimeoutError("Envoy connection deadline expired")
+            raise last_error
+        try:
+            return socket.create_connection(address, timeout=min(remaining, 0.25))
+        except OSError as exc:
+            last_error = exc
+            time.sleep(min(remaining, 0.05))
+
+
 @dataclass(frozen=True)
 class EnvoyOperationResult:
     operation_id: str
@@ -142,10 +162,10 @@ class EnvoyTerminalSession:
             )
         try:
             # The ordering is part of the v1 handshake contract.
-            self._terminal = socket.create_connection(
+            self._terminal = _connect_with_retry(
                 self.terminal_address, timeout=self.connect_timeout
             )
-            self._telemetry = socket.create_connection(
+            self._telemetry = _connect_with_retry(
                 self.telemetry_address, timeout=self.connect_timeout
             )
             self._terminal.settimeout(None)
