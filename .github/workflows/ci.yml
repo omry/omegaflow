@@ -102,6 +102,11 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: runtime/envoy/go.mod
+
       - name: Install build tooling
         run: python -m pip install build hatchling nox
 
