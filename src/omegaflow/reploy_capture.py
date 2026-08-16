@@ -16,12 +16,19 @@ from . import record
 from .controller_run import ControllerRunManifest, write_controller_manifest
 from .reploy_blueprint import write_reploy_blueprints
 from .reploy_protocol import ReployRunResult, decode_run_result
-from .recording_plan import RecordingPlanError, normalize_recording_plan
+from .recording_plan import (
+    RecordingPlanError,
+    declared_recording_source_inputs,
+    normalize_recording_plan,
+)
 from .workload_runtime import RuntimeManifest, stage_workload_runtime
 
 
 class ReployCaptureError(RuntimeError):
     """Host materialization or authoritative Reploy execution failed."""
+
+
+_ENDPOINT_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
 @dataclass(frozen=True)
@@ -50,7 +57,7 @@ def capture_recording_via_reploy(
     *,
     reploy_command: str | Path | None = None,
 ) -> ReployCaptureResult:
-    """Execute one already-composed terminal recording through public Reploy APIs."""
+    """Execute one already-composed recording through public Reploy APIs."""
 
     recording_id = spec.get("id")
     if not isinstance(recording_id, str) or not recording_id:
@@ -68,14 +75,16 @@ def capture_recording_via_reploy(
     if columns > 1000 or rows > 1000:
         raise ReployCaptureError("capture.window_size exceeds Envoy limits")
     try:
-        normalize_recording_plan(dict(spec))
+        plan = normalize_recording_plan(dict(spec))
     except RecordingPlanError as exc:
         raise ReployCaptureError(f"recording plan is invalid: {exc}") from exc
+    _validate_reploy_capture_capabilities(spec, plan)
     plan_payload = _portable_recording_plan(spec)
     try:
         normalize_recording_plan(plan_payload)
     except RecordingPlanError as exc:  # pragma: no cover - compilation invariant
         raise ReployCaptureError(f"compiled recording plan is invalid: {exc}") from exc
+    application_endpoint_ids = _browser_application_endpoint_ids(config, spec, plan)
     manifest = ControllerRunManifest(
         recording_id,
         plan_payload,
@@ -83,7 +92,7 @@ def capture_recording_via_reploy(
         rows,
         "omegaflow-terminal",
         "omegaflow-telemetry",
-        (),
+        application_endpoint_ids,
         (),
     )
     prepared = prepare_reploy_run(
@@ -98,6 +107,68 @@ def capture_recording_via_reploy(
         reploy_command=reploy_command,
     )
     return ReployCaptureResult(prepared, result)
+
+
+def _validate_reploy_capture_capabilities(spec: Mapping[str, Any], plan: Any) -> None:
+    if declared_recording_source_inputs(spec):
+        raise ReployCaptureError(
+            "Reploy capture does not yet support path-based recording inputs; "
+            "they require an approved controller-asset staging boundary"
+        )
+    audio_config = spec.get("audio")
+    narration_enabled = (
+        isinstance(audio_config, Mapping) and audio_config.get("enabled") is True
+    )
+    if narration_enabled and plan.narration_takes:
+        raise ReployCaptureError(
+            "Reploy capture does not yet support enabled narration; secret-dependent "
+            "narration requires an approved staging or delegation boundary"
+        )
+    browser_config = spec.get("browser")
+    auth_config = (
+        browser_config.get("auth") if isinstance(browser_config, Mapping) else None
+    )
+    if isinstance(auth_config, Mapping) and any(
+        auth_config.get(name) not in (None, "")
+        for name in ("storage_state_env", "storage_state_path")
+    ):
+        raise ReployCaptureError(
+            "Reploy capture does not yet support browser authentication inputs; "
+            "storage state requires an approved asset or secret-delegation boundary"
+        )
+
+
+def _browser_application_endpoint_ids(
+    config: DictConfig,
+    spec: Mapping[str, Any],
+    plan: Any,
+) -> tuple[str, ...]:
+    if plan.browser is None:
+        return ()
+    browser = spec.get("browser")
+    if not isinstance(browser, Mapping):
+        raise ReployCaptureError("browser config must be a mapping")
+    endpoint_id = browser.get("endpoint_id")
+    if not isinstance(endpoint_id, str) or not _ENDPOINT_ID_RE.fullmatch(endpoint_id):
+        raise ReployCaptureError(
+            "Reploy browser capture requires a valid browser.endpoint_id"
+        )
+    if browser.get("base_url") not in (None, ""):
+        raise ReployCaptureError(
+            "Reploy browser capture derives browser.base_url from opened.endpoints; "
+            "configure browser.endpoint_id instead"
+        )
+    endpoints = config.reploy.workload.environment.workload.endpoints
+    if endpoint_id not in endpoints:
+        raise ReployCaptureError(
+            f"browser endpoint {endpoint_id!r} is not declared by the workload blueprint"
+        )
+    endpoint = endpoints[endpoint_id]
+    if endpoint.scheme not in {"http", "https"}:
+        raise ReployCaptureError(
+            f"browser endpoint {endpoint_id!r} must use http or https"
+        )
+    return (endpoint_id,)
 
 
 def prepare_reploy_run(
