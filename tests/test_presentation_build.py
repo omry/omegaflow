@@ -573,6 +573,61 @@ def test_capture_recording_propagates_headed_override_to_both_runners(
     assert observed["browser_plan"] == plan.browser
 
 
+def test_capture_recording_uses_injected_browser_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = {
+        "id": "injected-browser",
+        "_project_root": str(tmp_path),
+        "_script_dir": str(tmp_path),
+        "browser": {"endpoint_id": "web"},
+        "beats": [
+            {
+                "id": "browser",
+                "medium": "browser",
+                "actions": [{"id": "open", "open_page": {"url": "/demo"}}],
+            }
+        ],
+    }
+    plan = normalize_recording_plan(spec)
+    injected = object()
+    observed: dict[str, object] = {}
+
+    class FakeCoordinator:
+        def __init__(
+            self,
+            *,
+            terminal_runner_factory,
+            terminal_pane_runner_factory,
+            browser_runner_factory,
+        ) -> None:
+            del terminal_runner_factory, terminal_pane_runner_factory
+            observed["browser_runner_factory"] = browser_runner_factory
+
+        def capture(self, *_args, **_kwargs):
+            factory = observed["browser_runner_factory"]
+            assert callable(factory)
+            observed["browser_runner"] = factory()
+            return object()
+
+    monkeypatch.setattr(presentation_build, "CaptureCoordinator", FakeCoordinator)
+    monkeypatch.setattr(
+        presentation_build,
+        "pinned_browser_runtime",
+        lambda: (_ for _ in ()).throw(AssertionError("native preflight was used")),
+    )
+
+    result = capture_recording(
+        spec,
+        plan,
+        tmp_path / "run",
+        browser_runner_factory=lambda: injected,
+    )
+
+    assert result is not None
+    assert observed["browser_runner"] is injected
+
+
 def test_capture_recording_uses_terminal_pane_window_sizes(
     tmp_path: Path, monkeypatch
 ) -> None:
