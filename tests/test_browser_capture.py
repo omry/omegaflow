@@ -8,6 +8,7 @@ import re
 import shutil
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 import wave
@@ -23,6 +24,7 @@ from omegaflow.browser_capture import (
     BrowserCaptureError,
     PersistentBrowserRunner,
     REALTIME_START_FRAME_HOLD_MS,
+    _create_short_browser_runtime_directory,
     browser_runtime_environment,
     resolve_browser_authentication,
 )
@@ -475,6 +477,27 @@ def test_browser_runner_removes_short_runtime_directory_on_close(
     assert not runtime_directory.exists()
 
 
+def test_browser_runtime_directory_falls_back_to_capture_temporary_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fallback = tmp_path / "capture-tmp"
+    fallback.mkdir()
+    real_mkdtemp = tempfile.mkdtemp
+
+    def mkdtemp(*, prefix: str, dir: str | Path) -> str:
+        if Path(dir) == Path("/tmp"):
+            raise OSError("read-only controller root filesystem")
+        return real_mkdtemp(prefix=prefix, dir=dir)
+
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: "/tmp")
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+
+    created = _create_short_browser_runtime_directory(fallback_root=fallback)
+
+    assert created.parent == fallback
+    assert created.stat().st_mode & 0o077 == 0
+
+
 def test_browser_runner_removes_short_runtime_directory_after_early_start_failure(
     tmp_path: Path,
     monkeypatch,
@@ -496,7 +519,7 @@ def test_browser_runner_removes_short_runtime_directory_after_early_start_failur
     )
     monkeypatch.setattr(
         "omegaflow.browser_capture._create_short_browser_runtime_directory",
-        lambda: runtime_directory,
+        lambda **_kwargs: runtime_directory,
     )
     runner = PersistentBrowserRunner({})
 

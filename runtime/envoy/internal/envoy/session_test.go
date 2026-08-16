@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -547,6 +548,51 @@ func TestEnvoyCleansDetachedBackgroundProcessGroupMember(t *testing.T) {
 	}
 	if err := syscall.Kill(brokerPID, 0); !errors.Is(err, syscall.ESRCH) {
 		t.Fatalf("control broker %d was not reaped during structured shutdown: %v", brokerPID, err)
+	}
+}
+
+func TestStructuredCleanupLetsAwshExitBeforeSignallingItsProcessGroup(t *testing.T) {
+	root := t.TempDir()
+	ready := filepath.Join(root, "ready")
+	terminated := filepath.Join(root, "terminated")
+	command := exec.Command(
+		"/bin/sh",
+		"-c",
+		`trap ': > "$OMEGAFLOW_TERMINATED"' TERM; : > "$OMEGAFLOW_READY"; sleep 0.1`,
+	)
+	command.Env = append(
+		os.Environ(),
+		"OMEGAFLOW_READY="+ready,
+		"OMEGAFLOW_TERMINATED="+terminated,
+	)
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- command.Wait() }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("test shell did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	session := &session{
+		config:       DefaultConfig(),
+		command:      command,
+		waitDone:     waitDone,
+		shutdownSent: true,
+	}
+	if err := session.cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(terminated); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("structured cleanup signalled a naturally exiting shell: %v", err)
 	}
 }
 

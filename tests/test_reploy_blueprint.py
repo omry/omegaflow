@@ -24,16 +24,46 @@ def test_hydra_composes_complete_controller_and_workload_blueprints() -> None:
     assert config.reploy.controller.environment.id == "omegaflow-controller"
     assert (
         config.reploy.controller.environment.base.image
-        == "mcr.microsoft.com/playwright/python:v1.61.0-noble"
+        == "debian:bookworm-slim"
     )
-    assert (
-        config.reploy.controller.environment.base.exports.python.executable
-        == "/usr/bin/python3"
-    )
-    assert list(config.reploy.controller.environment.packages.os) == ["ffmpeg"]
+    packages = config.reploy.controller.environment.applications.controller.packages
+    assert list(packages.os) == [
+        "python3",
+        "python3-pip",
+        "python3-venv",
+        "ffmpeg",
+    ]
+    assert [OmegaConf.to_container(tool) for tool in packages.tools] == [
+        {
+            "tool": "asciinema",
+            "version": "3.2.1",
+            "binding": "",
+            "select": [],
+        },
+        {
+            "tool": "playwright",
+            "version": "1.61.0",
+            "binding": "python",
+            "select": ["chromium"],
+        }
+    ]
+    assert OmegaConf.to_container(
+        config.reploy.controller.environment.applications.controller.executables.asciinema
+    ) == {
+        "source": "os",
+        "binary": "asciinema",
+        "order": [],
+        "argv_prefix": [],
+        "argv_suffix": [],
+    }
+    assert OmegaConf.to_container(packages.python.interpreter) == {
+        "command": "python",
+        "version": ">=3.11",
+        "supplier": "os",
+    }
     assert list(
-        config.reploy.controller.environment.applications.controller.packages.python.requirements
-    ) == ["omegaflow[browser]==0.9.0"]
+        packages.python.requirements
+    ) == ["omegaflow==0.9.0"]
     assert OmegaConf.is_readonly(config.reploy.controller)
     assert config.reploy.workload.environment.id == "omegaflow-internal-demo"
     assert config.reploy.workload.environment.base.image == "debian:13"
