@@ -2,10 +2,15 @@
 
 ## Status
 
-- Approved environment and Hydra blueprint contract; runtime materialization,
-  the public controlled-session controller lifecycle, and the Envoy terminal
-  boundary are implemented and undergoing conformance review. Browser,
-  publishing, bootstrap, and migration work remains.
+- Approved environment and Hydra blueprint contract. Runtime materialization,
+  the public controlled-session controller lifecycle, the Envoy terminal
+  boundary, browser endpoint capture, and controller-side publication-candidate
+  construction are implemented. Real Linux `amd64` terminal-only and ordered
+  terminal/browser controlled sessions complete successfully. The lifecycle
+  failure matrix, host publication and CLI integration, and isolated-workload
+  packaging remain. The end state fixes the recording toolchain in Reploy,
+  with a host workload by default and an explicitly configured Reploy workload
+  as the isolated option. The host-workload Envoy adapter remains to be built.
 - Updated: 2026-08-16
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
@@ -26,35 +31,46 @@ migration cutover remain open.
 
 ## Summary
 
-Reploy becomes OmegaFlow's standard execution substrate and a Python dependency
-of OmegaFlow. Docker is Reploy's initial runtime and the only normal external
-host dependency. A user should not need to install Reploy separately or install
-asciinema, Playwright Chromium, ffmpeg, ffprobe, codecs, or the other recording
-and media-processing tools directly on the host.
+Reploy becomes OmegaFlow's required recording-toolchain substrate and a Python
+dependency of OmegaFlow. A supported container runtime is the only normal
+external host dependency. The controller, browser, media, narration, and
+publication tools always run in the OmegaFlow-owned Reploy environment; users
+do not install those tools directly on the host.
 
-OmegaFlow nevertheless retains host recording for now. Recordings that exercise
-Reploy itself, including Reploy-backed Arbiter flows, require it until a
-complete Reploy-nesting model is available. Backend selection UX remains to be
-designed. A future host backend may reuse the Envoy and `awsh` contracts, and a
-future Reploy-managed controller may connect to a thin host Envoy so capture
-dependencies remain off the host; neither topology is specified here.
+The two placement choices remain explicit:
+
+```yaml
+studio:
+  recording_backend: reploy  # reploy | host; host is reserved and errors today
+  workload_backend: host     # host | reploy
+```
+
+`studio.recording_backend` defaults to `reploy`. `host` reserves a future
+bare-metal recording toolchain but currently produces a capability error.
+`studio.workload_backend` defaults to `host`. The host workload uses a
+host-running Envoy and `awsh` while the Reploy controller retains all capture
+authority. An explicitly selected Reploy workload requires a complete
+application blueprint and inherits no undeclared host dependencies. Missing or
+invalid isolated configuration fails; it never falls back after `reploy` is
+selected.
 
 The design separates two environments:
 
 1. The **OmegaFlow toolchain environment** contains OmegaFlow and its capture,
    processing, narration, and publishing dependencies. OmegaFlow owns this
    stable internal Reploy blueprint.
-2. The **recorded application environment** contains the project, tools,
-   packages, services, and state that appear in the recording. The project owns
-   this Reploy blueprint as a Hydra config-group entry.
+2. The **recorded workload** contains the project, tools, packages, services,
+   and state that appear in the recording. It runs on the host by default. When
+   isolated execution is selected, the project owns its Reploy application
+   blueprint as a Hydra config-group entry.
 
 Hydra produces complete typed controller and workload blueprint objects,
 OmegaFlow materializes their native YAML, and Reploy remains authoritative for
 blueprint semantics, Reploy interpolation, package resolution, environment
 construction, and execution.
 
-For a recording, host OmegaFlow prepares distinct toolchain-controller and
-recorded-workload deployments, then invokes the public
+For an isolated-workload recording, host OmegaFlow prepares distinct
+toolchain-controller and recorded-workload deployments, then invokes the public
 `reploy controlled-session run` command. Reploy injects its release-matched
 `reploy-session-client` only into the controller. Controller OmegaFlow consumes
 the public JSON Lines lifecycle stream and uses the separate byte-only terminal
@@ -92,6 +108,8 @@ the user to merge manually.
 11. Integrate only through Reploy's public host command, controller client,
     terminal attachment, endpoint, output, cancellation, and diagnostic
     contracts.
+12. Run the recording controller in Reploy for both workload backends; do not
+    retain a separate host recording toolchain.
 
 ## Non-goals
 
@@ -99,8 +117,8 @@ the user to merge manually.
 2. Perfect dependency inference from arbitrary source code.
 3. Executing project code during bootstrap to discover dependencies.
 4. Silently updating an application blueprint during an ordinary build.
-5. Maintaining permanently divergent recording-plan, artifact, or diagnostic
-   semantics between the retained host and Reploy execution paths.
+5. Divergent recording-plan, artifact, or diagnostic semantics between host
+   and Reploy workloads.
 6. Giving the OmegaFlow toolchain environment broad Docker-socket access.
 7. Designing remote execution, portable environment transfer, or a general
    multi-service orchestrator in this phase.
@@ -130,14 +148,14 @@ the user to merge manually.
   processing dependencies. During a controlled session it is the trusted
   controller deployment.
 
-**Recorded application environment**
-: The Reploy environment whose shell, files, tools, services, and browser
-  application are demonstrated. During a controlled session it is the workload
-  deployment.
+**Recorded workload**
+: The shell, files, tools, services, and browser application being
+  demonstrated. It runs on the host by default or in a Reploy workload
+  deployment when isolated execution is explicitly selected.
 
 **Application blueprint**
 : A project-owned Reploy blueprint selected through a Hydra config group for
-  use as the recorded application environment.
+  use as the isolated recorded workload.
 
 **Host OmegaFlow**
 : The ordinary OmegaFlow CLI installed on the host. It composes blueprints,
@@ -149,7 +167,7 @@ the user to merge manually.
   drives the Reploy session client, terminal recorder, browser runner, action
   coordination, artifact finalization, and acknowledgement lifecycle.
 
-## Architecture
+## Isolated Workload Architecture
 
 ```text
 Host
@@ -189,6 +207,16 @@ environment. Browser capture runs in the controller against endpoint
 coordinates granted by Reploy. Media processing may continue in the controller
 after workload termination, within the selected controller-finalization
 timeout, before OmegaFlow declares its artifacts complete.
+
+## Host Workload Architecture
+
+The host backend retains the same Reploy controller deployment and replaces the
+Reploy workload deployment with the packaged Envoy and `awsh` launched against
+the host project environment. Host OmegaFlow owns that process lifecycle;
+Reploy owns the controller lifecycle and retained output. Terminal, telemetry,
+and declared application services cross only through bounded coordinates
+prepared before controller launch. The portable public Reploy contract for
+those host coordinates remains an implementation prerequisite.
 
 ### Public controlled-session boundary
 
@@ -303,17 +331,20 @@ recording plan. Envoy protocol v1 carries no browser-specific message or
 workload-originated navigation intent. Dynamic workload-selected navigation
 remains deferred.
 
-## Reploy as the Standard Execution Substrate
+## Reploy Recording Toolchain and Workload Selection
 
-Reploy is required for operations that execute a recording or require the
-managed media toolchain in the standard isolated path. Pure authoring and
-source-inspection operations may remain direct CLI operations.
+`studio.recording_backend` is a typed `reploy` or `host` enum and defaults to
+`reploy`. Reploy is the only implemented recording backend. Selecting `host`
+produces a capability error; its enum value reserves a possible future
+bare-metal controller without implying support today. Pure authoring and
+source-inspection operations may remain direct CLI operations. A supported
+container runtime is therefore an intentional recording prerequisite,
+including in CI.
 
-The current native workflow remains available for host recordings, especially
-recordings that exercise Reploy or Reploy-backed tools. Reploy is still the
-target standard for ordinary isolated recordings. Backend naming, defaults,
-and the eventual host implementation require separate design; availability of
-the standard Reploy path alone is not a host-removal criterion.
+The workload runs on the host unless `studio.workload_backend=reploy` is
+selected with a complete workload blueprint. This choice does not change the
+recording controller, capture semantics, browser runner, artifact pipeline, or
+publication boundary.
 
 ## OmegaFlow Toolchain Blueprint
 
@@ -342,9 +373,10 @@ execution, it adds provenance-marked prompt and displayed-command events from
 the recording plan; those presentation events are ordered ahead of workload
 output but are not added to the raw workload-byte log. Reploy separately
 injects its release-matched public client at session preparation time;
-OmegaFlow must not package its own copy of `reploy-session-client`. The bundled
-asciinema executable remains available to the retained host recording path
-until an approved host-Envoy migration replaces it.
+OmegaFlow must not package its own copy of `reploy-session-client`. OmegaFlow
+wheels do not bundle asciinema. Both workload backends are recorded by the
+Reploy controller; host workloads reach that controller through the Envoy
+terminal and telemetry boundary rather than a host recording toolchain.
 
 The command's timing, execution shape, and output mode are fixed before
 execution. `realtime` plus `real` uses the PTY-attached path and publishes
@@ -814,10 +846,11 @@ endpoint limits the controller to that port.
 
 ## Implementation Plan
 
-Implementation is divided into focused slices. Each slice keeps host recording
-working while Reploy nesting and backend UX remain unresolved. The two paths
-must share recording-plan, artifact, and diagnostic semantics rather than
-become divergent capture models.
+Implementation is divided into focused slices. The already implemented
+controlled-session path supplies isolated Reploy workloads. A following slice
+adds the default host workload without adding a second recording toolchain.
+Both paths share one controller, recording plan, artifact model, and diagnostic
+contract.
 
 ### 1. Public contract models
 
@@ -952,19 +985,29 @@ Completion gate: a clean host with OmegaFlow, its Python dependencies, and
 Docker can run a terminal-and-browser recording without locally installed
 capture or media tools.
 
-### 7. Bootstrap, refresh, and migration
+### 7. Host workload, bootstrap, and migration
 
+- Add `studio.recording_backend` with typed `reploy` and `host` values, default
+  it to `reploy`, and reject the reserved `host` value until a bare-metal
+  recording toolchain exists.
+- Add `studio.workload_backend` with typed `host` and `reploy` values and make
+  `host` the default.
+- Launch the packaged Envoy and `awsh` against the host project environment and
+  connect the Reploy controller through bounded terminal, telemetry, and
+  declared application endpoint coordinates.
+- Retire the FIFO capture path after host-Envoy behavioral parity; retain no
+  separate host browser, media, or publication toolchain.
 - Add application-blueprint bootstrap and deterministic refresh.
 - Add capability errors for unsupported hosts, private environments,
   secret-dependent session operations, multi-terminal-pane recordings, missing
   Bash, and unavailable Reploy features.
-- Run representative recordings through both paths, make Reploy standard for
-  ordinary isolated recordings, and retain host recording until Reploy nesting
-  and a separately approved backend migration make replacement possible.
+- Run representative recordings through both workload backends. Keep isolated
+  Reploy workloads explicitly selected until their project blueprint is
+  complete.
 
-Completion gate: documentation, bootstrap, diagnostics, and release packaging
-describe the standard Reploy execution model and the bounded reason host
-recording remains supported.
+Completion gate: both workload backends use the Reploy controller and produce
+equivalent capture, diagnostic, and publication semantics; the host workload is
+the default and the FIFO recording path is no longer required.
 
 ## Validation Plan
 
@@ -1015,9 +1058,12 @@ multi-pane coverage:
 
 ## Decisions
 
-1. Reploy is the target standard execution substrate, not a permanently
-   optional peer backend.
-2. The toolchain and recorded application environments are distinct.
+1. Reploy is the required recording-toolchain substrate. A supported container
+   runtime is required for recording, including in CI; a bare-metal controller
+   is deferred unless a concrete need justifies reintroducing it.
+2. Recording-toolchain placement and workload placement are distinct. The
+   controller always runs in Reploy; the workload defaults to the host and may
+   be explicitly isolated in Reploy.
 3. OmegaFlow owns the stable controller structured config, and the resolved
    controller blueprint is visible but read-only.
 4. Project-owned application structured configs compose through `reploy/app`
@@ -1048,10 +1094,15 @@ multi-pane coverage:
 16. OmegaFlow declares a compatible Reploy Python dependency and normal package
     resolution installs it; OmegaFlow does not vendor Reploy. Docker is the only
     normal external host dependency.
-17. Host recording remains supported until a complete Reploy-nesting solution
-    covers recordings of Reploy and Reploy-backed tools. Its backend UX and any
-    migration from the FIFO runner to a host Envoy require separate design and
-    approval.
+17. `studio.recording_backend` is a typed `reploy` or `host` enum and defaults
+    to `reploy`. `host` is reserved and produces a capability error until a
+    bare-metal recording toolchain is deliberately introduced.
+18. `studio.workload_backend` is a typed `host` or `reploy` enum. `host` is the
+    default. Explicit `reploy` selection requires a complete workload blueprint
+    and never falls back after configuration or execution failure.
+19. The current FIFO runner is migration scaffolding, not a second recording
+    toolchain. Host workloads move to the packaged Envoy and `awsh` and use the
+    same Reploy controller as isolated workloads.
 
 ## Open Questions
 
@@ -1065,8 +1116,9 @@ multi-pane coverage:
 5. Which project detectors are included in the first release?
 6. How should toolchain selection work for a facet that lacks a first-class
    Reploy provider?
-7. What nesting capability and migration evidence would allow the native local
-   recording path to leave the supported product surface?
+7. What public Reploy endpoint contract should give its controller bounded,
+   portable access to a host-running Envoy and declared host application
+   services across supported Docker and Podman runtimes?
 8. What topology will eventually support multiple terminal panes that share
    one recorded application state without weakening the persistent-shell and
    output-ordering contracts?

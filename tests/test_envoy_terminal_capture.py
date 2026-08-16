@@ -14,6 +14,7 @@ import pytest
 from omegaflow.capture import CaptureContext
 from omegaflow.envoy_session import EnvoyOperationResult, EnvoySessionError
 from omegaflow.envoy_terminal_capture import EnvoyPersistentTerminalRunner
+from omegaflow.presentation_build import _load_terminal_actions
 from omegaflow.recording_plan import (
     capture_runner_beat,
     captured_pane_beats,
@@ -190,8 +191,17 @@ def test_envoy_runner_writes_direct_beat_cast_and_action_ranges(tmp_path: Path) 
     assert "$ printf hello\nran:printf hello\n$ " in "".join(
         json.loads(line)[2] for line in cast.splitlines()[1:]
     )
+    assert actions["version"] == 1
+    assert actions["beat_id"] == "one"
     assert actions["actions"][0]["id"] == "__step_0"
     assert actions["actions"][0]["event_indexes"]["output_start"] == 3
+    loaded = _load_terminal_actions(
+        result.artifacts[1],
+        beat_id="one",
+        expected_action_ids=("__step_0",),
+    )
+    assert loaded["__step_0"].timing == "presentation"
+    assert loaded["__step_0"].presentation_snapshot["display"] == "printf hello"
     assert fake.closed
 
 

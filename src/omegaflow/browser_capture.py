@@ -395,7 +395,9 @@ class PersistentBrowserRunner:
         self.authentication = authentication
         try:
             self.runtime_temporary_directory = (
-                _create_short_browser_runtime_directory()
+                _create_short_browser_runtime_directory(
+                    fallback_root=context.paths.temporary,
+                )
             )
             self.secrets.register_storage_state(authentication.storage_state)
             self.capture_log_path = context.runner_capture / "browser.capture.jsonl"
@@ -1846,22 +1848,29 @@ class PersistentBrowserRunner:
         return errors
 
 
-def _create_short_browser_runtime_directory() -> Path:
-    root = Path("/tmp")
-    if not root.is_dir():
-        root = Path(tempfile.gettempdir())
-    path: Path | None = None
-    try:
-        path = Path(tempfile.mkdtemp(prefix="of-browser-", dir=root))
-        path.chmod(0o700)
-    except OSError as exc:
-        if path is not None:
-            shutil.rmtree(path, ignore_errors=True)
-        raise BrowserCaptureError(
-            "BROWSER_SCHEMA",
-            "could not create private browser runtime directory",
-        ) from exc
-    return path
+def _create_short_browser_runtime_directory(
+    *, fallback_root: Path | None = None
+) -> Path:
+    roots = [Path("/tmp"), Path(tempfile.gettempdir())]
+    if fallback_root is not None:
+        roots.append(fallback_root)
+    error: OSError | None = None
+    for root in dict.fromkeys(roots):
+        if not root.is_dir():
+            continue
+        path: Path | None = None
+        try:
+            path = Path(tempfile.mkdtemp(prefix="of-browser-", dir=root))
+            path.chmod(0o700)
+            return path
+        except OSError as exc:
+            error = exc
+            if path is not None:
+                shutil.rmtree(path, ignore_errors=True)
+    raise BrowserCaptureError(
+        "BROWSER_SCHEMA",
+        "could not create private browser runtime directory",
+    ) from error
 
 
 def _prepare_private_browser_directory(path: Path) -> None:

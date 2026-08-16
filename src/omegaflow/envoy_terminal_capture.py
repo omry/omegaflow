@@ -23,6 +23,7 @@ from .recording_plan import (
 from .studio_config import RecordingMedium
 from .terminal_capture import (
     TERMINAL_FAILURE_OUTPUT_MAX_BYTES,
+    TERMINAL_PRESENTATION_SNAPSHOT_FIELDS,
     TerminalCaptureError,
     TerminalLifecycleStepError,
     TerminalPresentationDefaults,
@@ -187,6 +188,7 @@ class EnvoyPersistentTerminalRunner:
                 timings.append(
                     {
                         "id": action_id,
+                        "timing": snapshot["timing"],
                         "capture_start_ms": action_start_ms,
                         "capture_end_ms": session.elapsed_ms - beat_started,
                         "event_indexes": {
@@ -196,6 +198,10 @@ class EnvoyPersistentTerminalRunner:
                             "output_start": output_start,
                             "output_end": output_end,
                             "action_end": session.cast_event_count - event_start,
+                        },
+                        "presentation_snapshot": {
+                            field: snapshot[field]
+                            for field in TERMINAL_PRESENTATION_SNAPSHOT_FIELDS
                         },
                     }
                 )
@@ -218,7 +224,16 @@ class EnvoyPersistentTerminalRunner:
         action_timing = beat_dir / f"{beat.id}.actions.json"
         session.write_cast_slice(cast_start, cast_end, beat_cast)
         action_timing.write_text(
-            json.dumps({"actions": timings}, separators=(",", ":")) + "\n",
+            json.dumps(
+                {
+                    "version": 1,
+                    "beat_id": beat.id,
+                    "actions": timings,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
         return BeatCapture(
