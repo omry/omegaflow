@@ -139,10 +139,10 @@ def test_runtime_builder_writes_sorted_manifest_and_production_layout(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "source"
-    prototype = root / "docs" / "future" / "prototype" / "awsh"
-    prototype.mkdir(parents=True)
-    (prototype / "awsh").write_text("#!/bin/sh\n", encoding="utf-8")
-    (prototype / "awsh-driver.bash").write_text("driver\n", encoding="utf-8")
+    awsh_root = root / "runtime" / "internal" / "awsh"
+    awsh_root.mkdir(parents=True)
+    (awsh_root / "awsh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (awsh_root / "awsh-driver.bash").write_text("driver\n", encoding="utf-8")
     script = Path(__file__).resolve().parents[1] / "tools" / "build_workload_runtime.py"
     spec = importlib.util.spec_from_file_location("test_build_workload_runtime", script)
     assert spec is not None and spec.loader is not None
