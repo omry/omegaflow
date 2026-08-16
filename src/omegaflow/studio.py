@@ -66,6 +66,7 @@ from .studio_config import (
     load_configured_env_file,
     load_recording_spec_from_hydra_cfg,
     project_config_searchpath_override,
+    protect_reploy_controller_config,
     recording_collection_from_script,
     recording_script_dir_from_config,
     recording_source_kind,
@@ -4360,6 +4361,7 @@ def add_project_config_searchpath(argv: list[str]) -> list[str]:
 def hydra_main(cfg: DictConfig) -> None:
     use_color = record.host_color_enabled(sys.stderr)
     try:
+        protect_reploy_controller_config(cfg)
         raise SystemExit(run_tool_from_hydra_cfg(cfg))
     except KeyboardInterrupt:
         print(
