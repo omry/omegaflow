@@ -394,6 +394,12 @@ func (state *SessionState) advanceOutput(offset uint64) error {
 	if offset < state.outputEnd || (state.hasStart && offset < state.outputStart) {
 		return protocolError("invalid-output-order", "output offset regressed")
 	}
+	if state.hasStart && state.executionShape == ExecutionSplit {
+		logicalBytes := uint64(state.stdoutBytes + state.stderrBytes)
+		if logicalBytes > offset-state.outputStart {
+			return protocolError("invalid-output-order", "logical output exceeds output barrier")
+		}
+	}
 	state.outputEnd = offset
 	return nil
 }

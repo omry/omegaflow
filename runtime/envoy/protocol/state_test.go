@@ -198,6 +198,22 @@ func TestSessionStateLogicalStreamsAndPlannedFinalization(t *testing.T) {
 	}
 }
 
+func TestSessionStateRejectsLogicalEvidenceBeyondOutputBarrier(t *testing.T) {
+	state := readyState(t)
+	if err := state.AcceptController(testExecute(2, "server", "printf out")); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AcceptEnvoy(OperationStarted{Seq: 2, OperationID: "server", OutputStart: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.AcceptEnvoy(OperationOutput{Seq: 3, OperationID: "server", Stream: "stdout", DataBase64: "b3V0Cg=="}); err != nil {
+		t.Fatal(err)
+	}
+	requireCode(t, "invalid-output-order", state.AcceptEnvoy(OperationReady{
+		Seq: 4, OperationID: "server", GateID: "gate-1", OutputThrough: 13,
+	}))
+}
+
 func TestSessionStateRejectsLogicalStreamsForPTYOperations(t *testing.T) {
 	state := readyState(t)
 	if err := state.AcceptController(testPTYExecute(2, "interactive", "bash")); err != nil {
