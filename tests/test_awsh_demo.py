@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 import builtins
+import importlib.util
 import io
 import os
 import select
 import signal
+import sys
 import time
+from pathlib import Path
 
-from awsh_demo import (
+_DEMO_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "runtime"
+    / "internal"
+    / "awsh"
+    / "awsh_demo.py"
+)
+_DEMO_SPEC = importlib.util.spec_from_file_location("omegaflow_awsh_demo", _DEMO_PATH)
+assert _DEMO_SPEC is not None and _DEMO_SPEC.loader is not None
+_DEMO = importlib.util.module_from_spec(_DEMO_SPEC)
+sys.modules[_DEMO_SPEC.name] = _DEMO
+_DEMO_SPEC.loader.exec_module(_DEMO)
+
+from omegaflow_awsh_demo import (  # noqa: E402
     POST_COMPLETION_DRAIN_SECONDS,
     POST_COMPLETION_QUIET_SECONDS,
     AwshSession,

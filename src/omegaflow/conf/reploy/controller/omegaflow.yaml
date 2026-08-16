@@ -3,23 +3,33 @@ blueprint:
   version: "${omegaflow_version:}"
   requires_reploy: ">=0.7.0.dev1"
   compatibility:
-    platforms: [linux/amd64, linux/arm64]
+    platforms: [linux/amd64]
 
 environment:
   id: omegaflow-controller
   base:
-    image: mcr.microsoft.com/playwright/python:v1.61.0-noble
-    exports:
-      python:
-        executable: /usr/bin/python3
-  packages:
-    os: [ffmpeg]
+    image: debian:bookworm-slim
   applications:
     controller:
       packages:
+        tools:
+          - tool: asciinema
+            version: "3.2.1"
+          - tool: playwright
+            version: "1.61.0"
+            binding: python
+            select: [chromium]
+        os: [python3, python3-pip, python3-venv, ffmpeg]
         python:
-          requirements: ["omegaflow[browser]==${omegaflow_version:}"]
+          interpreter:
+            command: python
+            version: ">=3.11"
+            supplier: os
+          requirements: ["omegaflow==${omegaflow_version:}"]
       executables:
+        asciinema:
+          source: os
+          binary: asciinema
         omegaflow:
           source: python
           binary: omegaflow

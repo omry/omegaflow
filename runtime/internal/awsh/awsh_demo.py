@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testing-only split-screen frontend for the awsh prototype."""
+"""Testing-only split-screen frontend for Awsh."""
 
 from __future__ import annotations
 

@@ -639,6 +639,9 @@ func (s *session) cleanup() (cleanupErr error) {
 	if s.command == nil || s.command.Process == nil {
 		return nil
 	}
+	if s.shutdownSent && s.waitForProcessGroup(500*time.Millisecond) {
+		return nil
+	}
 	err := syscall.Kill(-s.command.Process.Pid, syscall.SIGTERM)
 	if err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
@@ -665,6 +668,9 @@ func (s *session) waitForProcessGroup(timeout time.Duration) bool {
 			default:
 			}
 		}
+		if s.exited {
+			reapExitedChildren()
+		}
 		groupErr := syscall.Kill(-s.command.Process.Pid, 0)
 		if s.exited && errors.Is(groupErr, syscall.ESRCH) {
 			return true
@@ -676,6 +682,17 @@ func (s *session) waitForProcessGroup(timeout time.Duration) bool {
 			return false
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func reapExitedChildren() {
+	for {
+		var status syscall.WaitStatus
+		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+		if pid > 0 || errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		return
 	}
 }
 
