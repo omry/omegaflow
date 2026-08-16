@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bash-resident half of the awsh prototype. Start through ./awsh.
+# Bash-resident half of Awsh. Start through ./awsh.
 
 set +e
 shopt -s expand_aliases
