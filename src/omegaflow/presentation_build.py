@@ -609,6 +609,7 @@ def capture_recording(
     headed: bool = False,
     on_progress: CaptureProgressCallback | None = None,
     terminal_runner_factory: Callable[[str | None], CaptureRunner] | None = None,
+    browser_runner_factory: Callable[[], CaptureRunner] | None = None,
 ) -> CaptureResult:
     """Capture every beat in one shared environment with failure diagnostics."""
 
@@ -638,7 +639,7 @@ def capture_recording(
     ):
         raise PresentationBuildError("capture.timeout must be positive")
     working_directory, environment = _capture_environment(spec)
-    if plan.browser is not None:
+    if plan.browser is not None and browser_runner_factory is None:
         try:
             browser_runtime = pinned_browser_runtime()
         except BrowserRuntimeError as exc:
@@ -712,10 +713,15 @@ def capture_recording(
         browser_runner_factory=(
             None
             if plan.browser is None
-            else lambda: PersistentBrowserRunner(
-                plan.browser,
-                headless=effective_headless,
-                secret_values=tuple(application_environment.values()),
+            else (
+                browser_runner_factory
+                or (
+                    lambda: PersistentBrowserRunner(
+                        plan.browser,
+                        headless=effective_headless,
+                        secret_values=tuple(application_environment.values()),
+                    )
+                )
             )
         ),
     )
