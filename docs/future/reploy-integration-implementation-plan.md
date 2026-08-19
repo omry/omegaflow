@@ -3,10 +3,13 @@
 ## Status
 
 - Temporary delivery plan.
-- Trusted implementation boundary: the approved tip of the A-stack, currently
-  PR 8. Node identities are not recorded here because every restack rewrites
-  them; read the current node from the stack itself.
-- Updated: 2026-08-17.
+- Trusted implementation boundary: the rebuilt stack's base, the tip of
+  `main`, which carries the formerly approved implementation stack. That
+  stack's final pre-rebuild PR number, 8, has since been reused by an open PR
+  in the rebuilt stack, so PR numbers are not boundary evidence; within the
+  rebuilt stack, the `approved` label on a PR is. Node identities are not
+  recorded here because every restack rewrites them.
+- Updated: 2026-08-20.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -90,7 +93,7 @@ repository.
 
 ## Review discipline
 
-- Start the rebuilt stack from the trusted PR 8 boundary.
+- Start the rebuilt stack from the trusted base: the tip of `main`.
 - Keep at most three unapproved PRs live at once.
 - Once a PR is approved, do not rewrite it. Corrections go into a successor PR
   and receive their own review.
@@ -276,7 +279,7 @@ work must not be folded backward into the terminal-only slices.
 
 | Slice | State | Evidence |
 | --- | --- | --- |
-| A1 | Amended, awaiting re-review | Approved, then amended with sender-stamped output marks; approval applies again only after the amended PR is reviewed |
+| A1 | Approved | Amended with sender-stamped output marks, re-reviewed through 42 remote rounds plus a local deep-design-review trail, and re-approved via the `approved` label on PR #1 on 2026-08-19; post-approval documentation corrections land in successor PRs |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
