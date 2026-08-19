@@ -3,11 +3,12 @@
 ## Status
 
 - Approved environment direction with the current Hydra blueprint and placement
-  amendments under re-review. The trusted implementation boundary remains PR 8.
+  amendments under re-review. The trusted implementation boundary
+  remains the rebuilt stack's base on `main`.
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-08-17
+- Updated: 2026-08-20
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -526,7 +527,8 @@ a port the Envoy is not listening on. Launch-affecting names take the other
 enforcement path, because a static reserved entry can pin a named value but
 cannot clear arbitrary names: OmegaFlow's Envoy-requirement validation rejects a
 composed blueprint whose environment contains `ENV`, `BASH_ENV`, or any name
-beginning with `LD_` or `AWSH_`, so those names never exist in the container for
+beginning with `LD_` or `AWSH_` — this list is the normative enumeration,
+referenced by the other design documents — so those names never exist in the container for
 either shell launch to meet. A workload whose commands need a loader variable
 sets it inside operation source, where the persistent shell carries it to
 operation children as ordinary shell state without governing any launch. The
