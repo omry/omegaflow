@@ -2,11 +2,12 @@
 
 ## Status
 
-- Approved direction through the protocol and Awsh Bash prototype. The current
-  protocol amendment and rebuilt delivery plan are under re-review. Production
+- Approved direction through the protocol and Awsh Bash prototype. The amended
+  protocol and rebuilt delivery plan are approved; documentation corrections
+  from the local design review are open in a successor PR. Production
   Envoy, runtime, controller, terminal-runner, and browser changes in the former
   PR 9–13 stack are raw material, not accepted implementation evidence.
-- Updated: 2026-08-17
+- Updated: 2026-08-20
 - Initial scope: one persistent Bash backend for terminal execution and
   structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -157,8 +158,9 @@ uses its compiled schedule instead. Whenever the timeline returns from an
 authored schedule to sender time — after synthesized prompt and typing
 presentation as well as after a presentation-timed operation — a signed session
 offset is re-anchored at the Envoy-stamped boundary that ends the span, the
-operation's start in the first case and the mark closing its range in the
-second. Anchoring there rather than on the next event to arrive keeps controller
+operation's start in the first case — or the terminal event that replaces it
+when the operation fails or is cancelled before starting — and the mark closing
+its range in the second. Anchoring there rather than on the next event to arrive keeps controller
 scheduling and discarded command duration out of the recording without also
 erasing a slow command's own startup delay, which falls after the anchor.
 Transport delay and controller backpressure therefore cannot deform the
@@ -464,9 +466,10 @@ controller OmegaFlow uses that attachment to execute
 Reploy command or transport contract.
 
 That bootstrap shell runs before any OmegaFlow code does, so the blueprint never
-sees the variables that would let application code execute inside it — `ENV` and
-`BASH_ENV` above all, and every `LD_` loader variable, which the dynamic loader
-consumes before `/bin/sh` reads anything — because OmegaFlow's Envoy-requirement
+sees the variables that would let application code execute inside it — `ENV`
+and `BASH_ENV` above all, every `LD_` loader variable, which the dynamic loader
+consumes before `/bin/sh` reads anything, and the reserved `AWSH_` prefix, the
+enumeration owned by the Reploy environment design — because OmegaFlow's Envoy-requirement
 validation rejects a composed blueprint whose environment contains them, and
 rejection is the only mechanism that can reach this shell: Reploy launches it
 with the blueprint environment before any OmegaFlow code runs, and the later
@@ -748,14 +751,15 @@ runtime, controller, terminal, browser, artifact, and migration work into
 review units that were too large. It is superseded by the temporary
 [Reploy Integration Implementation Plan](reploy-integration-implementation-plan.md).
 
-Delivery now proceeds through four gated phases:
+Delivery now proceeds through five gated phases:
 
 1. amend and re-review the protocol and plan;
 2. complete local Envoy/Awsh conformance in bounded slices;
 3. integrate the controller, Reploy boundary, runtime, blueprint, and terminal
-   runner without browser scope; and
-4. prove a terminal-only isolated Reploy recording before planning browser,
-   publication, host-workload parity, or FIFO retirement.
+   runner without browser scope;
+4. prove a terminal-only isolated Reploy recording; and
+5. plan browser, publication, host-workload parity, and FIFO retirement as
+   later, separately approved stacks.
 
 The cross-slice acceptance requirements below remain product requirements. The
 temporary plan owns their implementation order and evidence status.

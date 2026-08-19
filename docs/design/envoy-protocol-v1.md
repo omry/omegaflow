@@ -95,6 +95,7 @@ required handshake fails the capture.
 | Terminal input barrier wait | 5 seconds |
 | Raw output per session | 8 GiB |
 | Retained supervised writers per session | 256 |
+| Concurrently tracked descendants per operation | 4,096 |
 | PID | 1 through `2^31-1` |
 | Shell status | 0 through 255 |
 | Terminal columns and rows | 1 through 1,000 |
@@ -277,7 +278,7 @@ is session-scoped rather than operation-scoped, because output can arrive
 between operations. `offset` is the raw-log offset at which the attribution
 begins, `stream` is `pty`, `stdout`, `stderr`, or `echo`, and `elapsed_us` is
 the Envoy's monotonic microseconds since the session epoch established by
-`ready`. A mark attributes every byte from its `offset` until the next mark's
+`ready`; `ready` itself carries `elapsed_us` 0, the instant it is stamped. A mark attributes every byte from its `offset` until the next mark's
 `offset`.
 
 `echo` covers the raw-log span produced by the Envoy's own write of authored
@@ -341,6 +342,13 @@ writes never touches the raw-log or mark budgets, so the retained set has its
 own session limit: an operation whose completion would retain a writer beyond it
 fails instead of retaining, before the Envoy's descriptor or process budget
 breaks a later operation or the final cleanup.
+
+Tracking itself is bounded the same way. The Envoy retains a supervision
+identity for every live operation-created descendant, so the concurrently
+tracked set has its own budget from the global limits: an operation that
+would exceed it fails with `tracked-descendant-limit`, its tree terminated
+and reaped exactly as at an exclusive cleanup, before the Envoy's descriptor
+table becomes the failure.
 
 Only an unchecked `real` operation can leave such a writer: `suppress`,
 `replace`, and checked `real` operations fail closed when a writer survives
@@ -485,7 +493,7 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-`resize` is allowed in idle, starting, running, or gated states. Only one resize
+`resize` is allowed in idle, starting, running, gated, or continuing states; continuing is included because it is running-equivalent for the PTY, so a controller may pipeline `continue` and `resize` without waiting for `operation_continued`. Only one resize
 may be outstanding, and it must be matched by `resize_applied` with the same
 dimensions before another resize or shutdown. A bounded diagnostic is allowed
 after `hello` and before `closed`. Every operation and gate event must match the
@@ -773,8 +781,8 @@ to withhold — and a cleanup failure fails the operation instead. An unchecked
 `real` operation keeps its shell-faithful survivors at cancellation exactly as
 at completion. The Envoy then drains output and emits `operation_cancelled` with
 the shell status, normally 130. If the driver does not return, the Envoy
-terminates the persistent process group and emits `operation_failed` with a
-stable code. A cancelled operation never emits `operation_completed`.
+terminates the persistent process group and emits `operation_failed` with
+`cancel-timeout`. A cancelled operation never emits `operation_completed`.
 
 A `cancel` can also arrive after the driver has returned, while the Envoy is
 still resolving the inspection plan — the one phase that can outlast the command
@@ -798,7 +806,10 @@ cleanup but fail the capture even if Bash later returns successfully.
 ## Planned recording-end finalization
 
 `finalize` is distinct from cancellation. It names an intentionally open
-running, gated, or continuing operation and a bounded reason. The compiled
+running, gated, or continuing operation and a bounded reason. An operation
+still in `Starting` is never finalized: a recording that ends while the
+terminal-input barrier holds cancels it instead, taking the pre-start
+cancellation path, which sends no signal and reports no status. The compiled
 lifetime policy — which operation is intentionally open, and when the recording
 ends it — stays on the controller side and reaches the Envoy only as this typed
 request, so the termination sequence is fixed rather than configured and
@@ -978,8 +989,9 @@ It also removes every name beginning with `BASH_FUNC_`, `LD_`, or `AWSH_`; the
 `AWSH_` prefix belongs to the launch contract. Loader variables go because the
 dynamic loader consumes them before Bash reads a single flag, which would run
 application-controlled libraries inside the process that holds the private
-descriptors. Blueprint validation already rejects application-declared `LD_` and
-`AWSH_` names before anything is deployed, so for a validated blueprint this
+descriptors. Blueprint validation already rejects application-declared `ENV`, `BASH_ENV`,
+`LD_`, and `AWSH_` names — the enumeration the Reploy environment design owns —
+before anything is deployed, so for a validated blueprint this
 filter is a backstop rather than the enforcement point. A workload whose
 commands need a loader variable sets it inside operation source, where the
 persistent shell carries it to operation children as ordinary shell state while
@@ -1001,6 +1013,19 @@ Malformed, oversized, out-of-sequence, out-of-state, wrong-operation, and
 regressing-offset messages fail closed. When possible, the side detecting a
 failure records a bounded diagnostic before closing; diagnostic delivery is
 best effort and never converts failure to success.
+
+`operation_failed` carries one of a closed v1 code set: the five inspection
+codes above; `input-barrier-timeout` for a terminal-input barrier wait that
+exceeds its bound; `cancel-timeout` and `finalize-timeout` for a driver that
+does not return within the grace period; `echo-span-unclosed` for an echo
+span the Envoy cannot close; `surviving-writer` for a writer surviving a
+policy that forbids it; `retained-writer-limit` for a completion that would
+exceed the retained-writer budget; `tracked-descendant-limit` for an
+operation exceeding the tracked-descendant budget; `shell-ended-unresolved`
+for a shell end leaving declared inspections or an authored gate
+unevaluable; and `exclusive-cleanup` for a cleanup or census failure at an
+exclusive boundary. Codes keep the diagnostic shape, and adding one is a
+schema change under the versioning rule.
 
 The controller retains partial raw output, cast, timeline, accepted telemetry,
 and the structured local cause, then asks Reploy to terminate. Envoy success
