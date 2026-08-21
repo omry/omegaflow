@@ -230,19 +230,22 @@ server, client, plugin, deployment, and product-security work.
       once the player already has focus; add tests for the supported case; and
       defer explicitly if the behavior is too browser-dependent to make robust.
 
-- [ ] `P2` Evaluate Reploy-backed recording and processing environments without
-      replacing local mode. Produce a short architecture decision that compares
-      a nested processing/recording environment with a non-nested
-      controller/worker shape, defines the artifact and security boundary, and
-      recommends one bounded prototype. Acceptance checks: identify the
-      required processing and recording dependencies; account for casts,
-      timelines, narration, logs, failure metadata, and published assets;
-      keep the host installation on bare `omegaflow`, while provisioning
-      `omegaflow[browser]` and its browser runtime inside the Reploy environment
-      only when the recording requires browser support;
-      validate whether safe nested control is available; prefer a narrow Reploy
-      API over broad Docker-socket access; and leave the current local workflow
-      and its dependency errors unchanged.
+- [ ] `P2` Deliver Reploy-backed recording and processing as OmegaFlow's required
+      recording-controller environment. Keep the host installation on bare
+      `omegaflow`; provision the release-owned browser, media, narration, and
+      publication toolchain inside Reploy; and use only Reploy's narrow public
+      controlled-session boundary rather than broad Docker-socket access. Both
+      recording and workload placement use the typed `host | reploy` value
+      domain. Recording defaults to and currently requires `reploy`;
+      `recording_backend=host` is reserved, fails capability validation before
+      preparation, and has no maintained local-controller path or fallback.
+      Workload placement remains separate: host and Reploy workloads use the
+      same Reploy controller and capture contract. Acceptance checks: account
+      for casts, timelines, narration, logs, failure metadata, and published
+      assets; define the controller/workload artifact and security boundary;
+      validate the complete Reploy lifecycle, endpoint, output, and cleanup
+      path; and retire the FIFO-backed local controller only after the host-Envoy
+      workload path proves parity.
 
 - [ ] Define and implement direct native Windows support, starting with
       browser-only recordings. Playwright makes browser capture useful on
