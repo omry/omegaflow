@@ -83,8 +83,36 @@ letter or digit.
 Run the prototype checks from the repository root:
 
 ```text
-pytest -q docs/future/prototype/awsh/test_awsh.py
+pytest -q docs/future/prototype/awsh
 ```
+
+### Split-screen testing console
+
+For exploratory testing, `awsh_demo.py` supplies the missing human-facing
+command reader and opens a tmux split with terminal output on the left and
+protocol activity on the right:
+
+```text
+./awsh_demo.py
+```
+
+Enter submits one line of Bash source as an operation. Ctrl-C while an
+operation is active is forwarded through its PTY; Ctrl-D at the prompt sends a
+structured shutdown request. The prompt reflects the cwd reported by `awsh`.
+Python's GNU Readline integration supplies line editing, in-session history,
+reverse search, and basic path completion.
+
+The activity pane labels submitted source as a wrapper-local `request`, then
+shows the `started`, `completed`, and other events decoded from `awsh`'s result
+stream. Request source is visible in this testing UI, so do not submit secrets
+that should not be displayed.
+
+The console requires Python 3 and tmux. It is testing scaffolding rather than
+part of the private protocol or proposed Envoy. It deliberately does not try
+to reproduce Bash's parser-driven continuation prompts, startup files,
+history expansion, or programmable completion functions. Background-job
+output produced while the Readline prompt is idle may not appear until the
+next operation starts.
 
 ## What this can establish
 
