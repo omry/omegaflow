@@ -1,0 +1,13 @@
+{"schema":"omegaflow-envoy-telemetry-v1","type":"ready","seq":1,"envoy_pid":41,"shell_pid":42,"cwd":"/work","columns":80,"rows":24}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_started","seq":2,"operation_id":"op-1","output_start":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_ready","seq":3,"operation_id":"op-1","gate_id":"gate-1","output_through":3}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_continued","seq":4,"operation_id":"op-1","gate_id":"gate-1","output_through":3}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_output","seq":5,"operation_id":"op-1","stream":"stdout","data_base64":"b2sK"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_completed","seq":6,"operation_id":"op-1","status":0,"cwd":"/work","output_start":0,"output_through":6}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_cancelled","seq":7,"operation_id":"op-1","status":130,"cwd":"/work","reason":"controller-cancelled","output_start":6,"output_through":9}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_finalized","seq":8,"operation_id":"op-1","cwd":"/work","reason":"recording-end","output_start":9,"output_through":12}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_failed","seq":9,"operation_id":"op-1","code":"shell-exited","message":"persistent Bash exited","cwd":"/work","output_start":9,"output_through":12}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"resize_applied","seq":10,"columns":100,"rows":30}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"diagnostic","seq":11,"severity":"error","code":"pty-read-failed","message":"PTY read failed","operation_id":"op-1"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"draining","seq":12,"reason":"capture-complete","output_through":12}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"closed","seq":13,"reason":"shutdown","output_through":12}
