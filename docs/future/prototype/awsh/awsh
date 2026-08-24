@@ -1,0 +1,15 @@
+#!/bin/sh
+# POSIX entrypoint for the awsh persistent-Bash driver prototype.
+
+set -eu
+
+awsh_bash=${AWSH_BASH:-bash}
+case $0 in
+  */*) awsh_driver=${0%/*}/awsh-driver.bash ;;
+  *)
+    printf 'awsh: invoke the prototype with a path so it can locate awsh-driver.bash\n' >&2
+    exit 64
+    ;;
+esac
+
+exec "$awsh_bash" --noprofile --norc "$awsh_driver" "$@"
