@@ -9,7 +9,7 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-08-20.
+- Updated: 2026-08-25.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -22,11 +22,11 @@ the Reploy integration. Product contracts remain in
 ## Starting point
 
 The approved implementation contains neither the Envoy protocol models and
-fixtures nor the Awsh Bash prototype: both are pending work in this stack, the
-prototype in the commit above this one and the protocol implementation above
-that, and B1 and B2 schedule the rest. It contains no production Envoy and no
-Reploy integration either. A slice must therefore treat those artifacts as
-arriving with the stack rather than as already present.
+fixtures nor an external Awsh supervisor. The later Bash-resident prototype and
+protocol implementation in the current stack predate the external-supervisor
+amendment and are rewrite material, not an implementation dependency or
+approval baseline. B1 and B2 schedule the conforming replacements. The trusted
+base also contains no production Envoy or Reploy integration.
 
 The former PR 9 through PR 13 stack and the off-stack controlled-session work
 are raw material only. They may supply tests, fixtures, implementation ideas,
@@ -94,6 +94,12 @@ each row when its selected material is integrated into a reviewed stack slice.
 8. Bash is the only top-level shell backend in this plan. Multi-shell,
    multi-terminal-pane, project discovery, blueprint refresh, and secret
    delegation are outside the terminal-only milestone.
+9. Envoy owns the PTY master, controller protocol, input/source/resize
+   serialization, process-tree policy, and final drain. One external Awsh
+   supervisor directly parents and reaps persistent Bash, owns the private
+   selected-shell adapter boundary, and performs a cancellation interrupt in
+   the same serialized action that classifies source execution. Non-Bash
+   adapters remain deferred.
 
 ## Review discipline
 
@@ -105,7 +111,8 @@ each row when its selected material is integrated into a reviewed stack slice.
 - Target fewer than 800 handwritten changed lines. Split a PR before 1,200
   handwritten changed lines unless the excess is mechanically generated or a
   focused golden-fixture corpus.
-- A1 is exempt from that limit by owner decision: the contract reconciliation
+- A1 and its documentation-only A2 successor are exempt from that limit by
+  owner decision: each contract reconciliation
   stays one coherent PR however many review rounds grow it, because splitting a
   single self-consistent specification across review units would fragment it
   without adding review value. The line caps above bind the implementation
@@ -138,14 +145,59 @@ each row when its selected material is integrated into a reviewed stack slice.
 Gate: one documentation-only PR is reviewed again and approved before code is
 extracted from the raw stack.
 
+**A2. External Awsh supervisor amendment**
+
+- Record the proven `Envoy -> external Awsh -> persistent Bash` process tree in
+  all four authoritative documents.
+- Keep Envoy as the sole PTY-master writer and preserve the controller-facing
+  terminal and telemetry request shapes; add the one typed
+  `operation_gate_interrupted` event needed to leave a gate after terminal
+  Ctrl-C without inventing lifecycle cancellation.
+- Amend the private protocol for Awsh/Bash identity, cooperative PTY source
+  submission, start acknowledgement, source rejection, explicit shell exit,
+  shell-ended close, split-stream FIFOs, and orderly shutdown.
+- Freeze the one-exec descriptor handoff, controlling-terminal launch sequence,
+  private bounded Bash-helper packet protocol, exact submission-discard window,
+  and operation-start deadline.
+- Freeze delivery of the immutable Bash bootstrap through one manifested trusted
+  rcfile, including the initial prompt-state/readiness handshake before private
+  Awsh readiness.
+- Generate one versioned Bash-build table into host preparation and Envoy from
+  the same canonical digest-keyed source; record each build's compiled system-rc
+  path and startup-export transform, require any declared path absent, and reject a
+  prepared initial exported environment that cannot fit the helper bounds.
+- Freeze the complete Bash state matrix, immutable hooks, and one byte-exact
+  submission capsule: captured and temporarily disabled `histexpand`, reserved
+  bracketed-paste begin and `C-J` acceptance bindings in both supported
+  line-entry keymaps, a temporary byte-transparent termios delta, exact
+  begin/frame/end/`LF` bytes, prompt-boundary validation before readiness,
+  a blocking entry-sentinel handshake that proves Bash actually entered
+  Readline, default `SIGCHLD` before every normal helper spawn,
+  pre-start rejection of the exact paste terminator in authored source, and
+  independent fail-closed frame-entry and termios-restoration checks.
+- Preserve Bash as the only initial backend while defining a private behavioral
+  boundary that a future shell backend can implement without changing the
+  controller protocol.
+
+Gate: this documentation-only successor is approved at its current revision,
+its required checks are green, and every changed design attestation binds to
+the final reviewed bytes before B work resumes.
+
 ### B. Local Envoy and Awsh conformance
 
 **B1. Protocol models and fixtures**
 
 Add Go validation and canonical fixtures for inspection requests, deterministic
-IDs, resolved plans, typed results, aggregate frame bounds, malformed cases,
+IDs, resolved plans, typed results, aggregate frame bounds, the doubled-source
+capsule maximum and complete private `submit` envelope, malformed cases,
 failure codes, matching and mismatching handshake session IDs, and every
-startup/control-write deadline epoch. Cover an earlier writer exiting with
+startup/control-write/operation-start deadline epoch. Add exact private frames
+for Awsh/Bash
+identity, `submit`, `started`/`started_ack`, source rejection, active and idle
+`shell_exit`, `gate_interrupt`/`gate_interrupt_ack`, every cancel/finalize
+`disposition`, shell-ended shutdown, and both `closed` reasons. Freeze the public
+`operation_gate_interrupted` frame and state transitions, including crossed
+continue, cancel, and finalize. Cover an earlier writer exiting with
 bytes still buffered, and require the fresh exclusive pre-start drain before
 `operation_started`. Freeze path-resolution and file-digest
 compatibility with the native runner, including undefined variables, `~user`,
@@ -160,21 +212,106 @@ first actual split-stream byte.
 
 **B2. Awsh boundary alignment**
 
-Align execution-policy framing, persistent Bash state, inspection-path
-resolution, and descriptor non-inheritance with the amended protocol.
+Replace the Bash-resident request loop with the external Go Awsh supervisor and
+initial Bash backend. Prove direct `Envoy -> Awsh -> Bash` parentage, real shell
+wait status, cooperative bracketed-paste submission through Envoy, the
+start/ack barrier, source preflight, the complete supported state matrix,
+immutable hooks, action gates, cancellation survival, explicit shell exit, and
+orderly shutdown. Make idle shutdown send one uncatchable `SIGKILL` to the known
+selected-shell process group, reap Bash, close helper/slave resources, and report
+status 137 without running workload traps; preserve an actual reap status when
+Bash wins the pre-signal race. Launch Bash with the manifested trusted rcfile
+and prove its initial prompt-state/readiness sequence completes before private
+Awsh readiness.
+Validate `/bin/bash` against Envoy's generated build table and the selected
+entry's absent compiled system-rc path before launch, and retain only Awsh's close-on-exec control-only PTY slave descriptor
+for identity checks, submission-capsule termios operations, and atomic
+cancellation signaling.
+Implement the private mode-0700 runtime directory and
+mode-0600 Unix `SOCK_SEQPACKET` helper endpoint using short-lived modes of the
+manifested Awsh binary; freeze every bounded packet, environment limit, state
+transition, blocking reply, peer check, timeout, and cleanup rule. Implement and
+test exact signal-safe save/ignore/verify/restore behavior around every helper.
+Preserve ordinary signal, `EXIT`, and `ERR` traps; reserve `DEBUG` and `RETURN`
+unset and `SIGCHLD` default at every adapter boundary. Check those three through
+private-file `trap -p` checks, without command substitution or a child process,
+before every normal helper spawn. Make a gate refuse status 125 and a reached
+prompt boundary fail closed when reserved trap state is invalid; do not claim a
+DEBUG trap can be suppressed before its own invocation. Implement and test the
+Awsh-owned `setsid`/`TIOCSCTTY` controlling-terminal session,
+supervisor-private `SIGTTOU` handling, and barriered Bash-child
+process-group/fd-0-1-2/foreground-group launch sequence. Require Bash to reset
+job-control signals before exec and prove Awsh can legally perform `tcgetsid`,
+`tcgetpgrp`, and termios operations after Bash becomes foreground. Implement
+the private shell-ended close handshake. Create and validate the
+frame-entry marker in the immutable `PS0` path before its helper sends the
+blocking `start` packet. Validate bracketed-paste
+enablement, the exact begin binding, and `C-J` mapped to `accept-line` in both
+supported line-entry keymaps at startup and every reached prompt boundary; an
+invalid state must fail before readiness. Capture `histexpand`, disable it while
+the generated frame is read and parsed, then generate two byte-identical
+authored brace branches selected by the immutable input-state function as an
+`if` condition. That condition restores history state and returns the exact
+prior status without invoking `errexit`; the selected authored branch must keep
+normal `errexit` behavior and see that status at its first command. Apply and
+verify the entry sentinel while the blocking `prompt_ready` helper still
+prevents Bash from entering Readline; acknowledge it only after exact read-back,
+then accept no input or `execute` until Readline clears both sentinel bits and
+Awsh captures the active state. Apply the closed byte-transparent termios delta
+only from that exact active state. Require normal Readline return to restore the
+sentinel, then restore and verify the workload snapshot before Awsh accepts
+`start`. Keep the frame-entry marker and termios comparison as
+independent framing backstops. Enforce the protocol's closed
+simple-alias grammar from `BASH_ALIASES` at startup and every reached prompt
+boundary, reserve the exact input-state-condition alias name, preserve common
+command-and-argument aliases, and fail unsupported grammar-bearing alias state
+without transferring aliases into Awsh preflight.
+Parser-state-dependent, whitespace-only, comment-only, and exact
+bracketed-paste-terminator-containing source must be rejected before start.
+Keep a Ctrl-C-interrupted gate helper blocked while Awsh proposes the interrupt,
+make Envoy order that proposal against continue/cancel/finalize, publish the
+typed output-barrier event before acknowledgement, and only then let the helper
+return 130.
+Prove Bash and exec'd descendants inherit no Envoy socket, private
+Envoy-to-Awsh descriptor, or helper descriptor. Do not retain a second
+Bash-resident production driver or claim non-Bash support.
 
 **B3. Envoy session foundation**
 
 Implement listeners, the controller-generated session-ID handshake, the
 independent actor-local connect/hello/ready deadlines, one PTY, persistent
-Awsh/Bash startup, shared PTY execution, exact byte relay, bounded control
-writes, an empty `HISTFILE` for controlled Bash after application
-environment delegation, and orderly shutdown.
+external-Awsh/Bash startup with validated private identities, shared PTY
+execution, exact byte relay, sole-writer serialization of controller input and
+Awsh-requested source submission, exact pre-submission retention and
+submission-redraw discard, the non-resetting operation-start deadline, bounded
+control writes, the one-exec close-on-exec descriptor handoff, an empty
+`HISTFILE` for controlled Bash after application environment delegation, and
+orderly shutdown carrying the reaped shell status privately without relying on
+PTY closure or a cooperative Bash command.
 
 **B4. Operation boundaries and controls**
 
-Implement output barriers, completion, input, resize, cancellation, action
-gates, planned finalization, and final drain. Freeze resize placement at the
+Implement Awsh `submit`/`started`/`started_ack`, source-redraw discard, output
+barriers, completion, input, resize, cancellation, action gates, planned
+finalization, and final drain. Make Envoy the sole gate-decision arbiter: close
+the multi-source output frontier and complete
+`operation_gate_interrupted` before `gate_interrupt_ack`, suppress a losing
+proposal, resolve a crossed continue with the interruption event, and preserve
+a crossed cancel or finalize against the resumed operation. Treat the first
+submission byte as the start
+commit point: cancel before it disarms
+privately with an empty pre-start result, while cancel crossing the bounded
+submission transaction is accepted immediately after `operation_started` and
+takes the ordinary running path. Freeze result-versus-request serialization and
+the private request/disposition handshake: `signal` confirms Awsh selected and
+interrupted the foreground group inside the same serialized classification,
+`gate-cancelled` and `settled` perform none, `disarmed` acknowledges
+pre-start cancellation, and `already-interrupted` prevents a second action when
+cancel crosses finalization. Retain a crossed just-written Awsh result until the
+next execute/shutdown, buffer it at Envoy until the disposition arrives, and
+prove signal-safe helper transitions close every source/gate/completion race
+without resetting the timer. Freeze
+resize placement at the
 serialized writer's authored frontier, including queue-order ties and
 zero-duration schedules. Classify each resize when the controller sends it. A
 request sent during synthesized prompt or typing retains that authored-span tag
@@ -209,8 +346,9 @@ Reploy termination request and result. Accept ordinary completion from the
 controller's cancelling state when the serialized inspection result wins before
 cancellation. Linearize each accepted resize in the output pump,
 close and carry its preceding `output_through` frontier across the PTY and every
-active operation's split stdout/stderr source before `TIOCSWINSZ`, and make the
-controller reach that raw-log frontier before publishing the resize. Cover PTY
+active operation's split stdout/stderr source before the Linux `TIOCSWINSZ`,
+rely on that ioctl's one kernel-generated foreground-group `SIGWINCH`, and make
+the controller reach that raw-log frontier before publishing the resize. Cover PTY
 output immediately preceding a resize and a continuously writing PTY workload
 in B4 conformance; add the active split-stream equivalent with B5. Cover both
 resize/shell-end race outcomes: `resize_applied` resolves a resize applied
@@ -219,17 +357,26 @@ publishing it. Prove that a shell-ended drain crossing both an unstarted
 `execute` and its deadline-derived `cancel` resolves both requests with no
 terminal operation result and leaves the planned beat to fail as unrunnable.
 Make every failed `TIOCSWINSZ` fatal to the session in idle and active-operation
-states: emit best-effort `resize-failed`, no `resize_applied` or terminal
-operation result, close the channels, exit nonzero, retain partial artifacts,
-explain the failure, and log the Reploy termination request and result. Before
+states: emit best-effort `resize-failed`,
+no `resize_applied` or terminal operation result, close the channels, exit
+nonzero, retain partial artifacts, explain the failure, and log the Reploy
+termination request and result. Before
 any terminal operation result, observe EOF on the
-operation's split pipes, drain the pipe and PTY bytes, and emit their covering
+operation's split streams, drain those and the PTY bytes, and emit their covering
 mark.
 
 **B5. Split execution**
 
-Implement separate stdout/stderr supervision, ordered terminal forwarding,
-sender-stamped output marks, and split-stream conformance.
+Implement Envoy-created per-operation stdout/stderr FIFOs in a private
+mode-0700 runtime directory, with stdin left on the PTY, separate stream
+supervision, ordered terminal forwarding, sender-stamped output marks, and
+split-stream conformance. Envoy must open readers and keepalives before Awsh
+frames the redirections, kill remaining operation writers before closing its
+keepers, drain both FIFOs through EOF, remove the operation paths, and only then
+publish the terminal result. Prove the selected FIFO-backed fd 1/fd 2 are the
+only FIFO descriptors reaching a split exec'd child: no reader, keeper, helper,
+control descriptor, or pathname contract reaches it, and no descriptor or path
+survives into a later operation.
 
 **B6. Process cleanup and exclusive observation**
 
@@ -238,31 +385,33 @@ replaced, and presentation-timed operations. Reject `output_contains` and
 `output_regex` at plan compilation when an interactive operation or any of its
 continuations sends bytes through `text`, `key`, or `control`; retain
 `wait_for` as visible-terminal synchronization rather than assertion evidence.
-Independently of that evidence mode, implement Envoy-owned process cleanup after
-every submitted Bash operation: subreaper adoption, pidfd tracking, repeated
-`/proc` census,
-termination, reap, EOF, and drain before the terminal result. Cover ordinary
+Independently of that evidence mode, implement Envoy-owned process-tree policy
+after every submitted Bash operation: Envoy directly supervises Awsh and acts
+as subreaper, Awsh directly parents and reaps Bash, and Envoy performs pidfd
+tracking, repeated `/proc` census, termination, adopted reap, EOF, and drain
+before the terminal result. Cover ordinary
 background jobs, `disown`, `nohup`, `setsid`, rapid double-fork daemonization,
 cancellation, cancellation received after the Awsh result while mandatory
 cleanup is in progress, planned finalization, the five-second monotonic cleanup
 deadline, a cancellation racing a command that ends the persistent shell, and a
 setup-launched service outside the controlled tree remaining unaffected. Prove
-that cancellation and finalization grace-period expiry terminates and reaps
-persistent Bash, emits `operation_failed` with the corresponding timeout code
-and `shell_ended: true`, and enters the `shell_ended` drain without another
-prompt or operation. Prove that a deadline cancel accepted during the original
-finalization grace sends no second signal, does not reset the timer, and switches
-the result to `operation_cancelled` after timely driver return and cleanup or to
-`cancel-timeout` with `shell_ended: true` on expiry. Prove
+that cancellation and finalization grace-period expiry makes Envoy terminate
+the selected-shell process group, Awsh explicitly report Bash's reaped status,
+and Envoy emit `operation_failed` with the corresponding timeout code and
+`shell_ended: true`, then enter the `shell_ended` drain without another prompt
+or operation. Prove that a deadline cancel accepted during the original
+finalization grace sends no second signal, does not reset the timer, and
+switches the result to `operation_cancelled` after a timely Awsh adapter result
+and cleanup or to `cancel-timeout` with `shell_ended: true` on expiry. Prove
 that post-result cancellation does not signal idle persistent Bash, does not
 reset the cleanup deadline, skips inspection only after successful cleanup, and
 then emits `operation_cancelled`; cleanup failure still produces no terminal
 operation result and hands final environment termination to Reploy. Also prove
 the same outcome when cancellation arrives during post-finalize cleanup, and
 prove both serialized winners when it arrives during post-finalize inspection.
-Also prove that the shell-ended result wins its cancellation race without losing
-its reaped status. Prove that `finalize` received after the Awsh result likewise never
-signals idle persistent Bash, never resets cleanup, and never replaces the
+Also prove that Awsh's explicit shell-ended result wins its cancellation race
+without losing its reaped status. Prove that `finalize` received after the Awsh
+result likewise never signals idle persistent Bash, never resets cleanup, and never replaces the
 returned status with a synthetic status-free result; successful cleanup
 continues through inspection, while cleanup failure remains fatal with no
 terminal operation result. Do not add a controller process-lifetime option or a
@@ -274,7 +423,8 @@ domain.
 
 **B7. Workload inspection**
 
-Resolve configured paths in persistent Bash state, perform bounded workload
+Have external Awsh's Bash adapter resolve configured paths from persistent Bash
+cwd and exported environment; perform bounded workload
 existence/type/hash inspection in Envoy only after the universal operation
 cleanup and output drain, and return private typed results without controller
 filesystem access or probe commands. Run the resolved plan in a short-lived,
@@ -290,13 +440,36 @@ cleanup and drain failures, and every inspection resource limit.
 
 **B8. Failure and isolation hardening**
 
-Prove socket and private-descriptor isolation, stable failure classes, channel
-loss, shell exit, malformed traffic, cleanup, and repeated shutdown behavior.
+Prove the exact process topology, socket and private-descriptor isolation,
+stable failure classes, Awsh-first failure, active and idle explicit shell exit,
+malformed private traffic, adapter-framing corruption, cleanup, and repeated
+shutdown behavior.
+Cover helper packet truncation/overflow/state mismatch, environment overflow,
+manifested-rcfile absence or mismatch, unknown Bash digest/build-table entry,
+present system rc path, oversized prepared startup environment, startup helper ordering,
+every submission-capsule termios flag and read-back/restore failure, initial and
+later mutation of paste-begin or `C-J` acceptance, top-level history-expansion
+suppression with both preserved values, both exact conditional branches,
+nonzero prior status with `errexit` enabled, input-state-condition failure,
+entry-sentinel ordering and timeout, input or `execute` before observed Readline
+entry, initial and later non-default `SIGCHLD`, gate refusal under invalid state,
+initial and later `DEBUG`/`RETURN` traps, a trap that intercepts boundary entry,
+the maximum accepted source producing an in-bound doubled-source `submit` frame,
+operation-start timeout, partial Bash launch cleanup, every disposition phase,
+late Ctrl-C during each helper mode, gate-interrupt winners and losers against
+continue/cancel/finalize, normal completion after `gate; echo after`, immediate
+`errexit` after gate status 130, source-to-gate and source-to-prompt helper
+transitions during Awsh's atomic classified signal action, crossed private result/disposition
+ordering, and private EOF after `shell_exit` but before
+the required `closed` frame. Cover idle shutdown's successful process-group
+`SIGKILL`, fixed status 137, trap suppression, pre-signal `ESRCH` reap race,
+resource-close order, and final-drain timeout.
 Cover both orderings of `shutdown` crossing an idle persistent-shell exit:
 observed shell exit first resolves `ShutdownSent` through `shell_ended`, while
 accepted shutdown first preserves the requested shutdown reason.
 
-Gate: the complete local Envoy/Awsh conformance suite passes. No Reploy or
+Gate: the complete local Envoy/external-Awsh/Bash-adapter conformance suite
+passes. No Reploy or
 terminal-runner integration is required to review the individual B slices.
 
 ### C. Controller and Reploy boundaries
@@ -319,8 +492,11 @@ fixtures, including inspection results and cross-channel output barriers.
 
 **C4. Runtime build artifact**
 
-Add reproducible platform builds and the manifest for Envoy, Awsh, and their
-required runtime files.
+Add reproducible `CGO_ENABLED=0` platform builds for the Envoy and external Awsh
+commands from the runtime Go module. Manifest both binaries, Awsh's built-in
+Bash helper modes (without separate helper executables), the trusted Bash
+rcfile, the empty Readline file, terminfo, and locale
+assets; require the same selected artifacts for host and isolated workloads.
 
 **C5. Runtime staging**
 
@@ -335,7 +511,11 @@ Reject the complete normative launch-control environment enumeration before
 materialization, including application-provided `HISTFILE` and `INPUTRC`.
 Compose an empty `HISTFILE` after the application, validate that final
 value, and prove neither application `HISTFILE` nor the default under its
-`HOME` can block Bash before OmegaFlow types the Envoy bootstrap command.
+`HOME` can block Bash before OmegaFlow types the Envoy bootstrap command. Record
+and validate `/bin/bash` against the generated build table, require any selected
+system rc path absent, derive the exact first controlled-Bash exported
+environment, and reject preparation when its canonical helper representation
+would exceed 1,024 entries or 49,152 encoded bytes.
 
 **C7. Controller run input**
 
@@ -402,7 +582,8 @@ gate.
 
 | Slice | State | Evidence |
 | --- | --- | --- |
-| A1 | Amended, awaiting fresh re-review | Initially approved 2026-08-19 after 42 non-converged remote rounds; by owner decision the twelve corrections of the local deep-design-review campaign were folded back in, the approval label was removed, and the combined amendment awaits a fresh remote review cycle |
+| A1 | Approved | Approved on the current PR 25 revision after the local deep-design-review corrections and fresh remote review; GitHub carries the `approved` label |
+| A2 | Drafted, awaiting review | External Awsh-supervisor feasibility gate passed locally with 126 combined tests; documentation-only successor still requires fresh deep review, current-revision approval, green checks, and refreshed changed attestations |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
