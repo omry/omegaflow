@@ -8,6 +8,7 @@ import select
 import shlex
 import signal
 import subprocess
+import termios
 import time
 import traceback
 from pathlib import Path
@@ -22,6 +23,8 @@ RESULT_FD = 21
 EVENT_FIELDS = {
     "ready": ("pid", "cwd"),
     "started": ("operation_id",),
+    "gate_ready": ("operation_id", "gate_id"),
+    "gate_continued": ("operation_id", "gate_id"),
     "completed": ("operation_id", "status", "cwd"),
     "protocol_error": ("code", "message"),
     "closed": ("reason", "cwd"),
@@ -102,6 +105,9 @@ class AwshProcess:
         return b"\0" in self._result_buffer or bool(
             select.select([self.result_read], [], [], 0)[0]
         )
+
+    def resize(self, rows: int, columns: int) -> None:
+        termios.tcsetwinsize(self.terminal_master, (rows, columns))
 
     def read_terminal_until(self, expected: bytes, timeout: float = 2.0) -> bytes:
         deadline = time.monotonic() + timeout
@@ -612,32 +618,6 @@ def test_shutdown_reports_cwd_after_workload_unsets_pwd_with_nounset(
     assert awsh.wait() == 0
 
 
-def test_clean_eof_reports_cwd_after_workload_unsets_pwd_with_nounset(
-    tmp_path: Path,
-) -> None:
-    process = AwshProcess()
-    assert process.read_event()["type"] == "ready"
-    try:
-        process.send(
-            "execute",
-            "unset-pwd-before-eof",
-            f"cd {shlex.quote(str(tmp_path))}; set -u; unset PWD",
-        )
-        assert process.read_event()["type"] == "started"
-        assert process.read_event()["type"] == "completed"
-
-        os.close(process.request_write)
-        process.request_write = -1
-        assert process.read_event() == {
-            "type": "closed",
-            "reason": "eof",
-            "cwd": str(tmp_path),
-        }
-        assert process.wait() == 0
-    finally:
-        process.close()
-
-
 def test_readonly_workload_names_cannot_forge_protocol_errors(
     awsh: AwshProcess,
 ) -> None:
@@ -652,7 +632,7 @@ def test_readonly_workload_names_cannot_forge_protocol_errors(
     awsh.send("unsupported-kind")
     assert awsh.read_event() == {
         "type": "protocol_error",
-        "code": "unsupported_request",
+        "code": "unsupported-request",
         "message": "unsupported request kind: unsupported-kind",
     }
     assert awsh.wait() == 64
@@ -775,6 +755,231 @@ def test_operation_reads_interactive_input_from_the_pty(awsh: AwshProcess) -> No
     }
 
 
+def test_action_gate_continues_and_preserves_operation_state(
+    awsh: AwshProcess,
+) -> None:
+    awsh.send(
+        "execute",
+        "gated",
+        "export AWSH_BEFORE_GATE=preserved\n"
+        "awsh_gate gate-1 || return $?\n"
+        "printf 'after-gate=%s\\n' \"$AWSH_BEFORE_GATE\"",
+    )
+    assert awsh.read_event() == {"type": "started", "operation_id": "gated"}
+    assert awsh.read_event() == {
+        "type": "gate_ready",
+        "operation_id": "gated",
+        "gate_id": "gate-1",
+    }
+    awsh.send("continue", "gated", "gate-1")
+    assert awsh.read_event() == {
+        "type": "gate_continued",
+        "operation_id": "gated",
+        "gate_id": "gate-1",
+    }
+    assert b"after-gate=preserved" in awsh.read_terminal_until(
+        b"after-gate=preserved"
+    )
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "gated",
+        "status": "0",
+        "cwd": os.getcwd(),
+    }
+
+
+def test_action_gate_cancellation_returns_130_and_driver_survives(
+    awsh: AwshProcess,
+) -> None:
+    awsh.send(
+        "execute",
+        "cancel-gate",
+        "awsh_gate gate-1 || return $?\nprintf 'must-not-run\\n'",
+    )
+    assert awsh.read_event() == {
+        "type": "started",
+        "operation_id": "cancel-gate",
+    }
+    assert awsh.read_event() == {
+        "type": "gate_ready",
+        "operation_id": "cancel-gate",
+        "gate_id": "gate-1",
+    }
+    awsh.send("cancel", "cancel-gate", "controller-cancelled")
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "cancel-gate",
+        "status": "130",
+        "cwd": os.getcwd(),
+    }
+
+    awsh.send("execute", "after-cancel", "printf 'cancel-survived\\n'")
+    assert awsh.read_event() == {
+        "type": "started",
+        "operation_id": "after-cancel",
+    }
+    assert b"cancel-survived" in awsh.read_terminal_until(b"cancel-survived")
+    assert awsh.read_event()["type"] == "completed"
+
+
+def test_ctrl_c_does_not_break_the_request_channel_while_gated(
+    awsh: AwshProcess,
+) -> None:
+    awsh.send(
+        "execute",
+        "interrupt-gate",
+        "awsh_gate gate-1 || return $?\nprintf 'must-not-run\\n'",
+    )
+    assert awsh.read_event() == {
+        "type": "started",
+        "operation_id": "interrupt-gate",
+    }
+    assert awsh.read_event() == {
+        "type": "gate_ready",
+        "operation_id": "interrupt-gate",
+        "gate_id": "gate-1",
+    }
+
+    os.write(awsh.terminal_master, b"\x03")
+    awsh.send("cancel", "interrupt-gate", "terminal-interrupt")
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "interrupt-gate",
+        "status": "130",
+        "cwd": os.getcwd(),
+    }
+
+    awsh.send("execute", "after-gate-interrupt", "printf 'gate-survived\\n'")
+    assert awsh.read_event() == {
+        "type": "started",
+        "operation_id": "after-gate-interrupt",
+    }
+    assert b"gate-survived" in awsh.read_terminal_until(b"gate-survived")
+    assert awsh.read_event()["type"] == "completed"
+
+
+def test_resize_delivers_sigwinch_and_updates_terminal_size(
+    awsh: AwshProcess,
+) -> None:
+    awsh.resize(24, 80)
+    awsh.send(
+        "execute",
+        "resize",
+        "trap 'printf \"driver-winch\\n\"' WINCH\n"
+        "printf 'resize-ready\\n'\n"
+        "IFS= read -r awsh_resize_line\n"
+        "stty size",
+    )
+    assert awsh.read_event() == {"type": "started", "operation_id": "resize"}
+    awsh.read_terminal_until(b"resize-ready")
+    awsh.resize(33, 101)
+    os.write(awsh.terminal_master, b"\n")
+    terminal = awsh.read_terminal_until(b"33 101")
+    assert b"driver-winch" in terminal
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "resize",
+        "status": "0",
+        "cwd": os.getcwd(),
+    }
+
+
+def test_curses_child_uses_the_operation_pty(awsh: AwshProcess) -> None:
+    program = "\n".join(
+        (
+            "import curses, os",
+            "def main(screen):",
+            "    screen.addstr(0, 0, 'curses-ready')",
+            "    screen.refresh()",
+            "    key = screen.getch()",
+            "    os.write(1, f'curses-key={key}\\n'.encode())",
+            "curses.wrapper(main)",
+        )
+    )
+    awsh.send(
+        "execute",
+        "curses",
+        f"TERM=xterm-256color python3 -c {shlex.quote(program)}",
+    )
+    assert awsh.read_event() == {"type": "started", "operation_id": "curses"}
+    awsh.read_terminal_until(b"curses-ready")
+    os.write(awsh.terminal_master, b"q")
+    assert b"curses-key=113" in awsh.read_terminal_until(b"curses-key=113")
+    assert awsh.read_event()["type"] == "completed"
+
+
+def test_nested_interactive_bash_returns_to_persistent_driver(
+    awsh: AwshProcess,
+) -> None:
+    awsh.send(
+        "execute",
+        "nested",
+        "PS1='nested> ' bash --noprofile --norc -i",
+    )
+    assert awsh.read_event() == {"type": "started", "operation_id": "nested"}
+    awsh.read_terminal_until(b"nested> ")
+    os.write(awsh.terminal_master, b"printf 'nested-output\\n'\nexit\n")
+    assert b"nested-output" in awsh.read_terminal_until(b"nested-output")
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "nested",
+        "status": "0",
+        "cwd": os.getcwd(),
+    }
+
+
+def test_background_job_state_persists_between_operations(
+    awsh: AwshProcess,
+) -> None:
+    awsh.send(
+        "execute",
+        "start-job",
+        "sleep 30 & awsh_job_pid=$!; printf 'job-started=%s\\n' \"$awsh_job_pid\"",
+    )
+    assert awsh.read_event()["type"] == "started"
+    awsh.read_terminal_until(b"job-started=")
+    assert awsh.read_event()["type"] == "completed"
+
+    awsh.send(
+        "execute",
+        "check-job",
+        "kill -0 \"$awsh_job_pid\" && jobs -p | grep -qx \"$awsh_job_pid\" && "
+        "printf 'job-alive\\n'; kill \"$awsh_job_pid\"; wait \"$awsh_job_pid\" 2>/dev/null || true",
+    )
+    assert awsh.read_event()["type"] == "started"
+    assert b"job-alive" in awsh.read_terminal_until(b"job-alive")
+    assert awsh.read_event()["type"] == "completed"
+
+
+def test_ordinary_child_does_not_inherit_driver_descriptors(
+    awsh: AwshProcess,
+) -> None:
+    program = "\n".join(
+        (
+            "import os, sys",
+            "fds = [20, 21, *(int(value) for value in sys.argv[1:])]",
+            "assert all(not os.path.exists(f'/proc/self/fd/{fd}') for fd in fds), fds",
+            "print('driver-descriptors-closed')",
+        )
+    )
+    awsh.send(
+        "execute",
+        "descriptor-check",
+        f"python3 -c {shlex.quote(program)} "
+        '"$awsh_control_read_fd" "$awsh_control_write_fd"',
+    )
+    assert awsh.read_event()["type"] == "started"
+    assert b"driver-descriptors-closed" in awsh.read_terminal_until(
+        b"driver-descriptors-closed"
+    )
+    assert awsh.read_event() == {
+        "type": "completed",
+        "operation_id": "descriptor-check",
+        "status": "0",
+        "cwd": os.getcwd(),
+    }
+
+
 def test_ctrl_c_interrupts_the_operation_without_terminating_awsh(
     awsh: AwshProcess,
 ) -> None:
@@ -848,7 +1053,7 @@ def test_rejects_unknown_schema() -> None:
         os.write(process.request_write, payload)
         event = process.read_event()
         assert event["type"] == "protocol_error"
-        assert event["code"] == "unsupported_schema"
+        assert event["code"] == "unsupported-schema"
         assert process.wait() == 64
     finally:
         process.close()
@@ -863,24 +1068,50 @@ def test_rejects_truncated_initial_request_field() -> None:
         process.request_write = -1
         event = process.read_event()
         assert event["type"] == "protocol_error"
-        assert event["code"] == "truncated_request"
+        assert event["code"] == "truncated-request"
         assert process.wait() == 64
     finally:
         process.close()
 
 
-def test_clean_eof_between_request_frames_is_structured() -> None:
+def test_eof_before_shutdown_is_a_protocol_failure() -> None:
     process = AwshProcess()
     assert process.read_event()["type"] == "ready"
     try:
         os.close(process.request_write)
         process.request_write = -1
         event = process.read_event()
-        assert event == {
-            "type": "closed",
-            "reason": "eof",
-            "cwd": os.getcwd(),
+        assert event["type"] == "protocol_error"
+        assert event["code"] == "unexpected-eof"
+        assert process.wait() == 64
+    finally:
+        process.close()
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_status", "expected_output"),
+    [
+        ("exit 23", 23, None),
+        ("exec /bin/sh -c 'printf exec-output\\n'", 0, b"exec-output"),
+    ],
+)
+def test_shell_exit_or_exec_leaves_a_partial_result(
+    source: str,
+    expected_status: int,
+    expected_output: bytes | None,
+) -> None:
+    process = AwshProcess()
+    assert process.read_event()["type"] == "ready"
+    try:
+        process.send("execute", "replace-shell", source)
+        assert process.read_event() == {
+            "type": "started",
+            "operation_id": "replace-shell",
         }
-        assert process.wait() == 0
+        if expected_output is not None:
+            assert expected_output in process.read_terminal_until(expected_output)
+        with pytest.raises(EOFError):
+            process.read_event()
+        assert process.wait() == expected_status
     finally:
         process.close()
