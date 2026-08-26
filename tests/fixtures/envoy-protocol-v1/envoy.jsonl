@@ -1,0 +1,33 @@
+{"schema":"omegaflow-envoy-telemetry-v1","type":"ready","seq":1,"envoy_pid":214,"shell_pid":233,"cwd":"/workspace/project","columns":120,"rows":40,"elapsed_us":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":2,"offset":0,"stream":"pty","elapsed_us":12000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_started","seq":3,"operation_id":"op-1","output_start":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":4,"offset":12,"stream":"pty","elapsed_us":88000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_completed","seq":5,"operation_id":"op-1","status":0,"cwd":"/workspace/project","output_start":0,"output_through":12,"inspection_results":[]}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":6,"offset":12,"stream":"pty","elapsed_us":90000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_cancelled","seq":7,"operation_id":"op-2","cwd":"/workspace/project","reason":"deadline","output_start":12,"output_through":12}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":8,"offset":12,"stream":"pty","elapsed_us":95000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_started","seq":9,"operation_id":"op-3","output_start":12}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":10,"offset":12,"stream":"stdout","elapsed_us":100000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":11,"offset":40,"stream":"stdout","elapsed_us":150000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_ready","seq":12,"operation_id":"op-3","gate_id":"gate-1","output_through":40}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":13,"offset":40,"stream":"stdout","elapsed_us":200000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_gate_interrupted","seq":14,"operation_id":"op-3","gate_id":"gate-1","output_through":40}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":15,"offset":55,"stream":"stderr","elapsed_us":260000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_ready","seq":16,"operation_id":"op-3","gate_id":"gate-2","output_through":55}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":17,"offset":55,"stream":"stderr","elapsed_us":300000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_continued","seq":18,"operation_id":"op-3","gate_id":"gate-2","output_through":55}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":19,"offset":90,"stream":"stdout","elapsed_us":380000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_finalized","seq":20,"operation_id":"op-3","cwd":"/workspace/project","reason":"recording-end","output_start":12,"output_through":90,"inspection_results":[{"inspection_id":"inspection-1","kind":"file_exists","resolved_path":"/home/dev/notes.txt","path_kind":"file"},{"inspection_id":"inspection-2","kind":"produces","resolved_path":"/workspace/project/build/out","path_kind":"directory","producer_id":"build-step","output_id":"bundle","sha256":"cd97e1f176b68d06823d808597e824e975e7a7126edd873d44b4e1592e4fa5a7","digest_algorithm":"directory-v2"}]}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":21,"offset":90,"stream":"stdout","elapsed_us":400000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_failed","seq":22,"operation_id":"op-4","code":"source-unsupported","message":"fresh-parser rejection: source cannot form both authored branches","cwd":"/workspace/project","output_start":90,"output_through":90}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"diagnostic","seq":23,"severity":"warning","code":"source-rejected","message":"operation op-4 was rejected before start and persistent Bash remains available","operation_id":"op-4"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":24,"offset":90,"stream":"stdout","elapsed_us":410000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"resize_applied","seq":25,"columns":100,"rows":30,"elapsed_us":415000,"output_through":90}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":26,"offset":90,"stream":"stdout","elapsed_us":420000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_started","seq":27,"operation_id":"op-5","output_start":90}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":28,"offset":90,"stream":"stdout","elapsed_us":500000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_completed","seq":29,"operation_id":"op-5","status":7,"cwd":"/workspace/project","output_start":90,"output_through":90,"inspection_results":[],"shell_ended":true}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":30,"offset":90,"stream":"stdout","elapsed_us":505000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"draining","seq":31,"reason":"shell_ended","output_through":90}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":32,"offset":90,"stream":"stdout","elapsed_us":510000}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"closed","seq":33,"reason":"shell_ended","output_through":90}
