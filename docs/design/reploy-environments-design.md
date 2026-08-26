@@ -2,15 +2,16 @@
 
 ## Status
 
-- Owner-approved environment direction with the Hydra blueprint and placement
-  amendments. Exact local-review status belongs only to a hash-bound `.review`
-  sidecar when one is present, and the design requires a fresh remote review
-  cycle. The trusted implementation boundary remains the rebuilt stack's base
-  on `main`.
+- Owner-approved environment direction with the Hydra blueprint, placement,
+  and external Awsh-supervisor amendments. Exact local-review status belongs
+  only to a hash-bound `.review` sidecar when one is present. Current-revision
+  approval and required checks remain VCS and CI evidence rather than claims in
+  this document. The trusted
+  implementation boundary remains the rebuilt stack's base on `main`.
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-08-20
+- Updated: 2026-08-28
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -50,9 +51,9 @@ value is schema-valid so configuration remains forward-compatible, but current
 capability validation rejects it before preparation with a targeted unsupported
 recording-controller error; OmegaFlow maintains no bare-metal controller path
 and never falls back to one. `studio.workload_backend` defaults to `host`. The
-host workload uses a
-host-running Envoy and `awsh` while the Reploy controller retains all capture
-authority. An explicitly selected Reploy workload requires a complete
+host workload uses a host-running Envoy which launches the packaged external
+`awsh` supervisor and selected shell, while the Reploy controller retains all
+capture authority. An explicitly selected Reploy workload requires a complete
 application blueprint and inherits no undeclared host dependencies. Missing or
 invalid isolated configuration fails; it never falls back after `reploy` is
 selected.
@@ -234,7 +235,9 @@ Host OmegaFlow
         ├── project toolchains and packages
         ├── read-only /omegaflow-runtime
         ├── Reploy bootstrap shell and PTY
-        ├── Envoy-owned recording PTY and persistent Bash
+        ├── Envoy-owned recording PTY
+        ├── external Awsh supervisor
+        ├── persistent selected shell (Bash initially)
         └── demonstrated services and declared endpoints
 ```
 
@@ -253,8 +256,9 @@ timeout, before OmegaFlow declares its artifacts complete.
 ## Host Workload Architecture
 
 The host backend retains the same Reploy controller deployment and replaces the
-Reploy workload deployment with the packaged Envoy and `awsh` launched against
-the host project environment. Host OmegaFlow owns that process lifecycle;
+Reploy workload deployment with the packaged Envoy, which launches the same
+external `awsh` supervisor and selected-shell assets against the host project
+environment. Host OmegaFlow owns that process lifecycle;
 Reploy owns the controller lifecycle and retained output. Terminal, telemetry,
 and declared application services cross only through bounded coordinates
 prepared before controller launch. The portable public Reploy contract for
@@ -321,7 +325,8 @@ establishes success.
 | Reploy | Exact deployment admission, the bootstrap workload PTY, endpoint coordinates, lifecycle truth, controller output retention, cleanup, and private crash receipts. |
 | Host OmegaFlow | Blueprint composition, deployment preparation, public host invocation, host-process stderr retention, final host-result interpretation, retained-run inspection, and publication. |
 | Controller OmegaFlow | Recording plan execution, Envoy connections, terminal-to-browser handoff, browser automation, redaction, media production and validation, publication-candidate construction, artifact finalization, and structured failure preservation. |
-| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, resize, Ctrl-C delivery, persistent-Bash supervision, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
+| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, source/input/resize serialization, external-Awsh and controlled-tree supervision, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
+| External Awsh supervisor | Direct selected-shell parentage and reaping, controlling-terminal launch validation, private Bash-helper endpoint and lifecycle, operation arming and completion, shell-state handoff, gates, explicit shell-exit reporting, and the shell-ended close handshake over the private Envoy-to-Awsh contract. |
 | Recorded workload | Project shell, tools, files, services, and all untrusted terminal or application content. |
 
 ### OmegaFlow terminal control
@@ -338,13 +343,16 @@ recording stream but are never parsed as telemetry. The telemetry channel
 carries command completion, status, cwd, action gates, output ordering, and
 diagnostics through the versioned contracts defined by the Envoy design.
 
-All OmegaFlow-supplied workload executables and scripts are staged from the
-installed OmegaFlow release, validated by manifest, and mounted read-only and
-executable at `/omegaflow-runtime`. The workload does not require Python or the
-controller filesystem. It must provide Bash for the initial `awsh` adapter. The
-existing local FIFO protocol remains the current host implementation and is not
-extended for Reploy. Replacing it with a host Envoy requires separate design,
-parity evidence, and approval.
+All OmegaFlow-supplied workload executables and scripts, including Envoy and the
+external Awsh supervisor with its built-in Bash-adapter helper modes, are staged
+from the installed OmegaFlow release, validated by manifest, and mounted
+read-only and executable at `/omegaflow-runtime`. Per-session helper IPC uses a
+private mode-0700 directory below writable ephemeral `/run/omegaflow`; no helper
+report is a controller file or a Reploy message. The workload does not require
+Python or the controller filesystem. It must provide Bash for the initial Awsh backend.
+The existing local FIFO protocol remains the current host implementation and
+is not extended for Reploy. Replacing it with a host Envoy requires separate
+design, parity evidence, and approval.
 
 ### Browser handoff
 
@@ -488,28 +496,43 @@ published cast retain their exact bytes and are never normalized.
 
 Bash jobs are insufficient evidence because `disown`, `nohup`, `setsid`, and
 daemonization can hide descendants. Protocol v1 therefore has one process
-lifetime rule for every operation: when the submitted Bash source returns to
-Awsh, the Envoy terminates and reaps every remaining operation-created process,
-then reaches EOF and drains its output before reporting the terminal result.
+lifetime rule for every operation: when Awsh reports that the submitted Bash
+source returned, the Envoy terminates every remaining operation-created
+process, reaps those it owns or adopts, supervises other direct parents through
+reap, then reaches EOF and drains output before reporting the terminal result.
 The Linux Envoy acts as a subreaper, tracks identities by pidfd, and repeats a
-`/proc` census through cleanup; inability to prove that only the persistent Bash
-remains before the protocol's one five-second monotonic cleanup deadline expires
-fails the session without a terminal operation result, after which the
-controller asks Reploy to terminate the environment. Cancellation and planned
-finalization use the same cleanup and deadline. This supervision is correctness
-evidence within the same-identity threat boundary, not security evidence.
+`/proc` census through cleanup; inability to prove that only the external Awsh
+supervisor and persistent Bash remain before the protocol's one five-second
+monotonic cleanup deadline expires fails the session without a terminal
+operation result, after which the controller asks Reploy to terminate the
+environment. Cancellation and planned finalization use the same cleanup and
+deadline. This supervision is correctness evidence within the same-identity
+threat boundary, not security evidence.
 
-Cancellation and planned finalization first give persistent Bash the bounded
-grace period to return. A deadline cancel accepted during a finalization grace
-period sends no second signal and does not reset that timer. It changes a timely
-driver return to cleanup followed by `operation_cancelled`, or expiry to
-`cancel-timeout` with `shell_ended: true`; a finalization result committed first
-still wins. If persistent Bash does not otherwise return, the Envoy terminates and reaps the
-persistent process group, completes mandatory descendant cleanup and output
-drain, reports `operation_failed` with `cancel-timeout` or `finalize-timeout`
-and `shell_ended: true`, and enters the Envoy-initiated `shell_ended` drain.
+Cancellation and planned finalization first give the active Bash operation the
+bounded grace period to return through Awsh. A deadline cancel accepted during
+a finalization grace period sends no second signal and does not reset that
+timer. It changes a timely adapter result to cleanup followed by
+`operation_cancelled`, or expiry to `cancel-timeout` with `shell_ended: true`;
+a finalization result committed first still wins. If persistent Bash does not
+otherwise return, the Envoy terminates its process group, Awsh reaps the shell,
+and the Envoy completes mandatory descendant cleanup and output drain, reports
+`operation_failed` with `cancel-timeout` or `finalize-timeout` and
+`shell_ended: true`, and enters the Envoy-initiated `shell_ended` drain.
 Controller OmegaFlow does not synthesize another prompt or dispatch another
 operation after that result.
+
+Envoy serializes an accepted cancellation or finalization against Awsh results
+and never resets the grace period. It writes the private request first and waits
+for a matching disposition: `signal` confirms Awsh selected the foreground
+group and delivered its one `SIGINT` inside the same serialized
+source-execution classification,
+while a gated, settled, disarmed, or already-interrupted operation receives no
+PTY signal. Signal-safe helper critical sections preserve completion handoff if
+source crosses into helper work during that atomic action. Awsh emits no
+synthetic cancellation result; Envoy maps the next ordinary completion or
+explicit shell reap. This handshake is private OmegaFlow runtime behavior and
+does not add a Reploy lifecycle operation.
 
 Long-lived services belong in environment setup outside the controlled
 Envoy/Awsh process tree. V1 does not preserve processes across operations;
@@ -521,12 +544,13 @@ per-operation cgroup.
 
 `file_exists` and `produces` are evaluated inside the workload rather than
 against the controller filesystem. Their bounded specifications travel with the
-typed operation request. After command execution, `awsh` resolves configured
-paths in the persistent Bash's resulting cwd and exported environment and sends
-the resolved plan to the Envoy over the private driver channel. The Envoy first
-performs the mandatory operation cleanup, proves that only the persistent Bash
-remains, and drains output through the closing offset. It then checks existence
-and kind. Environment-setup services intentionally remain outside that cleanup,
+typed operation request. After command execution, the external Awsh
+supervisor's Bash adapter resolves configured paths in the persistent Bash's
+resulting cwd and exported environment and sends the resolved plan to the Envoy
+over the private result channel. The Envoy first performs the mandatory
+operation cleanup, proves that only external Awsh and persistent Bash remain,
+and drains output through the closing offset. It then checks existence and
+kind. Environment-setup services intentionally remain outside that cleanup,
 so cleanup alone does not make a produced path stable. The Envoy accepts a
 `produces` inspection only when its bounded workload-side inspection establishes
 one stable source state for the complete selected file or directory. Any observed
@@ -634,7 +658,9 @@ and requires those exact values, every other exact forbidden name to be absent,
 no name with a `BASH_FUNC_`, `LD_`, or `AWSH_` prefix, and no `LC_` name except
 the reserved `LC_ALL`. Before deployment, host OmegaFlow verifies from the
 trusted runtime manifest the empty
-Readline file, the exact `xterm-256color` database entry, and the complete
+Readline file, the fixed regular `/omegaflow-runtime/etc/awsh-bashrc` that
+installs the controlled Bash hooks without sourcing another file, the exact
+`xterm-256color` database entry, and the complete
 selected `C.UTF-8` locale tree. Every locale-tree entry must be a regular,
 readable file whose digest matches the manifest. The host also verifies that
 the read-only runtime mount cannot be shadowed. A missing, unreadable,
@@ -642,6 +668,21 @@ non-regular, or hash-mismatched trusted file fails preparation; neither shell
 launch may fall through to application-controlled configuration under `HOME`,
 to another terminal-database search directory, or to an application-selected
 locale database.
+
+Preparation also hashes the resolved regular `/bin/bash` and requires an exact
+entry in OmegaFlow's versioned Bash-build table, generated into host preparation
+and Envoy from one canonical source. Each digest-keyed entry records the
+compiled system-wide interactive rc path or `none` and the deterministic
+startup-export transformation. A declared path must be absent in the resolved
+workload image and Envoy re-hashes the binary and rechecks that absence before
+Bash launch. Preparation
+then derives the exact exported environment for the first controlled-Bash
+`prompt_state` from the final launch environment, working directory, selected
+table entry, and fixed rcfile. It applies the protocol's canonical compact-JSON
+encoding and rejects the workload unless the complete startup set has at most
+1,024 entries and at most 49,152 encoded bytes. Failure to prove the exact set
+also rejects preparation, so an admitted blueprint cannot be guaranteed to fail
+its mandatory readiness handshake solely because of delegated environment size.
 
 The controlled-session bootstrap therefore never opens an application-selected
 history, Readline, terminal-database, locale-database, or mailbox path and never
@@ -655,7 +696,8 @@ operation source, where the persistent shell carries it to operation children
 as ordinary shell state without governing either shell launch. The defaults
 are:
 
-- a Bash package and executable requirement;
+- a Bash package/build requirement whose `/bin/bash` digest has an exact entry
+  in OmegaFlow's generated build table, with any declared system rc path absent;
 - a default non-root `omegaflow` identity;
 - the read-only `/omegaflow-runtime` mount;
 - fixed endpoint IDs `omegaflow-terminal` and `omegaflow-telemetry`;
@@ -664,6 +706,8 @@ are:
   database at `/omegaflow-runtime/share/terminfo` for both shell launches;
 - fixed `INPUTRC=/omegaflow-runtime/etc/inputrc`, naming a
   manifest-validated empty read-only file for both shell launches;
+- a manifest-validated read-only `/omegaflow-runtime/etc/awsh-bashrc`, selected
+  only by Awsh's fixed `--rcfile` launch and never by the Reploy bootstrap shell;
 - fixed `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, and
   `LOCPATH=/omegaflow-runtime/lib/locale`, naming a complete,
   manifest-validated read-only locale tree for both shell launches;
@@ -715,8 +759,9 @@ checking of the composition.
 Envoy requirements are OmegaFlow concepts that Reploy cannot know, so OmegaFlow
 validates them itself against the composed blueprint before materialization: a
 Bash package and executable, a non-root identity, the read-only executable
-`/omegaflow-runtime` mount, no application mount whose target equals, contains,
-or is contained by `/omegaflow-runtime`, `/run/omegaflow`, or another reserved
+`/omegaflow-runtime` mount, a writable ephemeral `/run/omegaflow` root for fresh
+mode-0700 Envoy session directories, no application mount whose target equals,
+contains, or is contained by `/omegaflow-runtime`, `/run/omegaflow`, or another reserved
 OmegaFlow path, and both `omegaflow-terminal` and `omegaflow-telemetry`
 endpoints bound privately. A violation fails the recording with a specific
 error naming the unmet requirement; OmegaFlow does not repair the blueprint.
@@ -1109,7 +1154,7 @@ plan](reploy-integration-implementation-plan.md) supersedes it.
 The rebuilt delivery order is:
 
 1. amend and re-review the contracts and plan;
-2. complete local Envoy/Awsh conformance;
+2. complete local Envoy/external-Awsh/Bash-adapter conformance;
 3. deliver controller, Reploy, runtime, blueprint, and terminal-runner
    boundaries as independent slices;
 4. prove a terminal-only isolated Reploy recording; and
@@ -1157,7 +1202,16 @@ later items are not gates for the terminal-only milestone:
    workload-side file and produced-output inspection, and a setup service outside
    the controlled process tree concurrently mutating a produced file or directory
    causing typed inspection failure with no accepted digest or inspection record,
-   action gates, and ordered output ranges.
+   the complete Bash-state matrix, private bounded helper packets and endpoint
+   cleanup, one-exec descriptor inheritance, controlling-terminal and foreground
+   process-group setup, exact source/redraw discard with legitimate adjacent PTY
+   output retained, manifested-rcfile startup and initial helper ordering,
+   pre-start rejection of the exact bracketed-paste terminator,
+   operation-start timeout, private disposition handshakes,
+   signal-safe helper critical sections, every source/gate/completion race for
+   cancellation and finalization, active and idle shell exit followed by
+   the required shell-ended close handshake, action gates, and ordered output
+   ranges.
 3. **Terminal-only:** Prove startup failure, controller cancellation, workload
    exit, terminal output-finalization failure, controller artifact failure,
    result-delivery failure, acknowledgement failure, cleanup failure, and
@@ -1279,12 +1333,16 @@ later items are not gates for the terminal-only milestone:
     falls back after configuration or execution failure. The presence fact is
     internal composition state, not a user-facing field or backend value.
 19. The current FIFO runner is migration scaffolding, not a second recording
-    toolchain. Host workloads move to the packaged Envoy and `awsh` and use the
-    same Reploy controller as isolated workloads.
+    toolchain. Host workloads move to the packaged Envoy, external Awsh
+    supervisor, and selected backend assets and use the same Reploy controller
+    as isolated workloads.
 20. The terminal-only isolated milestone does not authorize production cutover.
     Before host-Envoy parity, omitted production configuration retains the
     existing FIFO-backed host path and isolated Reploy execution requires an
     explicit `workload_backend=reploy` selection.
+21. Envoy launches one external Awsh supervisor, which directly launches and
+    reaps the selected persistent shell. Bash is the only initial backend;
+    non-Bash adapters and a generalized plugin framework remain deferred.
 
 ## Open Questions
 
