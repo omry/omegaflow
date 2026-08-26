@@ -1,0 +1,12 @@
+{"schema":"omegaflow-envoy-telemetry-v1","type":"hello","seq":1,"session_id":"9f3c7a1e5b2d48c6a0e4f18d73b9c25a"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":2,"operation_id":"op-1","source":"printf 'hello world\\n' 2>&1","execution_shape":"pty","timing":"realtime","publication":"real","observation":"shared","inspections":[],"input_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":3,"operation_id":"op-2","source":"make bundle","execution_shape":"split","timing":"presentation","publication":"replace","observation":"exclusive","inspections":[],"input_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"cancel","seq":4,"operation_id":"op-2","reason":"deadline"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":5,"operation_id":"op-3","source":"./serve --port 8080","execution_shape":"split","timing":"presentation","publication":"suppress","observation":"exclusive","inspections":[{"inspection_id":"inspection-1","kind":"file_exists","path":"$HOME/notes.txt"},{"inspection_id":"inspection-2","kind":"produces","path":"build/out","producer_id":"build-step","output_id":"bundle"}],"input_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"continue","seq":6,"operation_id":"op-3","gate_id":"gate-1","input_through":7}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"continue","seq":7,"operation_id":"op-3","gate_id":"gate-2","input_through":42}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"finalize","seq":8,"operation_id":"op-3","reason":"recording-end"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":9,"operation_id":"op-4","source":"((","execution_shape":"pty","timing":"realtime","publication":"real","observation":"shared","inspections":[],"input_through":42}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"resize","seq":10,"columns":100,"rows":30}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":11,"operation_id":"op-5","source":"exit 7","execution_shape":"pty","timing":"realtime","publication":"real","observation":"shared","inspections":[],"input_through":42}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"shutdown","seq":12,"reason":"recording-complete"}
