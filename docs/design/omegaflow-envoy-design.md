@@ -871,8 +871,8 @@ not a Reploy-private channel or a workload mount.
 
 The former eight-slice plan combined independent protocol, process supervision,
 runtime, controller, terminal, browser, artifact, and migration work into
-review units that were too large. A dependent implementation-plan slice
-supersedes it.
+review units that were too large. The dependent [Reploy integration
+implementation plan](reploy-integration-implementation-plan.md) supersedes it.
 
 Delivery now proceeds through five gated phases:
 
