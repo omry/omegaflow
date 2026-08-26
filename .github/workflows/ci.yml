@@ -10,6 +10,27 @@ permissions:
   contents: read
 
 jobs:
+  envoy-protocol:
+    name: Envoy protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: runtime/envoy/go.mod
+
+      - name: Test workload protocol
+        working-directory: runtime/envoy
+        run: go test ./...
+
+      - name: Vet workload protocol
+        working-directory: runtime/envoy
+        run: go vet ./...
+
   python:
     name: Python tests
     runs-on: ubuntu-latest
