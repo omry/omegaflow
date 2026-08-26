@@ -11,6 +11,7 @@
 [![CI](https://github.com/omry/omegaflow/actions/workflows/ci.yml/badge.svg)](https://github.com/omry/omegaflow/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-omegaflow.dev-6eb6ff)](https://omegaflow.dev/)
 [![Zulip chat](https://img.shields.io/badge/chat-OmegaFlow%20channel-2e77d0?logo=zulip)](https://hydra-framework.zulipchat.com/#narrow/channel/omegaflow)
+[![ecosystem: cli.dev](https://cli.dev/img/badges/cli-dev-ecosystem.svg)](https://cli.dev)
 
 OmegaFlow turns scripted terminal workflows into rebuildable videos for docs,
 tutorials, release notes, and technical demos.
