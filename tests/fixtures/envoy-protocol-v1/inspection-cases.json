@@ -1,0 +1,178 @@
+{
+ "resolution": [
+  {
+   "name": "defined-variable",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "$HOME/notes.txt",
+   "resolved": "/home/dev/notes.txt"
+  },
+  {
+   "name": "braced-variable",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "${OUT}/out",
+   "resolved": "/workspace/project/build/out"
+  },
+  {
+   "name": "undefined-variable-stays-literal",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "$UNDEFINED/data",
+   "resolved": "/workspace/project/$UNDEFINED/data"
+  },
+  {
+   "name": "malformed-brace-stays-literal",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "${UNTERMINATED/data",
+   "resolved": "/workspace/project/${UNTERMINATED/data"
+  },
+  {
+   "name": "tilde-uses-home",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "~/media",
+   "resolved": "/home/dev/media"
+  },
+  {
+   "name": "tilde-without-home-uses-user-database",
+   "env": {},
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "~/media",
+   "resolved": "/home/fallback/media"
+  },
+  {
+   "name": "tilde-known-user",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "~deploy/releases",
+   "resolved": "/srv/deploy/releases"
+  },
+  {
+   "name": "tilde-unknown-user-stays-literal",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "~nobody/releases",
+   "resolved": "/workspace/project/~nobody/releases"
+  },
+  {
+   "name": "relative-after-cd",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project/sub",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "logs/latest.txt",
+   "resolved": "/workspace/project/sub/logs/latest.txt"
+  },
+  {
+   "name": "absolute-unchanged",
+   "env": {
+    "HOME": "/home/dev",
+    "OUT": "build"
+   },
+   "cwd": "/workspace/project",
+   "homes": {
+    "": "/home/fallback",
+    "deploy": "/srv/deploy"
+   },
+   "configured": "/var/log/app.log",
+   "resolved": "/var/log/app.log"
+  }
+ ],
+ "digests": {
+  "tree": [
+   {
+    "path": "report.txt",
+    "kind": "file",
+    "content": "42 items\n"
+   },
+   {
+    "path": "empty",
+    "kind": "dir"
+   },
+   {
+    "path": "media",
+    "kind": "dir"
+   },
+   {
+    "path": "media/logo.svg",
+    "kind": "file",
+    "content": "\u003csvg/\u003e"
+   },
+   {
+    "path": "media/latest",
+    "kind": "link",
+    "target": "logo.svg"
+   },
+   {
+    "path": "media/pipe",
+    "kind": "special"
+   }
+  ],
+  "file_content": "42 items\n",
+  "file_sha256": "6e33e96dd967d398dca1767055a8ba755445bdc87fd2c7719b8037bc3dad00a0",
+  "directory_v2": "cd97e1f176b68d06823d808597e824e975e7a7126edd873d44b4e1592e4fa5a7",
+  "directory_native": "423e346f40bfd48f8a748c79c679b9affb20e77c3b5c8b7a8cfc82deda16e1fa",
+  "empty_directory_v2": "f2753a9811027cdcf1bf19082fc50d42c7f775442a75395c79a831c59eb08ea4",
+  "empty_directory_native": "4b66bf93b3932a9539880b2421e35019af9daf84363a0246280ffcac173b2678"
+ }
+}
