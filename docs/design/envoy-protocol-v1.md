@@ -3,30 +3,38 @@
 ## Status and scope
 
 This document defines the first controller/workload contract for the
-[OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current
-pre-release inspection amendment becomes frozen when the rebuilt design slice
-is approved. It is an internal OmegaFlow release contract. Reploy provides the
-private network, endpoint coordinates, bootstrap attachment, and authoritative
-lifecycle; it does not transport or interpret these messages.
+[OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
+inspection and external-Awsh amendments become frozen only after their design
+slices are approved. It is an internal OmegaFlow release contract. Reploy
+provides the private network, endpoint coordinates, bootstrap attachment, and
+authoritative lifecycle; it does not transport or interpret these messages.
 
 Version 1 covers:
 
 - a full-duplex binary terminal channel;
 - a bounded JSON Lines telemetry channel;
-- the private NUL-framed Envoy-to-`awsh` descriptor protocol;
+- the private shell-neutral Envoy-to-external-Awsh lifecycle protocol;
 - bounded workload-side `file_exists` and `produces` inspection;
 - state, ordering, resize, cancellation, shutdown, and failure rules;
 - sender-stamped output marks carrying stream identity and timing;
 - direct asciicast synthesis and exact raw-output retention; and
-- the controlled Bash launch boundary.
+- the controlled external-Awsh and initial Bash launch boundary.
 
 It does not implement the Envoy process, PTY supervision, TCP listeners, runtime
 mounting, or Reploy lifecycle integration. A dependent implementation-plan
 slice tracks delivery order.
 
+The external-supervisor amendment preserves every controller request shape. It
+adds only the public pre-start failure codes `source-invalid` and
+`source-unsupported`, plus `operation_gate_interrupted` for terminal Ctrl-C
+that releases a waiting gate without becoming lifecycle cancellation. All
+other supervisor and source-submission changes remain private to Envoy and
+Awsh.
+
 ## Implementation and build contract
 
-The workload Envoy is a dependency-free Go executable:
+The workload Envoy and external Awsh supervisor are dependency-free Go
+executables built from one runtime module:
 
 - module: `github.com/omry/omegaflow/runtime/envoy`;
 - minimum toolchain: Go 1.25.x, matching Reploy;
@@ -36,9 +44,9 @@ The workload Envoy is a dependency-free Go executable:
 - `-trimpath -buildvcs=false`; and
 - linker flags `-s -w -buildid=`.
 
-The eventual production command is built from `./cmd/omegaflow-envoy`. The
-protocol-model slice does not add a placeholder command. Once the command
-exists, the release build is equivalent to:
+The production commands are built from `./cmd/omegaflow-envoy` and
+`./cmd/omegaflow-awsh`. This protocol slice adds neither placeholder. Once the
+commands exist, the Envoy release build is equivalent to:
 
 ```text
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
@@ -46,29 +54,34 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -o omegaflow-envoy ./cmd/omegaflow-envoy
 ```
 
-Release materialization records the source revision, Go version, target, file
-size, and SHA-256 digest. Rebuilding the same source with the pinned Go patch
-release and target must produce the same digest before the binary is added to
-the runtime manifest.
+The corresponding Awsh build changes the output and package to `awsh` and
+`./cmd/omegaflow-awsh`. Release materialization records the source revision,
+Go version, target, file size, and SHA-256 digest for both binaries. Rebuilding
+the same source with the pinned Go patch release and target must reproduce each
+digest before either binary is added to the runtime manifest.
 
 ## Connection establishment
 
 The workload blueprint declares two lease-private TCP endpoints: terminal and
-telemetry. The Envoy binds both listeners before starting Bash. It accepts one
+telemetry. Envoy binds both listeners before starting Awsh. It accepts one
 connection on each listener and then closes both listeners, so a later attempt
 is refused by the kernel without the Envoy observing it and has no effect on the
 capture.
 
 The controller connects the terminal channel first and telemetry second. Its
-first telemetry request is `hello`. The Envoy creates the PTY and persistent
-Bash only after both connections and a valid `hello` exist. Its first event is
-`ready`. Neither side sends another message before this exchange completes.
+first telemetry request is `hello`. Envoy creates the PTY and starts external
+Awsh only after both connections and a valid `hello` exist; Awsh then directly
+starts persistent Bash on the slave. Envoy emits public `ready` only after the
+private Awsh readiness result identifies both processes and Envoy validates
+their parent/child topology. Public `ready` remains shell-neutral and does not
+expose the Awsh PID. Neither controller endpoint sends another message before
+this exchange completes.
 
 Controller OmegaFlow generates a fresh 128-bit random lowercase hexadecimal
 `session_id` after Reploy reports the opened session and before it launches the
 Envoy. It passes that value to the Envoy through the trusted bootstrap command's
 `--session-id` argument and sends the same value in `hello.session_id`. The
-Envoy requires an exact match before creating Bash. The identifier binds the
+Envoy requires an exact match before creating Awsh. The identifier binds the
 two application channels to the exact Envoy invocation and gives retained
 diagnostics a correlation key; it is not an authentication credential and
 cannot authorize a Reploy operation or override Reploy lifecycle truth.
@@ -83,7 +96,7 @@ required handshake fails the capture.
 | --- | ---: |
 | Telemetry frame, including LF | 1,048,576 bytes |
 | Private `awsh` frame | 1,048,576 bytes |
-| Bash operation source | 1–786,432 UTF-8 bytes |
+| Operation source (Bash in v1) | 1–786,432 UTF-8 bytes |
 | Output-mark cadence | 10 milliseconds |
 | Output marks per session | 1,000,000 |
 | Session elapsed microseconds | 0 through `2^63-1` |
@@ -126,9 +139,9 @@ on partial progress.
 | Envoy `hello` | Envoy; starts after both connections are accepted | Read and validate one complete `hello` frame, including the exact `session_id`, within 10 seconds | Fail the handshake and exit nonzero |
 | Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame within 10 seconds | Fail the capture and ask Reploy to terminate |
 | Individual control write | Sender; starts with the first attempted transport write of one already-encoded frame | Write every byte of one telemetry JSON Lines frame or one private Awsh frame within 5 seconds; terminal input and workload-output bytes are excluded | Fail the session; delivery of a partial frame never becomes success |
-| Envoy operation cleanup | Envoy; starts when it begins mandatory cleanup after an Awsh result, cancellation or finalization driver return, or observed shell exit | Census, terminate, reap, reach operation-pipe EOF, and drain all operation-created processes and output within 5 seconds | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
+| Envoy operation cleanup | Envoy; starts when it begins mandatory cleanup after an Awsh completion, cancellation, finalization, or shell-exit result | Census, terminate, reap, reach operation-pipe EOF, and drain all operation-created processes and output within 5 seconds | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
 | Envoy inspection cancellation | Envoy; starts when it accepts `cancel` while the operation's inspection worker is live | Stop and reap the worker within the five-second cancellation grace period | Emit a best-effort fatal `inspection-cancel-timeout` diagnostic, close the session channels, and exit nonzero; no terminal operation result is emitted, and the controller records the cause and asks Reploy to terminate |
-| Envoy final drain | Envoy; starts when it accepts `shutdown` or enters an Envoy-initiated drain | Close Awsh, supervise the persistent process group, drain terminal output, and emit `closed` within 5 seconds | Emit a best-effort fatal diagnostic and exit nonzero |
+| Envoy final drain | Envoy; starts when it accepts `shutdown` or enters an Envoy-initiated drain | Close Awsh, supervise the persistent Awsh process and selected-shell tree, drain terminal output, and emit `closed` within 5 seconds | Emit a best-effort fatal diagnostic and exit nonzero |
 | Controller final drain | Controller; starts when it accepts `draining` | Receive `closed`, retain raw output through its final offset, and observe terminal EOF within 5 seconds | Fail the capture and ask Reploy to terminate |
 
 The two connect timers and the two handshake timers are intentionally
@@ -297,6 +310,7 @@ with the operation. Results remain in request order and repeat the ID;
 | `operation_started` | `operation_id`, `output_start` |
 | `operation_ready` | `operation_id`, `gate_id`, `output_through` |
 | `operation_continued` | `operation_id`, `gate_id`, `output_through` |
+| `operation_gate_interrupted` | `operation_id`, `gate_id`, `output_through` |
 | `output_mark` | `offset`, `stream`, `elapsed_us` |
 | `operation_completed` | `operation_id`, `status`, `cwd`, `output_start`, `output_through`, `inspection_results`, and `shell_ended`, boolean `true`, present only when the operation's shell did not survive it |
 | `operation_cancelled` | `operation_id`, `cwd`, `output_start`, `output_through`, `reason`, and `status` unless the operation was cancelled before it started; no inspection results |
@@ -374,13 +388,16 @@ keeps both readers open while it cleans up the operation, drains every byte
 through their EOF boundaries, and closes them before the typed terminal result.
 No operation-owned pipe or writer survives that result.
 
-Awsh reports that the submitted source returned; it does not own process
-cleanup. The Envoy is the persistent shell's parent and the Linux subreaper. It
-tracks live descendants with pidfds and `/proc`, terminates every descendant of
-the persistent shell, and terminates every non-shell child adopted when an
-intermediate parent exits. It repeats census, termination, reaping, pipe EOF,
-and drain until the persistent shell is the only process left in the controlled
-tree. The operation-cleanup deadline covers that whole sequence on one
+Awsh reports that the submitted source returned; Envoy retains process-tree
+policy and the decision that cleanup is complete. Envoy is Awsh's direct parent
+and the Linux subreaper; Awsh is the selected shell's direct parent and reaps
+that shell. Envoy tracks live descendants with pidfds and `/proc`, terminates
+operation descendants of the selected shell, and reaps non-shell children it
+adopts when an intermediate parent exits. Awsh and the selected shell remain
+responsible for their own direct children while alive. Envoy repeats census,
+termination, adopted-child reaping, pipe EOF, and drain until external Awsh and
+the selected shell are the only processes left in the controlled tree. The
+operation-cleanup deadline covers that whole sequence on one
 monotonic timer and does not reset when a process exits or output advances. If
 the boundary is not clean before the deadline, the Envoy takes the fatal
 session-failure path defined in the timeout table; it does not emit a terminal
@@ -553,6 +570,8 @@ stateDiagram-v2
     Running --> Gated: Envoy operation_ready
     Gated --> Continuing: controller continue
     Continuing --> Running: Envoy operation_continued
+    Gated --> Running: Envoy operation_gate_interrupted
+    Continuing --> Running: Envoy operation_gate_interrupted
     Starting --> Cancelling: controller cancel
     Running --> Cancelling: controller cancel
     Gated --> Cancelling: controller cancel
@@ -582,18 +601,21 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-`resize` is allowed in idle, starting, running, gated, or continuing states; continuing is included because it is running-equivalent for the PTY, so a controller may pipeline `continue` and `resize` without waiting for `operation_continued`. Only one resize
-may be outstanding. It must be matched by `resize_applied` with the same
-dimensions before another resize or controller-requested shutdown, unless an
+`resize` is allowed in idle, starting, running, gated, or continuing states;
+continuing is included because it is running-equivalent for the PTY, so a
+controller may pipeline `continue` and `resize` without waiting for
+`operation_continued`. Only one resize may be outstanding. It must be matched
+by `resize_applied` with the same dimensions before another resize or
+controller-requested shutdown, unless an
 Envoy-initiated `draining` resolves it first. On that drain the controller
 clears the outstanding resize without publishing it. A bounded diagnostic is
 allowed after `hello` and before `closed`. Every operation and gate event must
-match the active identifiers. The shell-end transitions are entered by the
-Envoy rather than by a controller message. An operation whose control
-descriptor reached EOF
-without a `closed` reaches `Idle` through `operation_completed` carrying the
-status the Envoy reaped — unless it declared inspections or still holds an
-unresolved gate, which the closed descriptor can no longer resolve, in which
+match the active identifiers. The shell-end transitions are entered by Envoy
+rather than by a controller message. External Awsh explicitly reports
+`shell_exit` with the active operation ID or an empty ID, the status it reaped,
+and the last valid cwd. An active operation reaches `Idle` through
+`operation_completed` carrying that status — unless it declared inspections or
+still holds an unresolved gate, which the ended shell can no longer resolve, in which
 case it reaches `Idle` through `operation_failed` instead, because an authored
 requirement that cannot be evaluated must not be reported as met; that
 `operation_failed` carries `shell_ended` exactly as the completion does, so the
@@ -603,9 +625,9 @@ controller still learns the shell is gone. Any operation terminal result carryin
 That drain is Envoy-initiated, so no request supplies its reason: `draining` and
 `closed` both carry reason `shell_ended` on this path, exactly as they carry the
 controller's shutdown reason on the requested one, which is what lets the golden
-fixtures freeze one shell-exit sequence. An EOF that arrives while the session
-is idle — a workload killed between operations — takes the same drain path with
-the same reasons; there is no operation to report. Because these transitions are
+fixtures freeze one shell-exit sequence. A `shell_exit` that arrives while the
+session is idle — a workload killed between operations — takes the same drain
+path with the same reasons; there is no operation to report. Because these transitions are
 Envoy-initiated, a controller request already in flight when the shell ends —
 the next `execute`, a `cancel` derived from that crossed execute, a `resize`, or
 `shutdown` — can arrive after them; it is accepted and discarded exactly like a
@@ -613,13 +635,13 @@ request that crossed its own terminal result, and a recording with a beat left
 to run still fails from that beat being unrunnable rather than from the
 crossing.
 
-Shutdown uses the same observed-result-wins rule at idle. If the Envoy observes
-and reaps the persistent shell before it accepts `shutdown`, the
+Shutdown uses the same observed-result-wins rule at idle. If Envoy accepts an
+Awsh `shell_exit` before it accepts `shutdown`, the
 Envoy-initiated `shell_ended` drain is authoritative. A controller that has
 already sent the request and entered `ShutdownSent` accepts that reason and
 treats the crossed shutdown as resolved; the request is discarded if it later
 reaches the draining Envoy. If the Envoy accepts `shutdown` first, the requested
-shutdown reason remains authoritative and a later shell EOF is clean under
+shutdown reason remains authoritative and a later `shell_exit` is clean under
 that requested drain. Thus transport ordering cannot turn either clean outcome
 into a protocol failure.
 
@@ -635,9 +657,9 @@ for bytes the controller has already written, so exceeding the terminal input
 barrier wait means they are never arriving, and the Envoy fails the operation
 rather than holding the session.
 
-If cancellation has moved a started operation to `Cancelling` but descriptor
-EOF and the shell reap are observed before a cancellation result is committed,
-the observed shell end wins. The Envoy emits the same `operation_completed` or
+If cancellation has moved a started operation to `Cancelling` but Awsh's
+`shell_exit` is accepted before a cancellation result is committed, the
+observed shell end wins. Envoy emits the same `operation_completed` or
 `operation_failed` carrying `shell_ended` that it would have emitted from a
 running state, then enters the Envoy-initiated drain. It does not conceal the
 dead shell behind `operation_cancelled`, and the controller treats that terminal
@@ -674,20 +696,20 @@ The preceding operation has already completed universal process cleanup and
 closed its split-stream pipes. The Envoy nevertheless takes a fresh PTY drain
 boundary, writes every preceding byte to the terminal socket, and emits the
 covering output mark. Only after that drain may it snapshot `output_start`,
-emit `operation_started`, and acknowledge the driver's `started` result so Bash
-can evaluate the new source. Failure to drain or write the preceding bytes
+emit `operation_started`, and acknowledge Awsh's `started` result so Awsh can
+release Bash to evaluate the new source. Failure to drain or write the preceding bytes
 fails the operation before it opens a range.
 
 `output_start` snapshots the raw-log offset at `operation_started`, and the
-snapshot happens before Bash is released rather than after. The driver's
-`started` result is one-way, so if the Envoy snapshotted on receiving it, a fast
+snapshot happens before Bash is released rather than after. If Envoy
+snapshotted on receiving `started`, a fast
 command could already have written and the pump already appended before the
 snapshot, putting the operation's first bytes outside its own range — missed by
 assertions, and for `suppress` or `replace` published as session-scoped output
-the policy was supposed to withhold. The driver therefore writes `started` and
-waits for the Envoy to acknowledge it on the request descriptor; only then does
-it evaluate the source. The Envoy takes the offset before sending that
-acknowledgement, so no byte of the operation can precede its own start. An
+the policy was supposed to withhold. Awsh therefore writes `started` and waits
+for Envoy's `started_ack`; only then does it release Bash. Envoy takes the
+offset before sending that acknowledgement, so no byte of the operation can
+precede its own start. An
 operation that fails before `operation_started` has no such snapshot, so its
 `operation_failed` sets both `output_start` and `output_through` to the offset
 observed at the failure, not the one observed when the `execute` was accepted.
@@ -705,12 +727,11 @@ that contains `output_through`, the Envoy:
 3. writes those bytes to the terminal socket in order; and
 4. snapshots the resulting output offset for the telemetry event.
 
-An operation whose shell ended has no `awsh` result to observe, so the reap
-replaces it: the Envoy waits for the child, then drains every byte whose write
-happened before that exit, writes them in order, and snapshots the offset. The
-reap is a real happens-before boundary — the kernel does not report the child
-until it has gone — so output written immediately before `exit 7` is still
-inside the range. Every other step is unchanged.
+An operation whose shell ended observes Awsh's `shell_exit` result. Awsh writes
+it only after reaping the selected shell, so the reap remains a real
+happens-before boundary: output written immediately before `exit 7` is inside
+the range. Envoy then performs the same drain, write, and offset snapshot as for
+another Awsh terminal result.
 
 A pre-start terminal event — the `operation_failed` or `operation_cancelled` of
 an operation that never started — has no result to observe either, and none will
@@ -719,14 +740,15 @@ snapshots the offset at the event for both ends of the empty range, which is the
 same offset the pre-start failure rule above already requires. Its `cwd` is the
 most recent one reported — by the previous operation's result, or by `ready`
 when none has completed — since the operation itself exchanged nothing with the
-driver.
+Awsh backend.
 
-A resize has no `awsh` result. The Envoy instead linearizes every accepted
-resize in the output pump's order. The pump first closes the finite prefix
-already admitted from every output source it orders — the PTY master and each
-active split stdout/stderr pipe — appends and writes those bytes,
-and emits their covering marks. It then snapshots `output_through`, applies
-`TIOCSWINSZ`, and emits `resize_applied` only after the ioctl succeeds. A source
+A resize has a private Awsh transaction rather than an operation result. Envoy
+linearizes every accepted resize in the output pump's order and asks Awsh to
+reserve the shell-side terminal lane. The pump closes the finite prefix already
+admitted from every output source it orders — the PTY master and each active
+split stdout/stderr pipe — appends and writes those bytes, and emits their
+covering marks. Envoy then snapshots `output_through` and asks Awsh to apply the
+dimensions. It emits `resize_applied` only after Awsh reports success. A source
 chunk admitted by the pump after that boundary is ordered after the resize even
 if the workload write raced it; this is the Envoy's observable sender order,
 not a claim about syscall wall-clock order. Continuous output cannot starve the
@@ -902,6 +924,14 @@ artifacts, records a bounded user-facing explanation, asks Reploy to terminate
 the environment, and logs the termination request and result. This path does
 not release or add an abort operation to the private gate protocol.
 
+Terminal Ctrl-C may independently interrupt the waiting gate helper. Awsh
+reports `gate_interrupt`; after Envoy commits
+`operation_gate_interrupted`, it sends `gate_interrupt_ack` and the operation
+continues running. This event is a terminal-input outcome, not lifecycle
+cancellation, and carries no cancellation reason or terminal status. The
+lifecycle-race slice specifies how it is serialized with crossed `continue`,
+`cancel`, and `finalize` requests.
+
 A planned browser handoff for a still-running operation requires one such
 operation-scoped gate named by the compiled plan. The trusted source invokes it
 in the intended service's launch path only after that operation has obtained
@@ -921,30 +951,31 @@ protocol machinery and carries no browser destination or navigation intent.
 `operation_cancelled.reason` must match it exactly. An operation still held at
 the terminal-input barrier has not started, so cancelling it sends no signal and
 reports no status, as described under the session state machine; everything
-below concerns an operation that is running. The Envoy sends `SIGINT` to the PTY
-foreground process group and starts the five-second grace period. If the
-persistent driver returns, the Envoy completes the same universal process
-cleanup required by normal completion before anything is reported; a cleanup
-failure takes the fatal session-failure path instead. The Envoy then drains
+below concerns an operation that is running. Envoy forwards the request to Awsh;
+Awsh signals the PTY foreground process group and Envoy starts the five-second
+grace period. If the selected shell returns to its backend boundary, Envoy
+completes the same universal process cleanup required by normal completion
+before anything is reported; a cleanup failure takes the fatal session-failure
+path instead. Envoy then drains
 output and emits `operation_cancelled` with the shell status, normally 130. If
-the driver does not return, the Envoy terminates the persistent process group,
+the selected shell does not return, Envoy terminates the selected-shell tree,
 completes mandatory descendant termination, reap, and final output drain, and
 emits `operation_failed` with `cancel-timeout` and `shell_ended` set to `true`.
-Its `cwd` is the last one the driver reported before the timed-out operation,
+Its `cwd` is the last one Awsh reported before the timed-out operation,
 and it has no inspection results. The Envoy then enters the Envoy-initiated
 `shell_ended` drain. An operation for which cancellation wins never emits
 `operation_completed`; the shell-end race above is an observed-shell-exit
 outcome instead.
 
-A `cancel` can also arrive after the driver has returned, while the Envoy is
+A `cancel` can also arrive after Awsh has reported return, while Envoy is
 completing mandatory operation cleanup or later resolving the inspection plan.
-There is nothing to signal in either phase: persistent Bash has already returned
-to its request loop. During cleanup, the Envoy records the cancellation and
+There is nothing to signal in either phase: Awsh has already observed persistent
+Bash return to its backend boundary. During cleanup, Envoy records the cancellation and
 finishes the already-started cleanup under its existing non-resetting five-second
 deadline; it neither signals Bash nor starts another grace period. Cleanup
 failure still takes the fatal session-failure path and emits no terminal
 operation result. After successful cleanup, the Envoy skips inspection and
-emits `operation_cancelled` with the status the driver returned, the matching
+emits `operation_cancelled` with the status Awsh reported, the matching
 request reason, and no inspection results.
 
 Worker completion and `cancel` acceptance are serialized by the Envoy. If the
@@ -954,7 +985,7 @@ accepts that ordinary completion or planned finalization and returns to `Idle`.
 If it accepts `cancel` first, it discards any worker result, requests worker
 shutdown, terminates it if needed, and waits only the existing five-second
 cancellation grace period. Successful
-reap emits `operation_cancelled` with the status the driver returned, the
+reap emits `operation_cancelled` with the status Awsh reported, the
 matching request reason, and no inspection results. This preserves the rule
 that cancellation invalidates assertions rather than evaluating them: without
 it, an operation the controller had bounded could keep hashing up to 16 GiB
@@ -990,20 +1021,18 @@ recording plan — which operation is intentionally open and when recording ends
 it — stays on the controller side and reaches the Envoy
 only as this typed request. Process lifetime is still fixed by v1: finalization
 ends the running operation and then uses the same mandatory operation cleanup
-as natural return or cancellation. The Envoy delivers the
-interruption exactly as cancellation does — `SIGINT` to the PTY foreground
-process group, which interrupts even source running inside the persistent driver
-without killing the driver, because the persistent process group is never part
-of operation teardown — and waits the cancellation grace period for the driver
-to return. It then terminates and reaps every remaining operation-created
+as natural return or cancellation. Envoy forwards the lifecycle request to
+Awsh, which delivers `SIGINT` to the PTY foreground process group, and waits the
+cancellation grace period for the selected shell to return to its backend
+boundary. Envoy then terminates and reaps every remaining operation-created
 process, drains the final output, emits any remaining split-stream evidence,
 and emits `operation_finalized` with the matching reason and closed output
-range. If the driver does not return within the grace period and no later
-`cancel` has been accepted, the Envoy terminates the persistent process group,
+range. If the selected shell does not return within the grace period and no later
+`cancel` has been accepted, Envoy terminates the selected-shell tree,
 completes mandatory descendant termination, reap, and final output drain, and
 emits `operation_failed` with
 `finalize-timeout` and `shell_ended` set to `true`. As on cancellation timeout,
-its `cwd` is the last driver-reported value and it has no inspection results.
+its `cwd` is the last Awsh-reported value and it has no inspection results.
 The Envoy then enters the Envoy-initiated `shell_ended` drain rather than
 returning to an operable idle shell. Failure of that mandatory cleanup takes the
 existing fatal no-terminal-result session path instead.
@@ -1011,17 +1040,17 @@ existing fatal no-terminal-result session path instead.
 After the Envoy accepts `finalize`, the controller-owned operation deadline may
 still send `cancel` throughout the unobservable finalization grace, cleanup, and
 inspection phases. The controller moves from `Finalizing` to `Cancelling`. If
-the Envoy accepts `cancel` while it is still waiting for the driver, it sends no
-second signal and does not reset the existing five-second grace timer. A driver
-return before that timer expires takes mandatory cleanup, skips inspection
+Envoy accepts `cancel` while it is still waiting for Awsh's completion result,
+it sends no second signal and does not reset the existing five-second grace
+timer. A completion result before that timer expires takes mandatory cleanup, skips inspection
 after successful cleanup, and emits `operation_cancelled` with the returned
-status and cancellation reason. If the same timer expires first, the Envoy
-terminates persistent Bash, completes mandatory descendant cleanup and output
-drain, emits `operation_failed` with `cancel-timeout` and `shell_ended: true`,
+status and cancellation reason. If the same timer expires first, Envoy
+terminates the selected-shell tree, completes mandatory descendant cleanup and
+output drain, emits `operation_failed` with `cancel-timeout` and `shell_ended: true`,
 and enters the `shell_ended` drain. During mandatory cleanup, the Envoy likewise
 records the cancellation, finishes cleanup under its existing non-resetting
 deadline, and, after successful cleanup, skips inspection and emits
-`operation_cancelled` with the status the driver returned from finalization and
+`operation_cancelled` with the status Awsh reported from finalization and
 no inspection results. Cleanup failure remains fatal with no terminal operation
 result. Once an inspection worker is running, the same serialized
 inspection-cancellation rules apply: a worker result accepted first commits
@@ -1032,14 +1061,14 @@ reap within the existing five-second grace remains fatal
 result is committed before the Envoy accepts `cancel`, that result wins and the
 crossed cancel is discarded.
 
-A `finalize` can arrive after the driver has returned, during mandatory cleanup
-or inspection. From the Awsh result through terminal-result commitment, the
+A `finalize` can arrive after Awsh has reported completion, during mandatory
+cleanup or inspection. From the Awsh result through terminal-result commitment, the
 observed result wins. During cleanup the Envoy neither signals the now-idle
 persistent Bash nor starts another grace period; it finishes the existing
 cleanup deadline, takes the ordinary fatal no-result path if cleanup fails, and
 otherwise continues through inspection and normal completion. During inspection
 it likewise leaves the worker running. The operation completes with the status
-the driver actually returned — the `Finalizing --> Idle` completion edge exists
+Awsh actually reported — the `Finalizing --> Idle` completion edge exists
 for exactly this race — and the finalize is discarded like any other request
 that crossed its own terminal result. Synthesizing a status-free finalization
 instead would throw away a real exit status and leave an authored exit-code
@@ -1055,15 +1084,17 @@ session-failure path without a terminal operation result. Failure or user
 cancellation invalidates assertions instead.
 
 Finalization is always controller-requested. An operation whose shell simply
-ends completes instead, with the status the Envoy reaps, as described under the
+ends completes instead, with the status Awsh reaps, as described under the
 private protocol.
 
 ## Resize
 
-The controller sends the complete target `columns` and `rows`. The Envoy uses
-the output-pump barrier above to close `output_through`, applies `TIOCSWINSZ` to
-the PTY master, and emits `resize_applied` only after success, stamped with the
-`elapsed_us` at which it was applied. The controller waits until the private raw
+The controller sends the complete target `columns` and `rows`. Envoy uses the
+output-pump barrier above to close `output_through` and coordinates the private
+`resize_prepare` / `resize_apply` transaction. Awsh applies `TIOCSWINSZ` through
+its retained PTY slave and reports `resized`; only then does Envoy emit
+`resize_applied`, stamped with the `elapsed_us` at which it was applied. The
+controller waits until the private raw
 log reaches `output_through` before giving the accepted resize to the serialized
 writer, so terminal and telemetry connection latency cannot place output the
 pump ordered earlier after it. The cast then orders the resize against output by
@@ -1112,7 +1143,8 @@ assigned to the frontier precede it, and later queued events at the same
 absolute time follow it. Multiple resizes at one frontier retain queue order,
 including in zero-duration authored spans. The kernel delivers `SIGWINCH`
 normally. If
-`TIOCSWINSZ` fails, the Envoy emits the best-effort fatal diagnostic
+`TIOCSWINSZ` fails, Awsh reports a fatal private failure and Envoy emits the
+best-effort fatal diagnostic
 `resize-failed`, closes the session channels, and exits nonzero. It emits no
 `resize_applied` and no terminal operation result, whether the accepted resize
 was idle or an operation was active. The controller retains partial artifacts
@@ -1128,10 +1160,11 @@ returned the session to idle. After the Envoy accepts it, the following
 case is an idle shell exit that the Envoy observed first: a controller already
 in `ShutdownSent` accepts `shell_ended` and resolves its request, as specified
 by the session state machine. The private `shutdown` request carries no reason,
-so the driver's `closed` result answers it with the fixed reason `shutdown`;
-the controller-facing telemetry reasons are not derived from that constant. The
-Envoy asks `awsh` to close, supervises the persistent process group, drains the
-PTY to EOF, and emits `draining` with the current barrier. It then half-closes
+so Awsh's `closed` result answers it with the fixed reason `shutdown` and the
+selected shell's reaped status; the controller-facing telemetry reasons are not
+derived from that constant. Envoy asks Awsh to close the selected shell,
+supervises the persistent Awsh process and its subtree, drains the PTY to EOF,
+and emits `draining` with the current barrier. It then half-closes
 terminal output and emits `closed` with the final exclusive offset and the same
 reason it drained under. The controller waits for both the raw log to reach that
 offset and terminal EOF before finalizing its cast.
@@ -1141,102 +1174,115 @@ between complete frames is not success until a valid `closed` was accepted.
 
 ## Private Envoy-to-`awsh` protocol
 
-The private descriptor protocol uses UTF-8 fields separated and terminated by
-NUL. Every frame starts with `awsh-v1` and a message type. Field arity is fixed
-by type; NUL cannot appear in source or other values.
+Envoy starts one external Awsh process with separate unidirectional control and
+result descriptors and gives it the PTY slave. Awsh is Envoy's direct child and
+the selected shell's direct parent. Envoy retains the PTY master, controller
+connections, public state machine, process-tree policy, and final result
+commitment. Awsh owns selected-shell launch and reaping plus the private,
+shell-neutral lifecycle described here. Neither the selected shell nor an
+ordinary descendant receives an Envoy connection or Envoy-to-Awsh descriptor.
+The exact descriptor setup and Bash-helper transport belong to the following
+launch slice.
 
-Requests:
+The private descriptor protocol uses bounded UTF-8 fields separated and
+terminated by NUL. Every frame starts with `awsh-v1` and a message type; NUL
+cannot appear in source or another value. This slice freezes the message
+vocabulary and ownership boundary. The Bash-launch, submission, and lifecycle
+race slices freeze exact field arity and phase-specific handshakes before the
+protocol is stamped.
 
-```text
-awsh-v1, execute, OPERATION_ID, EXECUTION_SHAPE, OBSERVATION, INSPECTIONS_JSON, BASH_SOURCE
-awsh-v1, continue, OPERATION_ID, GATE_ID
-awsh-v1, cancel, OPERATION_ID, REASON
-awsh-v1, finalize, OPERATION_ID, REASON
-awsh-v1, started_ack, OPERATION_ID
-awsh-v1, shutdown
-```
+| Envoy request | Purpose |
+| --- | --- |
+| `execute` | Offer one validated operation and its shell-neutral metadata. |
+| `continue` | Release the named action gate. |
+| `gate_interrupt_ack` | Commit Awsh's proposed terminal interruption of the named gate. |
+| `cancel` | Ask Awsh to classify and act on cancellation for the active operation. |
+| `finalize` | Ask Awsh to close the active operation for planned recording end. |
+| `start_release` / `started_ack` | Complete the private start barrier around the public `operation_started` event. |
+| `input_closed` | Confirm Envoy has permanently closed operation input and completed its cleanup side of ordinary return. |
+| `resize_prepare` / `resize_apply` | Reserve the shell-side terminal lane, then apply the named dimensions. |
+| `shutdown` | Close and reap the selected shell. |
 
-Results:
-
-```text
-awsh-v1, ready, SHELL_PID, CWD
-awsh-v1, started, OPERATION_ID
-awsh-v1, gate_ready, OPERATION_ID, GATE_ID
-awsh-v1, gate_continued, OPERATION_ID, GATE_ID
-awsh-v1, completed, OPERATION_ID, STATUS, CWD, RESOLVED_INSPECTIONS_JSON
-awsh-v1, protocol_error, CODE, MESSAGE
-awsh-v1, closed, REASON, CWD
-```
+| Awsh result | Purpose |
+| --- | --- |
+| `ready` | Identify Awsh, its direct selected-shell child, and the initial cwd. |
+| `submit` | Return backend-framed source for Envoy's sole PTY-master writer to submit. |
+| `start_prepared` / `started` | Report that source is prepared and then held at the backend start boundary. |
+| `gate_ready` / `gate_continued` | Report the selected backend's gate lifecycle. |
+| `gate_interrupt` | Propose that terminal Ctrl-C interrupted the waiting gate. |
+| `disposition` | Confirm Awsh's classified action for one cancel or finalize request. |
+| `input_close` | Propose the ordinary-return input and cleanup boundary. |
+| `completed` | Report returned source status, cwd, and the resolved inspection plan. |
+| `rejected` | Reject source before execution without damaging the persistent shell. |
+| `shell_exit` | Report the selected shell's parent-observed status, last cwd, and active operation, if any. |
+| `resize_ready` / `resized` | Acknowledge the two private resize phases. |
+| `protocol_error` | Report a bounded fatal private-protocol failure. |
+| `closed` | Report orderly selected-shell shutdown, reaped status, and final cwd. |
 
 The Envoy validates and bounds a complete request before forwarding it. Partial
 fields, unsupported types, invalid UTF-8, invalid arity, and EOF in the middle
 of a frame are protocol failures.
 
-EOF between frames is not a driver fault, because a recording reproduces a shell
-the workload is allowed to end. Operation source may end it with `exit 7`, with
-an `errexit` failure, or by replacing the image through `exec`.
+Private EOF is never a substitute for a result. EOF in a frame is a protocol
+failure. EOF between frames before `closed` is a fatal Awsh failure, even if the
+selected shell also disappears; Envoy terminates the remaining controlled tree,
+drains bounded output, and invents neither shell status nor an operation result.
 
-The status comes from a boundary that operation source cannot reach. The Envoy
-is the shell's parent, so it learns the exit status by reaping the child, and no
-`EXIT` trap is involved: source that writes its own trap, as in `trap cleanup
-EXIT; exit 7`, keeps that trap and its behaviour, and the status still arrives.
-An earlier draft of this contract had the driver install the trap itself, which
-source could replace, silently costing the operation its status.
+The selected shell is allowed to end through `exit`, `errexit`, `exec`, or a
+signal. Awsh, as its direct parent, reaps it and emits exactly one `shell_exit`
+or shutdown `closed` carrying the real status. No shell trap supplies that
+status. A signal N maps to `128 + N`, matching shell convention; the status is
+otherwise unchanged and remains bounded from 0 through 255. The protocol does
+not attempt to distinguish `exec` from another shell exit.
 
-Reaping also removes the need to tell `exec` from a crash. Every candidate
-observation for that was racy or undecidable — a short replacement such as `exec
-/bin/true` can exit before the EOF is even processed — and a terminal does not
-distinguish them either. It no longer matters: `exit 7` reaps 7, an `errexit`
-failure reaps its status, `exec /bin/true` reaps the replacement's, and a
-termination by signal N reaps `128 + N`, the same value a shell reports for a
-signalled child. That conversion is the only one: `status` is bounded 0 through
-255, signal numbers stay well below 128, and naming the shell convention leaves
-an exit-code assertion one value to compare instead of two implementations
-disagreeing about how to spell a signal. Each is what that terminal would have
-shown, so all of them are one outcome carrying a real status.
-
-The Envoy applies the same mandatory operation cleanup to all non-shell
-children it has adopted, drains their final output, and only then emits
-`operation_completed` carrying that reaped status, so an authored exit-code
-assertion sees it and the ordinary completion rules apply unchanged. It also
-sets `shell_ended` to boolean `true`. That is the field's
-only value, and it is absent from every ordinary completion rather than present
-and false, so a strict decoder has one representation to accept instead of a
-discriminator whose spelling two implementations could choose differently. The
-status alone would not tell the controller that Bash is gone, and a controller
-that could not tell would synthesize the configured following prompt for a shell
-that no longer exists, or start the next operation before learning otherwise
-from `draining`. Its `cwd` is the last one the driver reported, since none can
-be observed after the shell is gone. Nothing here is a failure, so nothing
-discards the operation's evidence — unless it declared inspections, which cannot
-be resolved once the descriptor has closed, and an unevaluated authored gate is
-reported as `operation_failed` rather than passed. No operation-created process
-survives this boundary in any output or assertion mode. No further operation
-can be executed without a control descriptor, so the session moves to its
-terminal state and finalizes at the drain. A plan with a later beat therefore
-still fails, because
-that beat cannot run. EOF after the Envoy has requested shutdown remains clean.
+Envoy accepts `shell_exit` only from the Awsh child it launched and validates
+the reported shell as Awsh's direct child. It then applies its mandatory
+descendant cleanup and output drain before committing the public terminal
+result. An active operation ordinarily becomes `operation_completed` carrying
+the reaped status and `shell_ended: true`. It becomes `operation_failed` instead
+when a declared inspection or unresolved gate can no longer be evaluated. No
+later operation starts, and the session enters the `shell_ended` drain. An idle
+shell exit enters that drain without fabricating an operation result.
 
 `INSPECTIONS_JSON` is the compact JSON encoding of the already validated public
 inspection array. `RESOLVED_INSPECTIONS_JSON` retains each inspection's
 identifiers and kind, replaces `path` with the absolute `resolved_path`, and
 does not contain filesystem results. Both are one NUL-free bounded field. Awsh
-uses the persistent shell state only to resolve the plan; the Envoy owns all
+uses selected-shell state only to resolve the plan; Envoy owns all
 filesystem access, type checks, hashing, and public result construction.
 
-`cancel` or `finalize` is recorded on the descriptor when the driver is waiting
-at a gate. While Bash is executing, signal delivery is authoritative and the
-eventual driver result is translated according to the Envoy's public
-cancelling or finalizing phase. The driver does not invent a natural exit
-status for planned finalization. The Envoy ignores the driver status while
-finalizing, but uses the returned cwd and resolved inspection plan after the
-operation tree is closed.
+Only one operation is active. `execute` may produce either `rejected` before
+the selected shell starts the source, or the ordered start sequence `submit`,
+`start_prepared`, `started`, and the public `operation_started` commitment.
+`rejected` maps to a typed public pre-start failure and leaves the shell ready
+for another operation. Once started, `completed`, `shell_exit`, cancellation,
+or finalization closes the operation; no later `execute` is accepted before
+Envoy completes cleanup, output drain, and the public terminal result.
 
-## Controlled Bash launch
+For cancellation and finalization, Awsh classifies the selected backend's
+current phase and emits one `disposition`; Envoy retains the public lifecycle
+state and timeout. Awsh performs shell-side signaling or gate release but does
+not decide the public terminal result. Planned finalization invents no natural
+status. The exact winning rules for crossed completion, shell exit, gate, and
+lifecycle messages belong to the lifecycle-race slice.
 
-The production executable is fixed at `/bin/bash` and begins with
-`--noprofile --norc`. It does not honor `AWSH_BASH`. Before launch, OmegaFlow
-removes these delegated application variables:
+Resize remains publicly owned by Envoy. The private prepare/apply exchange
+exists only to serialize the PTY ioctl with shell-side terminal-state work;
+`resize_applied` is not published until Awsh reports `resized`. The exact
+termios transaction belongs to the Bash-launch slice.
+
+Every private frame is bounded and state-checked. Partial fields, unsupported
+types, invalid UTF-8, invalid arity, wrong identifiers, duplicate terminal
+results, and EOF in a frame fail the session. Awsh failure never becomes a
+shell status, successful operation result, or Reploy lifecycle result.
+
+## Controlled Awsh and Bash launch
+
+The production Awsh executable is fixed at `/omegaflow-runtime/bin/awsh` and
+starts `/bin/bash` as its direct selected-shell child. The initial Bash command
+begins with `--noprofile --norc`. The launch path does not honor `AWSH_BASH`.
+Before Envoy starts Awsh, OmegaFlow removes these delegated application
+variables:
 
 ```text
 AWSH_BASH BASH_COMPAT BASHOPTS BASH_ENV BASH_XTRACEFD CDPATH ENV
@@ -1268,28 +1314,27 @@ LANG=C.UTF-8
 LOCPATH=/omegaflow-runtime/lib/locale
 ```
 
-Before starting Bash, the Envoy validates the mounted runtime manifest and the
+Before starting Awsh, Envoy validates the mounted runtime manifest and the
 actual read-only assets. `INPUTRC` must be an empty readable regular file whose
 digest matches the manifest. The exact `xterm-256color` terminal entry must be
 a readable regular file whose digest matches the manifest. The complete
 selected `C.UTF-8` locale tree must have exactly the manifest's relative-path
 inventory, and every entry must be a readable regular file whose digest
 matches. A missing, unreadable, non-regular, unmanifested, or hash-mismatched
-required asset is a fatal shell-launch failure; the Envoy starts no Bash and
-exits nonzero. Neither shell can therefore open application-selected history,
+required asset is a fatal shell-launch failure; Envoy starts no Awsh and exits
+nonzero. The selected shell cannot therefore open application-selected history,
 Readline, terminal-database, locale-database, or mailbox configuration before
 accepting OmegaFlow input. A workload whose commands need a filtered value sets
 it inside operation source, where persistent Bash carries it to operation
-children as ordinary shell state while the driver's own image never launches
-under it. Environment names must be non-empty, contain neither `=` nor NUL, and
-values cannot contain NUL.
+children as ordinary shell state. Environment names must be non-empty, contain
+neither `=` nor NUL, and values cannot contain NUL.
 
-The Envoy owns the TCP sockets with close-on-exec. Bash receives the PTY slave,
-dedicated private request/result descriptors, and, for split execution,
-operation-scoped stdout/stderr descriptors. The Awsh alignment slice must
-prevent ordinary operation children from inheriting the driver descriptors.
-Split-stream descriptors are inherited only as required by the evaluated
-command tree and are supervised and closed at its typed boundary.
+Envoy owns the TCP sockets with close-on-exec. External Awsh receives the PTY
+slave and dedicated private request/result descriptors; Bash receives neither
+those descriptors nor an Envoy socket. For split execution, only the selected
+stdout/stderr descriptors reach the evaluated command tree, and Envoy
+supervises and closes them at the typed operation boundary. The next launch
+slice freezes the descriptor transfer and Bash-helper mechanism.
 
 ## Failure mapping
 
@@ -1300,16 +1345,17 @@ best effort and never converts failure to success.
 
 `operation_failed` carries one of a closed v1 code set: the six inspection
 codes above; `input-barrier-timeout` for a pre-start `execute` barrier wait that
-exceeds its bound; `cancel-timeout` and `finalize-timeout` for a driver that
-does not return within the grace period; `shell-ended-unresolved` for a shell
-end leaving declared inspections or an authored gate
-unevaluable.
+exceeds its bound; `source-invalid` and `source-unsupported` for source Awsh
+rejects before start without damaging the selected shell; `cancel-timeout` and
+`finalize-timeout` for a selected shell that does not return to its backend
+boundary within the grace period; and `shell-ended-unresolved` for a shell end
+leaving declared inspections or an authored gate unevaluable.
 Codes keep the diagnostic shape, and adding one is a schema change under the
 versioning rule.
 
 A `continue` barrier timeout uses the same `input-barrier-timeout` code as a
 fatal diagnostic rather than an `operation_failed` result. Awsh is still
-blocked inside the unreleased gate, so the Envoy cannot reach the driver result
+blocked inside the unreleased gate, so Envoy cannot reach the Awsh result
 and cleanup boundary required to close a terminal operation range. It closes
 the session and delegates final environment termination to Reploy instead of
 inventing a normal result.
@@ -1334,11 +1380,12 @@ never overrides a failed Reploy lifecycle or cleanup result.
 
 Delivery slice B1 creates the canonical corpus under
 `tests/fixtures/envoy-protocol-v1`; that directory does not exist in this design
-revision. Its authoritative raw material is the exact schemas, field order,
-state rules, and wire examples in this document. Historical fixtures from the
-former implementation stack may be consulted as untrusted extraction material,
-but there is no approved pre-amendment fixture baseline to update. The B1 corpus
-contains:
+revision. The Bash-launch, submission, and lifecycle-race design slices must
+first freeze the exact private schemas and field order. The resulting protocol
+text, state rules, and wire examples are the fixture corpus's authoritative raw
+material. Historical fixtures from the former implementation stack may be
+consulted as untrusted extraction material, but there is no approved
+pre-amendment fixture baseline to update. The B1 corpus contains:
 
 - `controller.jsonl`: exact controller request encodings;
 - `envoy.jsonl`: exact Envoy event encodings, including output marks covering
@@ -1372,9 +1419,10 @@ accepted first produces the normal terminal result, returns a controller in
 `Cancelling` to `Idle`, and discards a crossed cancel, including when that
 normal result is `operation_finalized`. A cancel accepted first discards
 inspection output and, when the worker stops and is reaped within five seconds,
-produces `operation_cancelled` with the driver's status and no inspection
+produces `operation_cancelled` with the status Awsh reported and no inspection
 results. Planned-finalization cases also accept cancellation during the original
-driver grace period without another signal or timer reset: driver return takes
+Awsh completion grace period without another signal or timer reset: an Awsh
+completion result takes
 cleanup and `operation_cancelled`, while expiry takes `cancel-timeout` and the
 shell-ended drain. Cancellation during mandatory cleanup finishes the existing
 cleanup deadline, skips inspection after successful cleanup, and produces that
