@@ -1102,8 +1102,9 @@ endpoint limits the controller to that port.
 
 The former seven-slice plan overlapped the Envoy plan and grouped public
 contracts, lifecycle, terminal semantics, browser work, publication,
-orchestration, bootstrap, and migration into oversized review units. A
-dependent implementation-plan slice supersedes it.
+orchestration, bootstrap, and migration into oversized review units. The
+dependent [Reploy integration implementation
+plan](reploy-integration-implementation-plan.md) supersedes it.
 
 The rebuilt delivery order is:
 
