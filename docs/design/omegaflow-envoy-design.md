@@ -276,12 +276,13 @@ cancellation and user cancellation invalidate assertions instead of evaluating
 partial input and output. Operation source may also end the shell,
 and the recording keeps the shell's own behaviour. `exit 7`, an `errexit`
 failure, an `exec` that replaces the image, and a crash are one outcome rather
-than four: the Envoy is the shell's parent, so it reaps the status in every case
-and the operation completes carrying it, marked as having ended the shell so the
-controller does not draw a prompt for a shell that is gone, exactly as that
-terminal would have shown. Taking the status from the reap rather than from a
-shell trap also keeps it out of reach of operation source, which can install an
-`EXIT` trap of its own without costing the operation its status. The Envoy
+than four: Awsh is the shell's parent, so it reaps the status in every case and
+reports that parent-observed status to the Envoy. The operation completes
+carrying it, marked as having ended the shell so the controller does not draw a
+prompt for a shell that is gone, exactly as that terminal would have shown.
+Taking the status from Awsh's reap rather than from a shell trap also keeps it
+out of reach of operation source, which can install an `EXIT` trap of its own
+without costing the operation its status. The Envoy
 still terminates and reaps every remaining operation-created process and drains
 its output before reporting that status, regardless of presentation or
 assertion mode. An operation that declared inspections fails rather than
@@ -590,6 +591,7 @@ sequenceDiagram
     participant R as Reploy
     participant C as Controller OmegaFlow
     participant W as Workload /bin/sh then Envoy
+    participant A as External Awsh
     participant B as Persistent Bash
 
     R-->>C: broker-ready with attachment socket
@@ -603,19 +605,25 @@ sequenceDiagram
     C->>W: connect terminal then telemetry
     W->>W: close listeners to new connections
     C->>W: hello with exact session_id
-    W->>B: create PTY and start Bash
+    W->>A: create PTY and start Awsh with the slave
+    A->>B: start persistent Bash
+    A-->>W: selected shell ready
     W-->>C: envoy-ready
 
     C->>W: execute operation 17
-    W->>B: dispatch operation 17
+    W->>A: forward operation 17
+    A->>B: dispatch operation 17
     B-->>W: visible PTY output
     W-->>C: ordered terminal bytes
-    B-->>W: operation returns
+    B-->>A: operation returns
+    A-->>W: status, cwd, and lifecycle result
     W-->>C: operation 17 completed
 
     C->>W: graceful shutdown
-    W->>B: close persistent shell
+    W->>A: close selected shell
+    A->>B: close persistent Bash
     W-->>C: remaining terminal bytes
+    A-->>W: selected shell closed
     W-->>C: terminal EOF and final telemetry
     W-->>R: workload process exits
     R-->>C: authoritative lifecycle and finalization events
