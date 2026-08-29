@@ -243,8 +243,9 @@ persistent Bash, emits `operation_failed` with the corresponding timeout code
 and `shell_ended: true`, and enters the `shell_ended` drain without another
 prompt or operation. Prove that a deadline cancel accepted during the original
 finalization grace sends no second signal, does not reset the timer, and switches
-the result to `operation_cancelled` after timely driver return and cleanup or to
-`cancel-timeout` with `shell_ended: true` on expiry. Prove
+the result to `operation_cancelled` after timely return to the selected shell's
+backend boundary and cleanup, or to `cancel-timeout` with `shell_ended: true`
+on expiry. Prove
 that post-result cancellation does not signal idle persistent Bash, does not
 reset the cleanup deadline, waits for successful cleanup, and then emits
 `operation_cancelled`; cleanup failure still produces no terminal operation
@@ -285,9 +286,21 @@ races, cleanup and drain failures, and every inspection resource limit.
 
 Prove socket and private-descriptor isolation, stable failure classes, channel
 loss, shell exit, malformed traffic, cleanup, and repeated shutdown behavior.
+For ordinary selected-shell exit, require one complete terminal `shell_exit`,
+no later `closed`, private EOF, and a zero-status Awsh reap. Prove that premature
+EOF, a trailing result frame, reset, signal, or nonzero Awsh exit remains fatal
+after either terminal result. A processed controller-requested shutdown instead
+requires one terminal `closed`, private EOF, and a zero-status Awsh reap.
+For that terminal reap, prove the existing timer mapping: an active-operation
+`shell_exit` remains under the Envoy operation-cleanup deadline, while an idle
+`shell_exit` or `closed` remains under the already-running Envoy final-drain
+deadline. A terminal result starts or resets neither timer and leaves both
+existing five-second budgets and failure mappings unchanged.
 Cover both orderings of `shutdown` crossing an idle persistent-shell exit:
-observed shell exit first resolves `ShutdownSent` through `shell_ended`, while
-accepted shutdown first preserves the requested shutdown reason.
+observed shell exit first sends terminal `shell_exit` and resolves
+`ShutdownSent` through `shell_ended`, while accepted shutdown first preserves
+the requested shutdown reason whether Awsh sends `closed` or a crossed terminal
+`shell_exit`.
 
 Gate: the complete local Envoy/Awsh conformance suite passes. No Reploy or
 terminal-runner integration is required to review the individual B slices.
