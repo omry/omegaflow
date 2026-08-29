@@ -1,19 +1,19 @@
 ---
 artifact: swe-design-review-attestation
 schema_version: 2
-scope_key: 145ca2aff5ab4308a31ff6e4f8f479a41285e86d5558b4519015353dad211f16
-scope: {"kind": "path", "primary_target": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "selector": "docs/design/envoy-protocol-v1.md"}
-review_content_identity_sha256: ba9ca61c66080d0c2240ae040d554212bf659f922b7c5a453899527f21fc3414
-target_content_identity_sha256: 7a1fa04a58925f1f9c52edf5a6bddd943e0e47c7bedc74258189dc8a9389d60b
-baseline_content_identity_sha256: 8a155b9fd6eb4d648460ad6fd624e23b59186cb7197da9929b073b33f81c7e55
-target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "sha256": "a3fd7a68f5fafd31a30c97d7196c02e654cc2bc04736c84321ac210d1a0e0b46"}]
-baseline_documents: [{"path": "docs/design/omegaflow-envoy-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "37abbf51edd95ce35078c91f9f4d5885327fbc6386edb6e620cacaed37149ec0"}, {"path": "docs/design/reploy-environments-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "4ebbefefe348f30161aec8ea4f6a135acb22c170f0a23e658f38875785e3919a"}]
+scope_key: 3ad36ccacbf647376507b48fa05fe56da87047c90e2fd1cd75faff567e588113
+scope: {"kind": "pr", "primary_target": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "selector": "pr-31"}
+review_content_identity_sha256: 931b76f46550d9adb789e21a1cdae0a746f16e749616325d43838475c42cf1ed
+target_content_identity_sha256: 6c120ab7c7b5de66bbffe97716a2cf10e5492360cd16a3fcff46adc4803f5355
+baseline_content_identity_sha256: 6d1f7bd10fe17eb8f52980f2b8a3ccf8ce42d9c9d055be4791a391e141a58fbe
+target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "sha256": "81620976f844c0b718013ae432e35cc04bf9f44d804d6a289cc20b1631150db0"}]
+baseline_documents: [{"path": "docs/design/omegaflow-envoy-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "41458e8ea5f58fa90e66bfbcca7729f1fd6bb5101ad2966fd50cf370de3d8064"}, {"path": "docs/design/reploy-environments-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "4ebbefefe348f30161aec8ea4f6a135acb22c170f0a23e658f38875785e3919a"}]
 document_repository: "/home/omry/dev/omegaflow"
 document_path: "docs/design/envoy-protocol-v1.md"
-document_revision_provenance: "af7e1f96630dd6c0477b593ee3e8874b5c7c0481"
-document_sha256: a3fd7a68f5fafd31a30c97d7196c02e654cc2bc04736c84321ac210d1a0e0b46
+document_revision_provenance: "8450ed8bcf7edbd3bbb6a5b103680297cbe358df+worktree"
+document_sha256: 81620976f844c0b718013ae432e35cc04bf9f44d804d6a289cc20b1631150db0
 verdict: clean
-attested_at: 2026-08-28T19:05:33Z
+attested_at: 2026-08-30T00:13:54Z
 ---
 <!-- swe-design-review-attestation:v2 -->
 
