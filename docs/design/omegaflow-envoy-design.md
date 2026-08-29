@@ -702,16 +702,24 @@ running, the controller instead:
 2. starts the operation and waits for `operation_started` and its output
    barrier;
 3. waits for the exact operation-scoped `operation_ready` gate compiled for the
-   handoff, while racing it against operation completion, cancellation, and
-   failure;
+   handoff, while racing it against operation completion, cancellation,
+   `operation_gate_interrupted`, and failure;
 4. while that operation remains gated, probes the endpoint until the configured
    health condition succeeds or its deadline expires, under the same race;
-5. runs the already-planned browser actions while the operation remains gated;
+5. runs the already-planned browser actions while the operation remains gated,
+   under the same race;
    and
 6. sends any authored terminal input, then continues with the cumulative input
    watermark so the Envoy does not release the gate before those bytes arrive,
    or ends or retains the operation according to its compiled lifetime policy
    using the normal typed rules.
+
+If `operation_gate_interrupted` wins that race before the controller sends the
+matching `continue`, the controller stops or discards any in-flight endpoint
+probe or browser action, schedules no further action from the handoff, and fails
+the handoff. If the operation is still active, it sends the ordinary typed
+`cancel` request. A browser or endpoint result cannot substitute for the lost
+operation gate.
 
 The trusted operation source calls the named gate in the intended service's
 launch path only after obtaining that operation's application-specific

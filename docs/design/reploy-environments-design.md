@@ -364,22 +364,26 @@ the handoff. The trusted source calls that gate in the intended service's launch
 path only after obtaining application-specific readiness evidence for the
 current operation. While the same operation remains gated, controller OmegaFlow
 races the plan-selected granted endpoint health probe against typed operation
-completion, cancellation, or failure and performs the planned Playwright work
-only when health wins. It also requires the endpoint to have failed a probe
-before `execute`, but that is only a stale-listener guard: an endpoint's temporal
-unready-to-ready transition is not causal evidence. A terminal result observed
-before the gate, during probing, or at handoff, or an endpoint already serving
-before the operation existed, fails the capture. If an authored launch path
-cannot provide the gate, the running-operation handoff is unsupported and
-ordinary sequencing waits for completion. The controller then applies the
-operation's compiled lifetime policy through normal Envoy continuation,
-cancellation, and output-finalization rules. The handoff consumes no workload
-files, OSC markers, terminal text, or workload-originated navigation telemetry.
-Playwright, browser checks, endpoint selection, and navigation intent remain in
-the controller. The Envoy gate remains generic planned-controller-work
-machinery; protocol v1 carries no browser-specific message or
-workload-originated navigation intent. Dynamic workload-selected navigation
-remains deferred.
+completion, cancellation, `operation_gate_interrupted`, or failure and performs
+the planned Playwright work only when health wins while that gate remains
+current. It also requires the endpoint to have failed a probe before `execute`,
+but that is only a stale-listener guard: an endpoint's temporal unready-to-ready
+transition is not causal evidence. If `operation_gate_interrupted` wins before
+the controller sends the matching `continue`, the controller stops or discards
+any in-flight endpoint probe or Playwright action, schedules no further action
+from that handoff, and fails the handoff. If the operation is still active, it
+sends the ordinary typed `cancel` request. A terminal result observed before
+the gate, during probing, or at handoff, or an endpoint already serving before
+the operation existed, fails the capture. If an authored launch path cannot
+provide the gate, the running-operation handoff is unsupported and ordinary
+sequencing waits for completion. The controller then applies the operation's
+compiled lifetime policy through normal Envoy continuation, cancellation, and
+output-finalization rules. The handoff consumes no workload files, OSC markers,
+terminal text, or workload-originated navigation telemetry. Playwright, browser
+checks, endpoint selection, and navigation intent remain in the controller. The
+Envoy gate remains generic planned-controller-work machinery; protocol v1
+carries no browser-specific message or workload-originated navigation intent.
+Dynamic workload-selected navigation remains deferred.
 
 ## Reploy Recording Toolchain and Workload Selection
 
