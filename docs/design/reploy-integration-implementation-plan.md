@@ -243,8 +243,9 @@ persistent Bash, emits `operation_failed` with the corresponding timeout code
 and `shell_ended: true`, and enters the `shell_ended` drain without another
 prompt or operation. Prove that a deadline cancel accepted during the original
 finalization grace sends no second signal, does not reset the timer, and switches
-the result to `operation_cancelled` after timely driver return and cleanup or to
-`cancel-timeout` with `shell_ended: true` on expiry. Prove
+the result to `operation_cancelled` after timely return to the selected shell's
+backend boundary and cleanup, or to `cancel-timeout` with `shell_ended: true`
+on expiry. Prove
 that post-result cancellation does not signal idle persistent Bash, does not
 reset the cleanup deadline, waits for successful cleanup, and then emits
 `operation_cancelled`; cleanup failure still produces no terminal operation
