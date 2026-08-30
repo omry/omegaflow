@@ -9,7 +9,7 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-08-28.
+- Updated: 2026-08-30.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -138,6 +138,23 @@ at its exact current head before code is extracted from the raw stack. Approval
 of one slice is not evidence for another. Any later accepted architecture
 amendment is an additional documentation gate before its affected B work.
 
+**A2. Complete the external-Awsh amendment in bounded design-only slices**
+
+- A2.1 fixes the external supervisor architecture and actor ownership.
+- A2.2 fixes the shell-neutral Envoy/Awsh lifecycle boundary.
+- A2.3 fixes Bash launch and readiness: the one-exec descriptor handoff,
+  helper transport, process and controlling-terminal topology, termios
+  readiness proof, terminal-control leases, and partial-launch cleanup.
+- A2.4 fixes source submission and the operation-start barrier.
+- A2.5 fixes completion and persistent-state handoff.
+- A2.6 fixes controls and crossed lifecycle races.
+- A2.7 closes all private schemas and establishes the exact B1 base.
+
+Gate: each A2 slice is a design-only successor of the preceding approved slice
+and must complete deep design review, current-document attestation, required
+checks, and exact-head PR approval before its successor is published. No B
+implementation starts until A2.7 is approved.
+
 ### B. Local Envoy and Awsh conformance
 
 **B1. Protocol models and fixtures**
@@ -161,7 +178,9 @@ first actual split-stream byte.
 **B2. Awsh boundary alignment**
 
 Align execution-policy framing, persistent Bash state, inspection-path
-resolution, and descriptor non-inheritance with the amended protocol.
+resolution, and descriptor non-inheritance with the amended protocol. Awsh
+must retain no PTY-slave descriptor after readiness; every later shell-side
+terminal operation uses the bounded terminal-control lease fixed by A2.3.
 
 **B3. Envoy session foundation**
 
@@ -495,7 +514,9 @@ gate.
 
 | Slice | State | Evidence |
 | --- | --- | --- |
-| A1 | Approval-gated | Workload Envoy design, protocol amendment, and delivery plan are independent bottom-up documentation slices; each exact current head requires its own review and approval evidence before B work |
+| A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
+| A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
+| A2.3–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
