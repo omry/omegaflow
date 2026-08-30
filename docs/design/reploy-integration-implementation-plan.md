@@ -9,7 +9,7 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-08-28.
+- Updated: 2026-08-30.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -138,6 +138,23 @@ at its exact current head before code is extracted from the raw stack. Approval
 of one slice is not evidence for another. Any later accepted architecture
 amendment is an additional documentation gate before its affected B work.
 
+**A2. Complete the external-Awsh amendment in bounded design-only slices**
+
+- A2.1 fixes the external supervisor architecture and actor ownership.
+- A2.2 fixes the shell-neutral Envoy/Awsh lifecycle boundary.
+- A2.3 fixes Bash launch and readiness: the one-exec descriptor handoff,
+  helper transport, process and controlling-terminal topology, termios
+  readiness proof, terminal-control leases, and partial-launch cleanup.
+- A2.4 fixes source submission and the operation-start barrier.
+- A2.5 fixes completion and persistent-state handoff.
+- A2.6 fixes controls and crossed lifecycle races.
+- A2.7 closes all private schemas and establishes the exact B1 base.
+
+Gate: each A2 slice is a design-only successor of the preceding approved slice
+and must complete deep design review, current-document attestation, required
+checks, and exact-head PR approval before its successor is published. No B
+implementation starts until A2.7 is approved.
+
 ### B. Local Envoy and Awsh conformance
 
 **B1. Protocol models and fixtures**
@@ -157,11 +174,24 @@ and for a first operation that fails or is cancelled before starting. Require
 the initial `pty` boundary-only stream, repetition of the current stream when no
 new byte selected one, and a same-offset `stdout` or `stderr` mark before the
 first actual split-stream byte.
+Freeze every supported Bash-build entry's exact zero-to-4,096-byte startup PTY
+string and `ready.output_through`. Cover fragmented and delayed startup bytes,
+cross-connection delivery before `ready`, zero and maximum-size entries,
+mismatch, extra byte, overflow, premature EOF, and an incomplete barrier. Prove
+the raw range begins at offset zero as `pty` at elapsed time zero and contains
+no real Bash prompt byte.
 
 **B2. Awsh boundary alignment**
 
 Align execution-policy framing, persistent Bash state, inspection-path
-resolution, and descriptor non-inheritance with the amended protocol.
+resolution, and descriptor non-inheritance with the amended protocol. Awsh
+must retain no PTY-slave descriptor after readiness; every later shell-side
+terminal operation uses the bounded terminal-control lease fixed by A2.3.
+Implement Awsh's exact one-exec descriptor intake, digest-selected generated
+Bash-build-table consumer, fixed rcfile/helper startup exchange, empty primary
+prompt, signal reset, process/session/foreground topology, Readline termios
+proof, first terminal drain, private readiness, selected-shell reaping, and
+partial-launch cleanup.
 
 **B3. Envoy session foundation**
 
@@ -169,7 +199,10 @@ Implement listeners, the controller-generated session-ID handshake, the
 independent actor-local connect/hello/ready deadlines, one PTY, persistent
 Awsh/Bash startup, shared PTY execution, exact byte relay, bounded control
 writes, an empty `HISTFILE` for controlled Bash after application
-environment delegation, and orderly shutdown.
+environment delegation, and orderly shutdown. Own the exact Awsh exec handoff,
+startup-output pump and 4,096-byte cap, build-entry comparison, complete public
+`ready` write before terminal release, `ready.output_through`, and takeover of
+incomplete launch cleanup.
 
 **B4. Operation boundaries and controls**
 
@@ -323,12 +356,20 @@ cancellation.
 **C3. Envoy session client**
 
 Implement the Python terminal/telemetry client against the canonical Envoy v1
-fixtures, including inspection results and cross-channel output barriers.
+fixtures, including inspection results and cross-channel output barriers. Its
+readiness path buffers bounded terminal bytes received before public `ready`,
+appends them only after validating `ready.output_through`, and permits the
+first planned prompt or request only after the raw log reaches that barrier.
 
 **C4. Runtime build artifact**
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
-required runtime files.
+required runtime files. Generate host preparation, Envoy, and Awsh consumers
+from one canonical digest-keyed Bash-build table containing the system rc path,
+startup-export transform, catchable-signal inventory, Readline behavior, and
+exact bounded startup PTY bytes. Build and manifest the fixed
+`etc/awsh-bashrc` with its output-empty primary-prompt hook and the fixed empty
+`etc/inputrc`.
 
 **C5. Runtime staging**
 
@@ -337,9 +378,12 @@ blueprint composition or controller execution. Prove staging rejects missing or
 additional payloads, symlinks, special files, unreadable files, escaping or
 duplicate paths, invalid modes, size or digest mismatches, and malformed or
 additional executable and script payloads, including every trusted terminal,
-Readline, and locale asset. Prove the host copies only verified installed
-artifacts into a fresh private directory, writes the manifest last, makes the
-staged tree non-writable, and never assembles it from a project checkout.
+Readline, locale, and Bash rcfile asset named by the runtime manifest. Prove
+the rcfile installs the required startup hooks without sourcing another file
+and preserves the output-empty primary-prompt invariant. Prove the host copies
+only verified installed artifacts into a fresh private directory, writes the
+manifest last, makes the staged tree non-writable, and never assembles it from
+a project checkout.
 
 **C6. Blueprint schema and composition**
 
@@ -359,6 +403,12 @@ default under its `HOME` can block Bash before OmegaFlow types the Envoy
 bootstrap command. Prove the final blueprint cannot shadow the trusted
 terminal, Readline, or locale tree and fails before controlled Bash starts if a
 required mounted asset is missing, non-regular, unreadable, or mismatched.
+Resolve and hash `/bin/bash`, reject an unsupported build or present declared
+system rc path, and require the exact generated build-table entry. Compose the
+reserved `omegaflow_session_runtime` environment mount after the application
+at writable target `/run/omegaflow` with `update_policy: preserve`, extend it
+with the same-named Docker `tmpfs`, retain that effective plan, and reject a
+missing, read-only, overridden, differently materialized, or overlapping mount.
 
 **C7. Controller run input**
 
@@ -495,7 +545,9 @@ gate.
 
 | Slice | State | Evidence |
 | --- | --- | --- |
-| A1 | Approval-gated | Workload Envoy design, protocol amendment, and delivery plan are independent bottom-up documentation slices; each exact current head requires its own review and approval evidence before B work |
+| A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
+| A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
+| A2.3–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
