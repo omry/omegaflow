@@ -73,9 +73,11 @@ first telemetry request is `hello`. Envoy creates the PTY and starts external
 Awsh only after both connections and a valid `hello` exist; Awsh then directly
 starts persistent Bash on the slave. Envoy emits public `ready` only after the
 private Awsh readiness result identifies both processes and Envoy validates
-their parent/child topology. Public `ready` remains shell-neutral and does not
-expose the Awsh PID. Neither controller endpoint sends another message before
-this exchange completes.
+their parent/child topology and exact build-specific startup output. Public
+`ready` remains shell-neutral and does not expose the Awsh PID. The controller
+does not treat the exchange as complete until its raw log reaches
+`ready.output_through`; neither controller endpoint sends another message
+before that barrier is satisfied.
 
 Controller OmegaFlow generates a fresh 128-bit random lowercase hexadecimal
 `session_id` after Reploy reports the opened session and before it launches the
@@ -114,6 +116,7 @@ required handshake fails the capture.
 | Output offset | 0 through `2^63-1` |
 | Terminal input watermark | 0 through `2^63-1`, non-decreasing |
 | Terminal input barrier wait | 5 seconds |
+| Pre-ready terminal output | 0–4,096 bytes; exact selected Bash-build entry |
 | Raw output per session | 8 GiB |
 | PID | 1 through `2^31-1` |
 | Shell status | 0 through 255 |
@@ -137,17 +140,18 @@ on partial progress.
 | Controller connect | Controller; starts after the complete bootstrap `exec` command and newline have been written | Resolve the two already-opened coordinates and complete the terminal connection followed by the telemetry connection within one shared 10-second budget | Fail the capture and ask Reploy to terminate |
 | Envoy accept | Envoy; starts after both listeners are bound | Accept the one terminal connection and one telemetry connection within one shared 10-second budget | Emit a best-effort fatal diagnostic, close both listeners and accepted sockets, and exit nonzero |
 | Envoy `hello` | Envoy; starts after both connections are accepted | Read and validate one complete `hello` frame, including the exact `session_id`, within 10 seconds | Fail the handshake and exit nonzero |
-| Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame within 10 seconds | Fail the capture and ask Reploy to terminate |
+| Envoy launch readiness | Envoy; starts after it accepts the complete valid `hello` and begins creating the PTY and Awsh child | Complete the Awsh exec, Bash launch, startup helper exchanges, Readline-entry proof, startup-output drain and comparison, identity and terminal checks, accept one valid private `ready`, write the complete public `ready`, and write the complete buffered startup output within 10 seconds | Emit a best-effort fatal `shell-launch-timeout` diagnostic, enter the five-second Envoy final-drain teardown without a usable public readiness barrier, close the session channels, and exit nonzero |
+| Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame and append terminal bytes through `ready.output_through` within 10 seconds | Fail the capture and ask Reploy to terminate |
 | Individual control write | Sender; starts with the first attempted transport write of one already-encoded frame | Write every byte of one telemetry JSON Lines frame or one private Awsh frame within 5 seconds; terminal input and workload-output bytes are excluded | Fail the session; delivery of a partial frame never becomes success |
 | Envoy operation cleanup | Envoy; starts when it begins mandatory cleanup after an Awsh completion, cancellation, finalization, or shell-exit result | Census, terminate, reap, reach operation-pipe EOF, and drain all operation-created processes and output within 5 seconds | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
 | Envoy inspection cancellation | Envoy; starts when it accepts `cancel` while the operation's inspection worker is live | Stop and reap the worker within the five-second cancellation grace period | Emit a best-effort fatal `inspection-cancel-timeout` diagnostic, close the session channels, and exit nonzero; no terminal operation result is emitted, and the controller records the cause and asks Reploy to terminate |
-| Envoy final drain | Envoy; starts when it accepts `shutdown` or enters an Envoy-initiated drain | Close Awsh, supervise the persistent Awsh process and selected-shell tree, drain terminal output, and emit `closed` within 5 seconds | Emit a best-effort fatal diagnostic and exit nonzero |
+| Envoy final drain | Envoy; starts when it accepts `shutdown`, enters an Envoy-initiated drain, or takes over incomplete pre-ready launch cleanup | Close Awsh, supervise the persistent Awsh process and selected-shell tree, drain terminal output when public readiness had committed, and emit `closed` when the public session had reached that lifecycle within 5 seconds | Emit a best-effort fatal diagnostic, terminate the remaining controlled tree, and exit nonzero |
 | Controller final drain | Controller; starts when it accepts `draining` | Receive `closed`, retain raw output through its final offset, and observe terminal EOF within 5 seconds | Fail the capture and ask Reploy to terminate |
 
-The two connect timers and the two handshake timers are intentionally
-independent actor-local bounds. A timeout on either side is sufficient to fail
-the session; neither side extends its timer because the other side made partial
-progress.
+The two connect timers and the Envoy-hello, Envoy-launch, and controller-ready
+timers are intentionally independent actor-local bounds. A timeout on either
+side is sufficient to fail the session; neither side extends its timer because
+the other side made partial progress.
 
 Every field limit is additionally constrained by the enclosing telemetry or
 private-frame limit. Reaching an individual field maximum does not guarantee
@@ -209,6 +213,28 @@ controller's disk and take the recording host with it. The raw log is therefore
 capped per session, and reaching the cap is a typed session failure: the
 controller stops appending, emits a bounded diagnostic, and fails the capture
 rather than truncating a log whose whole contract is that it is exact.
+
+Terminal delivery has a separate launch barrier. Envoy drains the PTY master
+during Bash startup into a private buffer but writes no terminal byte before it
+has completely written public `ready`. The buffer is capped at 4,096 bytes and
+must equal the exact startup byte string in the selected Bash-build entry. Once
+`ready` is complete, Envoy writes that buffer to the terminal connection before
+relaying any later PTY byte. A mismatch, extra byte, overflow, EOF, or failure
+to collect the complete expected string within the launch-readiness deadline is
+a fatal `shell-launch-output` diagnostic and no public `ready` is emitted.
+
+The two TCP connections do not acquire cross-connection ordering merely
+because Envoy performs its writes in that order. The controller therefore may
+read and buffer at most 4,096 terminal bytes before it receives `ready`, but it
+does not append, present, or otherwise consume them. After validating
+`ready.output_through`, it appends the buffered and subsequently received
+terminal bytes in arrival order. Readiness is not complete at the controller
+until the raw-log offset reaches that exact barrier. Only then may it commit the
+first planned prompt or send `execute`. More than 4,096 pre-ready bytes, a raw
+offset beyond the declared barrier, or terminal EOF before the barrier is
+satisfied fails the handshake. This rule preserves exact bytes while making
+the `ready` frame, raw offset zero, startup bytes, and first planned prompt
+unambiguous.
 
 ## Telemetry framing
 
@@ -306,7 +332,7 @@ with the operation. Results remain in request order and repeat the ID;
 
 | Type | Additional required fields |
 | --- | --- |
-| `ready` | `envoy_pid`, `shell_pid`, `cwd`, `columns`, `rows`, `elapsed_us` |
+| `ready` | `envoy_pid`, `shell_pid`, `cwd`, `columns`, `rows`, `elapsed_us`, `output_through` |
 | `operation_started` | `operation_id`, `output_start` |
 | `operation_ready` | `operation_id`, `gate_id`, `output_through` |
 | `operation_continued` | `operation_id`, `gate_id`, `output_through` |
@@ -332,6 +358,13 @@ begins, `stream` is `pty`, `stdout`, or `stderr`, and `elapsed_us` is the
 Envoy's monotonic microseconds since the session epoch established by
 `ready`; `ready` itself carries `elapsed_us` 0, the instant it is stamped. A
 mark attributes every byte from its `offset` until the next mark's `offset`.
+
+`ready.output_through` is the exclusive raw-log end of the fixed Bash build's
+startup terminal bytes. It is between zero and 4,096 and equals the exact byte
+length in the selected build-table entry. Those bytes are session-scoped `pty`
+output at elapsed time zero, never operation output or a visible Bash prompt.
+They need no additional mark at `ready`: the current stream is initialized to
+`pty` at offset zero, and the first later mark closes that initial range.
 
 The current mark stream is deterministic even when a required boundary mark
 attributes no bytes. Before any output source has selected a stream, the
@@ -362,21 +395,25 @@ assertion evidence. Exit-status assertions and workload inspections remain
 valid for operations that send input. A later non-interactive operation can
 perform output or content verification when an interactive operation needs it.
 
-The Envoy emits a mark when the stream identity changes, when at least the mark
-cadence has elapsed and new bytes exist, and immediately before any event
-carrying `output_start` or `output_through`. Marking both range-opening and
-range-closing events is what supplies the timeline anchors the asciicast writer
-re-anchors on, without a separate timestamp field. It coalesces otherwise. The
-mark budget is session-wide rather than per-operation, because a mark carries no
+After the public-readiness launch barrier, the Envoy emits a mark when the
+stream identity changes, when at least the mark cadence has elapsed and new
+bytes exist, and immediately before any later event carrying `output_start` or
+`output_through`. Public `ready` is the sole pre-delivery exception: its
+`output_through` is fixed by the exact startup buffer, it has no preceding mark,
+and the launch barrier writes the frame before those bytes reach the terminal
+socket. Marking both range-opening and range-closing post-readiness events is
+what supplies the timeline anchors the asciicast writer re-anchors on, without
+a separate timestamp field. It coalesces otherwise. The mark budget is
+session-wide rather than per-operation, because a mark carries no
 `operation_id` and output surviving from an earlier operation can arrive while
 the session is idle or while a later operation runs; neither endpoint could
 charge such a mark to an operation. Exhausting the session budget is a session
-failure, not a partial success. Marks never regress in `offset` or `elapsed_us`,
-and a mark's `offset` never exceeds the bytes already written to the terminal
-socket, so a mark is never visible before the bytes it describes. A split-stream
-operation therefore carries `stdout` and `stderr` marks over its interleaved
-terminal range; a PTY operation carries `pty` marks, its PTY bytes are logical
-stdout, and logical stderr is empty.
+failure, not a partial success. Post-readiness marks never regress in `offset`
+or `elapsed_us`, and a mark's `offset` never exceeds the bytes already written
+to the terminal socket, so a mark is never visible before the bytes it
+describes. A split-stream operation therefore carries `stdout` and `stderr`
+marks over its interleaved terminal range; a PTY operation carries `pty` marks,
+its PTY bytes are logical stdout, and logical stderr is empty.
 
 Logical stdout and logical stderr are slices of the controller's raw log
 selected by stream attribution. The Envoy sends no copy of workload output on
@@ -564,7 +601,8 @@ advance this state machine:
 ```mermaid
 stateDiagram-v2
     [*] --> HelloSent: controller hello
-    HelloSent --> Idle: Envoy ready
+    HelloSent --> ReadinessBarrier: Envoy ready
+    ReadinessBarrier --> Idle: raw log reaches ready.output_through
     Idle --> Starting: controller execute
     Starting --> Running: Envoy operation_started
     Starting --> Idle: Envoy operation_failed
@@ -732,14 +770,21 @@ claiming output the operation never produced. Taking the later offset also
 respects the non-regressing rule when terminal output or a resize advances the
 session offset while the operation waits in `Starting`. A pre-start failure is
 the only case in which an operation reports a range it did not open.
-`output_through` is an exclusive raw-output offset. Before emitting an event
-that contains `output_through`, the Envoy:
+Except for public `ready`, whose sole ordering rule is the pre-delivery launch
+barrier above, `output_through` is an exclusive raw-output offset on a
+post-readiness event. Before emitting such an event, the Envoy:
 
-1. observes the corresponding `awsh` result;
+1. observes the boundary named by that event's rule, normally the corresponding
+   `awsh` result;
 2. drains all PTY bytes, or split stdout/stderr pipe bytes, whose writes
-   happened before that result write;
+   happened before that boundary;
 3. writes those bytes to the terminal socket in order; and
 4. snapshots the resulting output offset for the telemetry event.
+
+For `ready`, Envoy instead snapshots the exact validated startup buffer's end,
+writes the complete `ready` frame carrying that offset, and then releases the
+buffer to the terminal socket. The controller does not leave
+`ReadinessBarrier` until its raw log reaches that offset.
 
 An operation whose shell ended observes Awsh's `shell_exit` result. Awsh writes
 it only after reaping the selected shell, so the reap remains a real
@@ -1206,21 +1251,40 @@ between complete frames is not success until a valid `closed` was accepted.
 ## Private Envoy-to-`awsh` protocol
 
 Envoy starts one external Awsh process with separate unidirectional control and
-result descriptors and gives it the PTY slave. Awsh is Envoy's direct child and
-the selected shell's direct parent. Envoy retains the PTY master, controller
-connections, public state machine, process-tree policy, and final result
-commitment. Awsh owns selected-shell launch and reaping plus the private,
-shell-neutral lifecycle described here. Neither the selected shell nor an
-ordinary descendant receives an Envoy connection or Envoy-to-Awsh descriptor.
-The exact descriptor setup and Bash-helper transport belong to the following
-launch slice.
+result pipes and one PTY, with close-on-exec set on every new descriptor. In the
+forked Awsh child only, Envoy duplicates the control read end, result write end,
+and PTY slave onto three distinct descriptors greater than 2, clears
+close-on-exec only on those copies, closes every original and unused end, and
+execs the fixed Awsh binary as:
+
+```text
+/omegaflow-runtime/bin/awsh supervise \
+  --control-fd=N --result-fd=N --pty-slave-fd=N \
+  --session-runtime-dir=/run/omegaflow/session
+```
+
+Before that exec the child maps descriptor 0 to a read-only `/dev/null` and
+descriptors 1 and 2 to a write-only `/dev/null`; it does not inherit Envoy's
+bootstrap streams. The three decimal descriptor arguments must be distinct. On
+entry, Awsh validates their access directions and that the slave is a terminal,
+then restores close-on-exec on all three before it can fork Bash or a helper.
+The parent retains only the control write end, result read end, and PTY master.
+Envoy's listeners, connected controller sockets, Reploy descriptors, bootstrap
+streams, and unused pipe and PTY ends never enter the Awsh exec.
+
+Awsh is Envoy's direct child and the selected shell's direct parent. Envoy
+retains the PTY master, controller connections, public state machine,
+process-tree policy, and final result commitment. Awsh owns selected-shell
+launch and reaping plus the private, shell-neutral lifecycle described here.
+Neither the selected shell nor an ordinary descendant receives an Envoy
+connection or Envoy-to-Awsh descriptor.
 
 The private descriptor protocol uses bounded UTF-8 fields separated and
 terminated by NUL. Every frame starts with `awsh-v1` and a message type; NUL
-cannot appear in source or another value. This slice freezes the message
-vocabulary and ownership boundary. The Bash-launch, submission, and lifecycle
-race slices freeze exact field arity and phase-specific handshakes before the
-protocol is stamped.
+cannot appear in source or another value. This slice freezes the launch
+descriptor handoff, startup helper handshake, and exact `ready` arity. The
+submission, completion, and lifecycle-race slices freeze the remaining field
+arity and phase-specific handshakes before implementation begins.
 
 | Envoy request | Purpose |
 | --- | --- |
@@ -1253,6 +1317,20 @@ protocol is stamped.
 The Envoy validates and bounds a complete request before forwarding it. Partial
 fields, unsupported types, invalid UTF-8, invalid arity, and EOF in the middle
 of a frame are protocol failures.
+
+The sole successful launch result has this exact form:
+
+```text
+awsh-v1, ready, AWSH_PID, SHELL_PID, CWD
+```
+
+`AWSH_PID` and `SHELL_PID` are nonzero canonical decimal process IDs. `CWD` is
+the bounded absolute physical cwd from the startup state report. Envoy requires
+`AWSH_PID` to equal the child it launched, verifies that `SHELL_PID` is Awsh's
+direct child in the controlled tree, and requires the reported cwd to match the
+physical cwd accepted from the startup helper. Public `ready` continues to
+expose only Envoy and selected-shell identity; controller behavior does not
+depend on the private Awsh PID.
 
 Private EOF is never a substitute for a result. EOF in a frame is a protocol
 failure. EOF between frames is orderly only when it immediately follows one
@@ -1324,13 +1402,105 @@ types, invalid UTF-8, invalid arity, wrong identifiers, duplicate terminal
 results, and EOF in a frame fail the session. Awsh failure never becomes a
 shell status, successful operation result, or Reploy lifecycle result.
 
+### Launch helper transport and readiness
+
+Envoy exclusively creates a fresh mode-0700 session runtime directory at the
+fixed path `/run/omegaflow/session` without following symlinks and passes that
+exact path in the single Awsh exec. A pre-existing path fails launch. Awsh
+creates a mode-0700 `bash` subdirectory and a mode-0600 Unix `SOCK_SEQPACKET`
+listener at `/run/omegaflow/session/bash/helper.sock` before it starts Bash.
+The manifested Bash rcfile invokes short-lived helper modes of the same fixed
+Awsh binary with that literal socket path. Each invocation opens one
+connection, sends one bounded packet, receives one bounded final reply, and
+exits; there is no Bash-resident request loop and no inherited helper
+descriptor. The pathname is same-identity orchestration, not a security
+boundary. Awsh removes the socket and `bash` directory during every
+launch-failure and terminal cleanup path; Envoy removes the enclosing session
+directory after it reaps Awsh.
+
+Startup uses only these exact helper packets:
+
+```text
+# helper -> Awsh
+awsh-helper-v1, prompt_state, STATUS, HISTEXPAND, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
+awsh-helper-v1, prompt_ready
+
+# Awsh -> helper
+awsh-helper-v1, accepted
+```
+
+The rcfile sends one `prompt_state` and then one blocking `prompt_ready` while
+no operation is armed. Awsh accepts only that order. The state packet records
+the initial status, physical and validated logical cwd, bounded exported
+environment, and history-expansion state. When Awsh accepts the packet, it also
+reads and records the complete pre-Readline termios state from the controlling
+terminal. The packet fields' detailed bounds and canonical encodings are frozen
+with source submission in A2.4; A2.3 requires only that failure to validate the
+complete packet prevents readiness rather than truncating state.
+
+Before sending `prompt_ready`, the manifested rcfile installs the immutable
+adapter prompt hook and sets the Bash primary-prompt display value to the empty
+string. Every OmegaFlow-owned return to the primary prompt must restore that
+empty display value before Readline entry; A2.5 freezes the completion-side
+mechanics. Visible prompts remain controller presentation and no Bash prompt
+byte may enter the PTY stream.
+
+After accepting `prompt_ready`, Awsh sets both `ICANON` and `ECHO` on its
+controlling terminal, reads the complete termios state back, and replies
+`accepted` only after both bits are observed set and the remainder matches the
+captured workload state. The helper remains blocked until that reply. The
+fixed Bash/Readline build must then clear both bits on entry to interactive
+input. Awsh observes that second exact transition, records the resulting active
+termios state, and treats it as the readiness boundary. Startup output, prompt
+bytes, helper closure, or a live Bash PID is never substitute readiness
+evidence.
+
+After observing that transition, Awsh takes one terminal-control lease, calls
+`tcdrain`, closes the lease, and only then sends private `ready`. The selected
+Bash-build entry contains the exact zero-to-4,096-byte PTY string that the
+fixed Bash, Readline, terminal, locale, inputrc, and rcfile combination emits
+before that drain; it may contain terminal-control bytes but never a visible
+prompt. Envoy drains the PTY master concurrently, and after private `ready` it
+reads through nonblocking empty, compares the complete launch buffer byte for
+byte with that entry, and applies the terminal-delivery launch barrier above.
+The bytes are compatibility evidence, not protocol frames or readiness
+authority: the helper ordering, termios transition, topology checks, and
+private `ready` remain authoritative.
+
+The Envoy-owned ten-second launch-readiness deadline covers the Awsh exec,
+helper-listener setup, Bash exec and rcfile, both startup helper exchanges, the
+Readline transition, terminal drain, exact startup-output comparison, all
+identity and terminal checks, the private `ready`, and the complete public
+`ready` and buffered-startup-output writes. The controller's independent
+ten-second `ready` deadline continues to run from its complete `hello` write. Awsh emits
+the private `ready` frame only after all launch checks pass, and Envoy validates
+it before emitting public `ready`; neither timer is reset by intermediate
+launch progress.
+
 ## Controlled Awsh and Bash launch
 
-The production Awsh executable is fixed at `/omegaflow-runtime/bin/awsh` and
-starts `/bin/bash` as its direct selected-shell child. The initial Bash command
-begins with `--noprofile --norc`. The launch path does not honor `AWSH_BASH`.
-Before Envoy starts Awsh, OmegaFlow removes these delegated application
-variables:
+The production Awsh executable is fixed at `/omegaflow-runtime/bin/awsh`. Its
+initial backend is the resolved regular `/bin/bash`, launched as Awsh's direct
+child with this exact argument sequence:
+
+```text
+/bin/bash --noprofile --rcfile /omegaflow-runtime/etc/awsh-bashrc -i
+```
+
+The explicit manifested rcfile replaces the user interactive rcfile. OmegaFlow
+ships one versioned Bash-build table generated into host preparation code,
+Envoy, and Awsh from the same canonical source. It is keyed by the lowercase
+SHA-256 digest of `/bin/bash` and records that build's compiled system-wide
+interactive rc path or `none`, deterministic startup-export transformation,
+catchable signal inventory, Readline behavior required by the startup
+handshake, and the exact bounded startup PTY byte string through the first
+`tcdrain`.
+Preparation requires one exact table entry. Envoy re-hashes `/bin/bash` and,
+when the entry names a system rc path, requires that path to be absent. An
+Awsh re-hashes the same resolved regular executable and selects the same entry
+before it forks Bash. An unknown or mismatched build or a present system rc
+file fails before Bash starts. Neither launch path honors `AWSH_BASH`. Before
+Envoy starts Awsh, OmegaFlow removes these delegated application variables:
 
 ```text
 AWSH_BASH BASH_COMPAT BASHOPTS BASH_ENV BASH_XTRACEFD CDPATH ENV
@@ -1363,26 +1533,77 @@ LOCPATH=/omegaflow-runtime/lib/locale
 ```
 
 Before starting Awsh, Envoy validates the mounted runtime manifest and the
-actual read-only assets. `INPUTRC` must be an empty readable regular file whose
-digest matches the manifest. The exact `xterm-256color` terminal entry must be
-a readable regular file whose digest matches the manifest. The complete
-selected `C.UTF-8` locale tree must have exactly the manifest's relative-path
-inventory, and every entry must be a readable regular file whose digest
-matches. A missing, unreadable, non-regular, unmanifested, or hash-mismatched
-required asset is a fatal shell-launch failure; Envoy starts no Awsh and exits
-nonzero. The selected shell cannot therefore open application-selected history,
-Readline, terminal-database, locale-database, or mailbox configuration before
-accepting OmegaFlow input. A workload whose commands need a filtered value sets
-it inside operation source, where persistent Bash carries it to operation
-children as ordinary shell state. Environment names must be non-empty, contain
-neither `=` nor NUL, and values cannot contain NUL.
+actual read-only assets. `/omegaflow-runtime/etc/awsh-bashrc` must be a readable
+regular file whose digest matches the manifest and whose fixed content installs
+only the adapter startup hooks defined here, including the output-empty primary
+prompt invariant; it sources no other file and resolves no command through
+`PATH`. `INPUTRC` must be an empty readable regular file whose digest matches
+the manifest. The exact `xterm-256color`
+terminal entry must be a readable regular file whose digest matches the
+manifest. The complete selected `C.UTF-8` locale tree must have exactly the
+manifest's relative-path inventory, and every entry must be a readable regular
+file whose digest matches. A missing, unreadable, non-regular, unmanifested, or
+hash-mismatched required asset is a fatal shell-launch failure; Envoy starts no
+Awsh and exits nonzero. The selected shell cannot therefore open
+application-selected history, Readline, terminal-database, locale-database, or
+mailbox configuration before accepting OmegaFlow input. A workload whose
+commands need a filtered value sets it inside operation source, where
+persistent Bash carries it to operation children as ordinary shell state.
+Environment names must be non-empty, contain neither `=` nor NUL, and values
+cannot contain NUL.
+
+Awsh calls `setsid`, verifies that its session and process-group IDs equal its
+PID, and acquires the passed slave as its controlling terminal with
+`TIOCSCTTY`. It ignores `SIGHUP` and `SIGTTOU` in the supervisor only: `SIGHUP`
+must not terminate the parent when the selected-shell tree closes the final
+slave descriptor, and `SIGTTOU` must not stop its terminal-control calls while
+the selected shell is foreground. Awsh then forks Bash behind a private launch
+barrier. The child creates a distinct process group whose ID is its PID,
+duplicates the slave onto descriptors 0, 1, and 2, closes every descriptor
+except those three and its barrier ends, reports setup, and waits. Awsh makes
+that group foreground, verifies `tcgetsid(slave) == awsh_pid` and
+`tcgetpgrp(slave) == shell_pid`, and releases the child.
+
+In the child-only async-signal-safe pre-exec path, raw syscalls clear the signal
+mask and reset every supported catchable signal in the selected Bash-build
+entry to default, including `SIGHUP`, `SIGINT`, `SIGQUIT`, `SIGTTOU`, `SIGTTIN`,
+and `SIGTSTP`. The child then closes its barrier descriptors and execs Bash.
+Awsh's private ignored dispositions therefore do not become persistent Bash
+state, and Bash starts as the foreground process-group leader in Awsh's
+controlling-terminal session.
+
+After the startup helper and Readline handshake, Awsh repeats the direct-child,
+session, and foreground-group checks. It then closes every PTY-slave descriptor
+it owns before writing private `ready`. Only Bash and its descendants retain
+slave-side descriptors after readiness, so selected-shell exit can produce PTY
+master EOF.
+
+Later shell-side terminal operations use a serialized **terminal-control
+lease** rather than a retained slave descriptor. Awsh opens `/dev/tty` with
+`O_RDWR|O_NOCTTY|O_CLOEXEC`, verifies that it names Awsh's controlling session
+and the expected selected-shell foreground group, performs only the operation
+authorized by the current private state, and closes it on every outcome before
+another helper or terminal transaction is admitted. The source, completion,
+and lifecycle-race slices define which private phases may acquire this lease;
+ordinary descendants never inherit it.
+
+Any failure before private `ready` stops accepting helpers, terminates and reaps
+any Bash child or process group already created, writes a bounded
+`protocol_error` with code `shell-launch` when the result pipe remains usable,
+closes every Awsh descriptor, removes the private helper paths, and exits
+nonzero.
+If Awsh does not complete that cleanup before the launch-readiness deadline,
+Envoy takes over the controlled subtree under the existing five-second final
+drain, then removes the session runtime directory. It never emits public
+`ready` for a partial launch.
 
 Envoy owns the TCP sockets with close-on-exec. External Awsh receives the PTY
-slave and dedicated private request/result descriptors; Bash receives neither
-those descriptors nor an Envoy socket. For split execution, only the selected
-stdout/stderr descriptors reach the evaluated command tree, and Envoy
-supervises and closes them at the typed operation boundary. The next launch
-slice freezes the descriptor transfer and Bash-helper mechanism.
+slave and dedicated private request/result descriptors only through the
+one-exec handoff above; Bash receives neither those descriptors nor an Envoy
+socket. For split execution, only the selected stdout/stderr descriptors reach
+the evaluated command tree, and Envoy supervises and closes them at the typed
+operation boundary. Exact split-operation descriptor setup belongs to A2.4 and
+A2.5.
 
 ## Failure mapping
 
@@ -1506,7 +1727,14 @@ Readline, terminal, and locale values for both shell launches; hostile
 `$HOME/.inputrc` and `$HOME/.terminfo` data; and failure before controlled Bash
 for each missing, unreadable, non-regular, unmanifested, or mismatched trusted
 asset. It also covers a matching and mismatching handshake `session_id`, every
-startup and control-write deadline epoch, and resize placement before, between,
+startup and control-write deadline epoch, and the exact startup-output string
+for every supported Bash-build entry. Startup cases fragment and delay that
+string across private readiness, exercise zero and 4,096-byte entries, reject a
+mismatch, extra byte, overflow, premature EOF, and incomplete barrier, and prove
+that the controller buffers cross-connection reordering, appends bytes from raw
+offset zero as `pty` at elapsed time zero, and commits its first planned prompt
+only after `ready.output_through`. They also prove that the real Bash primary
+prompt contributes no byte. The corpus covers resize placement before, between,
 and after authored events,
 including multiple resizes at one frontier and zero-duration spans. A delayed
 `execute.input_through` case accepts a resize while `execute` remains in

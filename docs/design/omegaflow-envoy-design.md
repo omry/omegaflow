@@ -8,7 +8,7 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-08-20
+- Updated: 2026-08-30
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -419,13 +419,37 @@ though OmegaFlow distributes them together:
 
 Envoy starts one Awsh supervisor and passes it the PTY slave plus only the
 private runtime descriptors it needs. Awsh starts one selected shell on that
-slave and keeps it for the recording. Before reporting the selected shell
-ready, Awsh establishes its controlling terminal and standard streams, then
-closes every PTY-slave descriptor Awsh owns. Only the selected-shell tree may
-retain slave-side descriptors after readiness, so shell exit can produce
-master-side EOF. Top-level operations therefore share the state supported by
-that backend. For Bash this includes the directory, environment, functions,
-aliases, options, and jobs.
+slave and keeps it for the recording. Envoy creates the private pipes and PTY
+with close-on-exec set, then carries only the control read end, result write
+end, and slave through the single fixed Awsh exec. Awsh immediately restores
+close-on-exec on those descriptors; neither controller sockets nor the PTY
+master enter that process.
+
+Awsh becomes the controlling-terminal session leader with `setsid` and
+`TIOCSCTTY`. Behind a launch barrier it creates Bash as a distinct foreground
+process group with only the slave on descriptors 0, 1, and 2. The Bash pre-exec
+path resets the inherited signal mask and supported catchable signals to
+default. Awsh alone ignores `SIGHUP` and `SIGTTOU`, respectively to survive the
+final slave close and to perform terminal-control calls while Bash is
+foreground.
+
+Before reporting the selected shell ready, Awsh verifies parentage, session,
+foreground group, fixed-rcfile startup, the startup helper exchange, and actual
+Readline entry. The fixed adapter leaves the real Bash primary-prompt display
+empty. Awsh drains the slave-side terminal output and closes every PTY-slave
+descriptor it owns before private readiness. Envoy requires the pre-ready
+PTY-master bytes to match the selected Bash-build entry exactly, then commits
+public `ready` with their exclusive raw-log end in `output_through` before
+releasing those bytes to the terminal connection. The controller buffers
+cross-connection reordering and does not present its first planned prompt or
+submit work until its raw log reaches that barrier. Only the selected-shell
+tree may retain slave-side descriptors after readiness, so shell exit can
+produce master-side EOF. Later Awsh terminal operations open a
+close-on-exec `/dev/tty` terminal-control lease, validate the expected session
+and foreground group, perform one serialized operation, and close it on every
+outcome. Top-level operations share the state supported by the backend. For
+Bash this includes the directory, environment, functions, aliases, options,
+and jobs.
 
 ```text
 OmegaFlow Envoy
@@ -454,7 +478,10 @@ The controller submits planned operations through Envoy telemetry. Envoy
 validates and forwards them to Awsh; Awsh coordinates the selected backend and
 returns shell-neutral lifecycle and state results. The exact private packets,
 start and completion barriers, Bash submission mechanism, and cleanup races are
-specified by later design slices rather than by this actor model.
+specified by later design slices rather than by this actor model. The launch
+slice fixes only the descriptor handoff, helper transport, startup
+state/readiness packets, process and terminal topology, and partial-launch
+cleanup.
 
 If an operation starts Fish, Zsh, Python, a TUI, or another interactive
 program, that program is one opaque child operation. The terminal remains fully
@@ -479,9 +506,13 @@ being accepted as a protocol message.
 
 The initial Envoy, Awsh, and Bash run under the same non-root Reploy workload
 identity. Envoy retains the connected TCP sockets and gives external Awsh only
-the PTY slave and its private control/result descriptors. Awsh must give Bash
-and ordinary descendants neither Envoy sockets nor its private parent channel.
-The concrete descriptor and helper transport belongs to the Bash-launch slice.
+the PTY slave and its private control/result descriptors through one declared
+exec handoff. Awsh must give Bash and ordinary descendants neither Envoy sockets
+nor its private parent channel. Short-lived Bash helpers connect to a fresh
+mode-0600 `SOCK_SEQPACKET` endpoint inside a mode-0700 session directory; they
+inherit no helper descriptor. After readiness Awsh retains no PTY-slave
+descriptor, and every later terminal-control lease is close-on-exec and bounded
+to one serialized transaction.
 These measures prevent accidental inheritance; they do not isolate the three
 same-identity processes from deliberate interference.
 
@@ -492,7 +523,12 @@ Inspection results are reproducibility and correctness evidence, not
 tamper-proof security evidence.
 
 The production Envoy starts a fixed Awsh executable with a controlled launch
-environment, and Awsh starts the fixed Bash backend from that environment. The
+environment, and Awsh starts the fixed Bash backend from that environment as
+`/bin/bash --noprofile --rcfile /omegaflow-runtime/etc/awsh-bashrc -i`. A
+digest-keyed Bash-build table fixes the system interactive rc path or its
+absence, startup-export transformation, catchable-signal inventory, Readline
+behavior used by readiness, and the exact bounded PTY bytes emitted through
+the first Readline-entry terminal drain. The
 launch path must neutralize shell startup, input-binding, and option
 injection such as `BASH_ENV`, `ENV`, `HISTFILE`, `INPUTRC`, `SHELLOPTS`, and
 `BASHOPTS`, and it must not honor the prototype-only `AWSH_BASH` override. The
@@ -503,12 +539,15 @@ manifest-validated launch values from the environment contract:
 `/omegaflow-runtime/share/terminfo` database,
 `INPUTRC=/omegaflow-runtime/etc/inputrc`, `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, and
 `LOCPATH=/omegaflow-runtime/lib/locale`. Before launching Awsh, Envoy verifies
-the readable trusted terminal entry, the empty regular Readline file, and the
-complete regular-file-only trusted locale tree against the mounted runtime
-manifest and fails startup on a missing, unreadable, non-regular, or
-hash-mismatched asset. Awsh then launches Bash. Terminal, Readline, and locale
-lookup cannot fall through to application-controlled data under `HOME` or to
-another search directory.
+the readable trusted terminal entry, the empty regular Readline file, the fixed
+regular Bash rcfile, and the complete regular-file-only trusted locale tree
+against the mounted runtime manifest. It also verifies the Bash digest and the
+selected build-table entry's system-rc condition; Awsh independently re-hashes
+the resolved regular Bash executable and selects the same entry before it
+forks. A missing, unreadable, non-regular, unrecognized, or hash-mismatched
+input fails startup. Awsh then launches Bash. Terminal, Readline, locale, and
+Bash startup lookup cannot fall through to application-controlled data under
+`HOME`, `/etc`, or another search directory.
 
 Application environment required by planned operations is delegated
 explicitly, then the Envoy installs the trusted terminal, Readline, and locale
@@ -762,9 +801,8 @@ executable at `/omegaflow-runtime` in the workload:
 ├── bin/
 │   ├── envoy
 │   └── awsh
-├── libexec/
-│   └── awsh-driver.bash
 ├── etc/
+│   ├── awsh-bashrc
 │   └── inputrc
 ├── share/terminfo/
 │   └── .../xterm-256color
@@ -773,10 +811,9 @@ executable at `/omegaflow-runtime` in the workload:
 ```
 
 The mount contains every OmegaFlow-supplied workload executable, script, and
-launch-time data asset.
-The production `awsh` launcher resolves its driver relative to this fixed
-`bin`/`libexec` layout rather than relying on a host or project path.
-Writable ephemeral state, if needed, belongs under `/run/omegaflow`; project
+launch-time data asset. Awsh uses the fixed manifested rcfile directly; there
+is no production Bash driver script or project-relative launch path. Writable
+ephemeral state belongs under the reserved `/run/omegaflow` root; project
 source, the application working copy, caches, and controller capture outputs use
 separate declared locations. Blueprint validation rejects an application mount
 whose target equals, contains, or is contained by `/omegaflow-runtime`,
@@ -785,9 +822,9 @@ whose target equals, contains, or is contained by `/omegaflow-runtime`,
 Runtime integration requires the selected application blueprint to provide
 Bash and the configured non-root workload identity. The Envoy is a standalone
 executable so the workload does not need Python or an OmegaFlow installation.
-The frozen protocol contract selects a dependency-free Go executable, Linux
-`amd64` and `arm64`, and its reproducible build settings. The design no longer
-treats the language as open.
+The frozen protocol contract selects dependency-free Go Envoy and Awsh
+executables, Linux `amd64` and `arm64`, and their reproducible build settings.
+The design no longer treats the language as open.
 Distribution and identity materialization remain environment-construction
 concerns, not additions to Reploy's controlled-session protocol.
 
@@ -797,15 +834,16 @@ The installed OmegaFlow distribution carries one manifest for each supported
 workload platform. Its schema is `omegaflow-runtime-manifest-v1` and it records:
 
 - the OmegaFlow version and source revision;
-- the Envoy telemetry and private `awsh` protocol schemas;
+- the Envoy telemetry, private Envoy/Awsh, and Awsh-helper protocol schema
+  versions;
 - the target operating system and architecture;
-- the pinned Go toolchain version used for the Envoy binary; and
+- the pinned Go toolchain version used for the Envoy and Awsh binaries; and
 - every runtime-relative regular file with its byte size, executable mode, and
   lowercase SHA-256 digest.
 
 Paths are unique, normalized relative POSIX paths and may name only the fixed
-`bin`, `libexec`, `etc`, `share/terminfo`, and `lib/locale` roots. The trusted
-launch data consists of the empty `etc/inputrc`, the exact
+`bin`, `etc`, `share/terminfo`, and `lib/locale` roots. The trusted launch data
+consists of `etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
 `xterm-256color` entry below `share/terminfo`, and every regular file in the
 complete selected `C.UTF-8` tree below `lib/locale`. The manifest itself is not
 listed as a payload file. Staging rejects missing or additional payload files,
@@ -824,16 +862,44 @@ The frozen Hydra blueprint contract provides all of the following:
 - one configured non-root workload identity;
 - the verified runtime directory mounted read-only and executable at
   `/omegaflow-runtime`;
-- the manifest-validated empty Readline file, exact trusted terminal entry, and
-  complete trusted locale tree in that non-shadowable runtime mount;
-- writable ephemeral state, when required, outside that mount, provisionally at
-  `/run/omegaflow`;
+- the manifest-validated Bash rcfile, empty Readline file, exact trusted
+  terminal entry, and complete trusted locale tree in that non-shadowable
+  runtime mount;
+- a writable reserved runtime root at `/run/omegaflow`, outside that mount,
+  where Envoy can exclusively create `/run/omegaflow/session` mode 0700;
 - two private TCP endpoint declarations reserved for the Envoy terminal and
   telemetry listeners;
 - ordinary application and browser-service endpoints declared independently of
   those Envoy endpoints; and
 - no application mount that equals, contains, or is contained by
   `/omegaflow-runtime`, `/run/omegaflow`, or another reserved OmegaFlow path.
+
+The reserved writable root is one concrete environment mount, not a prose-only
+requirement. OmegaFlow composes this fragment after the application:
+
+```yaml
+environment:
+  mounts:
+    omegaflow_session_runtime:
+      target: /run/omegaflow
+      writable: true
+      update_policy: preserve
+docker:
+  mounts:
+    omegaflow_session_runtime:
+      extends: environment.mounts.omegaflow_session_runtime
+      mode: tmpfs
+```
+
+`preserve` is the required environment policy and is a no-op for the ephemeral
+tmpfs. The final effective plan must retain that exact target, writability,
+extension, update policy, and Docker mode; the generated source is empty. The
+mounted path must permit the selected non-root runtime identity to create the
+mode-0700 `session` directory. OmegaFlow rejects a missing, read-only,
+overridden, differently materialized, or overlapping effective mount rather
+than repairing it. Reploy remains authoritative for backend realization and
+numeric runtime identity. The tmpfs and same-identity session directory are
+cooperative orchestration, not hostile-workload containment.
 
 Hydra produces the final typed controller and workload blueprint objects.
 OmegaFlow's built-in Envoy defaults compose before the selected `reploy/app`
@@ -850,9 +916,9 @@ surface accepts the controller-generated handshake `session_id`, explicit
 terminal and telemetry listen coordinates, and initial columns and rows. The
 listen hosts and ports must be values frozen into the prepared workload
 blueprint; they are not accepted from terminal content or an untrusted runtime
-destination. The runtime root, `awsh` path, driver path, and `/bin/bash`
-executable are fixed and have no workload-controlled override. The exact flags
-are required `--session-id`, `--terminal-listen`, `--telemetry-listen`,
+destination. The runtime root, `awsh` path, manifested Bash rcfile path, and
+`/bin/bash` executable are fixed and have no workload-controlled override. The
+exact flags are required `--session-id`, `--terminal-listen`, `--telemetry-listen`,
 `--columns`, and `--rows`. Controller OmegaFlow always supplies all five;
 `session_id` has no default. Local developer invocations may use the built-in
 blueprint coordinates and an 80-by-24 terminal only by supplying them
