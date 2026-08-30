@@ -234,7 +234,7 @@ Host OmegaFlow
         ├── project toolchains and packages
         ├── read-only /omegaflow-runtime
         ├── Reploy bootstrap shell and PTY
-        ├── Envoy-owned recording PTY and persistent Bash
+        ├── Envoy-owned recording PTY, external Awsh, and persistent Bash
         └── demonstrated services and declared endpoints
 ```
 
@@ -321,7 +321,7 @@ establishes success.
 | Reploy | Exact deployment admission, the bootstrap workload PTY, endpoint coordinates, lifecycle truth, controller output retention, cleanup, and private crash receipts. |
 | Host OmegaFlow | Blueprint composition, deployment preparation, public host invocation, host-process stderr retention, final host-result interpretation, retained-run inspection, and publication. |
 | Controller OmegaFlow | Recording plan execution, Envoy connections, terminal-to-browser handoff, browser automation, redaction, media production and validation, publication-candidate construction, artifact finalization, and structured failure preservation. |
-| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, resize, Ctrl-C delivery, persistent-Bash supervision, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
+| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, resize, Ctrl-C delivery, external-Awsh and selected-shell-tree supervision, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
 | Recorded workload | Project shell, tools, files, services, and all untrusted terminal or application content. |
 
 ### OmegaFlow terminal control
@@ -364,22 +364,26 @@ the handoff. The trusted source calls that gate in the intended service's launch
 path only after obtaining application-specific readiness evidence for the
 current operation. While the same operation remains gated, controller OmegaFlow
 races the plan-selected granted endpoint health probe against typed operation
-completion, cancellation, or failure and performs the planned Playwright work
-only when health wins. It also requires the endpoint to have failed a probe
-before `execute`, but that is only a stale-listener guard: an endpoint's temporal
-unready-to-ready transition is not causal evidence. A terminal result observed
-before the gate, during probing, or at handoff, or an endpoint already serving
-before the operation existed, fails the capture. If an authored launch path
-cannot provide the gate, the running-operation handoff is unsupported and
-ordinary sequencing waits for completion. The controller then applies the
-operation's compiled lifetime policy through normal Envoy continuation,
-cancellation, and output-finalization rules. The handoff consumes no workload
-files, OSC markers, terminal text, or workload-originated navigation telemetry.
-Playwright, browser checks, endpoint selection, and navigation intent remain in
-the controller. The Envoy gate remains generic planned-controller-work
-machinery; protocol v1 carries no browser-specific message or
-workload-originated navigation intent. Dynamic workload-selected navigation
-remains deferred.
+completion, cancellation, `operation_gate_interrupted`, or failure and performs
+the planned Playwright work only when health wins while that gate remains
+current. It also requires the endpoint to have failed a probe before `execute`,
+but that is only a stale-listener guard: an endpoint's temporal unready-to-ready
+transition is not causal evidence. If `operation_gate_interrupted` wins before
+the controller sends the matching `continue`, the controller stops or discards
+any in-flight endpoint probe or Playwright action, schedules no further action
+from that handoff, and fails the handoff. If the operation is still active, it
+sends the ordinary typed `cancel` request. A terminal result observed before
+the gate, during probing, or at handoff, or an endpoint already serving before
+the operation existed, fails the capture. If an authored launch path cannot
+provide the gate, the running-operation handoff is unsupported and ordinary
+sequencing waits for completion. The controller then applies the operation's
+compiled lifetime policy through normal Envoy continuation, cancellation, and
+output-finalization rules. The handoff consumes no workload files, OSC markers,
+terminal text, or workload-originated navigation telemetry. Playwright, browser
+checks, endpoint selection, and navigation intent remain in the controller. The
+Envoy gate remains generic planned-controller-work machinery; protocol v1
+carries no browser-specific message or workload-originated navigation intent.
+Dynamic workload-selected navigation remains deferred.
 
 ## Reploy Recording Toolchain and Workload Selection
 
@@ -492,24 +496,26 @@ lifetime rule for every operation: when the submitted Bash source returns to
 Awsh, the Envoy terminates and reaps every remaining operation-created process,
 then reaches EOF and drains its output before reporting the terminal result.
 The Linux Envoy acts as a subreaper, tracks identities by pidfd, and repeats a
-`/proc` census through cleanup; inability to prove that only the persistent Bash
-remains before the protocol's one five-second monotonic cleanup deadline expires
-fails the session without a terminal operation result, after which the
-controller asks Reploy to terminate the environment. Cancellation and planned
-finalization use the same cleanup and deadline. This supervision is correctness
-evidence within the same-identity threat boundary, not security evidence.
+`/proc` census through cleanup; inability to prove that external Awsh and the
+persistent selected shell are the only processes left in its controlled tree
+before the protocol's one five-second monotonic cleanup deadline expires fails
+the session without a terminal operation result, after which the controller
+asks Reploy to terminate the environment. Cancellation and planned finalization
+use the same cleanup and deadline. This supervision is correctness evidence
+within the same-identity threat boundary, not security evidence.
 
-Cancellation and planned finalization first give persistent Bash the bounded
-grace period to return. A deadline cancel accepted during a finalization grace
-period sends no second signal and does not reset that timer. It changes a timely
-driver return to cleanup followed by `operation_cancelled`, or expiry to
-`cancel-timeout` with `shell_ended: true`; a finalization result committed first
-still wins. If persistent Bash does not otherwise return, the Envoy terminates and reaps the
-persistent process group, completes mandatory descendant cleanup and output
-drain, reports `operation_failed` with `cancel-timeout` or `finalize-timeout`
-and `shell_ended: true`, and enters the Envoy-initiated `shell_ended` drain.
-Controller OmegaFlow does not synthesize another prompt or dispatch another
-operation after that result.
+Cancellation and planned finalization first give the active operation the
+bounded grace period to return to the selected shell's backend boundary. A
+deadline cancel accepted during a finalization grace period sends no second
+signal and does not reset that timer. It changes a timely operation return to
+cleanup followed by `operation_cancelled`, or expiry to `cancel-timeout` with
+`shell_ended: true`; a finalization result committed first still wins. If the
+selected shell does not otherwise return to its backend boundary, the Envoy
+selects timeout teardown, terminates the selected-shell tree, completes
+mandatory descendant cleanup and output drain, reports `operation_failed` with
+`cancel-timeout` or `finalize-timeout` and `shell_ended: true`, and enters the
+Envoy-initiated `shell_ended` drain. Controller OmegaFlow does not synthesize
+another prompt or dispatch another operation after that result.
 
 Long-lived services belong in environment setup outside the controlled
 Envoy/Awsh process tree. V1 does not preserve processes across operations;
@@ -521,12 +527,14 @@ per-operation cgroup.
 
 `file_exists` and `produces` are evaluated inside the workload rather than
 against the controller filesystem. Their bounded specifications travel with the
-typed operation request. After command execution, `awsh` resolves configured
-paths in the persistent Bash's resulting cwd and exported environment and sends
-the resolved plan to the Envoy over the private driver channel. The Envoy first
-performs the mandatory operation cleanup, proves that only the persistent Bash
-remains, and drains output through the closing offset. It then checks existence
-and kind. Environment-setup services intentionally remain outside that cleanup,
+typed operation request. After command execution, Awsh resolves configured
+paths in the persistent selected shell's resulting cwd and exported environment
+and sends the resolved plan to the Envoy over its private result descriptor.
+The Envoy first performs the mandatory operation cleanup, proves that external
+Awsh and the persistent selected shell are the only processes left in its
+controlled tree, and drains output through the closing offset. It then checks
+existence and kind.
+Environment-setup services intentionally remain outside that cleanup,
 so cleanup alone does not make a produced path stable. The Envoy accepts a
 `produces` inspection only when its bounded workload-side inspection establishes
 one stable source state for the complete selected file or directory. Any observed
