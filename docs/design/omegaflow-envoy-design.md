@@ -449,7 +449,11 @@ close-on-exec `/dev/tty` terminal-control lease, validate the expected session
 and foreground group, perform one serialized operation, and close it on every
 outcome. Top-level operations share the state supported by the backend. For
 Bash this includes the directory, environment, functions, aliases, options,
-and jobs.
+and jobs, except for the adapter-reserved parser, execution, tracing, trap,
+job-control-entry, and Readline controls fixed below. Alias definitions and
+non-reserved options persist even though the outer
+recording-plan source grammar does not expand aliases or depend on a persistent
+parser mode.
 
 ```text
 OmegaFlow Envoy
@@ -476,12 +480,53 @@ authoritative environment-lifecycle owner throughout.
 
 The controller submits planned operations through Envoy telemetry. Envoy
 validates and forwards them to Awsh; Awsh coordinates the selected backend and
-returns shell-neutral lifecycle and state results. The exact private packets,
-start and completion barriers, Bash submission mechanism, and cleanup races are
-specified by later design slices rather than by this actor model. The launch
-slice fixes only the descriptor handoff, helper transport, startup
-state/readiness packets, process and terminal topology, and partial-launch
-cleanup.
+returns shell-neutral lifecycle and state results. A2.3 fixes the descriptor
+handoff, helper transport, startup state/readiness packets, process and terminal
+topology, and partial-launch cleanup. A2.4 fixes source submission and start:
+Envoy forwards one bounded UTF-8 source field only on the private control pipe,
+Awsh independently syntax-checks both the source and its canonical frame and
+reserves it, and a short-lived Bash helper returns a canonical brace frame to a
+private loader buffer. The readonly loader assigns `READLINE_LINE` only after
+validating the complete reply and its positive success marker. Envoy writes
+only the fixed two-byte adapter trigger on the PTY. The selected Bash/Readline
+build accepts the private loader and `accept-line` macro without redisplaying
+the frame, and its output-empty `PS0` helper blocks before execution. A helper
+error enters a manifested non-returning fail-stop primitive instead of
+returning to the loader macro or `PS0`; fatal teardown is the only release.
+Awsh's
+`start_prepared`/`started` and Envoy's `start_release`/`started_ack` keep Bash
+blocked until Envoy has drained preceding output, completely published
+`operation_started`, and fixed `output_start`. Completion handoff and cleanup
+races remain later design slices.
+
+For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
+under the mode-0700 session runtime after the one operation-start timer has
+begun, retains their readers and temporary writer keepalives, and sends their
+exact fixed paths in private `execute`. The source helper places redirections
+for only the authored inner brace group in the canonical line; a reserved inner
+sentinel proves that both redirections succeeded before authored source may run
+and distinguishes redirection failure from source status 1. Bash stdin remains
+the PTY and adapter hooks remain outside the split streams. Awsh validates type,
+owner, mode and path before `submit`.
+A2.5 closes the keepalives after source return and cleanup, drains both readers
+through EOF, and removes the FIFOs. This cooperative path avoids dynamic file
+descriptor injection into persistent Bash without treating pathname secrecy as
+an isolation boundary.
+
+The adapter reserves the `__OMEGAFLOW_AWSH_` namespace, empty prompt values,
+the idle `emacs-standard` keymap, two Readline control sequences, and the parser
+controls needed for deterministic framing. Recording-plan source containing
+the reserved namespace, and authored
+terminal input containing either sequence, is rejected. Top-level source is
+parsed in a canonical adapter entry state: history and alias expansion,
+`errexit`, tracing, `extdebug`, `extglob`, POSIX mode, `noexec`, and `verbose`
+are disabled; `interactive_comments` and job control are enabled; and adapter-
+sensitive traps are unset. Source may change those controls within its own
+operation, including enabling `errexit`, but they do not persist across the
+next adapter boundary. Ordinary non-reserved shell state remains persistent,
+including alias definitions, but source cannot rely on persistent aliases or
+parser modes for its outer grammar. A nested Bash remains available when a
+planned operation deliberately needs another parser contract.
 
 If an operation starts Fish, Zsh, Python, a TUI, or another interactive
 program, that program is one opaque child operation. The terminal remains fully
@@ -510,11 +555,28 @@ the PTY slave and its private control/result descriptors through one declared
 exec handoff. Awsh must give Bash and ordinary descendants neither Envoy sockets
 nor its private parent channel. Short-lived Bash helpers connect to a fresh
 mode-0600 `SOCK_SEQPACKET` endpoint inside a mode-0700 session directory; they
-inherit no helper descriptor. After readiness Awsh retains no PTY-slave
+inherit no helper descriptor. Listener, accepted, and client sockets request
+and verify the protocol-sized send and receive buffers before use, so the
+one-record maximum does not depend on host defaults. Unsupported launch-time
+buffer capacity prevents readiness and a later mismatch is fatal. After
+readiness Awsh retains no PTY-slave
 descriptor, and every later terminal-control lease is close-on-exec and bounded
 to one serialized transaction.
 These measures prevent accidental inheritance; they do not isolate the three
 same-identity processes from deliberate interference.
+
+Operation source never traverses the PTY. Envoy writes it only to Awsh's
+private control pipe; Awsh returns it once to a short-lived manifested helper
+over the mode-0600 packet socket; and Bash command substitution captures the
+helper's canonical frame directly into the reserved Readline line buffer.
+Only the fixed `0x18 0x02` submit trigger crosses the PTY master. The companion
+`0x18 0x01` loader binding, the submit macro, the `__OMEGAFLOW_AWSH_`
+namespace, fixed prompts and `PS0`, canonical parser state, positive helper
+markers, fail-stop mode, and split-entry sentinel are cooperative adapter
+reservations. They prevent accidental collision and source display, not
+deliberate same-identity tampering. Any missing reservation or unexpected
+helper phase blocks the affected Bash context until fatal teardown; it cannot
+release source or become another operation.
 
 Workload inspection has the same boundary. Closing every tracked
 operation-created descendant prevents cooperative background mutation during
@@ -527,8 +589,10 @@ environment, and Awsh starts the fixed Bash backend from that environment as
 `/bin/bash --noprofile --rcfile /omegaflow-runtime/etc/awsh-bashrc -i`. A
 digest-keyed Bash-build table fixes the system interactive rc path or its
 absence, startup-export transformation, catchable-signal inventory, Readline
-behavior used by readiness, and the exact bounded PTY bytes emitted through
-the first Readline-entry terminal drain. The
+behavior used by readiness, the reserved loader/submit macro's keymap,
+no-redisplay, UTF-8 cursor, and maximum-line behavior, and the exact bounded PTY
+bytes emitted through the
+first Readline-entry terminal drain. The
 launch path must neutralize shell startup, input-binding, and option
 injection such as `BASH_ENV`, `ENV`, `HISTFILE`, `INPUTRC`, `SHELLOPTS`, and
 `BASHOPTS`, and it must not honor the prototype-only `AWSH_BASH` override. The
@@ -841,6 +905,11 @@ workload platform. Its schema is `omegaflow-runtime-manifest-v1` and it records:
 - every runtime-relative regular file with its byte size, executable mode, and
   lowercase SHA-256 digest.
 
+The manifested `bin/awsh` is also conformance-tested for its fixed socket-helper
+request set, argument-free `bash-fail-stop` mode, positive source/start markers,
+and Linux helper-socket buffer contract. These are behaviors of the exact
+hashed executable, not optional application configuration.
+
 Paths are unique, normalized relative POSIX paths and may name only the fixed
 `bin`, `etc`, `share/terminfo`, and `lib/locale` roots. The trusted launch data
 consists of `etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
@@ -1008,18 +1077,23 @@ The terminal-only isolated Reploy milestone must prove:
    mismatched trusted terminal, Readline, or locale asset failing before
    controlled Bash starts;
 9. separation of terminal output from telemetry messages;
-10. documentation that same-identity workload processes can deliberately
+10. source-loader and `PS0` helper failures remaining blocked until fatal
+    teardown, split redirection-open failure remaining distinct from authored
+    status 1, the operation-start deadline covering split setup and rollback,
+    and an exact maximum helper packet crossing one record only after every
+    endpoint verifies the required socket capacity;
+11. documentation that same-identity workload processes can deliberately
    interfere and that telemetry is not security evidence, plus a mechanical
    conformance test proving that ordinary exec'd descendants inherit neither
    Envoy TCP sockets nor private `awsh` request/result descriptors;
-11. ordered terminal drain and EOF during graceful shutdown;
-12. useful partial diagnostics after Envoy, shell, channel, and controller
+12. ordered terminal drain and EOF during graceful shutdown;
+13. useful partial diagnostics after Envoy, shell, channel, and controller
    failures; and
-13. planned recording-end finalization that drains an intentionally open
+14. planned recording-end finalization that drains an intentionally open
     operation and validates its non-exit assertions, while failure/user
     cancellation invalidates assertions, including cancellation and
     finalization timeouts that report `shell_ended` and drain the session; and
-14. end-to-end Reploy termination, acknowledgement, retained output, and
+15. end-to-end Reploy termination, acknowledgement, retained output, and
     cleanup.
 
 Before retiring the native FIFO runner, a separately approved host-Envoy stack
