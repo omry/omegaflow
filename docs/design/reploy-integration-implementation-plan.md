@@ -145,7 +145,9 @@ amendment is an additional documentation gate before its affected B work.
 - A2.3 fixes Bash launch and readiness: the one-exec descriptor handoff,
   helper transport, process and controlling-terminal topology, termios
   readiness proof, terminal-control leases, and partial-launch cleanup.
-- A2.4 fixes source submission and the operation-start barrier.
+- A2.4 fixes exact private source fields, helper IPC, canonical Bash framing,
+adapter-reserved state, Readline submission, `PS0`, and the public
+operation-start barrier.
 - A2.5 fixes completion and persistent-state handoff.
 - A2.6 fixes controls and crossed lifecycle races.
 - A2.7 closes all private schemas and establishes the exact B1 base.
@@ -180,6 +182,16 @@ cross-connection delivery before `ready`, zero and maximum-size entries,
 mismatch, extra byte, overflow, premature EOF, and an incomplete barrier. Prove
 the raw range begins at offset zero as `pty` at elapsed time zero and contains
 no real Bash prompt byte.
+Freeze the exact A2.4 private and helper packets, canonical brace frame,
+independent source/frame syntax checks, source and aggregate bounds, the hard
+post-source LF boundary, `0x18 0x01` loader and `0x18 0x02` submit bindings in
+the fixed idle keymap, command-substitution marker, source rejection codes, and one non-resetting
+operation-start deadline. Cover minimum and maximum source, multiline source,
+comments, quotations, heredocs, trailing LF, parser-state-dependent rejection,
+fixed interactive-comment handling, reserved names and input sequences
+including adjacent-step boundaries, duplicate and crossed helper phases,
+mismatched IDs, no-redisplay behavior, and failures on both sides of public
+`operation_started`.
 
 **B2. Awsh boundary alignment**
 
@@ -191,7 +203,12 @@ Implement Awsh's exact one-exec descriptor intake, digest-selected generated
 Bash-build-table consumer, fixed rcfile/helper startup exchange, empty primary
 prompt, signal reset, process/session/foreground topology, Readline termios
 proof, first terminal drain, private readiness, selected-shell reaping, and
-partial-launch cleanup.
+partial-launch cleanup. Implement the A2.4 source checker and private active
+operation record, fixed helper request/reply arities, canonical source-frame
+emitter, readonly adapter namespace, canonical parser/trap/trace/job-control
+entry state, fixed-keymap loader/submit Readline macro, output-empty blocking
+`PS0`, source-visible status/history/editing restoration, validation and canonical
+redirection of split FIFO paths, and fail-closed start phases.
 
 **B3. Envoy session foundation**
 
@@ -202,7 +219,11 @@ writes, an empty `HISTFILE` for controlled Bash after application
 environment delegation, and orderly shutdown. Own the exact Awsh exec handoff,
 startup-output pump and 4,096-byte cap, build-entry comparison, complete public
 `ready` write before terminal release, `ready.output_through`, and takeover of
-incomplete launch cleanup.
+incomplete launch cleanup. Own `execute.input_through` before private submit,
+mode-0600 split FIFO creation and reader/keepalive ownership, the serialized
+internal `0x18 0x02` PTY write, the fresh pre-start drain and mark,
+`start_release`/`started` ordering, complete public `operation_started` before
+`started_ack`, and the operation-start deadline and teardown.
 
 **B4. Operation boundaries and controls**
 
@@ -360,15 +381,22 @@ fixtures, including inspection results and cross-channel output barriers. Its
 readiness path buffers bounded terminal bytes received before public `ready`,
 appends them only after validating `ready.output_through`, and permits the
 first planned prompt or request only after the raw log reaches that barrier.
+Validate source UTF-8, size and reserved namespace plus authored terminal input
+against both reserved Readline sequences before `execute`; keep
+`execute.input_through` controller-local and require the exact public
+`operation_started` barrier before operation-authored terminal input.
 
 **C4. Runtime build artifact**
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
 required runtime files. Generate host preparation, Envoy, and Awsh consumers
 from one canonical digest-keyed Bash-build table containing the system rc path,
-startup-export transform, catchable-signal inventory, Readline behavior, and
-exact bounded startup PTY bytes. Build and manifest the fixed
-`etc/awsh-bashrc` with its output-empty primary-prompt hook and the fixed empty
+startup-export transform, catchable-signal inventory, startup Readline behavior,
+source-loader/submit-macro keymap, no-redisplay, UTF-8 cursor, and maximum-line
+behavior, and exact bounded startup PTY bytes. Build and manifest the fixed
+`etc/awsh-bashrc` with
+its output-empty primary-prompt and `PS0` hooks, readonly adapter namespace,
+canonical parser state and private bindings, plus the fixed empty
 `etc/inputrc`.
 
 **C5. Runtime staging**
@@ -380,10 +408,12 @@ duplicate paths, invalid modes, size or digest mismatches, and malformed or
 additional executable and script payloads, including every trusted terminal,
 Readline, locale, and Bash rcfile asset named by the runtime manifest. Prove
 the rcfile installs the required startup hooks without sourcing another file
-and preserves the output-empty primary-prompt invariant. Prove the host copies
-only verified installed artifacts into a fresh private directory, writes the
-manifest last, makes the staged tree non-writable, and never assembles it from
-a project checkout.
+and preserves the output-empty primary-prompt and start-barrier invariants.
+Prove its literal helper path, socket, request names, bindings, readonly state,
+canonical frame functions and command-substitution marker match the frozen
+fixtures. Prove the host copies only verified installed artifacts into a fresh
+private directory, writes the manifest last, makes the staged tree
+non-writable, and never assembles it from a project checkout.
 
 **C6. Blueprint schema and composition**
 
@@ -547,7 +577,8 @@ gate.
 | --- | --- | --- |
 | A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
 | A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
-| A2.3–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
+| A2.3 | Approved prefix | PR 33 is approved at its exact current head with current A2.3 attestations |
+| A2.4–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |

@@ -449,7 +449,11 @@ close-on-exec `/dev/tty` terminal-control lease, validate the expected session
 and foreground group, perform one serialized operation, and close it on every
 outcome. Top-level operations share the state supported by the backend. For
 Bash this includes the directory, environment, functions, aliases, options,
-and jobs.
+and jobs, except for the adapter-reserved parser, execution, tracing, trap,
+job-control-entry, and Readline controls fixed below. Alias definitions and
+non-reserved options persist even though the outer
+recording-plan source grammar does not expand aliases or depend on a persistent
+parser mode.
 
 ```text
 OmegaFlow Envoy
@@ -476,12 +480,46 @@ authoritative environment-lifecycle owner throughout.
 
 The controller submits planned operations through Envoy telemetry. Envoy
 validates and forwards them to Awsh; Awsh coordinates the selected backend and
-returns shell-neutral lifecycle and state results. The exact private packets,
-start and completion barriers, Bash submission mechanism, and cleanup races are
-specified by later design slices rather than by this actor model. The launch
-slice fixes only the descriptor handoff, helper transport, startup
-state/readiness packets, process and terminal topology, and partial-launch
-cleanup.
+returns shell-neutral lifecycle and state results. A2.3 fixes the descriptor
+handoff, helper transport, startup state/readiness packets, process and terminal
+topology, and partial-launch cleanup. A2.4 fixes source submission and start:
+Envoy forwards one bounded UTF-8 source field only on the private control pipe,
+Awsh independently syntax-checks both the source and its canonical frame and
+reserves it, and a short-lived Bash helper loads a
+canonical brace frame directly into `READLINE_LINE`. Envoy writes only the
+fixed two-byte adapter trigger on the PTY. The selected Bash/Readline build
+accepts the private loader and `accept-line` macro without redisplaying the
+frame, and its output-empty `PS0` helper blocks before execution. Awsh's
+`start_prepared`/`started` and Envoy's `start_release`/`started_ack` keep Bash
+blocked until Envoy has drained preceding output, completely published
+`operation_started`, and fixed `output_start`. Completion handoff and cleanup
+races remain later design slices.
+
+For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
+under the mode-0700 session runtime, retains their readers and temporary writer
+keepalives, and sends their exact fixed paths in private `execute`. The source
+helper places redirections for only the authored inner brace group in the
+canonical line; Bash stdin remains the PTY and adapter hooks remain outside the
+split streams. Awsh validates type, owner, mode and path before `submit`.
+A2.5 closes the keepalives after source return and cleanup, drains both readers
+through EOF, and removes the FIFOs. This cooperative path avoids dynamic file
+descriptor injection into persistent Bash without treating pathname secrecy as
+an isolation boundary.
+
+The adapter reserves the `__OMEGAFLOW_AWSH_` namespace, empty prompt values,
+the idle `emacs-standard` keymap, two Readline control sequences, and the parser
+controls needed for deterministic framing. Recording-plan source containing
+the reserved namespace, and authored
+terminal input containing either sequence, is rejected. Top-level source is
+parsed in a canonical adapter entry state: history and alias expansion,
+`errexit`, tracing, `extdebug`, `extglob`, POSIX mode, `noexec`, and `verbose`
+are disabled; `interactive_comments` and job control are enabled; and adapter-
+sensitive traps are unset. Source may change those controls within its own
+operation, including enabling `errexit`, but they do not persist across the
+next adapter boundary. Ordinary non-reserved shell state remains persistent,
+including alias definitions, but source cannot rely on persistent aliases or
+parser modes for its outer grammar. A nested Bash remains available when a
+planned operation deliberately needs another parser contract.
 
 If an operation starts Fish, Zsh, Python, a TUI, or another interactive
 program, that program is one opaque child operation. The terminal remains fully
@@ -516,6 +554,17 @@ to one serialized transaction.
 These measures prevent accidental inheritance; they do not isolate the three
 same-identity processes from deliberate interference.
 
+Operation source never traverses the PTY. Envoy writes it only to Awsh's
+private control pipe; Awsh returns it once to a short-lived manifested helper
+over the mode-0600 packet socket; and Bash command substitution captures the
+helper's canonical frame directly into the reserved Readline line buffer.
+Only the fixed `0x18 0x02` submit trigger crosses the PTY master. The companion
+`0x18 0x01` loader binding, the submit macro, the `__OMEGAFLOW_AWSH_`
+namespace, fixed prompts and `PS0`, and canonical parser state are cooperative
+adapter reservations. They prevent accidental collision and source display,
+not deliberate same-identity tampering. Any missing reservation or unexpected
+helper phase fails closed before another operation is accepted.
+
 Workload inspection has the same boundary. Closing every tracked
 operation-created descendant prevents cooperative background mutation during
 hashing, but a different same-identity workload process can still interfere.
@@ -527,8 +576,10 @@ environment, and Awsh starts the fixed Bash backend from that environment as
 `/bin/bash --noprofile --rcfile /omegaflow-runtime/etc/awsh-bashrc -i`. A
 digest-keyed Bash-build table fixes the system interactive rc path or its
 absence, startup-export transformation, catchable-signal inventory, Readline
-behavior used by readiness, and the exact bounded PTY bytes emitted through
-the first Readline-entry terminal drain. The
+behavior used by readiness, the reserved loader/submit macro's keymap,
+no-redisplay, UTF-8 cursor, and maximum-line behavior, and the exact bounded PTY
+bytes emitted through the
+first Readline-entry terminal drain. The
 launch path must neutralize shell startup, input-binding, and option
 injection such as `BASH_ENV`, `ENV`, `HISTFILE`, `INPUTRC`, `SHELLOPTS`, and
 `BASHOPTS`, and it must not honor the prototype-only `AWSH_BASH` override. The
