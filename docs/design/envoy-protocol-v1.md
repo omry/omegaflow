@@ -25,8 +25,8 @@ mounting, or Reploy lifecycle integration. A dependent implementation-plan
 slice tracks delivery order.
 
 The external-supervisor amendment preserves every controller request shape. It
-adds only the public pre-start failure codes `source-invalid` and
-`source-unsupported`, plus `operation_gate_interrupted` for terminal Ctrl-C
+adds only the public pre-start failure codes `source-syntax` and
+`source-policy`, plus `operation_gate_interrupted` for terminal Ctrl-C
 that releases a waiting gate without becoming lifecycle cancellation. All
 other supervisor and source-submission changes remain private to Envoy and
 Awsh.
@@ -98,6 +98,7 @@ required handshake fails the capture.
 | --- | ---: |
 | Telemetry frame, including LF | 1,048,576 bytes |
 | Private `awsh` frame | 1,048,576 bytes |
+| Bash-helper payload | 1,048,576 bytes |
 | Operation source (Bash in v1) | 1–786,432 UTF-8 bytes |
 | Output-mark cadence | 10 milliseconds |
 | Output marks per session | 1,000,000 |
@@ -116,6 +117,7 @@ required handshake fails the capture.
 | Output offset | 0 through `2^63-1` |
 | Terminal input watermark | 0 through `2^63-1`, non-decreasing |
 | Terminal input barrier wait | 5 seconds |
+| Operation-start handshake | 5 seconds |
 | Pre-ready terminal output | 0–4,096 bytes; exact selected Bash-build entry |
 | Raw output per session | 8 GiB |
 | PID | 1 through `2^31-1` |
@@ -142,6 +144,7 @@ on partial progress.
 | Envoy `hello` | Envoy; starts after both connections are accepted | Read and validate one complete `hello` frame, including the exact `session_id`, within 10 seconds | Fail the handshake and exit nonzero |
 | Envoy launch readiness | Envoy; starts after it accepts the complete valid `hello` and begins creating the PTY and Awsh child | Complete the Awsh exec, Bash launch, startup helper exchanges, Readline-entry proof, startup-output drain and comparison, identity and terminal checks, accept one valid private `ready`, write the complete public `ready`, and write the complete buffered startup output within 10 seconds | Emit a best-effort fatal `shell-launch-timeout` diagnostic, enter the five-second Envoy final-drain teardown without a usable public readiness barrier, close the session channels, and exit nonzero |
 | Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame and append terminal bytes through `ready.output_through` within 10 seconds | Fail the capture and ask Reploy to terminate |
+| Envoy operation start | Envoy; starts immediately after `execute.input_through` is satisfied, before any split directory or FIFO creation, descriptor opening, private `execute` encoding, or private write | Within 5 seconds, either complete split setup plus recoverable source rejection and split rollback, including the public `operation_failed` write, or complete split setup when selected, private source validation and syntax preflight, `submit`, the fixed Readline trigger, source-helper delivery, the `PS0` preparation barrier, the pre-start output drain, `start_release`, `started`, the public `operation_started` write, `started_ack`, the adapter-owned post-`PS0` release signal, and `start_released` | Emit a best-effort fatal `operation-start-timeout` diagnostic, close and remove any partial split setup, close the session channels, terminate and reap the controlled tree, and exit nonzero; the adapter may hold a parsed source unit, so no ordinary operation result or later operation is safe |
 | Individual control write | Sender; starts with the first attempted transport write of one already-encoded frame | Write every byte of one telemetry JSON Lines frame or one private Awsh frame within 5 seconds; terminal input and workload-output bytes are excluded | Fail the session; delivery of a partial frame never becomes success |
 | Envoy operation cleanup | Envoy; starts when it begins mandatory cleanup after an Awsh completion, cancellation, finalization, or shell-exit result | Census, terminate, reap, reach operation-pipe EOF, and drain all operation-created processes and output within 5 seconds | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
 | Envoy inspection cancellation | Envoy; starts when it accepts `cancel` while the operation's inspection worker is live | Stop and reap the worker within the five-second cancellation grace period | Emit a best-effort fatal `inspection-cancel-timeout` diagnostic, close the session channels, and exit nonzero; no terminal operation result is emitted, and the controller records the cause and asks Reploy to terminate |
@@ -270,6 +273,61 @@ being downgraded.
 
 Operation source is trusted recording-plan Bash source. It is delivered on the
 private control path and is not typed into the PTY.
+
+Version 1 accepts source only when all of these conditions hold:
+
+- its exact UTF-8 bytes satisfy the source and enclosing-frame limits and
+  contain neither NUL nor the reserved ASCII substring
+  `__OMEGAFLOW_AWSH_`;
+- the source by itself and the exact canonical adapter frame defined under the
+  private protocol both parse successfully under the selected digest-verified
+  Bash build in the fixed adapter grammar state; and
+- the source does not depend for its top-level grammar on a persistent alias,
+  `extglob`, POSIX mode, history expansion, or another adapter-reserved parser
+  control.
+
+Awsh performs two parse checks in short-lived instances of the same resolved
+regular `/bin/bash`, each with `--noprofile --norc -n`, the controlled launch
+environment, and standard output and error captured under the one
+operation-start bound. The first standard input is the exact source through
+EOF; the second is the exact canonical frame. This rejects an incomplete
+source that would otherwise consume adapter suffix syntax, while the frame
+check proves the actual submitted unit. Each check succeeds only when Bash
+exits zero and produces no standard-output or standard-error byte. This
+output-empty requirement rejects incomplete grammar such as an unterminated
+here-document even on a selected Bash build that reports the condition as a
+warning while returning zero; Awsh does not parse or classify diagnostic text.
+Awsh rechecks the binary digest before each fork. A checker executes nothing
+and receives no selected-shell, PTY, helper, Envoy, or controller descriptor.
+Its checker-only `-n` does not change the live adapter's parser state. A
+nonzero result or any output byte from either check produces private `rejected`
+with code `source-syntax`; a reserved-name violation produces `source-policy`.
+Both become a public pre-start
+`operation_failed` with an empty range and leave persistent Bash idle. An
+execution-time adapter or helper failure after `submit` is not a recoverable
+source rejection because Bash may already hold the parsed frame; it fails the
+session without an ordinary terminal operation result.
+
+The live adapter entry state has history and alias expansion, `errexit`,
+`errtrace`, `extdebug`, `extglob`, `functrace`, POSIX mode, `noexec`, `verbose`,
+and `xtrace` disabled; `interactive_comments` and job-control `monitor` enabled;
+the `DEBUG`, `ERR`, and `RETURN` traps unset; the fixed idle
+`emacs-standard` keymap active; and the fixed Readline bindings described
+below. These controls are adapter state, not persistent workload state. In
+particular, disabling `errexit` at adapter entry lets `ENTER` return any
+preceding status without turning that adapter command into a shell-ending
+failure. Source may change these controls while its operation runs, including
+enabling `errexit`, but the source-visible change does not persist into a later
+operation; failure to regain the canonical entry state fails the session.
+
+Other non-process Bash state remains persistent, including cwd, variables,
+exported environment, functions, positional parameters, non-reserved shell
+options, and alias definitions. Operation-created background jobs are not part
+of that persistence contract: mandatory operation cleanup terminates and reaps
+their processes before the terminal result, and job-table state may change as
+those children disappear. Alias definitions persist as data, but recording-plan
+source is not expanded through them at its top-level parse; source that
+deliberately needs a different parser can launch a nested Bash explicitly.
 
 The compiled execution policy uses these closed enums:
 
@@ -612,6 +670,7 @@ stateDiagram-v2
     Gated --> Running: Envoy operation_gate_interrupted
     Continuing --> Running: Envoy operation_gate_interrupted
     Starting --> Cancelling: controller cancel
+    Cancelling --> Cancelling: crossed operation_started after private start commit
     Running --> Cancelling: controller cancel
     Gated --> Cancelling: controller cancel
     Continuing --> Cancelling: controller cancel
@@ -628,6 +687,7 @@ stateDiagram-v2
     Gated --> Idle: failed
     Continuing --> Idle: failed
     Cancelling --> Idle: completed or failed after shell end
+    Cancelling --> Idle: pre-start operation_failed after queued cancel
     Cancelling --> Idle: completed when the observed result wins
     Cancelling --> Idle: finalized when the inspection result wins
     Cancelling --> Idle: cancelled or failed with shell intact
@@ -685,17 +745,38 @@ reaped status when it processes `shutdown` before committing `shell_exit`; a
 crossed terminal `shell_exit` is also clean under that requested drain. Thus
 transport ordering cannot turn either clean outcome into a protocol failure.
 
-`Starting` can last as long as the terminal-input barrier makes it last, so it
-accepts `cancel` like the running states do. A cancel there needs no signal,
-because the operation has not begun: the Envoy abandons the wait, discards the
-input it was waiting through as belonging to an ended operation, and reports
-`operation_cancelled` with an empty range and no `status`. No shell ran, so
-there is no status to report and none is invented; this is the only case in
-which that field is absent, and it parallels `operation_finalized`, which has no
-status for the same reason. The wait is bounded anyway: the barrier only waits
-for bytes the controller has already written, so exceeding the terminal input
-barrier wait means they are never arriving, and the Envoy fails the operation
-rather than holding the session.
+`Starting` has two Envoy-internal phases while remaining one public controller
+state. Before Envoy attempts the first byte of private `execute`, `cancel`
+abandons the terminal-input wait or split setup, completes the same bounded
+rollback required for another pre-submit exit, discards pending input as
+belonging to the ended operation, and reports `operation_cancelled` with an
+empty range and no `status`. No shell ran, so there is no status to report and
+none is invented; this is the only case in which that field is absent, and it
+parallels `operation_finalized`, which has no status for the same reason.
+
+Attempting the first private `execute` byte closes that cancellable pre-start
+phase because Awsh may reserve or load the source before Envoy can observe its
+reply. A later `cancel` is retained but never abandons the private transaction.
+If `rejected` wins before `submit`, Envoy completes the empty-range
+`operation_failed`; that result resolves the controller's crossed cancel. If
+`submit` wins, the private start is committed: Envoy completely publishes
+`operation_started`, writes `started_ack`, and keeps cancellation queued until
+it accepts `start_released`, which proves that the positive helper marker and
+`PS0` release completed. A cancel accepted after public start but before that
+private result joins the same queue. Envoy then forwards the queued request
+through the ordinary started-operation path and starts the cancellation grace
+period at that forwarding point.
+A controller that already entered `Cancelling` accepts that crossed
+`operation_started`, remains in `Cancelling`, and then accepts the ordinary
+cancellation terminal result. The queued request neither resets the
+operation-start deadline nor turns a start-handshake failure into a normal
+cancellation. This ordering may let authored source begin before the queued
+cancel is delivered, exactly as for any started operation, but it never leaves
+a loaded frame or blocked `PS0` helper abandoned.
+
+The terminal-input wait remains bounded: it waits only for bytes the controller
+already wrote. Exceeding that wait before private `execute` fails the
+not-yet-started operation rather than holding the session.
 
 If cancellation has moved a started operation to `Cancelling` but Awsh's
 `shell_exit` is accepted before a cancellation result is committed, the
@@ -749,8 +830,9 @@ closed its split-stream pipes. The Envoy nevertheless takes a fresh PTY drain
 boundary, writes every preceding byte to the terminal socket, and emits the
 covering output mark. Only after that drain may it snapshot `output_start`,
 emit `operation_started`, and acknowledge Awsh's `started` result so Awsh can
-release Bash to evaluate the new source. Failure to drain or write the preceding bytes
-fails the operation before it opens a range.
+release the blocked `PS0` helper. Bash then reports `start_released` before it
+evaluates the new source. Failure to drain or write the preceding bytes fails
+the operation before it opens a range.
 
 `output_start` snapshots the raw-log offset at `operation_started`, and the
 snapshot happens before Bash is released rather than after. If Envoy
@@ -759,9 +841,10 @@ command could already have written and the pump already appended before the
 snapshot, putting the operation's first bytes outside its own range — missed by
 assertions, and for `suppress` or `replace` published as session-scoped output
 the policy was supposed to withhold. Awsh therefore writes `started` and waits
-for Envoy's `started_ack`; only then does it release Bash. Envoy takes the
-offset before sending that acknowledgement, so no byte of the operation can
-precede its own start. An
+for Envoy's `started_ack`; only then does it release the blocked `PS0` helper.
+The first adapter-owned command after `PS0` reports `start_released` through
+Awsh before authored source. Envoy takes the offset before sending
+`started_ack`, so no byte of the operation can precede its own start. An
 operation that fails before `operation_started` has no such snapshot, so its
 `operation_failed` sets both `output_start` and `output_through` to the offset
 observed at the failure, not the one observed when the `execute` was accepted.
@@ -1087,6 +1170,9 @@ running, gated, or continuing operation and a bounded reason. An operation
 still in `Starting` is never finalized: a recording that ends while the
 terminal-input barrier holds cancels it instead, taking the pre-start
 cancellation path, which sends no signal and reports no status. The controller's
+recording-end request remains `cancel` if private `execute` has already begun;
+in that case Envoy takes the retained start-crossing path above rather than
+abandoning the private transaction. The controller's
 recording plan — which operation is intentionally open and when recording ends
 it — stays on the controller side and reaches the Envoy
 only as this typed request. Process lifetime is still fixed by v1: finalization
@@ -1281,10 +1367,11 @@ connection or Envoy-to-Awsh descriptor.
 
 The private descriptor protocol uses bounded UTF-8 fields separated and
 terminated by NUL. Every frame starts with `awsh-v1` and a message type; NUL
-cannot appear in source or another value. This slice freezes the launch
-descriptor handoff, startup helper handshake, and exact `ready` arity. The
-submission, completion, and lifecycle-race slices freeze the remaining field
-arity and phase-specific handshakes before implementation begins.
+cannot appear in source or another value. A2.3 froze the launch descriptor
+handoff, startup helper handshake, and exact `ready` arity. This A2.4 slice
+freezes source submission and every private field through the operation-start
+commit. Completion and lifecycle-race slices freeze the remaining field arity
+and phase-specific handshakes before implementation begins.
 
 | Envoy request | Purpose |
 | --- | --- |
@@ -1293,7 +1380,7 @@ arity and phase-specific handshakes before implementation begins.
 | `gate_interrupt_ack` | Commit Awsh's proposed terminal interruption of the named gate. |
 | `cancel` | Ask Awsh to classify and act on cancellation for the active operation. |
 | `finalize` | Ask Awsh to close the active operation for planned recording end. |
-| `start_release` / `started_ack` | Complete the private start barrier around the public `operation_started` event. |
+| `start_release` / `started_ack` | Complete the private start barrier around the public `operation_started` event and authorize Bash release. |
 | `input_closed` | Confirm Envoy has permanently closed operation input and completed its cleanup side of ordinary return. |
 | `resize_prepare` / `resize_apply` | Reserve the shell-side terminal lane around Envoy's PTY-master ioctl, then release it with the committed dimensions. |
 | `shutdown` | Close and reap the selected shell. |
@@ -1302,7 +1389,7 @@ arity and phase-specific handshakes before implementation begins.
 | --- | --- |
 | `ready` | Identify Awsh, its direct selected-shell child, and the initial cwd. |
 | `submit` | Confirm that Awsh accepted the source for private backend submission. |
-| `start_prepared` / `started` | Report that source is prepared and then held at the backend start boundary. |
+| `start_prepared` / `started` / `start_released` | Report that source is prepared, held at the backend start boundary, and then safely past the helper/`PS0` release boundary. |
 | `gate_ready` / `gate_continued` | Report the selected backend's gate lifecycle. |
 | `gate_interrupt` | Propose that terminal Ctrl-C interrupted the waiting gate. |
 | `disposition` | Confirm Awsh's classified action for one cancel or finalize request. |
@@ -1331,6 +1418,231 @@ direct child in the controlled tree, and requires the reported cwd to match the
 physical cwd accepted from the startup helper. Public `ready` continues to
 expose only Envoy and selected-shell identity; controller behavior does not
 depend on the private Awsh PID.
+
+### Bash source submission and operation start
+
+The start-related private frames have exactly these fields and this order:
+
+```text
+# Envoy -> Awsh
+awsh-v1, execute, OPERATION_ID, EXECUTION_SHAPE, TIMING, PUBLICATION, OBSERVATION, INSPECTIONS_JSON, STDOUT_FIFO_OR_EMPTY, STDERR_FIFO_OR_EMPTY, SOURCE
+awsh-v1, start_release, OPERATION_ID
+awsh-v1, started_ack, OPERATION_ID
+
+# Awsh -> Envoy
+awsh-v1, submit, OPERATION_ID
+awsh-v1, start_prepared, OPERATION_ID
+awsh-v1, started, OPERATION_ID
+awsh-v1, start_released, OPERATION_ID
+awsh-v1, rejected, OPERATION_ID, CODE, MESSAGE
+```
+
+The policy fields use the public closed enums and `INSPECTIONS_JSON` is the
+already-validated compact public array. `SOURCE` is the exact public source
+field, not a path, shell-quoted representation, JSON re-encoding, or PTY
+payload. `rejected.CODE` is `source-syntax` or `source-policy`; `MESSAGE` uses
+the diagnostic-message bound and contains no checker stderr beyond that bounded
+summary. `execute` omits `input_through`: Envoy owns that cross-channel barrier
+and does not begin the private write until the watermark is satisfied.
+
+Envoy serializes cancellation with the first attempted private `execute` byte.
+Before that boundary it may take only the cancellable pre-start path above and
+must finish split rollback before reporting cancellation. At or after that
+boundary it records cancellation without sending a private lifecycle request or
+abandoning the source transaction. A partial or failed private write remains a
+fatal protocol failure; cancellation cannot reinterpret it as an unsent
+operation.
+
+For `pty`, both FIFO fields are empty. After the input watermark is satisfied
+and the operation-start timer is running, a `split` start has Envoy exclusively
+create mode-0600 FIFOs at
+`/run/omegaflow/session/split/OPERATION_ID.stdout` and the corresponding
+`.stderr`, with every parent mode 0700 and no symlink traversal, opens the two
+nonblocking readers and private writer keepalives, and sends those exact paths.
+Every partial setup failure closes what opened and removes what was created
+under that same non-resetting timer; failure to prove rollback is fatal.
+Awsh requires the fixed path derivation, owner, mode, and FIFO type before
+`submit`. The canonical frame redirects only the authored inner brace group to
+those paths; stdin remains the PTY. Envoy closes its keepalives only at the
+completion boundary defined by A2.5, drains both readers through EOF, and
+removes the two FIFOs after cleanup. No FIFO exists for `pty`, and an empty,
+swapped, additional, pre-existing, replaced, or mismatched split path fails
+closed. These paths are cooperative same-identity transport, not containment.
+
+Awsh accepts `execute` only while selected Bash is at the adapter-owned empty
+primary Readline boundary, no helper request is active, and no operation is
+reserved. It validates the complete frame, performs the syntax preflight,
+copies the exact source and policy into one private active-operation record,
+and only then writes `submit`. Before `submit`, either source rejection is
+recoverable. On a split-source rejection, Envoy closes both keepalives and
+readers and removes both FIFOs before completely writing the public
+`operation_failed`; that cleanup remains inside the non-resetting
+operation-start deadline. A close, type check, or removal failure is fatal and
+produces no ordinary operation result. At and after `submit`, the operation
+identifier is reserved until a terminal private result or fatal session
+teardown; a second `execute`, a second source request, or a mismatched
+identifier is a protocol failure.
+
+Acceptance of `submit` is the private start commit for a retained cancellation.
+Envoy must finish the start sequence through the complete public
+`operation_started` write, complete `started_ack`, and acceptance of
+`start_released` before forwarding that cancel to Awsh. Any cancel first
+accepted after public start but before `start_released` is queued identically.
+Acceptance of `rejected` before `submit` instead commits the
+recoverable pre-start failure and resolves the retained cancel without a Bash
+signal. Envoy serializes those two Awsh results and never manufactures one from
+arrival of the controller request.
+
+After `submit`, Envoy serializes one internal PTY-master write with controller
+input and resize and writes exactly bytes `0x18 0x02`. Those bytes are the
+adapter submit trigger, are not controller-authored terminal input, do not
+advance `input_through`, and are never included in operation source. The
+controller rejects either reserved Readline sequence `0x18 0x01` or
+`0x18 0x02` anywhere in the compiled authored input byte stream, including
+across adjacent input-step boundaries; idle controller input is still discarded
+before it reaches the PTY. The adapter-owned idle Readline boundary
+always uses the `emacs-standard` keymap. The active Readline build binds
+`0x18 0x01` there to the readonly source-loader function and binds `0x18 0x02`
+to one macro that dispatches `0x18 0x01` followed by `accept-line`. The selected
+Bash-build table must prove that the whole macro is consumed before redisplay,
+so neither source nor the canonical frame is written to the PTY. A missing or
+changed binding, redisplay byte, unexpected helper request, or secondary prompt
+after the trigger fails the session under the operation-start deadline.
+
+The source-loader function invokes only the absolute manifested Awsh helper and
+captures its complete standard output and exit status into private local state,
+not `READLINE_LINE`. It requires zero exit and exactly one final ASCII `x`
+marker before assigning any byte to `READLINE_LINE`, removes the marker, and
+sets `READLINE_POINT` to the resulting UTF-8 character count expected by the
+selected Bash/Readline build. The helper appends that marker after the canonical
+frame so Bash command substitution cannot strip source-significant trailing
+newlines; no byte follows the marker. A nonzero exit, missing or malformed
+marker, partial output, failed assignment, or cursor mismatch calls the readonly
+`__OMEGAFLOW_AWSH_FAIL_STOP` function and never returns to the enclosing
+Readline macro. The helper writes no stderr or uncaptured stdout. The canonical
+line is:
+
+```text
+{
+__OMEGAFLOW_AWSH_START_RELEASED
+__OMEGAFLOW_AWSH_ENTER STATUS HISTEXPAND EDITING_MODE
+__OMEGAFLOW_AWSH_INNER_ENTERED=0
+{
+__OMEGAFLOW_AWSH_INNER_ENTERED=1
+__OMEGAFLOW_AWSH_RETURN STATUS
+SOURCE
+
+__OMEGAFLOW_AWSH_RETURN "$?"
+} SPLIT_REDIRECTIONS_OR_EMPTY
+__OMEGAFLOW_AWSH_STATUS=$?
+if [[ $__OMEGAFLOW_AWSH_INNER_ENTERED != 1 ]]; then
+__OMEGAFLOW_AWSH_FAIL_STOP
+fi
+__OMEGAFLOW_AWSH_RETURN "$__OMEGAFLOW_AWSH_STATUS"
+}
+```
+
+Every other shown separator is one LF. The frame appends exactly two
+adapter-owned LFs after the exact `SOURCE`, even when the source already ends in
+LF. The first terminates a final source line and the second preserves a hard
+boundary if the source ends in an unpaired backslash; the independent
+source-only parse rejects grammar that is incomplete through EOF. `STATUS` is
+canonical decimal 0 through 255;
+`HISTEXPAND` is `on` or `off`; and `EDITING_MODE` is `emacs` or `vi`. The four
+uppercase functions are fixed readonly adapter functions. `START_RELEASED`
+uses only Bash's `builtin kill` to send `SIGUSR1` to Bash's direct Awsh parent
+from `$PPID`; it forks no helper and emits no byte. Failure to queue that signal
+calls `FAIL_STOP`. Awsh reserves `SIGUSR1` for this boundary, arms the matching
+release phase before allowing the `PS0` helper's success reply, accepts the
+first signal observed in that phase, and writes matching private
+`start_released`; a signal observed outside that phase or after the transition
+is fatal. The private result is shell-neutral even though this initial adapter
+uses a Bash-specific signal. `ENTER` restores
+the source-visible history and editing settings recorded at the preceding
+prompt and returns `STATUS`, so the authored source observes the preceding
+shell status. At an adapter-owned prompt boundary, exactly one of `emacs` or
+`vi` must have been active; disabling both is damage to reserved adapter state
+and fails the session. The prompt hook records that source-visible mode before
+forcing the fixed idle `emacs-standard` keymap, and `ENTER` restores the
+recorded mode before authored source executes. `SPLIT_REDIRECTIONS_OR_EMPTY`
+is empty for `pty`; for `split` it
+is exactly `> 'STDOUT_FIFO' 2> 'STDERR_FIFO'` with the validated fixed paths.
+The reserved `INNER_ENTERED` sentinel remains zero when either redirection
+cannot be applied because Bash skips the group. Its first inner assignment
+changes the sentinel before any source command, and the immediately following
+`RETURN STATUS` reapplies the status supplied to `ENTER` after that successful
+assignment. The authored source's first expansion or command therefore
+observes the exact preceding persistent-shell status. The post-group `if` is
+exempt from source-enabled `errexit` and calls `FAIL_STOP` if the source group
+was not entered. Only an entered group may propagate its status. The trailing
+inner `RETURN` makes comments-only source a complete list while preserving the
+preceding status. The assignment captures the inner group's result and the
+outer `RETURN` preserves it as the operation's prompt status. Source that exits
+or replaces Bash never reaches that suffix and is
+reported by Awsh's parent-observed `shell_exit` path. Every variable, function,
+binding, prompt value, and byte sequence beginning `__OMEGAFLOW_AWSH_` is
+reserved adapter state; the controller rejects the literal reserved substring
+in operation source, and the completion slice verifies the immutable state
+before another operation is accepted.
+
+`PS0` is the readonly, output-empty command substitution invoking a readonly
+wrapper around the fixed `start-prepared` helper. Bash expands it exactly once
+after accepting and parsing the complete brace group and before executing
+`START_RELEASED`. The helper blocks, Awsh writes `start_prepared`, and Bash cannot execute
+any frame byte until the complete `started_ack` sequence below releases it. On
+success the helper emits exactly one captured ASCII `x` marker with no LF; the
+wrapper requires zero exit and exactly that captured value, removes it, and
+emits nothing. On EOF, signal, nonzero exit, missing or malformed marker, or any
+other helper error, the wrapper calls `FAIL_STOP` from inside the command-
+substitution process and never completes, so parent Bash remains blocked.
+
+`FAIL_STOP` invokes the fixed manifested command
+`/omegaflow-runtime/bin/awsh bash-fail-stop`. That command accepts no arguments,
+writes no byte, repeatedly stops itself with `SIGSTOP` after every `SIGCONT`, and
+exits only by a terminating signal. If the manifested command ever returns, the
+readonly function enters an output-empty Bash builtin loop and still never
+returns. Envoy/Awsh fatal teardown kills the stopped helper or substitution and
+selected Bash through the already-owned controlled tree. More than one `PS0`
+expansion, any `PS0` byte on the PTY, or source execution before release is
+fatal.
+
+The start commitment is ordered as follows:
+
+1. Envoy satisfies `execute.input_through`, starts the one operation-start
+   timer, and completes split setup when selected. A cancel accepted before the
+   first attempted private `execute` byte takes bounded pre-start rollback and
+   empty-range cancellation.
+2. Envoy attempts private `execute`, closing the cancellable pre-start phase.
+   A later cancel is retained. Awsh either writes `rejected`, which commits the
+   recoverable pre-start failure, or writes `submit`, which commits start.
+3. After `submit`, Envoy writes the fixed Readline trigger. The source helper
+   obtains the one active source over helper IPC; Readline
+   accepts the canonical frame; the `PS0` helper blocks; and Awsh writes
+   `start_prepared`.
+4. Envoy completes the required fresh pre-start drain and covering mark, then
+   writes `start_release`.
+5. Awsh commits that the blocked helper is the active operation, writes
+   `started`, and still does not release Bash.
+6. Envoy snapshots `output_start`, completely writes public
+   `operation_started`, and completely writes `started_ack`.
+7. Awsh enters the matching release-signal phase and then sends the helper's
+   `accepted` reply. The helper emits its one captured success marker and exits
+   zero, the wrapper validates and removes the marker, and `PS0` completes with
+   empty output.
+8. Bash executes `START_RELEASED` as the first adapter-owned frame command. Its
+   builtin signal reaches Awsh, which writes `start_released`. Envoy accepts
+   that result, ends the operation-start timer, and only then forwards any
+   queued cancel through the ordinary started-operation path. Bash may execute
+   `ENTER` and the authored source after queuing the signal; source therefore
+   may begin before the queued cancel arrives, but no helper or `PS0`
+   substitution remains vulnerable to it.
+
+This release-observed boundary keeps every operation byte at or after its published
+`output_start`. Failure before the complete public event releases nothing;
+failure after public start but before `start_released` is fatal rather than a
+fabricated completion. The one monotonic operation-start deadline covers the
+whole sequence and is never reset by an intermediate frame, helper connection,
+drain, or output advance.
 
 Private EOF is never a substitute for a result. EOF in a frame is a protocol
 failure. EOF between frames is orderly only when it immediately follows one
@@ -1379,7 +1691,8 @@ filesystem access, type checks, hashing, and public result construction.
 
 Only one operation is active. `execute` may produce either `rejected` before
 the selected shell starts the source, or the ordered start sequence `submit`,
-`start_prepared`, `started`, and the public `operation_started` commitment.
+`start_prepared`, `started`, the public `operation_started` commitment, and
+`start_released`.
 `rejected` maps to a typed public pre-start failure and leaves the shell ready
 for another operation. Once started, `completed`, `shell_exit`, cancellation,
 or finalization closes the operation; no later `execute` is accepted before
@@ -1407,7 +1720,7 @@ shell status, successful operation result, or Reploy lifecycle result.
 Envoy exclusively creates a fresh mode-0700 session runtime directory at the
 fixed path `/run/omegaflow/session` without following symlinks and passes that
 exact path in the single Awsh exec. A pre-existing path fails launch. Awsh
-creates a mode-0700 `bash` subdirectory and a mode-0600 Unix `SOCK_SEQPACKET`
+creates a mode-0700 `bash` subdirectory and a mode-0600 Unix `SOCK_STREAM`
 listener at `/run/omegaflow/session/bash/helper.sock` before it starts Bash.
 The manifested Bash rcfile invokes short-lived helper modes of the same fixed
 Awsh binary with that literal socket path. Each invocation opens one
@@ -1418,25 +1731,110 @@ boundary. Awsh removes the socket and `bash` directory during every
 launch-failure and terminal cleanup path; Envoy removes the enclosing session
 directory after it reaps Awsh.
 
-Startup uses only these exact helper packets:
+Every socket helper invocation is the same fixed executable form:
+
+```text
+/omegaflow-runtime/bin/awsh bash-helper \
+  --socket=/run/omegaflow/session/bash/helper.sock REQUEST [SCALAR...]
+```
+
+`REQUEST` is `prompt-state`, `prompt-ready`, `source`, or `start-prepared`.
+Only `prompt-state` has scalar arguments: canonical `STATUS`, `HISTEXPAND`, and
+`EDITING_MODE`. The helper obtains physical cwd, logical `$PWD`, and its exact
+inherited exported environment directly rather than putting them in argv. No
+helper accepts a different socket, runtime root, executable, or request name.
+CLI request names use the shown hyphenated spelling; their packet message types
+use the underscored spelling shown below.
+
+The separate local fail-stop primitive has the fixed manifested form:
+
+```text
+/omegaflow-runtime/bin/awsh bash-fail-stop
+```
+
+It accepts no argument, opens no helper socket, sends no packet, and has the
+non-returning behavior specified for `FAIL_STOP` above. It is not another
+helper request.
+
+Helper payloads use the same bounded UTF-8, NUL-separated, NUL-terminated field
+encoding as the private descriptor protocol. Each stream direction carries one
+four-byte unsigned big-endian payload length followed by exactly that many
+bytes. The length is 1 through the helper-packet limit and does not include the
+prefix. The client writes one complete request, calls `shutdown(SHUT_WR)`, and
+then reads one complete reply through EOF; the server requires EOF immediately
+after the request payload, writes one complete reply, and closes. Every read
+uses `recvmsg` and rejects ancillary descriptors or credentials. A short
+prefix, zero or oversized length, short payload, trailing byte, extra payload,
+invalid UTF-8, or invalid arity fails the session. Reads and writes loop over
+ordinary stream fragmentation under the existing launch or operation-start
+deadline; no helper packet requires a protocol-sized kernel socket buffer. The
+complete helper packet set through A2.4 is:
 
 ```text
 # helper -> Awsh
-awsh-helper-v1, prompt_state, STATUS, HISTEXPAND, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
+awsh-helper-v1, prompt_state, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
 awsh-helper-v1, prompt_ready
+awsh-helper-v1, source
+awsh-helper-v1, start_prepared
 
 # Awsh -> helper
 awsh-helper-v1, accepted
+awsh-helper-v1, source, OPERATION_ID, STATUS, HISTEXPAND, EDITING_MODE, EXECUTION_SHAPE, STDOUT_FIFO_OR_EMPTY, STDERR_FIFO_OR_EMPTY, SOURCE
 ```
+
+The request-then-reply ordering ensures the receiver drains each bounded stream
+while its peer writes it, so correctness does not depend on `SO_SNDBUF`,
+`SO_RCVBUF`, `net.core.wmem_max`, or `net.core.rmem_max`. Awsh and its helpers
+do not set or inspect those values. EOF and the explicit length prove complete
+framing; stream fragmentation or a small effective socket buffer cannot be
+reinterpreted as truncation or a smaller request.
 
 The rcfile sends one `prompt_state` and then one blocking `prompt_ready` while
 no operation is armed. Awsh accepts only that order. The state packet records
 the initial status, physical and validated logical cwd, bounded exported
-environment, and history-expansion state. When Awsh accepts the packet, it also
-reads and records the complete pre-Readline termios state from the controlling
-terminal. The packet fields' detailed bounds and canonical encodings are frozen
-with source submission in A2.4; A2.3 requires only that failure to validate the
-complete packet prevents readiness rather than truncating state.
+environment, history-expansion state, and Readline editing mode. `STATUS` is
+canonical decimal 0 through 255, `HISTEXPAND` is `on` or `off`, and
+`EDITING_MODE` is `emacs` or `vi`. Cwd fields use the global cwd bound; logical
+cwd is empty unless it is absolute and names the same directory as physical
+cwd. `EXPORTED_ENV_JSON` is one compact JSON object from valid Bash variable
+names to UTF-8 values, with keys sorted by UTF-8 bytes, no duplicate key, and
+no NUL or non-string value. It has no separate size allowance beyond the
+complete helper-packet bound. An exported name or value that cannot be
+represented is a state-report failure, never silently omitted or replaced.
+The prompt hook captures `STATUS`, `HISTEXPAND`, and `EDITING_MODE` before any
+status-changing canonicalization, then establishes and locally verifies the
+complete adapter entry state above before invoking the helper. It never reports
+state first and repairs it later. The first startup hook performs the same
+ordering; A2.5 freezes the completion-side hook and handoff that repeats it.
+When Awsh accepts the packet, it also reads and records the complete
+pre-Readline termios state from the controlling terminal. Failure to validate
+the complete packet prevents readiness rather than truncating state.
+
+The `source` request is accepted exactly once after private `submit` and before
+`start_prepared`. Its response repeats the active operation ID and the last
+accepted prompt status, history, and editing state plus the shape, validated
+split paths or empty fields, and exact source. The fixed helper validates the
+response and emits only the matching canonical Readline frame and final marker
+described above. `start_prepared` is accepted exactly once
+after that source response. Its `accepted` reply is withheld until Awsh has
+written `started`, accepted matching `started_ack`, and is ready to release
+Bash. After validating that complete reply, the helper writes exactly the
+captured ASCII `x` success marker to its standard output and exits zero;
+the readonly wrapper removes that marker, so `PS0` remains output-empty.
+`accepted` is also the sole successful `prompt_ready` reply. A helper
+disconnect, nonzero exit, signal, malformed reply, missing success marker, or
+unexpected standard-output byte cannot return control to the loader macro or
+`PS0`: the manifested wrapper enters `FAIL_STOP`, and fatal teardown ends the
+session.
+
+After that wrapper validates and removes the marker, the canonical frame's
+first command is `START_RELEASED`. Awsh has already armed the one matching
+post-`started_ack` release phase before permitting that marker; it accepts the
+first `SIGUSR1` observed there and emits `start_released`. Envoy accepts that
+result before forwarding any queued private cancellation. A missing signal
+remains under the original operation-start deadline; a signal observed outside
+the release phase or after its transition, or a `start_released` with the wrong
+operation identifier, fails the session.
 
 Before sending `prompt_ready`, the manifested rcfile installs the immutable
 adapter prompt hook and sets the Bash primary-prompt display value to the empty
@@ -1493,8 +1891,9 @@ Envoy, and Awsh from the same canonical source. It is keyed by the lowercase
 SHA-256 digest of `/bin/bash` and records that build's compiled system-wide
 interactive rc path or `none`, deterministic startup-export transformation,
 catchable signal inventory, Readline behavior required by the startup
-handshake, and the exact bounded startup PTY byte string through the first
-`tcdrain`.
+handshake, the loader/submit macro's fixed keymap, no-redisplay, UTF-8 cursor,
+and maximum-canonical-line behavior, and the exact bounded startup PTY byte
+string through the first `tcdrain`.
 Preparation requires one exact table entry. Envoy re-hashes `/bin/bash` and,
 when the entry names a system rc path, requires that path to be absent. An
 Awsh re-hashes the same resolved regular executable and selects the same entry
@@ -1557,8 +1956,10 @@ PID, and acquires the passed slave as its controlling terminal with
 `TIOCSCTTY`. It ignores `SIGHUP` and `SIGTTOU` in the supervisor only: `SIGHUP`
 must not terminate the parent when the selected-shell tree closes the final
 slave descriptor, and `SIGTTOU` must not stop its terminal-control calls while
-the selected shell is foreground. Awsh then forks Bash behind a private launch
-barrier. The child creates a distinct process group whose ID is its PID,
+the selected shell is foreground. Before forking Bash, Awsh also installs the
+`SIGUSR1` reception path reserved for the post-`PS0` release boundary; no
+default-action window may remain while Bash is live. Awsh then forks Bash
+behind a private launch barrier. The child creates a distinct process group whose ID is its PID,
 duplicates the slave onto descriptors 0, 1, and 2, closes every descriptor
 except those three and its barrier ends, reports setup, and waits. Awsh makes
 that group foreground, verifies `tcgetsid(slave) == awsh_pid` and
@@ -1602,8 +2003,9 @@ slave and dedicated private request/result descriptors only through the
 one-exec handoff above; Bash receives neither those descriptors nor an Envoy
 socket. For split execution, only the selected stdout/stderr descriptors reach
 the evaluated command tree, and Envoy supervises and closes them at the typed
-operation boundary. Exact split-operation descriptor setup belongs to A2.4 and
-A2.5.
+operation boundary. A2.4 fixes FIFO creation, validation, canonical-frame
+redirection, and start ownership; A2.5 fixes keepalive closure, dual EOF,
+completion drain, and removal.
 
 ## Failure mapping
 
@@ -1614,8 +2016,8 @@ best effort and never converts failure to success.
 
 `operation_failed` carries one of a closed v1 code set: the six inspection
 codes above; `input-barrier-timeout` for a pre-start `execute` barrier wait that
-exceeds its bound; `source-invalid` and `source-unsupported` for source Awsh
-rejects before start without damaging the selected shell; `cancel-timeout` and
+exceeds its bound; `source-syntax` and `source-policy` for source Awsh rejects
+before `submit` without damaging the selected shell; `cancel-timeout` and
 `finalize-timeout` for a selected shell that does not return to its backend
 boundary within the grace period; and `shell-ended-unresolved` for a shell end
 leaving declared inspections or an authored gate unevaluable.
@@ -1734,8 +2136,66 @@ mismatch, extra byte, overflow, premature EOF, and incomplete barrier, and prove
 that the controller buffers cross-connection reordering, appends bytes from raw
 offset zero as `pty` at elapsed time zero, and commits its first planned prompt
 only after `ready.output_through`. They also prove that the real Bash primary
-prompt contributes no byte. The corpus covers resize placement before, between,
-and after authored events,
+prompt contributes no byte.
+
+Source-start cases cover the minimum and maximum UTF-8 source, embedded and
+trailing newlines, comments-only source, multiline compounds, quotations and
+heredocs including an unterminated heredoc for which the selected Bash checker
+warns while returning zero, source and aggregate private/helper frame overflow,
+invalid UTF-8 and NUL, the reserved adapter substring, canonical syntax
+rejection, and source that would parse only through aliases, `extglob`, POSIX
+mode, history expansion, or disabled `interactive_comments`. They require zero
+checker status and empty checker stdout and stderr for both source-only and
+canonical-frame checks. They prove that helper IPC carries the exact source,
+the PTY receives
+only `0x18 0x02`, the loader macro performs no redisplay, command substitution
+preserves trailing LF through the final marker, the canonical brace group
+expands `PS0` exactly once, its first adapter-owned command sends the one
+post-`PS0` release signal, and no source or output executes before the complete
+public `operation_started` and private `started_ack`. They also cover each
+start-handshake frame fragmented or delayed at its own pipe boundary, duplicate
+or out-of-order helper and private packets, a missing release signal, a release
+signal before its phase is armed, and a second signal deliberately delivered
+after the first is consumed, mismatched operation IDs, secondary
+prompt entry, source-helper and `PS0`-helper disconnects, every failure before
+and after public start, and exhaustion of the one non-resetting start deadline.
+Loader and `PS0` cases inject partial output, nonzero exit, signal, EOF,
+disconnect, and missing, duplicate, or malformed success markers; each proves
+that no source byte executes and the corresponding Bash context remains
+blocked in `FAIL_STOP` until fatal teardown. Split cases independently fail the
+stdout and stderr redirection opens, prove that the zero `INNER_ENTERED`
+sentinel distinguishes each setup failure from authored source status 1, and
+prove that only a group whose first inner assignment ran may propagate source
+status. Deadline cases fail or stall each split directory, FIFO, keepalive,
+reader, validation, and rollback step before private `execute` and prove that
+all consume the original operation-start timer. Helper-transport cases
+fragment every prefix and payload position, use deliberately small effective
+socket buffers, reject zero and oversized lengths, short prefix or payload,
+trailing bytes, ancillary data, missing half-close and premature EOF, and
+transport the exact maximum request and reply without relying on a one-record
+send or host socket-buffer maxima. Start-cancellation cases serialize `cancel`
+before the first private `execute` byte, after that boundary but before
+`rejected` or `submit`, after public start but before `start_released`, and after
+every subsequent start phase. They prove that
+pre-boundary cancellation rolls back with an empty result, `rejected` resolves
+a retained cancel as pre-start failure, and `submit` orders public
+`operation_started` and `start_released` before ordinary cancellation without
+abandoning a loaded frame or blocked helper. They also prove that the
+cancellation grace period starts only when Envoy forwards the queued request
+after `start_released`.
+Persistent-state cases prove the preceding status survives `ENTER` and the
+inner-entry sentinel assignment and is observed by the authored source's first
+expansion and first command, history/editing state is restored before source,
+ordinary source status survives the canonical suffix,
+and cwd, variables, exported values, functions, positional parameters,
+non-reserved options, and alias definitions survive the operation while the
+adapter-reserved entry state is canonicalized. They also prove an
+operation-created background job and its job-table presence do not survive
+mandatory operation cleanup. One case leaves `errexit`
+enabled with a nonzero status through an exempt `!` list, proves the next source
+still observes that status, and proves adapter entry itself does not end Bash.
+
+The corpus covers resize placement before, between, and after authored events,
 including multiple resizes at one frontier and zero-duration spans. A delayed
 `execute.input_through` case accepts a resize while `execute` remains in
 `Starting` and proves that successful start and pre-start failure or
