@@ -10,7 +10,7 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-08-20
+- Updated: 2026-08-30
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -605,14 +605,42 @@ native Reploy blueprint under `reploy.workload`.
 OmegaFlow's built-in Envoy config composes into that same object in two parts.
 Its overridable defaults compose before the selected application, so an
 application can replace them; its reserved entries — the read-only runtime
-mount, the two exact endpoint IDs, bind addresses, and container ports, the
+mount, the writable session-runtime mount, the two exact endpoint IDs, bind
+addresses, and container ports, the
 fixed terminal type and trusted terminal-database path, the trusted empty
-Readline configuration, the trusted locale database and fixed locale, and the
-fixed empty `HISTFILE` launch value — compose after it, so an application
-cannot. Composing the reserved entries first would let an application win under
+Readline configuration, the manifested Bash adapter rcfile, the trusted locale
+database and fixed locale, and the fixed empty `HISTFILE` launch value —
+compose after it, so an application cannot. Composing the reserved entries
+first would let an application win under
 Hydra's ordinary behaviour and disconnect the Envoy listen arguments from the
-coordinates Reploy reports. Launch-affecting names otherwise take a validation
-path, because a static reserved entry cannot clear arbitrary names. After
+coordinates Reploy reports. The writable entry has this exact resolved shape:
+
+```yaml
+environment:
+  mounts:
+    omegaflow_session_runtime:
+      target: /run/omegaflow
+      writable: true
+      update_policy: preserve
+docker:
+  mounts:
+    omegaflow_session_runtime:
+      extends: environment.mounts.omegaflow_session_runtime
+      mode: tmpfs
+```
+
+The Docker mount has the generated empty source required for `tmpfs` and no
+host path or volume name. `preserve` is a required no-op policy for this
+ephemeral mode. The selected non-root runtime identity must be able to create
+the mode-0700 `/run/omegaflow/session` directory in the mounted path. Reploy
+owns the backend realization and numeric identity; OmegaFlow requires and
+retains the exact environment target, writability, update policy, extension,
+and Docker mode. A missing, read-only, overridden, differently materialized,
+or overlapping effective mount fails preparation. The tmpfs is cooperative
+session state and does not strengthen the same-identity threat boundary.
+
+Launch-affecting names otherwise take a validation path, because a static
+reserved entry cannot clear arbitrary names. After
 resolving the selected workload image but before adding OmegaFlow's reserved
 entries, workload preparation materializes the effective environment produced
 by the image configuration and the selected application blueprint. OmegaFlow's
@@ -641,15 +669,29 @@ is empty and read-only. Final validation re-materializes the launch environment
 and requires those exact values, every other exact forbidden name to be absent,
 no name with a `BASH_FUNC_`, `LD_`, or `AWSH_` prefix, and no `LC_` name except
 the reserved `LC_ALL`. Before deployment, host OmegaFlow verifies from the
-trusted runtime manifest the empty
-Readline file, the exact `xterm-256color` database entry, and the complete
-selected `C.UTF-8` locale tree. Every locale-tree entry must be a regular,
-readable file whose digest matches the manifest. The host also verifies that
-the read-only runtime mount cannot be shadowed. A missing, unreadable,
-non-regular, or hash-mismatched trusted file fails preparation; neither shell
-launch may fall through to application-controlled configuration under `HOME`,
-to another terminal-database search directory, or to an application-selected
-locale database.
+trusted runtime manifest the empty Readline file, the fixed regular
+`/omegaflow-runtime/etc/awsh-bashrc` that installs the controlled Bash startup
+hooks, leaves the real primary-prompt display empty, and sources no other file,
+the exact `xterm-256color` database entry, and the complete selected `C.UTF-8`
+locale tree. Every locale-tree entry must be
+a regular, readable file whose digest matches the manifest. The host also
+verifies that the read-only runtime mount cannot be shadowed.
+
+Preparation hashes the resolved regular `/bin/bash` and requires an exact entry
+in OmegaFlow's versioned Bash-build table, generated into host preparation,
+Envoy, and Awsh from one canonical source. Each digest-keyed entry records the
+compiled system-wide interactive rc path or `none`, deterministic
+startup-export transformation, catchable-signal inventory, Readline behavior
+required by the startup handshake, and the exact zero-to-4,096-byte PTY string
+emitted through the first Readline-entry terminal drain. A declared system rc
+path must be absent in the resolved workload image; Envoy re-hashes the binary
+and rechecks that condition before Bash launch, and Awsh independently re-hashes the same
+resolved executable and selects the same entry before it forks. A missing,
+unreadable, non-regular, unrecognized, or hash-mismatched trusted input fails
+preparation or launch at the boundary that detects it. Neither shell launch may
+fall through to application-controlled configuration under `HOME`, `/etc`,
+another terminal-database search directory, or an application-selected locale
+database.
 
 The controlled-session bootstrap therefore never opens an application-selected
 history, Readline, terminal-database, locale-database, or mailbox path and never
@@ -663,20 +705,28 @@ operation source, where the persistent shell carries it to operation children
 as ordinary shell state without governing either shell launch. The defaults
 are:
 
-- a Bash package and executable requirement;
+- a Bash package/build requirement whose resolved `/bin/bash` digest has an
+  exact entry in OmegaFlow's generated build table, with any declared system rc
+  path absent;
 - a default non-root `omegaflow` identity;
 - the read-only `/omegaflow-runtime` mount;
+- the reserved `omegaflow_session_runtime` environment mount at
+  `/run/omegaflow`, writable with `update_policy: preserve`, extended by the
+  same-named Docker `tmpfs` mount, and with no application mount at or across
+  that path;
 - fixed endpoint IDs `omegaflow-terminal` and `omegaflow-telemetry`;
 - private TCP bind defaults and fixed container ports for both endpoints;
 - fixed `TERM=xterm-256color` and a manifest-validated, read-only terminfo
   database at `/omegaflow-runtime/share/terminfo` for both shell launches;
 - fixed `INPUTRC=/omegaflow-runtime/etc/inputrc`, naming a
   manifest-validated empty read-only file for both shell launches;
+- a manifest-validated read-only `/omegaflow-runtime/etc/awsh-bashrc`, selected
+  only by Awsh's fixed `--rcfile` launch and never by the Reploy bootstrap shell;
 - fixed `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, and
   `LOCPATH=/omegaflow-runtime/lib/locale`, naming a complete,
   manifest-validated read-only locale tree for both shell launches;
 - fixed empty `HISTFILE` for the bootstrap and Envoy launch environment; and
-- the fixed Envoy runtime paths.
+- the fixed Envoy and Awsh runtime paths.
 
 The terminal endpoint defaults to scheme `tcp`, container port `47001`, and
 Docker bind address `0.0.0.0`; the telemetry endpoint uses the same values with
@@ -723,8 +773,10 @@ checking of the composition.
 Envoy requirements are OmegaFlow concepts that Reploy cannot know, so OmegaFlow
 validates them itself against the composed blueprint before materialization: a
 Bash package and executable, a non-root identity, the read-only executable
-`/omegaflow-runtime` mount, no application mount whose target equals, contains,
-or is contained by `/omegaflow-runtime`, `/run/omegaflow`, or another reserved
+`/omegaflow-runtime` mount, the exact writable
+`omegaflow_session_runtime` environment mount and same-named Docker `tmpfs`
+extension defined above, no application mount whose target equals, contains, or
+is contained by `/omegaflow-runtime`, `/run/omegaflow`, or another reserved
 OmegaFlow path, and both `omegaflow-terminal` and `omegaflow-telemetry`
 endpoints bound privately. A violation fails the recording with a specific
 error naming the unmet requirement; OmegaFlow does not repair the blueprint.
