@@ -671,7 +671,15 @@ no name with a `BASH_FUNC_`, `LD_`, or `AWSH_` prefix, and no `LC_` name except
 the reserved `LC_ALL`. Before deployment, host OmegaFlow verifies from the
 trusted runtime manifest the empty Readline file, the fixed regular
 `/omegaflow-runtime/etc/awsh-bashrc` that installs the controlled Bash startup
-hooks, leaves the real primary-prompt display empty, and sources no other file,
+hooks, leaves the real primary-prompt display empty, installs the readonly
+`__OMEGAFLOW_AWSH_` adapter namespace and output-empty `PS0`, binds private
+loader bytes `0x18 0x01` and submit bytes `0x18 0x02` in the fixed idle
+`emacs-standard` keymap, validates positive source and start-helper markers
+before releasing Bash, sends the one adapter-owned post-`PS0` signal to the
+direct Awsh parent before authored source, invokes the fixed argument-free manifested
+`/omegaflow-runtime/bin/awsh bash-fail-stop` mode on every loader or `PS0`
+failure, uses the reserved split-entry sentinel to prove that both output
+redirections opened, and sources no other file,
 the exact `xterm-256color` database entry, and the complete selected `C.UTF-8`
 locale tree. Every locale-tree entry must be
 a regular, readable file whose digest matches the manifest. The host also
@@ -682,7 +690,9 @@ in OmegaFlow's versioned Bash-build table, generated into host preparation,
 Envoy, and Awsh from one canonical source. Each digest-keyed entry records the
 compiled system-wide interactive rc path or `none`, deterministic
 startup-export transformation, catchable-signal inventory, Readline behavior
-required by the startup handshake, and the exact zero-to-4,096-byte PTY string
+required by the startup handshake, the loader/submit macro's keymap,
+no-redisplay, UTF-8 cursor, and maximum canonical-line behavior, and the exact
+zero-to-4,096-byte PTY string
 emitted through the first Readline-entry terminal drain. A declared system rc
 path must be absent in the resolved workload image; Envoy re-hashes the binary
 and rechecks that condition before Bash launch, and Awsh independently re-hashes the same
@@ -702,8 +712,29 @@ Envoy bootstrap command before OmegaFlow code starts. A workload whose commands
 need a loader variable, history file, Readline configuration, different
 terminal lookup, different locale, or mail notification sets it inside
 operation source, where the persistent shell carries it to operation children
-as ordinary shell state without governing either shell launch. The defaults
-are:
+as ordinary shell state without governing either shell launch. That freedom
+does not include the adapter-reserved parser state, prompt values, namespace,
+tracing and execution controls, the `CHLD` (`SIGCHLD`), `DEBUG`, `ERR`, and
+`RETURN` adapter-sensitive traps, adapter-required
+builtin state, job-control entry state, or two source-trigger bindings: source
+using the reserved namespace and planned terminal input producing either
+reserved byte sequence are rejected; readonly shell mediation preflights a
+complete expanded request and canonicalizes every selected-Bash `signal_spec`
+using the selected Bash build's case-insensitive signal-name grammar and
+signal-name table, including aliases and decimal values, before deciding
+whether it is reserved. A value that canonicalizes to `SIGCHLD` is reserved
+regardless of spelling; the selected build's numeric
+mapping is authoritative, and queries and non-`CHLD` numeric traps retain
+ordinary selected-Bash behavior. It then refuses ordinary source
+mutations of the reserved traps or required builtin enablement or
+implementation before any partial state change; and a runtime failure to
+retain or regain any cooperative reservation fails the session. Deliberate
+explicit-builtin bypass remains same-
+identity interference, not a supported source capability. The `CHLD`
+reservation prevents an adapter-owned helper child exit from asynchronously
+running a selected-shell `CHLD` trap and mutating persistent shell state
+across adapter boundaries. It applies only to the selected persistent shell;
+nested shells retain their own ordinary `CHLD` trap behavior. The defaults are:
 
 - a Bash package/build requirement whose resolved `/bin/bash` digest has an
   exact entry in OmegaFlow's generated build table, with any declared system rc
@@ -722,6 +753,21 @@ are:
   manifest-validated empty read-only file for both shell launches;
 - a manifest-validated read-only `/omegaflow-runtime/etc/awsh-bashrc`, selected
   only by Awsh's fixed `--rcfile` launch and never by the Reploy bootstrap shell;
+- fixed helper requests to the mode-0600
+  `/run/omegaflow/session/bash/helper.sock`, with operation source returned only
+  to the short-lived source helper and assigned to Bash's reserved Readline
+  buffer only after complete private capture and positive-marker validation,
+  rather than written through the PTY;
+- the fixed helper stream framing: each mode-0600 Unix stream connection carries
+  one bounded four-byte big-endian length-prefixed request, request half-close,
+  one length-prefixed reply, and reply EOF; exact read/write loops tolerate
+  fragmentation and small effective socket buffers without a host sysctl
+  prerequisite;
+- mode-0600 per-operation split stdout and stderr FIFOs below the mode-0700
+  `/run/omegaflow/session/split` directory, created and read by Envoy, validated
+  by Awsh, opened only by the canonical Bash source frame after the one
+  operation-start timer has begun, proven open by the reserved inner sentinel,
+  and removed after completion cleanup and dual EOF;
 - fixed `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, and
   `LOCPATH=/omegaflow-runtime/lib/locale`, naming a complete,
   manifest-validated read-only locale tree for both shell launches;
