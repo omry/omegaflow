@@ -145,7 +145,11 @@ amendment is an additional documentation gate before its affected B work.
 - A2.3 fixes Bash launch and readiness: the one-exec descriptor handoff,
   helper transport, process and controlling-terminal topology, termios
   readiness proof, terminal-control leases, and partial-launch cleanup.
-- A2.4 fixes source submission and the operation-start barrier.
+- A2.4 fixes exact private source fields, helper IPC, canonical Bash framing,
+  adapter-reserved state, Readline submission, `PS0`, positive helper markers,
+  the post-`PS0` release signal and private `start_released` result,
+  non-returning fail-stop behavior, split-entry proof, bounded helper-stream
+  framing, and the public operation-start barrier.
 - A2.5 fixes completion and persistent-state handoff.
 - A2.6 fixes controls and crossed lifecycle races.
 - A2.7 closes all private schemas and establishes the exact B1 base.
@@ -180,6 +184,63 @@ cross-connection delivery before `ready`, zero and maximum-size entries,
 mismatch, extra byte, overflow, premature EOF, and an incomplete barrier. Prove
 the raw range begins at offset zero as `pty` at elapsed time zero and contains
 no real Bash prompt byte.
+Freeze the exact A2.4 private frames and helper messages, canonical brace frame,
+independent source/frame syntax checks, source and aggregate bounds, the hard
+post-source LF boundary, `0x18 0x01` loader and `0x18 0x02` submit bindings in
+the fixed idle keymap, command-substitution marker, source rejection codes, and
+one non-resetting operation-start deadline. Prove the canonical suffix performs
+no command lookup when source defines a function named `:` or disables the `:`
+builtin, and preserves zero and nonzero status under source-enabled `errexit`.
+Freeze readonly `trap` and `enable` mediation for the adapter-sensitive
+`CHLD` (`SIGCHLD`), `DEBUG`, `ERR`, and `RETURN` traps and the exact
+adapter-required builtin set. Before deciding whether a target is reserved,
+the readonly mediation must canonicalize every selected-Bash `signal_spec`
+after expansion using the selected Bash build's case-insensitive signal-name
+grammar and signal-name table, including aliases and decimal values, so the
+selected build's numeric `SIGCHLD` spelling cannot bypass the reservation; no
+portable hardcoded numeric constant is assumed.
+Queries and non-`CHLD` numeric trap mutations retain ordinary selected-Bash
+behavior. The `CHLD` reservation prevents an adapter-owned
+helper child exit from asynchronously running a selected-shell `CHLD` trap and
+mutating persistent shell state across adapter boundaries; nested shells retain
+their own ordinary `CHLD` trap behavior. Prove prohibited direct and
+expanded-argument mutations fail-stop before state changes, including direct
+and expanded `CHLD`/`SIGCHLD` spellings, lowercase `chld`/`sigchld` spellings
+in both direct and expanded forms, and direct and expanded decimal spellings
+of the selected build's numeric `SIGCHLD` value (17 on supported Linux builds),
+`trap 'exit 42' DEBUG`, `trap 'exit 42' CHLD`, and `enable -n kill`. Also prove
+dynamic load or replacement and dynamic unload cannot target a required
+builtin. Cover combined options, multiple names, and mixed reserved/non-
+reserved targets, with complete post-expansion argument preflight before any
+partial mutation. Reserved-state queries, positive enablement, and every
+operation on non-reserved traps and builtins preserve selected-Bash behavior.
+Classify explicit builtin-lookup bypass as fatal same-identity interference
+rather than a supported operation.
+Cover minimum and maximum source,
+multiline source,
+comments, quotations, heredocs including an unterminated heredoc whose selected
+Bash checker warns while returning zero, zero status plus empty stdout and
+stderr as the success condition for both parse checks, trailing LF,
+parser-state-dependent rejection, fixed interactive-comment handling, reserved
+names and input sequences including adjacent-step boundaries, duplicate and
+crossed helper phases,
+mismatched IDs, no-redisplay behavior, and failures on both sides of public
+`operation_started`. Freeze the source-loader and `PS0` positive success
+markers, the adapter-owned post-`PS0` signal and private `start_released`
+result, argument-free fail-stop mode, split `INNER_ENTERED` sentinel, and
+the post-sentinel restoration that makes the first authored expansion or
+command observe the exact preceding shell status. Freeze the Linux
+helper-stream length prefix, half-close, and EOF boundaries. Cover partial helper
+output, malformed or missing markers, nonzero exit, signal and disconnect;
+stdout and stderr redirection-open failures versus authored status 1; split
+setup and rollback under the original start timer; fragmented and short
+prefixes and payloads, zero and oversized lengths, trailing bytes, ancillary
+data, deliberately small socket buffers, and exact maximum request and reply
+payloads. Cover cancellation before the first private `execute` byte, while
+`rejected` or `submit` is pending, after public start but before
+`start_released`, and after every later private-start phase; prove a committed
+start publishes `operation_started` and accepts `start_released` before
+ordinary cancellation and never abandons a loaded frame or adapter helper.
 
 **B2. Awsh boundary alignment**
 
@@ -191,7 +252,21 @@ Implement Awsh's exact one-exec descriptor intake, digest-selected generated
 Bash-build-table consumer, fixed rcfile/helper startup exchange, empty primary
 prompt, signal reset, process/session/foreground topology, Readline termios
 proof, first terminal drain, private readiness, selected-shell reaping, and
-partial-launch cleanup.
+partial-launch cleanup. Implement the A2.4 source checker and private active
+operation record, parent-side `SIGUSR1` reception installed before Bash launch,
+fixed helper request/reply arities, canonical source-frame
+emitter, readonly adapter namespace, canonical parser/trap/trace/job-control
+entry state, whole-request readonly trap/builtin mediation, fixed-keymap
+loader/submit Readline macro, output-empty blocking
+`PS0`, private source capture followed by positive-marker validation, the
+manifested non-returning `bash-fail-stop` mode, source-visible
+status/history/editing restoration, validation and canonical redirection of
+split FIFO paths, the split-entry sentinel, the readonly first-command
+post-`PS0` signal to the direct Awsh parent, and fail-closed start phases. Set
+the fixed four-byte big-endian length framing on every helper request and reply,
+require request half-close and reply EOF, reject ancillary data and trailing
+bytes, and use exact bounded stream read/write loops under the existing phase
+deadline.
 
 **B3. Envoy session foundation**
 
@@ -202,7 +277,19 @@ writes, an empty `HISTFILE` for controlled Bash after application
 environment delegation, and orderly shutdown. Own the exact Awsh exec handoff,
 startup-output pump and 4,096-byte cap, build-entry comparison, complete public
 `ready` write before terminal release, `ready.output_through`, and takeover of
-incomplete launch cleanup.
+incomplete launch cleanup. Own `execute.input_through` before private submit,
+start the one operation-start timer before any split directory/FIFO setup, own
+bounded rollback of every partial setup, mode-0600 split FIFO creation and
+reader/keepalive ownership, the serialized
+internal `0x18 0x02` PTY write, the fresh pre-start drain and mark,
+`start_release`/`started` ordering, complete public `operation_started` before
+`started_ack`, acceptance of private `start_released`, and the operation-start
+deadline and teardown. Serialize cancel
+with the first attempted private `execute` byte: retain later cancellation,
+allow `rejected` to commit pre-start failure, and after `submit` finish public
+start and wait for `start_released` before taking the ordinary
+started-operation cancellation path. Queue a cancel first accepted between
+public start and `start_released` under the same rule.
 
 **B4. Operation boundaries and controls**
 
@@ -360,15 +447,27 @@ fixtures, including inspection results and cross-channel output barriers. Its
 readiness path buffers bounded terminal bytes received before public `ready`,
 appends them only after validating `ready.output_through`, and permits the
 first planned prompt or request only after the raw log reaches that barrier.
+Validate source UTF-8, size and reserved namespace plus authored terminal input
+against both reserved Readline sequences before `execute`; keep
+`execute.input_through` controller-local and require the exact public
+`operation_started` barrier before operation-authored terminal input.
 
 **C4. Runtime build artifact**
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
 required runtime files. Generate host preparation, Envoy, and Awsh consumers
 from one canonical digest-keyed Bash-build table containing the system rc path,
-startup-export transform, catchable-signal inventory, Readline behavior, and
-exact bounded startup PTY bytes. Build and manifest the fixed
-`etc/awsh-bashrc` with its output-empty primary-prompt hook and the fixed empty
+startup-export transform, catchable-signal inventory, startup Readline behavior,
+source-loader/submit-macro keymap, no-redisplay, UTF-8 cursor, and maximum-line
+behavior, and exact bounded startup PTY bytes. Build and manifest the fixed
+`etc/awsh-bashrc` with
+its output-empty primary-prompt and `PS0` hooks, readonly adapter namespace,
+canonical parser state, whole-request readonly `trap` and `enable` mediation,
+private bindings, positive helper markers, split-entry sentinel, post-`PS0`
+release signal, and readonly fail-stop wrapper. Build the
+same manifested `bin/awsh` with its fixed socket-helper requests, bounded
+stream-framing validation, and
+argument-free non-returning `bash-fail-stop` mode, plus the fixed empty
 `etc/inputrc`.
 
 **C5. Runtime staging**
@@ -380,10 +479,15 @@ duplicate paths, invalid modes, size or digest mismatches, and malformed or
 additional executable and script payloads, including every trusted terminal,
 Readline, locale, and Bash rcfile asset named by the runtime manifest. Prove
 the rcfile installs the required startup hooks without sourcing another file
-and preserves the output-empty primary-prompt invariant. Prove the host copies
-only verified installed artifacts into a fresh private directory, writes the
-manifest last, makes the staged tree non-writable, and never assembles it from
-a project checkout.
+and preserves the output-empty primary-prompt and start-barrier invariants.
+Prove its literal helper path, socket, request names, bindings, readonly state,
+canonical frame and whole-request reserved-state mediation functions, positive
+source/start markers, post-`PS0` release signal, split-entry sentinel, and
+fail-stop invocation match the frozen fixtures. Prove the exact staged Awsh
+binary passes the stream-framing and non-returning fail-stop fixtures. Prove
+the host copies only verified installed artifacts into a fresh
+private directory, writes the manifest last, makes the staged tree
+non-writable, and never assembles it from a project checkout.
 
 **C6. Blueprint schema and composition**
 
@@ -547,7 +651,8 @@ gate.
 | --- | --- | --- |
 | A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
 | A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
-| A2.3–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
+| A2.3 | Approved prefix | PR 33 is approved at its exact current head with current A2.3 attestations |
+| A2.4–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
