@@ -150,7 +150,23 @@ amendment is an additional documentation gate before its affected B work.
   the post-`PS0` release signal and private `start_released` result,
   non-returning fail-stop behavior, split-entry proof, bounded helper-stream
   framing, and the public operation-start barrier.
-- A2.5 fixes completion and persistent-state handoff.
+- A2.5 fixes ordinary completion and persistent-state handoff: the
+  completion-side Bash prompt hook and canonical shell-neutral state report;
+  the direct-exec completion helper identity; exact private
+  `input_close`, `input_closed`, and `completed` fields and ordering; immutable
+  adapter-state and empty-job-table validation; completion-side
+  `prompt_ready` and Readline termios proof; returned status/cwd/environment
+  and inspection-plan handoff; and PTY plus split-stream output, keepalive,
+  dual-EOF, and FIFO-removal barriers. Functions, aliases, positional
+  parameters, unexported variables, and non-reserved options remain live in
+  Bash rather than becoming wire state. The `CHLD`, `DEBUG`, `ERR`, and `RETURN`
+  traps are adapter-reserved and must remain unset so helper and cleanup child
+  exits cannot mutate persistent Bash state after the completion snapshot.
+  This restriction applies to the selected persistent Bash, not a nested
+  shell's own child-exit trap. Operation-created jobs must be terminated,
+  reaped, and absent from the job table before completion is reusable. A2.6
+  owns controls and crossed lifecycle races; A2.7 owns final private-schema
+  closure.
 - A2.6 fixes controls and crossed lifecycle races.
 - A2.7 closes all private schemas and establishes the exact B1 base.
 
@@ -198,22 +214,29 @@ the readonly mediation must canonicalize every selected-Bash `signal_spec`
 after expansion using the selected Bash build's case-insensitive signal-name
 grammar and signal-name table, including aliases and decimal values, so the
 selected build's numeric `SIGCHLD` spelling cannot bypass the reservation; no
-portable hardcoded numeric constant is assumed.
-Queries and non-`CHLD` numeric trap mutations retain ordinary selected-Bash
-behavior. The `CHLD` reservation prevents an adapter-owned
-helper child exit from asynchronously running a selected-shell `CHLD` trap and
-mutating persistent shell state across adapter boundaries; nested shells retain
-their own ordinary `CHLD` trap behavior. Prove prohibited direct and
-expanded-argument mutations fail-stop before state changes, including direct
-and expanded `CHLD`/`SIGCHLD` spellings, lowercase `chld`/`sigchld` spellings
-in both direct and expanded forms, and direct and expanded decimal spellings
-of the selected build's numeric `SIGCHLD` value (17 on supported Linux builds),
-`trap 'exit 42' DEBUG`, `trap 'exit 42' CHLD`, and `enable -n kill`. Also prove
+portable hardcoded numeric constant is assumed. Queries and non-`CHLD` numeric
+trap mutations retain ordinary selected-Bash behavior. The `CHLD` reservation
+prevents an adapter-owned helper child exit from asynchronously running a
+selected-shell `CHLD` trap and mutating persistent shell state across adapter
+boundaries; nested shells retain their own ordinary `CHLD` trap behavior. Prove
+prohibited direct and expanded-argument mutations fail-stop before state
+changes, including direct and expanded `CHLD`/`SIGCHLD` spellings, lowercase
+`chld`/`sigchld` spellings in both direct and expanded forms, and direct and
+expanded decimal spellings of the selected build's numeric `SIGCHLD` value (17
+on supported Linux builds), `trap 'exit 42' DEBUG`, `trap 'exit 42' CHLD`,
+`trap 'cd /tmp' SIGCHLD`, and `enable -n kill`. Also prove
 dynamic load or replacement and dynamic unload cannot target a required
 builtin. Cover combined options, multiple names, and mixed reserved/non-
 reserved targets, with complete post-expansion argument preflight before any
-partial mutation. Reserved-state queries, positive enablement, and every
-operation on non-reserved traps and builtins preserve selected-Bash behavior.
+partial mutation. Reserved-state queries, including numeric `SIGCHLD` queries,
+and positive enablement remain allowed, while trap changes using non-`CHLD`
+numeric signals and every operation on non-reserved traps and builtins preserve
+ordinary selected-Bash behavior.
+A nested Bash case proves that the child shell may install and own its own
+`CHLD` trap without weakening the selected-shell reservation.
+A nominal completion case must also prove that helper and cleanup child exits
+after `prompt_state` leave the reported and live cwd/exported environment
+aligned.
 Classify explicit builtin-lookup bypass as fatal same-identity interference
 rather than a supported operation.
 Cover minimum and maximum source,
@@ -241,6 +264,20 @@ payloads. Cover cancellation before the first private `execute` byte, while
 `start_released`, and after every later private-start phase; prove a committed
 start publishes `operation_started` and accepts `start_released` before
 ordinary cancellation and never abandons a loaded frame or adapter helper.
+Freeze the exact A2.5 ordinary-return frames and helper report: completion
+`prompt_state` with status, physical and logical cwd, exported environment,
+Awsh `input_close` with the active operation ID and exact direct-exec helper
+PID; Envoy `input_closed` with only the operation ID; and Awsh `completed` with
+status, physical cwd, and `RESOLVED_INSPECTIONS_JSON`. Freeze their
+ordinary-return ordering, the exact completion-helper cleanup exclusion,
+post-cleanup `wait`/empty-job-table proof, repeated adapter validation,
+completion `prompt_ready`, Readline termios transition, and final PTY drain.
+Prove functions, aliases, positional parameters, unexported variables, and
+non-reserved options remain live in Bash without entering a helper or private
+frame. Cover malformed and duplicate completion reports, stale or extra helper
+PIDs, early helper release, stale status/cwd/environment, and each PTY and split
+output/EOF boundary. Leave cancellation, finalization, gates, and crossed
+lifecycle cases to A2.6 and final private-schema closure to A2.7.
 
 **B2. Awsh boundary alignment**
 
@@ -266,7 +303,18 @@ post-`PS0` signal to the direct Awsh parent, and fail-closed start phases. Set
 the fixed four-byte big-endian length framing on every helper request and reply,
 require request half-close and reply EOF, reject ancillary data and trailing
 bytes, and use exact bounded stream read/write loops under the existing phase
-deadline.
+deadline. Implement the completion-side prompt hook and its `prompt_state`
+snapshot before `input_close`; direct-exec and identify the one completion
+helper; have Awsh send `input_close` with only the active operation ID and exact
+helper PID; validate adapter-reserved state before and after Envoy cleanup; use
+the reserved `wait` and `jobs` builtins to require an empty job table; and
+preserve returned status, cwd, exported environment, functions, aliases,
+positional parameters, unexported variables, and non-reserved options without
+serializing the Bash-only state. The completion hook must validate the four
+unset adapter-sensitive traps before the helper snapshot and after
+helper/cleanup child exits. Repeat `prompt_ready` and the selected-build
+Readline termios proof before Awsh sends `completed` with the final status, cwd,
+and resolved inspection plan.
 
 **B3. Envoy session foundation**
 
@@ -290,6 +338,21 @@ allow `rejected` to commit pre-start failure, and after `submit` finish public
 start and wait for `start_released` before taking the ordinary
 started-operation cancellation path. Queue a cancel first accepted between
 public start and `start_released` under the same rule.
+For ordinary return, sequence the `input_close` proposal/timer boundary with
+only the active operation ID and exact completion-helper PID; permanently close
+operation input, terminate live authored descendants and reap adopted children
+while preserving only the exact completion helper and descriptor-free Bash wait
+records, close both split writer keepalives, drain both split readers to
+independent EOF, remove the FIFOs, and send `input_closed`. Only then does Awsh
+release the blocked `prompt_state` helper; Bash clears its own wait records with
+reserved `wait`, proves the empty job table and adapter state, and sends
+`prompt_ready`; Awsh performs the terminal-control handoff and observes Bash
+re-enter Readline before Envoy accepts `completed` with the final status,
+physical cwd, and resolved inspection plan.
+Then prove
+the final census and perform the fresh PTY drain before publishing the unchanged
+public terminal result. A failure at any cleanup, helper, readiness, EOF, drain,
+or removal step is fatal and emits no terminal operation result.
 
 **B4. Operation boundaries and controls**
 
@@ -330,8 +393,10 @@ operation resize frontier across every split stdout/stderr source before
 `TIOCSWINSZ`. Use `output_through` as a covered prefix for each logical stream
 through acknowledgement. Cover a long-running operation whose resize arrives
 before any split-stream prefix is covered. Before any terminal operation
-result, observe EOF on the operation's split pipes, drain the pipe and PTY
-bytes, and emit their covering marks. Prove the sender-marked ranges preserve
+result, close both writer keepalives only after descendant cleanup, observe
+independent EOF on both operation split pipes, remove their paths only after
+both EOFs and reader closure, drain the pipe and PTY bytes, and emit their
+covering marks. Prove the sender-marked ranges preserve
 the complete exact logical stdout and stderr byte sequences under interleaved
 presentation; do not normalize, merge, or reorder those retained inputs to
 match presentation order.
