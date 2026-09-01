@@ -351,18 +351,22 @@ and preserves newline-sensitive stdout-then-stderr checks.
 operation uses it as well, and so does any presentation-timed operation. That
 choice controls evidence and publication; it does not control process lifetime.
 Protocol v1 has one lifetime rule for every operation. When the submitted Bash
-source returns to Awsh, Awsh reports its status, cwd, and resolved inspection
-plan, and the Linux Envoy terminates and reaps every remaining process created
-by that operation before reporting its terminal result. The Bash job table is
-not the authority because `disown`, `nohup`, `setsid`, and daemonization can
-hide descendants. The Envoy acts as a subreaper, retains pidfd identities, and
-repeats `/proc` census, termination, reap, EOF, and drain until only external
-Awsh and the persistent selected shell remain. Cancellation and planned
-finalization use the same cleanup. One five-second monotonic deadline covers
-the complete cleanup sequence and does not reset on progress. Inability to
-prove the operation process set
-empty before it expires fails the session without a terminal operation result;
-the controller then asks Reploy to terminate the environment.
+source returns to Awsh, the completion hook sends `prompt_state`, and Awsh
+proposes `input_close` with only the operation ID and exact completion-helper
+PID. The Linux Envoy uses that proposal as the cleanup-timer boundary,
+terminates and reaps every remaining process created by that operation, drains
+its output, and sends `input_closed`. Bash then clears its wait records, proves
+the empty job table and adapter/readiness conditions, and re-enters Readline;
+only then does Awsh send `completed` with the final status, physical cwd, and
+resolved inspection plan. The Bash job table is not the authority because
+`disown`, `nohup`, `setsid`, and daemonization can hide descendants. The Envoy
+acts as a subreaper, retains pidfd identities, and repeats `/proc` census,
+termination, reap, EOF, and drain until only external Awsh and the persistent
+selected shell remain. Cancellation and planned finalization use the same
+cleanup. One five-second monotonic deadline covers the complete cleanup
+sequence and does not reset on progress. Inability to prove the operation
+process set empty before it expires fails the session without a terminal
+operation result; the controller then asks Reploy to terminate the environment.
 This census is correctness evidence within the documented same-identity threat
 boundary, not security evidence.
 
@@ -376,14 +380,18 @@ contract.
 
 Filesystem expectations do not use terminal output or controller filesystem
 access. The controller includes bounded `file_exists` and `produces` inspection
-specifications in the operation request. After the command returns and before
-the terminal result is committed, `awsh` resolves their configured paths in the
-persistent Bash's resulting cwd and exported environment, then sends the
-resolved inspection plan to the Envoy over its private descriptor. The Envoy
-first performs the mandatory operation cleanup, proves that only external Awsh
-and the persistent selected shell remain, and drains output through the closing
-operation offset. It then
-performs bounded workload-side existence and file-type checks. For `produces`,
+specifications in the operation request. At ordinary return, the completion
+hook's `prompt_state` snapshot supplies the status, physical and logical cwd,
+and exported environment needed for later resolution. Awsh proposes
+`input_close` with only the operation ID and exact completion-helper PID; Envoy
+performs mandatory operation cleanup and sends `input_closed`; Bash then clears
+wait records, proves the empty job table and adapter/readiness conditions, and
+re-enters Readline. Only then does Awsh resolve configured paths and send
+`completed` with the final status, physical cwd, and resolved inspection plan.
+The Envoy then proves that external Awsh and the persistent selected shell are
+the only processes left in its controlled tree and drains output through the
+closing operation offset before it performs bounded workload-side existence and
+file-type checks. For `produces`,
 the selected file or directory must remain one stable source state across the
 complete inspection and deterministic SHA-256 calculation even though a
 permitted setup service may remain outside operation cleanup. Any observed
@@ -452,10 +460,16 @@ For Bash this includes the directory, environment, functions, aliases, and
 non-reserved options, except for the adapter-reserved parser, execution,
 tracing, trap, job-control-entry, and Readline controls fixed below.
 Operation-created background jobs are excluded: mandatory cleanup terminates
-and reaps their processes before the terminal result. Alias definitions and
-non-reserved options persist even though the outer
-recording-plan source grammar does not expand aliases or depend on a persistent
-parser mode.
+and reaps their processes, removes their job-table entries, and closes their
+output before the terminal result. The later `completed` report carries only
+the returned status, physical cwd, and resolved inspection plan. The validated
+logical cwd and exported environment used for path resolution remain in Bash
+and Awsh rather than entering that frame. Functions, aliases, positional
+parameters, unexported variables, and non-reserved options remain live in Bash
+rather than becoming wire state.
+Alias definitions and non-reserved options persist even though the outer
+recording-plan source grammar does not expand aliases or depend on a
+persistent parser mode.
 
 ```text
 OmegaFlow Envoy
@@ -508,8 +522,27 @@ retained: `rejected` may resolve it as pre-start failure, while `submit` commits
 the start and orders public `operation_started`, `started_ack`, and
 `start_released` before the ordinary started-operation cancellation path. A
 cancel accepted after public start but before `start_released` is queued the
-same way. Completion handoff and other
-cleanup races remain later design slices.
+same way. A2.5 fixes ordinary completion and persistent-state handoff. On
+return to the selected shell, the immutable completion-side Bash hook captures
+the source status before its own bookkeeping, validates the reserved adapter
+state, including unset `CHLD`, `DEBUG`, `ERR`, and `RETURN` traps, and starts
+one direct-exec `prompt_state` helper. Awsh binds its exact
+PID into `input_close`; Envoy permanently closes operation input and terminates
+every live authored descendant, reaps its adopted children, and preserves only
+that validated helper plus descriptor-free Bash wait records. It then closes
+both split FIFO keepalives, drains both readers to independent EOF, removes the
+FIFOs, and sends `input_closed`. The hook resumes, uses reserved `wait` to clear
+Bash-owned child records, proves the job table empty, revalidates the adapter,
+and repeats `prompt_ready`. Awsh observes the selected-build Readline termios
+transition before sending `completed` with the saved status, physical cwd, and
+resolved inspection plan. Envoy proves the final census, then performs the PTY
+drain and public completion barrier under the same deadline. Functions,
+aliases, positional parameters, unexported variables, and non-reserved options
+never leave Bash. A malformed report, unexpected helper, nonempty job table,
+readiness mismatch, or cleanup failure fails closed without a terminal result.
+The public completion fields remain unchanged. A2.6 retains cancellation,
+finalization, gates, resize, shell exit, and crossed lifecycle outcomes; A2.7
+retains final private-schema closure.
 
 For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
 under the mode-0700 session runtime after the one operation-start timer has
@@ -520,16 +553,22 @@ sentinel proves that both redirections succeeded before authored source may run
 and distinguishes redirection failure from source status 1. Bash stdin remains
 the PTY and adapter hooks remain outside the split streams. Awsh validates type,
 owner, mode and path before `submit`.
-A2.5 closes the keepalives after source return and cleanup, drains both readers
-through EOF, and removes the FIFOs. This cooperative path avoids dynamic file
-descriptor injection into persistent Bash without treating pathname secrecy as
-an isolation boundary.
+A2.5 closes both keepalives only after source return and mandatory descendant
+cleanup, then drains both nonblocking readers concurrently until stdout and
+stderr have each returned EOF. It closes the readers and removes both FIFO
+paths only after dual EOF. The later completion readiness transition precedes
+the fresh final PTY drain and public result. One stream's EOF, a reader close,
+or a removed path is not a substitute for the other stream. Failure to
+terminate, reap, close, reach either EOF, drain, or remove within the existing
+five-second cleanup bound fails closed. This
+cooperative path avoids dynamic file-descriptor injection into persistent Bash
+without treating pathname secrecy as an isolation boundary.
 
 The adapter reserves the `__OMEGAFLOW_AWSH_` namespace, empty prompt values,
 the idle `emacs-standard` keymap, two Readline control sequences, and the parser
-controls needed for deterministic framing. Recording-plan source containing
-the reserved namespace, and authored
-terminal input containing either sequence, is rejected. Top-level source is
+controls needed for deterministic framing. Recorded terminal operation source
+containing the reserved namespace, and authored terminal input containing
+either sequence, is rejected. Top-level source is
 parsed in a canonical adapter entry state: history and alias expansion,
 `errexit`, tracing, `extdebug`, `extglob`, POSIX mode, `noexec`, and `verbose`
 are disabled; `interactive_comments` and job control are enabled; and the
@@ -538,16 +577,16 @@ unset. Readonly `trap` and `enable` mediation functions canonicalize every
 post-expansion `signal_spec` using the selected Bash build's case-insensitive
 signal-name grammar and signal-name table, including aliases and decimal
 values, before deciding whether it denotes a reserved trap. Thus every spelling
-that canonicalizes to `SIGCHLD` is reserved;
-the selected build's numeric mapping is authoritative, and queries and
-non-`CHLD` numeric traps retain ordinary selected-Bash behavior. They reserve
-those traps and the builtins required by adapter status propagation and the
-post-`PS0` release signal. Source may change non-reserved controls within
-its own operation, including enabling `errexit`, but it may not mutate the
-reserved traps or disable, dynamically replace, or dynamically unload a
-required builtin, and other control changes do not persist across the next
-adapter boundary. Each mediation function preflights the complete expanded
-request; one reserved target rejects a mixed request before any target changes.
+that canonicalizes to `SIGCHLD` is reserved; the selected build's numeric
+mapping is authoritative, and queries and non-`CHLD` numeric traps retain
+ordinary selected-Bash behavior. They reserve those traps and the builtins
+required by adapter status propagation and the post-`PS0` release signal.
+Recorded terminal operation source may change non-reserved controls within its
+own operation, including enabling `errexit`, but it may not mutate the reserved
+traps or disable, dynamically replace, or dynamically unload a required
+builtin, and other control changes do not persist across the next adapter
+boundary. Each mediation function preflights the complete expanded request; one
+reserved target rejects a mixed request before any target changes.
 A prohibited ordinary mutation enters fail-stop before changing reserved state;
 explicit builtin-lookup bypass is deliberate same-identity interference outside
 the cooperative source contract. The `CHLD` reservation applies only to the
@@ -556,6 +595,13 @@ own ordinary `CHLD` trap behavior. Ordinary non-reserved shell state remains
 persistent, including alias definitions, but source cannot rely on persistent
 aliases or parser modes for its outer grammar. A nested Bash remains available
 when a planned operation deliberately needs another parser contract.
+
+The `CHLD` reservation prevents a recorded terminal operation from installing a
+`SIGCHLD` handler that could run when the completion helper or a cleanup child
+exits, after the completion-side state snapshot, and mutate the persistent cwd
+or exported environment before `completed`. It applies only to the selected
+persistent Bash; a nested shell started by the operation may own its own
+child-exit trap.
 
 If an operation starts Fish, Zsh, Python, a TUI, or another interactive
 program, that program is one opaque child operation. The terminal remains fully
@@ -602,8 +648,9 @@ helper's canonical frame directly into the reserved Readline line buffer.
 Only the fixed `0x18 0x02` submit trigger crosses the PTY master. The companion
 `0x18 0x01` loader binding, the submit macro, the `__OMEGAFLOW_AWSH_`
 namespace, fixed prompts and `PS0`, canonical parser state, positive helper
-markers, fail-stop mode, split-entry sentinel, adapter-sensitive traps, and
-adapter-required builtin state are cooperative adapter reservations. They
+markers, fail-stop mode, split-entry sentinel, the unset `CHLD`, `DEBUG`, `ERR`,
+and `RETURN` traps, and adapter-required builtin state are cooperative adapter
+reservations. They
 prevent accidental collision, source display, and ordinary source-state damage
 to a later adapter boundary, not deliberate same-identity tampering. Any
 missing reservation or unexpected helper phase blocks the affected Bash
@@ -762,8 +809,17 @@ sequenceDiagram
     A->>B: dispatch operation 17
     B-->>W: visible PTY output
     W-->>C: ordered terminal bytes
-    B-->>A: operation returns
-    A-->>W: status, cwd, and lifecycle result
+    B-->>A: prompt_state snapshot
+    A-->>W: input_close (operation ID, helper PID)
+    W->>W: cleanup descendants, drain split streams
+    W-->>A: input_closed
+    A->>B: release and accept blocked prompt_state helper
+    B->>B: clear wait records, prove empty jobs and adapter state
+    B-->>A: prompt_ready
+    A->>B: perform terminal-control handoff, observe Bash enter Readline
+    A-->>W: completed (status, cwd, resolved inspections)
+    W->>W: final process census, PTY drain and output-through barrier
+    W->>W: bounded workload inspection
     W-->>C: operation 17 completed
 
     C->>W: graceful shutdown
