@@ -867,8 +867,9 @@ Any lifecycle request accepted after that selection is a crossed request: Envoy
 discards it, and the selected timeout result resolves the controller's request.
 Envoy still withholds the public timeout result until descendant cleanup and
 output drain succeed; failure of that mandatory boundary takes the fatal
-no-terminal-result path instead. The lifecycle-race slice freezes the exact
-private messages that serialize this semantic commit point.
+no-terminal-result path instead. The private protocol below fixes that commit
+point: selection is Envoy-internal, no private teardown request exists, and
+Awsh's `shell_exit` is the required reaping evidence.
 
 Two crossing families are accepted in states that have no transition for them,
 because TCP ordering is directional and the controller can act on a state the
@@ -1145,16 +1146,20 @@ reports `gate_interrupt`; after Envoy commits
 `operation_gate_interrupted`, it sends `gate_interrupt_ack` and the operation
 continues running. This event is a terminal-input outcome, not lifecycle
 cancellation, and carries no cancellation reason or terminal status. The
-lifecycle-race slice specifies how it is serialized with crossed `continue`,
-`cancel`, and `finalize` requests.
+private protocol below fixes how it is serialized with crossed `continue`,
+`cancel`, and `finalize` requests: the interruption wins a crossed `continue`,
+and a forwarded lifecycle request closes a blocked gate without proposing an
+interruption.
 
 If `operation_gate_interrupted` arrives before the controller sends the
 matching `continue` for a planned browser handoff, the controller stops or
 discards any in-flight endpoint probe or browser action, schedules no further
 browser action from that handoff, and fails the handoff. If the operation is
 still active, it sends the ordinary typed `cancel` request. The interruption
-event remains a terminal-input outcome rather than lifecycle cancellation; the
-lifecycle-race slice defines how a crossed `continue` or `cancel` is resolved.
+event remains a terminal-input outcome rather than lifecycle cancellation; a
+crossed `continue` is resolved by that event, and a crossed `cancel` proceeds
+as an ordinary started-operation cancellation, as the private protocol fixes
+below.
 
 A planned browser handoff for a still-running operation requires one such
 operation-scoped gate named by the compiled plan. The trusted source invokes it
@@ -1442,9 +1447,9 @@ terminated by NUL. Every frame starts with `awsh-v1` and a message type; NUL
 cannot appear in source or another value. A2.3 froze the launch descriptor
 handoff, startup helper handshake, and exact `ready` arity. A2.4 froze source
 submission and every private field through the operation-start commit. A2.5
-freezes the ordinary-return completion and persistent-state handoff below;
-A2.6 owns lifecycle controls and crossed outcomes, and A2.7 closes the
-remaining private schemas before implementation begins.
+froze the ordinary-return completion and persistent-state handoff below. A2.6
+freezes the lifecycle controls and crossed outcomes that follow it; A2.7 closes
+the remaining private schemas before implementation begins.
 
 | Envoy request | Purpose |
 | --- | --- |
@@ -1730,14 +1735,26 @@ drain, or output advance.
 
 A2.5 owns natural return to the selected shell's reusable adapter boundary.
 Cancellation, planned finalization, action gates, resize, shell exit, and
-crossed lifecycle outcomes remain A2.6 work; they do not add fields to the
-ordinary-return frames below.
+crossed lifecycle outcomes are fixed by A2.6 in the following section; they add
+no field to the ordinary-return frames below.
 
 The completion-side Bash prompt hook first saves the exact source status
-before its own bookkeeping and verifies that the child-exit trap is unset
-before capturing persistent state. It then captures the same shell-neutral
-state as the startup hook: history expansion, source-visible editing mode,
-physical and validated logical cwd, and the exact exported environment.
+before its own bookkeeping, then records the current `INT` trap disposition
+with the reserved `builtin trap -p INT` and ignores `SIGINT` with
+`builtin trap '' INT` for the remainder of the hook, and verifies that the
+child-exit trap is unset before capturing persistent state. A2.6 adds that
+`INT` bracket: a lifecycle signal or terminal Ctrl-C that reaches the selected
+shell's process group during the completion handshake then neither aborts the
+hook nor kills its direct-exec helpers, which inherit the ignored disposition
+through `exec`. The hook restores the recorded disposition, or the default
+when none was recorded, as its last action before Readline entry, so a
+source-installed `INT` trap remains ordinary preserved Bash state. A `SIGINT`
+that arrives before that bracket is armed interrupts Bash at top level, and
+the hook then runs to completion reporting status 130 or the source-trapped
+outcome; the interrupted attempt is not a second completion. It then captures
+the same shell-neutral state as the startup hook: history expansion,
+source-visible editing mode, physical and validated logical cwd, and the exact
+exported environment.
 Functions, aliases, positional parameters, unexported variables, and
 non-reserved shell options remain live only in persistent Bash; they are
 neither serialized nor replayed through Awsh or Envoy. The hook then restores
@@ -1846,8 +1863,8 @@ the existing worker stop/reap timeout.
 or readiness status. A malformed or duplicate report, stale PID, early helper
 release, nonempty job table, readiness mismatch, or private-frame failure takes
 fatal teardown rather than making a partially cleaned shell reusable. The
-ordinary handshake adds no public field and settles no A2.6 crossed-outcome
-rule.
+ordinary handshake adds no public field; the crossed-outcome rules are fixed
+in the lifecycle-control section below.
 
 Private EOF is never a substitute for a result. EOF in a frame is a protocol
 failure. EOF between frames is orderly only when it immediately follows one
@@ -1908,19 +1925,338 @@ current phase and emits one `disposition`; Envoy retains the public lifecycle
 state and timeout. Awsh performs shell-side signaling or gate release but does
 not decide the public terminal result. Planned finalization invents no natural
 status. The exact winning rules for crossed completion, shell exit, gate, and
-lifecycle messages belong to the lifecycle-race slice.
+lifecycle messages are fixed under Lifecycle controls and crossed outcomes
+below.
 
 Resize remains publicly owned by Envoy. The private prepare/apply exchange
 exists only to serialize Envoy's PTY-master ioctl with shell-side terminal-state
 work; `resize_applied` is not published until Awsh reports `resized`. The exact
-termios transaction belongs to the Bash-launch slice.
+lane transaction is fixed under Lifecycle controls and crossed outcomes below;
+the lease it excludes is the A2.3 terminal-control lease.
 
 Every private frame is bounded and state-checked. Partial fields, unsupported
 types, invalid UTF-8, invalid arity, wrong identifiers, duplicate terminal
 results, and EOF in a frame fail the session. Awsh failure never becomes a
 shell status, successful operation result, or Reploy lifecycle result.
 
+### Lifecycle controls and crossed outcomes
+
+A2.6 owns every private lifecycle control after `start_released`: action
+gates, cancellation and planned finalization, resize, controller-requested
+shutdown, selected-shell exit, and the exact winning rule wherever those
+messages cross one another, an ordinary-return frame, or Envoy's timeout
+selection. It adds no public field, no private timer, and no field to the A2.4
+start or A2.5 ordinary-return frames. Envoy retains every public state, reason,
+and deadline; Awsh performs shell-side signalling, gate release, the terminal
+lane, and shell reaping, and never decides a public terminal result.
+
+#### Direction-grouped lifecycle frame schemas
+
+The exact lifecycle frames have these fields and this order; the grouping is by
+direction, not wire order.
+
+```text
+# Envoy -> Awsh
+awsh-v1, continue, OPERATION_ID, GATE_ID
+awsh-v1, gate_interrupt_ack, OPERATION_ID, GATE_ID
+awsh-v1, cancel, OPERATION_ID
+awsh-v1, finalize, OPERATION_ID
+awsh-v1, resize_prepare, COLUMNS, ROWS
+awsh-v1, resize_apply, COLUMNS, ROWS
+awsh-v1, shutdown
+
+# Awsh -> Envoy
+awsh-v1, gate_ready, OPERATION_ID, GATE_ID
+awsh-v1, gate_continued, OPERATION_ID, GATE_ID
+awsh-v1, gate_interrupt, OPERATION_ID, GATE_ID
+awsh-v1, disposition, OPERATION_ID, REQUEST, PHASE, ACTION
+awsh-v1, resize_ready, COLUMNS, ROWS
+awsh-v1, resized, COLUMNS, ROWS
+awsh-v1, shell_exit, OPERATION_ID_OR_EMPTY, STATUS, CWD
+awsh-v1, closed, STATUS, CWD
+awsh-v1, protocol_error, CODE, MESSAGE
+
+# helper -> Awsh
+awsh-helper-v1, gate, GATE_ID
+```
+
+`OPERATION_ID` and `GATE_ID` are identifiers under the global limits.
+`COLUMNS` and `ROWS` are canonical decimal terminal dimensions, `STATUS` is
+canonical decimal 0 through 255, and `CWD` uses the cwd bound. `REQUEST` is
+`cancel` or `finalize`; `PHASE` is `running`, `gated`, or `returned`; `ACTION`
+is `signalled` or `none`. `CODE` uses the diagnostic-code shape and `MESSAGE`
+the diagnostic-message bound. The private `cancel`, `finalize`, and `shutdown`
+requests carry no reason: Envoy retains the public reason, the public state
+machine, and every timer. The `gate` helper message has the existing sole
+successful reply `accepted`. Every frame remains bounded and state-checked
+under the rules already fixed for private frames.
+
+#### Action gates
+
+The one source-callable helper mode has the fixed manifested form:
+
+```text
+/omegaflow-runtime/bin/awsh gate GATE_ID
+```
+
+It accepts exactly one argument, opens the fixed helper socket at its literal
+path, sends one `gate` message under the same length-prefixed transport as the
+`bash-helper` requests, blocks for one reply, writes nothing to standard output
+or error, and exits zero only on `accepted`. Any other outcome exits nonzero.
+Recorded terminal operation source invokes it by that absolute path because
+`PATH` is application-delegated.
+
+Awsh accepts `gate` only while the started operation is in phase `running`
+with no gate blocked and no other helper phase live, when `GATE_ID` is
+identifier-shaped and no earlier `gate_ready` in this operation used it, and
+when the `SO_PEERCRED` peer is a live process in Awsh's controlling session
+other than Awsh and the selected shell whose executable is the manifested Awsh.
+Awsh records the identifier as used, writes `gate_ready`, and then watches the
+blocked peer. Envoy establishes the output barrier and emits public
+`operation_ready`. A request that fails any check is same-identity
+interference or an unsupported operation: Awsh closes the connection without
+a reply and takes the fatal `protocol_error` path with code `gate-request`.
+
+Envoy accepts public `continue`, waits under the terminal input barrier wait
+until its terminal read count reaches the request's watermark, and only then
+writes private `continue`. Awsh requires it to name the currently blocked
+gate, writes `accepted` to the helper, closes that connection, and writes
+`gate_continued`; Envoy then emits `operation_continued`. A watermark that is
+not reached takes the fatal `input-barrier-timeout` path already defined and
+writes no private frame: the helper stays blocked until Envoy's teardown ends
+the controlled tree.
+
+If the blocked peer closes before Awsh has accepted a `continue` for it, Awsh
+writes `gate_interrupt` and keeps the operation in phase `gated` with the
+interruption proposed until it accepts `gate_interrupt_ack`, after which the
+phase is `running`. Envoy commits public `operation_gate_interrupted` with its
+barrier and writes `gate_interrupt_ack` before any later private request for
+that operation. When Envoy has already written `continue` for that gate before
+it reads `gate_interrupt`, the interruption wins: Awsh discards the crossed
+`continue`, because there is nothing left to release, and writes no
+`gate_continued`; Envoy emits `operation_gate_interrupted`, writes the
+acknowledgement, and treats the controller's `continue` as resolved by that
+event through the existing `Continuing --> Running` edge. If Envoy has
+already accepted a `cancel` or `finalize` for the operation when it reads
+`gate_interrupt`, the public state machine has no gate transition left for a
+controller in `Cancelling` or `Finalizing`, so Envoy emits no
+`operation_gate_interrupted`, still writes `gate_interrupt_ack`, and lets the
+lifecycle result resolve the gate. A `continue` naming any other gate, or
+arriving after the acknowledgement, is a protocol failure.
+
+#### Cancellation and planned finalization
+
+Envoy forwards at most one lifecycle request per operation: the first `cancel`
+or `finalize` it accepts for a started operation, written only after it has
+accepted `start_released`, including a cancel queued across the start
+commit. Every later lifecycle request for that operation is Envoy-local under
+the public rules and is never forwarded, so Awsh never delivers a second
+signal. Envoy starts the cancellation grace period when it writes the
+forwarded request.
+
+Awsh classifies the selected backend's phase at the moment it reads the
+request and writes exactly one `disposition` before it accepts another helper
+request or writes any later result:
+
+- `running`: the operation is started and Awsh has not accepted the
+  completion-side `prompt_state` connection. Awsh takes one terminal-control
+  lease, reads the foreground process group with `tcgetpgrp`, delivers
+  `SIGINT` to that whole group with `kill`, closes the lease, and reports
+  `signalled`. The foreground group may be the selected shell's own group when
+  Bash is executing a builtin or compound command directly; the signal then
+  interrupts that command exactly as terminal Ctrl-C would, and a
+  source-installed `INT` trap runs as ordinary Bash behavior.
+- `gated`: a gate helper is blocked. Awsh first closes that helper connection
+  without a reply, so the helper exits nonzero, proposes no interruption for
+  that closure, and leaves the gate identifier consumed; it then performs the
+  same signal delivery and reports `signalled`. The phase is also `gated`
+  when an interruption is proposed and not yet acknowledged: the helper is
+  already gone, so Awsh closes nothing, delivers the signal, reports
+  `signalled`, and still waits for the acknowledgement.
+- `returned`: Awsh has accepted the completion-side `prompt_state` connection
+  for the named operation, whether or not it has already written `completed`.
+  There is nothing to interrupt; Awsh reports `none` and the ordinary return
+  continues unchanged. This phase also absorbs the crossing in which Envoy
+  forwards a request after Awsh has written `completed` but before Envoy has
+  read it: the control and result pipes are independent, so Envoy cannot
+  prevent that write, and the disposition it later reads for an operation
+  whose terminal result it has already published is discarded as crossed.
+
+A foreground job may end between `tcgetpgrp` and `kill`, and the terminal keeps
+naming its now-empty group until the selected shell runs `tcsetpgrp` to reclaim
+it, so one re-read can name the same vanished group again. `kill` reporting
+that the group no longer exists is therefore an expected completion race, not a
+failure, and it is not resolved by a single retry. Awsh instead repeats the
+lease, `tcgetpgrp`, and `kill` sequence until one of exactly three things
+happens, all bounded by the grace period Envoy is already running for this
+request. If the terminal names a live process group, Awsh signals it and
+reports `signalled`; that group is the selected shell's own once Bash has
+reclaimed the terminal, and the signal then reaches Bash at top level or inside
+the `INT`-bracketed completion hook exactly as the `returned` rules above
+describe. If Awsh instead accepts the completion-side `prompt_state` connection
+first, the operation has already returned: Awsh stops retrying, delivers no
+signal, and reports the `returned` phase with `none`. And if the selected shell
+is reaped first, which is what Envoy's timeout teardown below causes, Awsh
+stops retrying, delivers no further signal, writes no `disposition`, and writes
+the terminal `shell_exit` that teardown requires as its reaping evidence; a
+shell that has been killed can neither accept a signal nor open a completion
+connection, so reaping is the condition that makes the retry terminate in that
+case. Awsh never reports `signalled` for a signal it did not deliver, and it
+starts no timer of its own; if Envoy's grace period expires while Awsh is still
+retrying, Envoy selects timeout teardown and discards any late `disposition` as
+a crossed result under the rules below. A failure to open the lease, read the
+foreground group, or deliver the signal for any reason other than a vanished
+group is fatal with `protocol_error` code `lifecycle-signal`. A lifecycle
+request that names an identifier Awsh never reserved, or a reserved operation
+other than the most recent one, is a protocol failure with code
+`request-state`. `finalize` and `cancel` are identical on the Awsh side; the
+request name is carried only so the disposition can be matched.
+
+After a `signalled` disposition the selected shell returns through the A2.5
+ordinary-return path with the interrupted status, and Envoy maps the resulting
+`completed` to `operation_cancelled`, `operation_finalized`, or, for a request
+that crossed its own result, the ordinary terminal result, under the public
+rules. Envoy skips workload inspection for a cancellation and runs it for a
+finalization. The `INT` bracket in the completion hook is what keeps a
+lifecycle signal or terminal Ctrl-C that lands during the handshake from
+aborting the hook or killing a direct-exec helper.
+
+Deadline expiry is Envoy-internal. When the grace period ends without the
+selected shell returning to its backend boundary, Envoy first selects
+`cancel-timeout` or `finalize-timeout`, then begins mandatory cleanup under the
+operation-cleanup deadline and terminates the selected-shell tree by sending
+`SIGKILL` to the selected shell's process group and to every descendant in its
+census. No private teardown request exists. Awsh reaps the shell, drops any
+blocked helper without a reply, stops any vanished-group retry still in
+progress, and writes `shell_exit` carrying the real parent-observed status and
+whichever operation identifier its ordinary identifier rule below selects. The
+status is ordinarily 137 from the `SIGKILL`, but a shell that had already
+exited before the signal, whose `shell_exit` Envoy had not yet accepted at
+selection, reports its own status. The identifier is the reserved one when Awsh
+had not written `completed`, and empty when it had, which is exactly the
+crossed-`completed` case above. Envoy accepts either identifier form and any
+valid status in that frame as the required reaping evidence, never publishes
+it, keeps the already-selected timeout outcome authoritative, and withholds the
+public timeout result until census, reap, and drain succeed. Any other result
+Envoy reads after that selection — a late `input_close`, `completed`,
+`gate_ready`, `gate_interrupt`, or `disposition` — is a crossed result: Envoy
+discards it and writes no `input_closed` or acknowledgement for it. The one
+exception is `protocol_error`, which is never discarded. It is Awsh's own fatal
+terminal result, it replaces rather than precedes the `shell_exit` above
+because Awsh exits nonzero after writing it, and waiting for reaping evidence
+that cannot arrive would convert a specific private failure into a generic
+fatal EOF at the deadline. Envoy therefore processes it immediately under the
+fatal `protocol_error` rules below, which supersede the selected timeout
+outcome and emit no terminal operation result.
+
+#### Resize lane
+
+After it closes the `output_through` barrier for an accepted public `resize`,
+Envoy writes `resize_prepare` with the requested dimensions. Only one exchange
+may be outstanding. If Awsh currently holds a terminal-control lease for a
+readiness handoff or lifecycle signal, it completes that one operation and
+closes the lease first; it then writes `resize_ready` with the same dimensions
+and admits no lease until `resize_apply`. A helper request whose phase needs
+the lease waits behind the lane without a reply. Envoy applies `TIOCSWINSZ`
+through its retained PTY master, records the `elapsed_us` of that ioctl, and
+writes `resize_apply`; Awsh writes `resized` and resumes admitting leases;
+Envoy then emits `resize_applied`. The four frames of one exchange carry
+identical dimensions, and any mismatch is a protocol failure. A failed
+`TIOCSWINSZ` takes the fatal `resize-failed` path already defined and writes no
+`resize_apply`. No private frame is bounded by a new timer: an idle lane
+answers immediately, and a lane waiting on a lease holder is bounded by the
+launch, operation-cleanup, or cancellation deadline that already governs that
+holder.
+
+#### Shutdown and selected-shell exit
+
+Awsh accepts `shutdown` only at the idle adapter boundary: no operation is
+reserved, no helper phase is live, and no lease or lane is held. Anything else
+is a protocol failure with code `request-state`. Awsh delivers `SIGHUP` to the
+selected shell process, reaps it, writes `closed` with the real reaped status
+and the last accepted physical cwd, closes its private descriptors, and exits
+with status zero. Interactive Bash runs any `EXIT` trap and then terminates by
+the signal, so the reaped status is 129; an `EXIT` trap cannot substitute an
+exit status. A
+persistent shell whose recorded source ignored or trapped `HUP` without exiting
+keeps Awsh waiting; the already-running Envoy final-drain deadline then
+terminates the controlled tree and the session takes that fatal drain result
+rather than a clean `closed`. Recording plans must not leave persistent Bash
+ignoring `HUP`.
+
+Awsh, as the selected shell's direct parent, reaps every shell exit. Its
+`shell_exit` carries the reserved operation identifier when Awsh has accepted
+`submit` for an operation and has not yet written `completed`; otherwise the
+field is empty, including after `completed` and before the next `execute`.
+`STATUS` is the reaped status with a signal `N` mapped to `128 + N`, and `CWD`
+is the last accepted physical cwd from the startup or the most recent
+completion `prompt_ready`. Awsh drops any blocked helper or gate peer without a
+reply, writes no `gate_interrupt`, `disposition`, `resize_ready`, or `resized`
+for the ended shell, closes its private descriptors, and exits with status
+zero. A `gate_interrupt` already written before the reap is crossed: Envoy
+discards it on reading `shell_exit` and writes no acknowledgement.
+
+Envoy maps `shell_exit` with an active identifier under the public shell-end
+rules: `operation_completed` or `operation_failed` carrying `shell_ended`, or
+reaping evidence for an already-selected timeout. An empty identifier after
+Envoy has accepted `completed` but before it publishes that result means the
+shell ended during the final census or drain: Envoy proves the final census
+with the shell, its descendants, and the exited Awsh absent, performs the
+drain, runs any declared inspection under the controller-owned operation
+deadline, publishes the pending result with `shell_ended: true`, and enters the
+`shell_ended` drain. That reap, census, and drain stay under the
+operation-cleanup deadline already running for this operation. The
+terminal-reap mapping's idle case does not apply: it assigns an
+empty-identifier exit to the final-drain deadline only when the session is
+already idle, and here the final drain does not begin until the pending result
+is published. An empty identifier while the session is idle takes the idle
+shell-end drain already defined.
+
+Shutdown and shell exit cross on the request order Awsh observes. When Awsh
+reads `shutdown` before it has reaped the shell, the result is `closed`, even if
+the shell was already exiting, and the requested public reason is
+authoritative. When Awsh reaps the shell before it reads `shutdown`, the result
+is `shell_exit` with an empty identifier, Awsh reads no later request, and the
+Envoy-initiated `shell_ended` drain is authoritative for a controller already
+in `ShutdownSent`.
+
+Envoy reads the result pipe before it classifies a failed control write. A
+write that fails after Awsh has written a complete terminal `shell_exit`,
+`closed`, or `protocol_error` that Envoy then accepts is a crossed write and is
+orderly; every other control-write failure remains fatal under the individual
+control-write deadline. After accepting any terminal result Envoy closes its
+control writer and writes no later private request.
+
+`protocol_error` is Awsh's fatal terminal result when it detects a private
+failure and the result pipe remains usable. Its codes are `shell-launch`
+before readiness, `frame` for a malformed or out-of-arity request,
+`request-state` for a request that is invalid in the current private phase,
+`gate-request` for a rejected gate request, and `lifecycle-signal` for a
+failed signal delivery. After writing it Awsh terminates and reaps the
+selected-shell tree it can reach, closes its descriptors, and exits nonzero.
+Envoy treats it as a fatal session failure with no terminal operation result,
+completes cleanup of the remaining controlled tree, and emits a best-effort
+fatal diagnostic carrying the same code.
+
+#### Crossed-outcome summary
+
+| Crossing | Winner | Envoy action |
+| --- | --- | --- |
+| `continue` written, then `gate_interrupt` read | interruption | emit `operation_gate_interrupted`, write `gate_interrupt_ack`, resolve the crossed `continue` |
+| lifecycle request forwarded while a gate is blocked | lifecycle request | accept `disposition` `gated`/`signalled`; the closed helper proposes nothing |
+| `gate_interrupt` read after a lifecycle request was accepted | lifecycle request | write `gate_interrupt_ack`; emit no public gate event; the lifecycle result resolves the gate |
+| lifecycle request read after the completion `prompt_state` connection | ordinary return | accept `disposition` `returned`/`none`; map the result under the public rules |
+| lifecycle request read by Awsh after it wrote `completed` | published result | accept `disposition` `returned`/`none` and discard it as crossed |
+| Awsh result read after timeout selection | selection | discard the crossed result; await `shell_exit` as reaping evidence |
+| `shell_exit` with an active identifier before selection | shell end | `operation_completed` or `operation_failed` with `shell_ended`, then drain |
+| `shell_exit` with an empty identifier after `completed` | pending result | publish it with `shell_ended`, then drain |
+| `shutdown` read by Awsh before the reap | shutdown | accept `closed`; the requested reason stands |
+| shell reaped before `shutdown` is read | shell end | accept `shell_exit`; the `shell_ended` drain resolves the crossed shutdown |
+| shell exit inside a resize exchange | shell end | no resize result follows; `resize_applied` precedes `draining` only when `resized` was accepted |
+| control write fails after a terminal result | terminal result | orderly; close the control writer |
+
 ### Launch helper transport and readiness
+
 
 Envoy exclusively creates a fresh mode-0700 session runtime directory at the
 fixed path `/run/omegaflow/session` without following symlinks and passes that
@@ -1944,6 +2280,9 @@ Every socket helper invocation is the same fixed executable form:
 ```
 
 `REQUEST` is `prompt-state`, `prompt-ready`, `source`, or `start-prepared`.
+The source-callable gate helper is the separate `awsh gate` mode fixed under
+Lifecycle controls and crossed outcomes; it sends the `gate` helper message
+over this same transport and is not a `bash-helper` request name.
 `prompt-state` and the completion-phase `prompt-ready` have scalar arguments:
 canonical `STATUS`, `HISTEXPAND`, and `EDITING_MODE`. Startup `prompt-ready`,
 `source`, and `start-prepared` have none. The helper obtains physical cwd,
@@ -1982,7 +2321,7 @@ prefix, zero or oversized length, short payload, trailing byte, extra payload,
 invalid UTF-8, or invalid arity fails the session. Reads and writes loop over
 ordinary stream fragmentation under the applicable launch, operation-start,
 or operation-cleanup deadline; no helper payload requires a protocol-sized
-kernel socket buffer. The complete helper message set through A2.5 is:
+kernel socket buffer. The complete helper message set through A2.6 is:
 
 ```text
 # helper -> Awsh
@@ -1991,6 +2330,7 @@ awsh-helper-v1, prompt_ready
 awsh-helper-v1, prompt_ready, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
 awsh-helper-v1, source
 awsh-helper-v1, start_prepared
+awsh-helper-v1, gate, GATE_ID
 
 # Awsh -> helper
 awsh-helper-v1, accepted
@@ -2235,9 +2575,11 @@ lease** rather than a retained slave descriptor. Awsh opens `/dev/tty` with
 `O_RDWR|O_NOCTTY|O_CLOEXEC`, verifies that it names Awsh's controlling session
 and the expected selected-shell foreground group, performs only the operation
 authorized by the current private state, and closes it on every outcome before
-another helper or terminal transaction is admitted. The source, completion,
-and lifecycle-race slices define which private phases may acquire this lease;
-ordinary descendants never inherit it.
+another helper or terminal transaction is admitted. Exactly three private
+phases may acquire it: the startup readiness handoff, the completion readiness
+handoff, and lifecycle signal delivery. The resize lane fixed under Lifecycle
+controls and crossed outcomes admits none of them between `resize_ready` and
+`resize_apply`; ordinary descendants never inherit the lease.
 
 Any failure before private `ready` stops accepting helpers, terminates and reaps
 any Bash child or process group already created, writes a bounded
@@ -2371,8 +2713,8 @@ controller sends the matching `continue`. `operation_gate_interrupted` makes
 the controller stop or discard that work, schedule no further action from the
 handoff, fail the handoff, and send ordinary typed `cancel` if the operation is
 still active. The event remains a terminal-input outcome rather than lifecycle
-cancellation. The lifecycle-race fixtures cover the crossed-`continue` winner
-once that private schema is frozen.
+cancellation. The lifecycle-control cases below cover the crossed-`continue`
+winner.
 
 The corpus also covers pre-deployment rejection of every exact launch-control
 application environment name, including application-provided `HISTFILE` and
@@ -2511,6 +2853,52 @@ same-identity interference, never as a supported successful operation.
 A nominal completion case must also prove that helper and cleanup child exits
 after `prompt_state` leave the final state-bearing `prompt_ready`, reported, and
 live cwd/exported environment aligned.
+
+Lifecycle-control cases freeze the exact A2.6 frames in `awsh-frames.json`:
+every request and result above at minimum and maximum field sizes, the `gate`
+helper message, and each `protocol_error` code. Gate cases prove the fixed
+`awsh gate GATE_ID` invocation, `gate_ready` only for a running started
+operation with an unused identifier and a session-local manifested peer,
+`accepted` and `gate_continued` only after the watermark is reached, a peer
+closure producing exactly one `gate_interrupt` followed by
+`gate_interrupt_ack`, and the crossed `continue` discarded without
+`gate_continued` while `operation_gate_interrupted` resolves it. They reject a
+reused, malformed, idle, unstarted, second-blocked, out-of-session, and
+wrong-executable gate request with `gate-request`. Disposition cases cover
+`cancel` and `finalize` in the `running` phase against an external foreground
+job, a Bash builtin loop, and a source-installed `INT` trap; the `gated` phase
+closing a foreground and a backgrounded helper without an interruption; and
+the `returned` phase from the `prompt_state` connection through `completed`
+with `none` and no signal. They prove the completion hook's `INT` bracket
+keeps both a lifecycle signal and terminal Ctrl-C from aborting the hook or
+killing the direct-exec helpers, restores a source-installed `INT` trap and
+the default disposition, and that an interruption before the bracket yields
+one completion reporting status 130. Timeout cases cover `input_close`,
+`completed`, `gate_ready`, `gate_interrupt`, and `disposition` read after
+Envoy's selection and discarded, a `protocol_error` read after selection
+processed immediately instead of discarded, `shell_exit` with either identifier
+form and
+any valid reaped status, ordinarily 137, as the sole accepted post-selection
+result, including a shell that exited just before selection and one whose
+crossed `completed` makes the identifier empty, and a blocked helper dropped
+without a reply. Lifecycle cases also cover a `cancel` or `finalize` forwarded
+after Awsh wrote `completed`, answered `returned`/`none` and discarded by
+Envoy, and a foreground job ending between `tcgetpgrp` and `kill` where the
+terminal keeps naming the dead group across at least one retry, resolved either
+by signalling the reclaimed group or by reporting `returned`/`none` when the
+operation returns first, and never by a `signalled` report without a delivered
+signal. Resize-lane cases cover an
+idle lane, a lane waiting behind the startup and completion handoffs and a
+lifecycle signal, a helper phase waiting behind the lane, dimension mismatch at
+each of the four frames, a second outstanding exchange, and shell exit at each
+phase with no resize result. Shutdown cases cover the reaped `HUP` status 129
+with and without an `EXIT` trap, a persistent shell ignoring `HUP` reaching the
+fatal final-drain result, and both crossing orders against shell exit.
+Shell-exit cases cover the active, empty, and post-`completed` identifier
+forms, the dropped helper and gate peers, a crossed `gate_interrupt` discarded
+on `shell_exit`, and a control write that fails after each terminal result
+being orderly. Every `protocol_error` code is proved fatal with no terminal
+operation result.
 
 The corpus covers resize placement before, between, and after authored events,
 including multiple resizes at one frontier and zero-duration spans. A delayed
