@@ -493,16 +493,33 @@ published cast retain their exact bytes and are never normalized.
 Bash jobs are insufficient evidence because `disown`, `nohup`, `setsid`, and
 daemonization can hide descendants. Protocol v1 therefore has one process
 lifetime rule for every operation: when the submitted Bash source returns to
-Awsh, the Envoy terminates and reaps every remaining operation-created process,
-then reaches EOF and drains its output before reporting the terminal result.
-The Linux Envoy acts as a subreaper, tracks identities by pidfd, and repeats a
-`/proc` census through cleanup; inability to prove that external Awsh and the
-persistent selected shell are the only processes left in its controlled tree
-before the protocol's one five-second monotonic cleanup deadline expires fails
-the session without a terminal operation result, after which the controller
-asks Reploy to terminate the environment. Cancellation and planned finalization
-use the same cleanup and deadline. This supervision is correctness evidence
-within the same-identity threat boundary, not security evidence.
+Awsh, the completion hook sends its pre-cleanup `prompt_state`, and Awsh
+proposes `input_close` with only the operation ID and exact completion-helper
+PID. The Envoy uses that proposal as the cleanup-timer boundary, terminates and
+reaps every remaining operation-created process, reaches EOF, drains its
+output, and sends `input_closed` before any final completion report. The hook
+then uses reserved `wait` to clear Bash-owned child records, proves the job
+table empty, revalidates the adapter, and sends `prompt_ready` with the saved
+source status and the final recapture of history expansion, editing mode,
+physical/logical cwd, and exported environment. Awsh validates that final state
+without altering non-reserved signal traps, and uses it to resolve paths before
+actual Readline entry and `completed` with the saved source status, physical
+cwd, and resolved inspection plan.
+Other persistent Bash state remains live rather than entering a protocol frame.
+The public `operation_completed` schema remains unchanged, and this private
+handoff is not a new Reploy lifecycle field. The Linux Envoy acts as a
+subreaper, tracks identities by pidfd, and repeats a `/proc` census through
+cleanup; the one five-second monotonic operation-cleanup deadline covers
+cleanup through `input_closed`, the Bash checks, `completed`, the final census,
+and the final PTY output-through barrier, and ends there. Workload inspection
+then runs under the controller-owned operation deadline, with the existing
+inspection-worker cancellation timeout. Inability to prove that external Awsh
+and the persistent selected shell are the only processes left in its controlled
+tree before that cleanup deadline expires fails the session without a terminal
+operation result, after which the controller asks Reploy to terminate the
+environment. Cancellation and planned finalization use the same cleanup and
+deadline. This supervision is correctness evidence within the same-identity
+threat boundary, not security evidence.
 
 Cancellation and planned finalization first give the active operation the
 bounded grace period to return to the selected shell's backend boundary. A
@@ -527,13 +544,19 @@ per-operation cgroup.
 
 `file_exists` and `produces` are evaluated inside the workload rather than
 against the controller filesystem. Their bounded specifications travel with the
-typed operation request. After command execution, Awsh resolves configured
-paths in the persistent selected shell's resulting cwd and exported environment
-and sends the resolved plan to the Envoy over its private result descriptor.
-The Envoy first performs the mandatory operation cleanup, proves that external
-Awsh and the persistent selected shell are the only processes left in its
-controlled tree, and drains output through the closing offset. It then checks
-existence and kind.
+typed operation request. At ordinary return, the completion hook's
+pre-cleanup `prompt_state` is followed by a final state-bearing `prompt_ready`
+carrying the saved source status and recapturing physical/logical cwd and
+exported environment after cleanup, wait-record removal, and adapter
+validation. Awsh validates that final state and resolves configured paths from
+it before releasing the helper and observing Readline entry, then sends
+`completed` with the saved source status, physical cwd, and resolved inspection
+plan. The Envoy performs the mandatory operation cleanup and sends
+`input_closed`, then proves
+that external Awsh and the persistent selected shell are the only processes
+left in its controlled tree and drains output through the closing offset. That
+final census and PTY output-through barrier end the cleanup deadline; only afterward does it
+check existence and kind under the controller-owned operation deadline.
 Environment-setup services intentionally remain outside that cleanup,
 so cleanup alone does not make a produced path stable. The Envoy accepts a
 `produces` inspection only when its bounded workload-side inspection establishes
@@ -711,30 +734,29 @@ is Bash. The fixed empty `INPUTRC` prevents Readline from falling back to
 Envoy bootstrap command before OmegaFlow code starts. A workload whose commands
 need a loader variable, history file, Readline configuration, different
 terminal lookup, different locale, or mail notification sets it inside
-operation source, where the persistent shell carries it to operation children
-as ordinary shell state without governing either shell launch. That freedom
-does not include the adapter-reserved parser state, prompt values, namespace,
-tracing and execution controls, the `CHLD` (`SIGCHLD`), `DEBUG`, `ERR`, and
-`RETURN` adapter-sensitive traps, adapter-required
-builtin state, job-control entry state, or two source-trigger bindings: source
-using the reserved namespace and planned terminal input producing either
-reserved byte sequence are rejected; readonly shell mediation preflights a
-complete expanded request and canonicalizes every selected-Bash `signal_spec`
-using the selected Bash build's case-insensitive signal-name grammar and
-signal-name table, including aliases and decimal values, before deciding
-whether it is reserved. A value that canonicalizes to `SIGCHLD` is reserved
-regardless of spelling; the selected build's numeric
-mapping is authoritative, and queries and non-`CHLD` numeric traps retain
-ordinary selected-Bash behavior. It then refuses ordinary source
-mutations of the reserved traps or required builtin enablement or
+recorded terminal operation source, where the persistent shell carries it to
+operation children as ordinary shell state without governing either shell
+launch. That freedom does not include the adapter-reserved parser state, prompt
+values, namespace, tracing and execution controls, the `CHLD` (`SIGCHLD`),
+`DEBUG`, `ERR`, and `RETURN` adapter-sensitive traps, adapter-required builtin
+state, job-control entry state, or two source-trigger bindings: source using the
+reserved namespace and planned terminal input producing either reserved byte
+sequence are rejected; readonly shell mediation preflights a complete expanded
+request and canonicalizes every selected-Bash `signal_spec` using the selected
+Bash build's case-insensitive signal-name grammar and signal-name table,
+including aliases and decimal values, before deciding whether it is reserved.
+A value that canonicalizes to `SIGCHLD` is reserved regardless of spelling; the
+selected build's numeric mapping is authoritative, and queries and non-`CHLD`
+numeric traps retain ordinary selected-Bash behavior. It then refuses ordinary
+source mutations of the reserved traps or required builtin enablement or
 implementation before any partial state change; and a runtime failure to
 retain or regain any cooperative reservation fails the session. Deliberate
-explicit-builtin bypass remains same-
-identity interference, not a supported source capability. The `CHLD`
-reservation prevents an adapter-owned helper child exit from asynchronously
-running a selected-shell `CHLD` trap and mutating persistent shell state
-across adapter boundaries. It applies only to the selected persistent shell;
-nested shells retain their own ordinary `CHLD` trap behavior. The defaults are:
+explicit-builtin bypass remains same-identity interference, not a supported
+source capability. The `CHLD` reservation also prevents a recorded terminal
+operation's child-exit trap from mutating cwd or exported environment after the
+completion-side state snapshot and before the `completed` report. It constrains
+only the selected persistent Bash, not a nested shell's own child-exit trap. The
+defaults are:
 
 - a Bash package/build requirement whose resolved `/bin/bash` digest has an
   exact entry in OmegaFlow's generated build table, with any declared system rc
@@ -767,7 +789,8 @@ nested shells retain their own ordinary `CHLD` trap behavior. The defaults are:
   `/run/omegaflow/session/split` directory, created and read by Envoy, validated
   by Awsh, opened only by the canonical Bash source frame after the one
   operation-start timer has begun, proven open by the reserved inner sentinel,
-  and removed after completion cleanup and dual EOF;
+  with both writer keepalives closed only after descendant cleanup, both readers
+  drained concurrently to EOF, and both paths removed only after dual EOF;
 - fixed `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, and
   `LOCPATH=/omegaflow-runtime/lib/locale`, naming a complete,
   manifest-validated read-only locale tree for both shell launches;
@@ -1243,8 +1266,17 @@ later items are not gates for the terminal-only milestone:
    that send authored terminal bytes, fail-closed cleanup after every operation
    including ordinary background jobs, `disown`, `nohup`, `setsid`, and rapid
    double-fork daemonization, a setup service outside the controlled process
-   tree remaining unaffected, resize, Ctrl-C, command
-   completion, cwd, newline-sensitive split-stream assertions, exact
+   tree remaining unaffected, immutable `CHLD`, `DEBUG`, `ERR`, and `RETURN`
+   trap-state validation before reuse, an allowed non-reserved signal trap
+   changing cwd and exported environment during cleanup with the final report
+   matching live Bash, completion-side status/cwd/exported-environment handoff
+   plus preservation of
+   live Bash-only functions, aliases, positional parameters, variables, and
+   non-reserved options, exact helper-PID binding, empty-job-table proof,
+   repeated `prompt_ready`, operation input close followed by split keepalive
+   closure, dual stdout/stderr EOF, FIFO removal, and the post-readiness PTY
+   output drain, resize, Ctrl-C, command completion, cwd, newline-sensitive
+   split-stream assertions, exact
    post-line-discipline PTY assertion semantics without authored input across
    terminal CRLF processing,
    split-stream `stdout + stderr` compatibility under interleaved presentation,
