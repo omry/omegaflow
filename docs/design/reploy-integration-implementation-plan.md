@@ -9,7 +9,7 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-08-30.
+- Updated: 2026-09-02.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -172,7 +172,26 @@ amendment is an additional documentation gate before its affected B work.
   absent from the job table before completion is reusable. A2.6
   owns controls and crossed lifecycle races; A2.7 owns final private-schema
   closure.
-- A2.6 fixes controls and crossed lifecycle races.
+- A2.6 fixes controls and crossed lifecycle races: the exact private
+  `continue`, `gate_interrupt_ack`, `cancel`, `finalize`, `resize_prepare`,
+  `resize_apply`, and `shutdown` requests; the exact `gate_ready`,
+  `gate_continued`, `gate_interrupt`, `disposition`, `resize_ready`,
+  `resized`, `shell_exit`, `closed`, and `protocol_error` results; the
+  source-callable `/omegaflow-runtime/bin/awsh gate GATE_ID` helper mode and
+  its `gate` helper message; gate acceptance, release, and interruption with
+  the interruption winning a crossed `continue`; at most one forwarded
+  lifecycle request per operation answered by one `disposition` whose phase is
+  `running`, `gated`, or `returned`; `SIGINT` delivery to the PTY foreground
+  process group under a terminal-control lease; the completion hook's `INT`
+  bracket; Envoy-internal timeout selection with `SIGKILL` of the
+  selected-shell tree, crossed Awsh results discarded, and `shell_exit` as
+  reaping evidence, with no private teardown request; the resize lane that
+  excludes every lease between `resize_ready` and `resize_apply`; idle
+  `shutdown` by `SIGHUP` answered with `closed`; the `shell_exit` identifier
+  rule, its post-`completed` empty form, and both shutdown crossing orders;
+  and the crossed-write rule for a control write that fails after a terminal
+  result. It adds no public field and no private timer. A2.7 owns final
+  private-schema closure.
 - A2.7 closes all private schemas and establishes the exact B1 base.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
@@ -286,8 +305,27 @@ Prove functions, aliases, positional parameters, unexported variables, and
 non-reserved options remain live in Bash without entering a helper or private
 frame. Cover malformed and duplicate completion reports, stale or extra helper
 PIDs, early helper release, stale status/cwd/environment, and each PTY and split
-output/EOF boundary. Leave cancellation, finalization, gates, and crossed
-lifecycle cases to A2.6 and final private-schema closure to A2.7.
+output/EOF boundary.
+Freeze the exact A2.6 lifecycle frames, the `gate` helper message, and every
+`protocol_error` code at minimum and maximum field sizes. Cover gate
+acceptance only for a running started operation with an unused identifier and
+a session-local manifested peer, release only after the watermark, one
+`gate_interrupt` per peer closure, the crossed `continue` discarded while
+`operation_gate_interrupted` resolves it, and every rejected gate request.
+Cover `cancel` and `finalize` dispositions in the `running`, `gated`, and
+`returned` phases, including an external foreground job, a Bash builtin loop,
+a source-installed `INT` trap, a foreground and a backgrounded gate helper
+closed without an interruption, and the completion hook's `INT` bracket
+surviving both a lifecycle signal and terminal Ctrl-C while restoring the
+recorded disposition. Cover every crossed Awsh result discarded after timeout
+selection with `shell_exit` status 137 as the sole accepted post-selection
+result; the resize lane idle, waiting behind each lease holder, mismatched at
+each frame, doubled, and crossed by shell exit; shutdown by `SIGHUP` with the
+reaped status 129 even under an `EXIT` trap, a `HUP`-ignoring shell reaching
+the fatal final-drain result, and both crossing orders; the active, empty, and
+post-`completed` `shell_exit` identifier forms; and a control write failing
+after each terminal result being orderly. Leave final private-schema closure
+to A2.7.
 
 **B2. Awsh boundary alignment**
 
@@ -331,6 +369,18 @@ The completion hook must validate the four unset adapter-sensitive traps before
 the helper snapshot and after helper/cleanup child exits. Repeat the
 selected-build Readline termios proof before Awsh sends `completed` with the
 saved source status, cwd, and resolved inspection plan.
+Implement the A2.6 Awsh side: the `awsh gate GATE_ID` mode and `gate` helper
+acceptance with peer, phase, and identifier checks; `gate_ready`, helper
+release on private `continue` with `gate_continued`, and `gate_interrupt`
+followed by `gate_interrupt_ack` with the crossed `continue` discarded; one
+`disposition` per forwarded lifecycle request with `SIGINT` delivered to the
+foreground process group under a lease, a blocked gate helper closed first
+without an interruption, and no signal once the completion `prompt_state`
+connection is accepted; the completion hook's `INT` bracket saving, ignoring,
+and restoring the disposition; the resize lane; idle `shutdown` by `SIGHUP`
+answered with `closed`; `shell_exit` with the reserved identifier only between
+`submit` and `completed`, dropped helpers and gate peers, descriptor closure,
+and a zero exit after either terminal result; and every `protocol_error` code.
 
 **B3. Envoy session foundation**
 
@@ -371,14 +421,28 @@ barrier after `completed`; workload inspection runs afterward under the
 controller-owned operation deadline and its existing inspection-cancellation
 timeout. A failure at any cleanup, helper, readiness, EOF, drain, or removal
 step is fatal and emits no terminal operation result.
+Implement the A2.6 Envoy side: write private `continue` only after the
+watermark is reached, acknowledge `gate_interrupt` before any later request for
+the operation, and resolve a crossed `continue` by the interruption; forward at
+most one `cancel` or `finalize` per operation after `start_released` and start
+the grace period at that write; select `cancel-timeout` or `finalize-timeout`
+internally, `SIGKILL` the selected-shell tree, discard every crossed Awsh
+result, and accept only `shell_exit` as reaping evidence; drive the resize lane
+around the ioctl; publish a pending completion with `shell_ended` when an
+empty-identifier `shell_exit` follows `completed`; read the result pipe before
+classifying a failed control write and treat one that follows an accepted
+terminal result as orderly; and map every `protocol_error` code to a fatal
+no-result diagnostic.
 
 **B4. Operation boundaries and controls**
 
 Implement output barriers, completion, input, resize, cancellation, action
 gates, planned finalization, and final drain. Linearize every accepted resize in
 the Envoy output pump, close and carry its preceding `output_through` frontier
-across the PTY before `TIOCSWINSZ`, and acknowledge it with `resize_applied`
-only after the resize is applied. Cover queue-order ties, PTY output
+across the PTY before `TIOCSWINSZ`, drive the private `resize_prepare`,
+`resize_ready`, `resize_apply`, and `resized` lane around the ioctl, and
+acknowledge it with `resize_applied` only after Awsh reports `resized`. Cover
+queue-order ties, PTY output
 immediately preceding a resize, and a continuously writing PTY
 workload. Cover a resize accepted while `execute` remains in
 `Starting` across `operation_started` and the replacing pre-start failure,
@@ -442,7 +506,9 @@ cleanup is in progress, planned finalization, the five-second monotonic cleanup
 deadline, a cancellation racing a command that ends the persistent shell, and a
 setup-launched service outside the controlled tree remaining unaffected. Prove
 that cancellation and finalization grace-period expiry terminates and reaps
-persistent Bash, emits `operation_failed` with the corresponding timeout code
+persistent Bash through Envoy-owned `SIGKILL` of the selected-shell tree, with
+Awsh's `shell_exit` as the reaping evidence and every crossed Awsh result
+discarded, emits `operation_failed` with the corresponding timeout code
 and `shell_ended: true`, and enters the `shell_ended` drain without another
 prompt or operation. Prove that a deadline cancel accepted during the original
 finalization grace sends no second signal, does not reset the timer, and switches
@@ -498,7 +564,10 @@ no later `closed`, private EOF, and a zero-status Awsh reap. Prove that prematur
 EOF, a trailing result frame, reset, signal, or nonzero Awsh exit remains fatal
 after either terminal result. A processed controller-requested shutdown instead
 requires one terminal `closed`, private EOF, and a zero-status Awsh reap.
-For that terminal reap, prove the existing timer mapping: an active-operation
+Prove that a `shell_exit` with an empty identifier after `completed` publishes
+the pending result with `shell_ended` and enters the drain, and that a control
+write failing after an accepted terminal result is orderly. For that terminal
+reap, prove the existing timer mapping: an active-operation
 `shell_exit` remains under the Envoy operation-cleanup deadline, while an idle
 `shell_exit` or `closed` remains under the already-running Envoy final-drain
 deadline. A terminal result starts or resets neither timer and leaves both
@@ -553,9 +622,9 @@ canonical parser state, whole-request readonly `trap` and `enable` mediation,
 private bindings, positive helper markers, split-entry sentinel, post-`PS0`
 release signal, and readonly fail-stop wrapper. Build the
 same manifested `bin/awsh` with its fixed socket-helper requests, bounded
-stream-framing validation, and
-argument-free non-returning `bash-fail-stop` mode, plus the fixed empty
-`etc/inputrc`.
+stream-framing validation, argument-free non-returning `bash-fail-stop` mode,
+and source-callable `gate GATE_ID` mode with its `gate` helper message, plus
+the fixed empty `etc/inputrc`.
 
 **C5. Runtime staging**
 
@@ -571,7 +640,8 @@ Prove its literal helper path, socket, request names, bindings, readonly state,
 canonical frame and whole-request reserved-state mediation functions, positive
 source/start markers, post-`PS0` release signal, split-entry sentinel, and
 fail-stop invocation match the frozen fixtures. Prove the exact staged Awsh
-binary passes the stream-framing and non-returning fail-stop fixtures. Prove
+binary passes the stream-framing, non-returning fail-stop, and gate-mode
+fixtures. Prove
 the host copies only verified installed artifacts into a fresh
 private directory, writes the manifest last, makes the staged tree
 non-writable, and never assembles it from a project checkout.
@@ -739,7 +809,8 @@ gate.
 | A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
 | A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
 | A2.3 | Approved prefix | PR 33 is approved at its exact current head with current A2.3 attestations |
-| A2.4–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
+| A2.4–A2.5 | Approved prefix | PRs 34 and 35 are approved at their exact current heads with current attestations |
+| A2.6–A2.7 | Approval-gated | Independent design-only successors; each requires deep review, current attestations, green checks, and exact-head approval before the next slice |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
