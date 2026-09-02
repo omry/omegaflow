@@ -146,7 +146,7 @@ on partial progress.
 | Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame and append terminal bytes through `ready.output_through` within 10 seconds | Fail the capture and ask Reploy to terminate |
 | Envoy operation start | Envoy; starts immediately after `execute.input_through` is satisfied, before any split directory or FIFO creation, descriptor opening, private `execute` encoding, or private write | Within 5 seconds, either complete split setup plus recoverable source rejection and split rollback, including the public `operation_failed` write, or complete split setup when selected, private source validation and syntax preflight, `submit`, the fixed Readline trigger, source-helper delivery, the `PS0` preparation barrier, the pre-start output drain, `start_release`, `started`, the public `operation_started` write, `started_ack`, the adapter-owned post-`PS0` release signal, and `start_released` | Emit a best-effort fatal `operation-start-timeout` diagnostic, close and remove any partial split setup, close the session channels, terminate and reap the controlled tree, and exit nonzero; the adapter may hold a parsed source unit, so no ordinary operation result or later operation is safe |
 | Individual control write | Sender; starts with the first attempted transport write of one already-encoded frame | Write every byte of one telemetry JSON Lines frame or one private Awsh frame within 5 seconds; terminal input and workload-output bytes are excluded | Fail the session; delivery of a partial frame never becomes success |
-| Envoy operation cleanup | Envoy; starts when it begins mandatory cleanup after an Awsh completion, cancellation, finalization, or shell-exit result | Census, terminate, reap, reach operation-pipe EOF, and drain all operation-created processes and output within 5 seconds | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
+| Envoy operation cleanup | Envoy; starts when it accepts matching `input_close` for ordinary return, or when it begins mandatory cleanup for cancellation, finalization, or shell-exit handling | For every cleanup trigger, complete census, termination, reap, operation-pipe EOF, and operation-output drain within 5 seconds. For ordinary return only, that same deadline continues through sending `input_closed`, Bash wait-record, empty-job-table, adapter, and completion-side Readline readiness checks, receiving `completed`, proving the final census, and performing the final PTY drain and output-through barrier. Workload inspection then runs under the controller-owned operation deadline. | Emit a best-effort fatal `operation-cleanup` diagnostic, close the Envoy-owned operation descriptors and session channels, and exit nonzero; no terminal operation result is emitted, and the controller fails the capture and asks Reploy to terminate |
 | Envoy inspection cancellation | Envoy; starts when it accepts `cancel` while the operation's inspection worker is live | Stop and reap the worker within the five-second cancellation grace period | Emit a best-effort fatal `inspection-cancel-timeout` diagnostic, close the session channels, and exit nonzero; no terminal operation result is emitted, and the controller records the cause and asks Reploy to terminate |
 | Envoy final drain | Envoy; starts when it accepts `shutdown`, enters an Envoy-initiated drain, or takes over incomplete pre-ready launch cleanup | Close Awsh, supervise the persistent Awsh process and selected-shell tree, drain terminal output when public readiness had committed, and emit `closed` when the public session had reached that lifecycle within 5 seconds | Emit a best-effort fatal diagnostic, terminate the remaining controlled tree, and exit nonzero |
 | Controller final drain | Controller; starts when it accepts `draining` | Receive `closed`, retain raw output through its final offset, and observe terminal EOF within 5 seconds | Fail the capture and ask Reploy to terminate |
@@ -271,8 +271,8 @@ being downgraded.
 | `resize` | `columns`, `rows` |
 | `shutdown` | `reason` |
 
-Operation source is trusted recording-plan Bash source. It is delivered on the
-private control path and is not typed into the PTY.
+Each recorded terminal operation supplies trusted recording-plan Bash source.
+It is delivered on the private control path and is not typed into the PTY.
 
 Version 1 accepts source only when all of these conditions hold:
 
@@ -311,17 +311,19 @@ session without an ordinary terminal operation result.
 The live adapter entry state has history and alias expansion, `errexit`,
 `errtrace`, `extdebug`, `extglob`, `functrace`, POSIX mode, `noexec`, `verbose`,
 and `xtrace` disabled; `interactive_comments` and job-control `monitor` enabled;
-the `CHLD` (`SIGCHLD`), `DEBUG`, `ERR`, and `RETURN` traps unset; the adapter-
-required `builtin`, `enable`, `kill`, `return`, and `trap` builtins enabled; the
-fixed idle `emacs-standard` keymap active; and the fixed Readline bindings
-described below. These controls are adapter state, not persistent workload state. In
-particular, disabling `errexit` at adapter entry lets `ENTER` return any
+the `CHLD` (`SIGCHLD`), `DEBUG`, `ERR`, and `RETURN` traps unset; the
+adapter-required `builtin`, `enable`, `exec`, `jobs`, `kill`, `return`, `trap`,
+and `wait` builtins enabled; the fixed idle `emacs-standard` keymap active; and
+the fixed Readline bindings described below. These controls are adapter state,
+not persistent workload state. In particular, disabling `errexit` at adapter
+entry lets `ENTER` return any
 preceding status without turning that adapter command into a shell-ending
-failure. Source may change the non-reserved controls while its operation runs,
-including enabling `errexit`, but it may not mutate the four adapter-sensitive
-traps or disable, dynamically load or replace, or dynamically unload an
-adapter-required builtin. Other source-visible changes do not persist into a
-later operation; failure to regain the canonical entry state fails the session.
+failure. Recorded terminal operation source may change the non-reserved controls
+while its operation runs, including enabling `errexit`, but it may not mutate
+the four adapter-sensitive traps or disable, dynamically load or replace, or
+dynamically unload an adapter-required builtin. Other changes to those adapter-
+entry controls do not persist into a later operation; failure to regain the
+canonical entry state fails the session.
 
 The fixed rcfile installs readonly shell functions named `trap` and `enable`.
 Each preflights its complete post-expansion argument vector before invoking the
@@ -331,39 +333,52 @@ reserved, the `trap` wrapper canonicalizes every selected-Bash signal
 specification using the selected Bash build's case-insensitive signal-name
 grammar and signal-name table, including aliases and decimal values. A
 specification that canonicalizes to `SIGCHLD` is reserved regardless of
-spelling; the selected build's numeric mapping is authoritative,
-not a portable hardcoded constant. `trap` refuses any request that would mutate
+spelling; the selected build's numeric mapping is authoritative, not a
+portable hardcoded constant. `trap` refuses any request that would mutate
 `CHLD` or `SIGCHLD`, `DEBUG`, `ERR`, or `RETURN`. `enable` refuses any disable,
 dynamic-load or replacement, or dynamic-unload request naming an adapter-
-required builtin. A mixed request that
-names both reserved and non-reserved targets is refused before either target
-changes. A refused mutation invokes `FAIL_STOP`, so it cannot arm a trap for the
-canonical suffix or remove or replace the next operation's release primitive.
+required builtin. A mixed request that names both reserved and non-reserved
+targets is refused before either target changes. A refused mutation invokes
+`FAIL_STOP`, so it cannot arm a trap for the canonical suffix or remove or
+replace the next operation's release primitive.
 Queries and positive enablement of reserved state remain allowed, as do trap
 changes for other signals and all enable operations on other builtins. Numeric
 trap specifications that canonicalize to a non-`CHLD` signal retain ordinary
-selected-Bash behavior. The
-wrappers, the builtins they protect, and the command names used by the fixed
-adapter functions are cooperative reservations. Source that deliberately
-bypasses them through an explicit builtin-lookup escape is same-identity
+selected-Bash behavior. The wrappers, the builtins they protect, and the
+command names used by the fixed adapter functions are cooperative reservations.
+Recorded terminal operation source that deliberately bypasses them through an
+explicit builtin-lookup escape is same-identity
 interference outside the supported recording-source contract and may fatally
 end the session. It is not converted into a successful operation or persistent
 workload state.
 
-The `CHLD` reservation prevents an adapter-owned helper child exit from
-asynchronously running a selected-shell `CHLD` trap and mutating persistent
-shell state across adapter boundaries. It applies only to the selected
-persistent shell; a nested shell started by an operation retains its own
-ordinary `CHLD` trap behavior.
+The `CHLD` reservation is required by the completion handshake: the
+completion-side `prompt_state` helper is a child of Bash, and its later exit
+can deliver `SIGCHLD` after the initial state snapshot. A `CHLD` trap installed
+by recorded terminal operation source could then change the live cwd or
+exported environment before the final state is captured. Requiring the
+`CHLD`/`SIGCHLD` trap to remain unset keeps adapter-owned helper and cleanup
+child exits from mutating persistent state after that snapshot while still
+allowing Bash to reap children normally. Other permitted signal traps remain
+ordinary selected-Bash behavior; completion `prompt_ready` recaptures the
+complete shell-neutral state after cleanup so such a trap cannot stale the
+`completed` report. This reservation belongs only to the selected persistent
+Bash; a nested shell started by recorded source may install and own its own
+child-exit trap.
 
 Other non-process Bash state remains persistent, including cwd, variables,
 exported environment, functions, positional parameters, non-reserved shell
-options, and alias definitions. Operation-created background jobs are not part
-of that persistence contract: mandatory operation cleanup terminates and reaps
-their processes before the terminal result, and job-table state may change as
-those children disappear. Alias definitions persist as data, but recording-plan
-source is not expanded through them at its top-level parse; source that
-deliberately needs a different parser can launch a nested Bash explicitly.
+options, and alias definitions. These values remain live in Bash. After cleanup
+and the completion-side final-state `prompt_ready`, the `completed` frame below
+carries only the saved source status, final physical cwd, and already-resolved
+inspection plan.
+Operation-created background jobs are not
+part of that persistence contract: Envoy cleanup terminates and reaps their
+processes, and the completion hook uses the reserved `jobs` and `wait` builtins
+to prove that no job-table entry remains before Readline reuse. Alias
+definitions persist as data, but recording-plan source is not expanded through
+them at its top-level parse; source that deliberately needs a different parser
+can launch a nested Bash explicitly.
 
 The compiled execution policy uses these closed enums:
 
@@ -519,10 +534,20 @@ keeps both readers open while it cleans up the operation, drains every byte
 through their EOF boundaries, and closes them before the typed terminal result.
 No operation-owned pipe or writer survives that result.
 
-Awsh reports that the submitted source returned; Envoy retains process-tree
-policy and the decision that cleanup is complete. Envoy is Awsh's direct parent
-and the Linux subreaper; Awsh is the selected shell's direct parent and reaps
-that shell. Envoy tracks live descendants with pidfds and `/proc`, terminates
+At ordinary return, the completion hook first sends its `prompt_state` snapshot;
+Awsh then proposes `input_close` with only the operation ID and exact
+completion-helper PID. Envoy uses that accepted proposal as the cleanup-timer
+boundary, completes process-tree and split-stream cleanup, and sends
+`input_closed`. Bash then clears its wait records, proves the empty job table
+and adapter state, and sends `prompt_ready` with the complete final
+shell-neutral state while preserving the saved source status. Awsh validates
+that state and resolves configured paths from it, then performs the
+terminal-control handoff and observes Bash re-enter Readline before sending
+`completed` with the saved status, final physical cwd, and resolved inspection
+plan.
+Envoy is Awsh's direct parent and the Linux subreaper; Awsh is the selected
+shell's direct parent and reaps that shell. Envoy tracks live descendants with
+pidfds and `/proc`, terminates
 operation descendants of the selected shell, and reaps non-shell children it
 adopts when an intermediate parent exits. Awsh and the selected shell remain
 responsible for their own direct children while alive. Envoy repeats census,
@@ -578,11 +603,17 @@ retained record could not say which algorithm produced it, and the promise that
 a recording stays identifiable under its own tag would not survive migration.
 Downstream retained records carry it with the digest.
 
-After Bash returns or a planned finalization closes the operation, `awsh`
-resolves configured paths using the persistent Bash process's resulting cwd and
-exported environment. It sends only the resolved plan to the Envoy over the
-private descriptor. The controller never resolves a workload path, starts a
-probe operation, or infers filesystem state from terminal output.
+At ordinary return, the completion hook's final `prompt_ready` carries the
+saved source status and recaptures the physical and logical cwd and exported
+environment needed for later resolution. Awsh proposes `input_close` with only
+the operation ID and exact completion-helper PID; Envoy completes mandatory
+cleanup and sends
+`input_closed`; Bash then clears wait records, proves the empty job table and
+adapter/readiness conditions, and emits that final `prompt_ready` state before
+re-entering Readline. Awsh validates and uses the final state to resolve
+configured paths and sends `completed` with the saved source status, physical
+cwd, and resolved inspection plan. The controller never resolves a workload path,
+starts a probe operation, or infers filesystem state from terminal output.
 
 Resolution preserves the current native runner's successful path behavior. It
 expands `$NAME` and `${NAME}` from the exported environment when the name is
@@ -595,11 +626,16 @@ arithmetic expansion, word splitting, or globbing. The expanded relative path
 is anchored at the resulting cwd. After existence is established, the Envoy
 reports the absolute canonical path.
 
-Inspection is the final part of an exclusive operation boundary. The Envoy
-first receives the Awsh result and resolved plan, completes the universal
-operation cleanup, proves that external Awsh and the persistent selected shell
-are the only processes left in its controlled tree, and drains output through
-the operation's closing offset. Only then may it inspect or hash workload paths.
+Inspection follows the exclusive operation boundary. The Envoy accepts
+`completed` only after `input_closed` and the Bash-owned cleanup and Readline
+readiness checks; it then proves the final process census and drains output
+through the operation's closing offset. That final census and fresh PTY drain
+and output-through barrier are the last work under the one non-resetting
+five-second Envoy operation-cleanup deadline. Only after that deadline ends may
+it inspect or hash workload paths. Workload inspection is governed by the
+controller-owned operation deadline; its expiry arrives as a typed `cancel`,
+and stopping a live inspection worker uses the existing five-second
+inspection-cancellation timeout.
 It runs the complete resolved plan in one short-lived, Envoy-supervised worker
 process. The worker is a restricted mode of the Envoy executable, not another
 service or protocol peer; it inherits no terminal, telemetry, Awsh, or Reploy
@@ -1404,10 +1440,11 @@ connection or Envoy-to-Awsh descriptor.
 The private descriptor protocol uses bounded UTF-8 fields separated and
 terminated by NUL. Every frame starts with `awsh-v1` and a message type; NUL
 cannot appear in source or another value. A2.3 froze the launch descriptor
-handoff, startup helper handshake, and exact `ready` arity. This A2.4 slice
-freezes source submission and every private field through the operation-start
-commit. Completion and lifecycle-race slices freeze the remaining field arity
-and phase-specific handshakes before implementation begins.
+handoff, startup helper handshake, and exact `ready` arity. A2.4 froze source
+submission and every private field through the operation-start commit. A2.5
+freezes the ordinary-return completion and persistent-state handoff below;
+A2.6 owns lifecycle controls and crossed outcomes, and A2.7 closes the
+remaining private schemas before implementation begins.
 
 | Envoy request | Purpose |
 | --- | --- |
@@ -1417,7 +1454,7 @@ and phase-specific handshakes before implementation begins.
 | `cancel` | Ask Awsh to classify and act on cancellation for the active operation. |
 | `finalize` | Ask Awsh to close the active operation for planned recording end. |
 | `start_release` / `started_ack` | Complete the private start barrier around the public `operation_started` event and authorize Bash release. |
-| `input_closed` | Confirm Envoy has permanently closed operation input and completed its cleanup side of ordinary return. |
+| `input_closed` | Confirm Envoy has permanently closed operation input, terminated authored execution, reaped adopted children, and completed its split-stream cleanup side; Bash-owned wait records and the final output frontier remain. |
 | `resize_prepare` / `resize_apply` | Reserve the shell-side terminal lane around Envoy's PTY-master ioctl, then release it with the committed dimensions. |
 | `shutdown` | Close and reap the selected shell. |
 
@@ -1429,8 +1466,8 @@ and phase-specific handshakes before implementation begins.
 | `gate_ready` / `gate_continued` | Report the selected backend's gate lifecycle. |
 | `gate_interrupt` | Propose that terminal Ctrl-C interrupted the waiting gate. |
 | `disposition` | Confirm Awsh's classified action for one cancel or finalize request. |
-| `input_close` | Propose the ordinary-return input and cleanup boundary. |
-| `completed` | Report returned source status, cwd, and the resolved inspection plan. |
+| `input_close` | Bind one validated completion helper to the ordinary-return input and cleanup boundary for one active operation. |
+| `completed` | Report the returned source status, cwd, and resolved inspection plan after completion-side Readline readiness. |
 | `rejected` | Reject source before execution without damaging the persistent shell. |
 | `shell_exit` | Report the selected shell's parent-observed status, last cwd, and active operation, if any, then terminate the private session. |
 | `resize_ready` / `resized` | Acknowledge the two private resize phases. |
@@ -1499,11 +1536,13 @@ Every partial setup failure closes what opened and removes what was created
 under that same non-resetting timer; failure to prove rollback is fatal.
 Awsh requires the fixed path derivation, owner, mode, and FIFO type before
 `submit`. The canonical frame redirects only the authored inner brace group to
-those paths; stdin remains the PTY. Envoy closes its keepalives only at the
-completion boundary defined by A2.5, drains both readers through EOF, and
-removes the two FIFOs after cleanup. No FIFO exists for `pty`, and an empty,
-swapped, additional, pre-existing, replaced, or mismatched split path fails
-closed. These paths are cooperative same-identity transport, not containment.
+those paths; stdin remains the PTY. Envoy closes both keepalives only after
+source return and descendant cleanup, drains both nonblocking readers until
+each independently returns EOF, and removes the two FIFOs only after both
+readers are closed. The completion readiness proof and fresh final PTY drain
+follow that cleanup. No FIFO exists for `pty`, and an empty, swapped,
+additional, pre-existing, replaced, or mismatched split path fails closed.
+These paths are cooperative same-identity transport, not containment.
 
 Awsh accepts `execute` only while selected Bash is at the adapter-owned empty
 primary Readline boundary, no helper request is active, and no operation is
@@ -1687,6 +1726,127 @@ fabricated completion. The one monotonic operation-start deadline covers the
 whole sequence and is never reset by an intermediate frame, helper connection,
 drain, or output advance.
 
+### Ordinary completion and persistent-state handoff
+
+A2.5 owns natural return to the selected shell's reusable adapter boundary.
+Cancellation, planned finalization, action gates, resize, shell exit, and
+crossed lifecycle outcomes remain A2.6 work; they do not add fields to the
+ordinary-return frames below.
+
+The completion-side Bash prompt hook first saves the exact source status
+before its own bookkeeping and verifies that the child-exit trap is unset
+before capturing persistent state. It then captures the same shell-neutral
+state as the startup hook: history expansion, source-visible editing mode,
+physical and validated logical cwd, and the exact exported environment.
+Functions, aliases, positional parameters, unexported variables, and
+non-reserved shell options remain live only in persistent Bash; they are
+neither serialized nor replayed through Awsh or Envoy. The hook then restores
+and validates the complete adapter entry state, including the reserved
+namespace and readonly functions, empty prompt values and output-empty `PS0`,
+the unset `CHLD`, `DEBUG`, `ERR`, and `RETURN` traps, adapter-required builtins,
+canonical parser and execution controls, job-control entry state, the idle
+`emacs-standard` keymap, and both fixed Readline bindings. A missing
+reservation, changed binding, invalid prompt value, or failed restoration
+enters `FAIL_STOP` before a completion report.
+
+The completion hook invokes `prompt-state` through a readonly command-
+substitution wrapper whose last action is the reserved `exec` builtin. The
+substitution process therefore becomes exactly one manifested `bash-helper`
+process: it has no child, is Bash's direct child, and is the peer Awsh observes
+with `SO_PEERCRED`. Awsh validates that PID, parentage, executable identity,
+request, operation phase, and complete `prompt_state` report before sending
+`input_close`. That helper is adapter machinery rather than an authored
+operation descendant. Envoy may exclude only the exact validated PID named by
+`input_close` from its operation census; any additional live helper, child of
+that helper, changed executable, or mismatched parent is fatal.
+
+#### Direction-grouped ordinary-return frame schemas
+
+The exact ordinary-return frame schemas below are grouped by direction to show
+field order; this grouping is not wire order. Chronologically, the helper sends
+`prompt_state`, Awsh sends `input_close`, Envoy sends `input_closed`, Awsh
+releases the blocked helper, Bash sends the final-state `prompt_ready`, Awsh
+validates that final state and resolves paths, observes Readline re-entry, and
+sends `completed`.
+
+```text
+# helper -> Awsh
+awsh-helper-v1, prompt_state, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
+awsh-helper-v1, prompt_ready, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
+
+# Awsh -> Envoy
+awsh-v1, input_close, OPERATION_ID, COMPLETION_HELPER_PID
+awsh-v1, completed, OPERATION_ID, STATUS, PHYSICAL_CWD, RESOLVED_INSPECTIONS_JSON
+
+# Envoy -> Awsh
+awsh-v1, input_closed, OPERATION_ID
+```
+
+`input_close` proposes ordinary return but carries no status or inspection
+result from which Envoy could publish partial completion. Envoy permanently
+closes accepted operation input and runs its existing five-second cleanup
+deadline without resetting it. It terminates and reaps every operation-created
+process it owns and every adopted child while preserving only external Awsh,
+selected Bash, and the exact completion helper. A direct child already exited
+under Bash may remain only as a descriptor-free wait record for the hook to
+clear; a live authored process or another retained descriptor is not allowed.
+For `split`, Envoy then closes both temporary writer keepalives, services both
+nonblocking readers concurrently until stdout and stderr independently return
+EOF, closes both readers, and removes both FIFO paths. One EOF, a closed
+keepalive, reader closure, or path removal never substitutes for the other
+stream. `pty` performs the same Envoy-owned process boundary without FIFO
+steps. Any census, termination, adopted-child reap, keepalive, EOF, close, or
+removal failure is fatal; Envoy sends no `input_closed` and no public terminal
+operation result. The cleanup deadline continues through the Bash-owned
+completion phases below.
+
+After that boundary Envoy sends `input_closed` once. Awsh then replies
+`accepted` to the blocked `prompt_state` helper. The helper exits, command
+substitution reaps it, and the hook uses the reserved `wait` builtin in an
+errexit-exempt list to discard completed job statuses. It captures the output
+of reserved `jobs -p` and requires it to be empty, then revalidates the complete
+adapter entry state without changing the saved source status. Any surviving
+job-table entry, helper process, output byte, or adapter mismatch enters
+`FAIL_STOP` and leaves Envoy without `completed`.
+
+The hook next carries the saved source `STATUS` and recaptures `HISTEXPAND`,
+`EDITING_MODE`, `PHYSICAL_CWD`, `LOGICAL_CWD_OR_EMPTY`, and
+`EXPORTED_ENV_JSON` after cleanup, wait-record removal, and adapter validation,
+sends the ordinary completion `prompt_ready` carrying those final fields, and
+blocks again. Awsh accepts it only after the first helper has exited and been
+reaped and its own helper phase is idle. It validates the complete final state
+without altering non-reserved
+signal traps and uses the saved source status, editing mode, and cwd/environment
+as the completion state and resolves the inspection plan from the final accepted
+physical/logical cwd and exported environment. Under one terminal-control lease
+it repeats the startup termios handoff: set `ICANON` and `ECHO`, verify the
+remaining state against the validated final `prompt_ready`, reply `accepted`,
+and observe the selected Bash build clear both bits on actual Readline entry. It
+then `tcdrain`s and closes the lease. This transition, not helper EOF, an empty
+prompt, or a live Bash PID, proves that Bash reached the reusable boundary.
+Operation input remains closed, so Readline cannot consume bytes for this or a
+later operation before Envoy publishes the terminal result.
+
+Awsh now sends `completed` with the saved source status and physical cwd plus
+that resolved inspection plan. The logical cwd and environment do not need
+another wire copy; functions, aliases, positional parameters, unexported variables, and
+non-reserved options never left Bash. After accepting `completed`, Envoy
+requires the completion helpers and every previously waitable Bash child to be
+absent and the complete final census to contain only external Awsh and selected
+Bash. It then performs the fresh final PTY drain and covering output mark. That
+census and output-through barrier end the original non-resetting
+operation-cleanup deadline. Envoy then runs the already-defined workload
+inspection under the controller-owned operation deadline before publishing the
+unchanged public `operation_completed` shape; inspection cancellation retains
+the existing worker stop/reap timeout.
+
+`STATUS` is always the authored source result, never a helper, `wait`, cleanup,
+or readiness status. A malformed or duplicate report, stale PID, early helper
+release, nonempty job table, readiness mismatch, or private-frame failure takes
+fatal teardown rather than making a partially cleaned shell reusable. The
+ordinary handshake adds no public field and settles no A2.6 crossed-outcome
+rule.
+
 Private EOF is never a substitute for a result. EOF in a frame is a protocol
 failure. EOF between frames is orderly only when it immediately follows one
 complete, accepted terminal `shell_exit` or `closed`. Envoy then requires Awsh
@@ -1782,10 +1942,18 @@ Every socket helper invocation is the same fixed executable form:
 ```
 
 `REQUEST` is `prompt-state`, `prompt-ready`, `source`, or `start-prepared`.
-Only `prompt-state` has scalar arguments: canonical `STATUS`, `HISTEXPAND`, and
-`EDITING_MODE`. The helper obtains physical cwd, logical `$PWD`, and its exact
-inherited exported environment directly rather than putting them in argv. No
-helper accepts a different socket, runtime root, executable, or request name.
+`prompt-state` and the completion-phase `prompt-ready` have scalar arguments:
+canonical `STATUS`, `HISTEXPAND`, and `EDITING_MODE`. Startup `prompt-ready`,
+`source`, and `start-prepared` have none. The helper obtains physical cwd,
+logical `$PWD`, and its exact inherited exported environment directly rather
+than putting them in argv.
+Functions, aliases, positional parameters, unexported variables, and shell
+options remain live in Bash and are not helper arguments. For the completion
+`prompt-state` only, the readonly wrapper executes the shown helper as the last
+command of its command substitution through the reserved `exec` builtin. This
+makes the socket peer the selected Bash process's exact direct child and leaves
+no wrapper child to classify during cleanup. No helper accepts a different
+socket, runtime root, executable, or request name.
 CLI request names use the shown hyphenated spelling; their helper message types
 use the underscored spelling shown below.
 
@@ -1810,14 +1978,15 @@ after the request payload, writes one complete reply, and closes. Every read
 uses `recvmsg` and rejects ancillary descriptors or credentials. A short
 prefix, zero or oversized length, short payload, trailing byte, extra payload,
 invalid UTF-8, or invalid arity fails the session. Reads and writes loop over
-ordinary stream fragmentation under the existing launch or operation-start
-deadline; no helper payload requires a protocol-sized kernel socket buffer. The
-complete helper message set through A2.4 is:
+ordinary stream fragmentation under the applicable launch, operation-start,
+or operation-cleanup deadline; no helper payload requires a protocol-sized
+kernel socket buffer. The complete helper message set through A2.5 is:
 
 ```text
 # helper -> Awsh
 awsh-helper-v1, prompt_state, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
 awsh-helper-v1, prompt_ready
+awsh-helper-v1, prompt_ready, STATUS, HISTEXPAND, EDITING_MODE, PHYSICAL_CWD, LOGICAL_CWD_OR_EMPTY, EXPORTED_ENV_JSON
 awsh-helper-v1, source
 awsh-helper-v1, start_prepared
 
@@ -1833,10 +2002,13 @@ do not set or inspect those values. EOF and the explicit length prove complete
 framing; stream fragmentation or a small effective socket buffer cannot be
 reinterpreted as truncation or a smaller request.
 
-The rcfile sends one `prompt_state` and then one blocking `prompt_ready` while
-no operation is armed. Awsh accepts only that order. The `prompt_state` message
-records the initial status, physical and validated logical cwd, bounded
-exported environment, history-expansion state, and Readline editing mode.
+At startup, the rcfile sends one `prompt_state` and then one blocking,
+output-empty `prompt_ready` with no state fields while no operation is armed.
+Awsh accepts only that order. The `prompt_state` message records the initial
+status, physical and validated logical cwd, bounded exported environment,
+history-expansion state, and Readline editing mode. At ordinary completion, the
+first `prompt_state` is the pre-cleanup snapshot and the later `prompt_ready`
+uses the state-bearing arity above for the final recapture.
 `STATUS` is canonical decimal 0 through 255, `HISTEXPAND` is `on` or `off`, and
 `EDITING_MODE` is `emacs` or `vi`. Cwd fields use the global cwd bound; logical
 cwd is empty unless it is absolute and names the same directory as physical
@@ -1849,7 +2021,13 @@ The prompt hook captures `STATUS`, `HISTEXPAND`, and `EDITING_MODE` before any
 status-changing canonicalization, then establishes and locally verifies the
 complete adapter entry state above before invoking the helper. It never reports
 state first and repairs it later. The first startup hook performs the same
-ordering; A2.5 freezes the completion-side hook and handoff that repeats it.
+ordering; the completion hook performs the pre-cleanup snapshot after source
+return and the final recapture after cleanup, wait-record removal, and adapter
+validation. Awsh enforces the phase-specific arity, accepts a completion
+`prompt_ready` only while the matching operation is active and no other helper
+phase is live, and validates the complete final state before readiness and path
+resolution. It validates the completion helper's peer PID and carries that
+identity in `input_close` before withholding `accepted` through Envoy cleanup.
 When Awsh accepts the `prompt_state` message, it also reads and records the
 complete pre-Readline termios state from the controlling terminal. Failure to
 validate the complete message prevents readiness rather than truncating state.
@@ -1871,6 +2049,25 @@ unexpected standard-output byte cannot return control to the loader macro or
 `PS0`: the manifested wrapper enters `FAIL_STOP`, and fatal teardown ends the
 session.
 
+At ordinary completion, Awsh withholds the `prompt_state` helper's `accepted`
+reply until it has sent `input_close` and accepted matching `input_closed`.
+After that helper exits, Bash clears completed job records and revalidates the
+adapter before opening a new `prompt_ready` helper connection. Awsh accepts
+that second request only when the first socket peer is gone and no operation
+process remains. Completion `prompt_ready` carries the final state-bearing
+arity, uses the same output-empty `accepted` reply and termios transition as
+startup, and carries no operation result. Awsh uses its validated saved source
+status, physical/logical cwd, and exported environment for `completed` and
+inspection path resolution.
+
+The repeated adapter validation requires the `CHLD`/`SIGCHLD` trap to remain
+unset across this boundary, but it preserves every non-reserved signal trap.
+The completion helper and cleanup children can exit after the initial
+`prompt_state` snapshot; an allowed trap installed by recorded terminal
+operation source may run at that point and mutate the live cwd or exported
+environment. The final state-bearing `prompt_ready` is therefore authoritative
+for the live Bash state used by `completed` and path resolution.
+
 After that wrapper validates and removes the marker, the canonical frame's
 first command is `START_RELEASED`. Awsh has already armed the one matching
 post-`started_ack` release phase before permitting that marker; it accepts the
@@ -1887,27 +2084,30 @@ empty display value before Readline entry; A2.5 freezes the completion-side
 mechanics. Visible prompts remain controller presentation and no Bash prompt
 byte may enter the PTY stream.
 
-After accepting `prompt_ready`, Awsh sets both `ICANON` and `ECHO` on its
+After accepting startup or completion `prompt_ready`, Awsh sets both `ICANON`
+and `ECHO` on its
 controlling terminal, reads the complete termios state back, and replies
 `accepted` only after both bits are observed set and the remainder matches the
 captured workload state. The helper remains blocked until that reply. The
 fixed Bash/Readline build must then clear both bits on entry to interactive
 input. Awsh observes that second exact transition, records the resulting active
-termios state, and treats it as the readiness boundary. Startup output, prompt
-bytes, helper closure, or a live Bash PID is never substitute readiness
-evidence.
+termios state, and treats it as the applicable readiness boundary. Startup
+output, prompt bytes, helper closure, or a live Bash PID is never substitute
+readiness evidence.
 
 After observing that transition, Awsh takes one terminal-control lease, calls
-`tcdrain`, closes the lease, and only then sends private `ready`. The selected
-Bash-build entry contains the exact zero-to-4,096-byte PTY string that the
-fixed Bash, Readline, terminal, locale, inputrc, and rcfile combination emits
-before that drain; it may contain terminal-control bytes but never a visible
-prompt. Envoy drains the PTY master concurrently, and after private `ready` it
-reads through nonblocking empty, compares the complete launch buffer byte for
-byte with that entry, and applies the terminal-delivery launch barrier above.
-The bytes are compatibility evidence, not protocol frames or readiness
-authority: the helper ordering, termios transition, topology checks, and
-private `ready` remain authoritative.
+`tcdrain`, and closes the lease. At startup it then sends private `ready`; at
+ordinary completion it sends the exact `completed` frame defined above. The
+selected Bash-build entry contains the exact zero-to-4,096-byte PTY string that
+the fixed Bash, Readline, terminal, locale, inputrc, and rcfile combination
+emits before the startup drain; it may contain terminal-control bytes but never
+a visible prompt. Envoy drains the PTY master concurrently, and after startup
+`ready` it reads through nonblocking empty, compares the complete launch buffer
+byte for byte with that entry, and applies the terminal-delivery launch barrier
+above. Completion instead uses the final output drain after `completed`. The
+bytes are compatibility evidence, not protocol frames or readiness authority:
+the helper ordering, termios transition, topology checks, and corresponding
+private result remain authoritative.
 
 The Envoy-owned ten-second launch-readiness deadline covers the Awsh exec,
 helper-listener setup, Bash exec and rcfile, both startup helper exchanges, the
@@ -2106,7 +2306,9 @@ pre-amendment fixture baseline to update. The B1 corpus contains:
 - `envoy.jsonl`: exact Envoy event encodings, including output marks covering
   stream identity and sender timing, workload inspection results, and planned
   finalization; and
-- `awsh-frames.json`: exact private frames represented as hexadecimal bytes.
+- `awsh-frames.json`: exact private frames represented as hexadecimal bytes,
+  including the startup no-state `prompt_ready` and completion state-bearing
+  `prompt_ready` arities.
 
 The inspection corpus covers defined and undefined environment references, `~`
 and `~user`, relative paths after `cd`, files, directories, symlinks, nested
@@ -2239,17 +2441,54 @@ operation-created background job and its job-table presence do not survive
 mandatory operation cleanup. One case leaves `errexit`
 enabled with a nonzero status through an exempt `!` list, proves the next source
 still observes that status, and proves adapter entry itself does not end Bash.
+Ordinary-completion cases freeze the startup and completion `prompt_state`
+arity, the startup no-state `prompt_ready` arity, and the completion
+state-bearing `prompt_ready` arity. They prove that functions, aliases, positional parameters,
+unexported variables, and non-reserved options remain live in Bash without a
+serialized or replayed copy in any helper or private frame. They bind the
+direct-exec helper's `SO_PEERCRED` PID to `input_close`, require the peer to be
+Bash's direct child with the manifested executable and no child of its own,
+and reject a stale, extra, wrong-parent, or wrong-executable helper. They prove
+that Envoy sends `input_closed` only after operation input is permanently
+closed, live authored processes and adopted children are gone, both split
+streams independently reach EOF, both readers are closed, and both FIFO paths
+are removed. A direct Bash child that exited before that point may remain only
+as a descriptor-free Bash wait record. After `input_closed`, cases require the
+first helper to exit, reserved `wait` to clear every such record, reserved
+`jobs -p` to be empty, and the complete adapter state to pass its second
+validation before the completion `prompt_ready`. They then require the
+selected Bash build's actual Readline termios transition, the exact `completed`
+fields, a final census containing only Awsh and Bash, and a fresh final PTY
+drain and covering mark before the unchanged public terminal result.
+One paired case attempts to install a `CHLD`/`SIGCHLD` trap that changes cwd or
+exported environment and requires mediation to enter `FAIL_STOP`; its nominal
+counterpart proves that completion-helper and cleanup child exits after the
+`prompt_state` snapshot leave the reported and live persistent state aligned.
+Another nominal case installs an allowed non-reserved signal trap that changes
+cwd and an exported variable when cleanup delivers a signal; the final
+state-bearing `prompt_ready`, resolved inspection path, and `completed` report
+must match the live Bash state after that trap runs, while the trap remains
+installed.
+Companion cases fragment, duplicate, delay, reorder, or malform each completion
+helper message and private frame; mismatch the operation ID, status, cwd,
+environment, helper identity, or inspection result; release the helper early;
+leave a live process, helper child, retained descriptor, or job-table entry;
+stall either split EOF or the Readline transition; and exhaust the single
+non-resetting cleanup deadline at each phase. Every such failure is fatal,
+sends no `completed` when its prerequisites are unmet, and publishes no public
+terminal operation result.
 Suffix-isolation cases define a function named `:`, disable the `:` builtin,
 and use zero and nonzero source statuses under `errexit`; they prove the fixed
 constant arithmetic performs no workload-controlled command lookup, emits no
 workload output, preserves the exact status, and does not end Bash.
-Reserved-state cases attempt direct and expanded-argument mutations of
-`CHLD`/`SIGCHLD`, `DEBUG`, `ERR`, and `RETURN`, including direct `CHLD`,
-expanded `"$name"` where `name=CHLD`, the alias spelling `SIGCHLD` in both
-direct and expanded forms, lowercase `chld`/`sigchld` spellings in both direct
-and expanded forms, and direct and expanded decimal spellings of the selected
-Bash build's numeric `SIGCHLD` value (17 on the supported Linux builds), as
-well as `trap 'exit 42' DEBUG` and `trap 'exit 42' CHLD`, and attempt to
+Reserved-state cases for recorded terminal operations attempt direct and
+expanded-argument mutations of `CHLD`/`SIGCHLD`, `DEBUG`, `ERR`, and `RETURN`,
+including direct `CHLD`, expanded `"$name"` where `name=CHLD`, the alias
+spelling `SIGCHLD` in both direct and expanded forms, lowercase `chld`/`sigchld`
+spellings in both direct and expanded forms, and direct and expanded decimal
+spellings of the selected Bash build's numeric `SIGCHLD` value (17 on the
+supported Linux builds), as well as `trap 'exit 42' DEBUG`,
+`trap 'exit 42' CHLD`, and `trap 'cd /tmp' SIGCHLD`, and attempt to
 disable, dynamically load or replace, and dynamically unload each adapter-
 required builtin, including `enable -n kill`. Direct, expanded, combined-option,
 multiple-name, and mixed reserved/non-reserved cases prove each mediation
@@ -2257,9 +2496,14 @@ function preflights the whole argument vector and enters fail-stop before any
 partial state change. Companion cases prove reserved-state queries, including
 numeric `SIGCHLD` queries, and positive enablement, while trap changes using
 non-`CHLD` numeric signals and every enable mode on non-required builtins retain
-ordinary selected-Bash behavior. Deliberate explicit-
-builtin bypass is covered only as fatal same-identity interference, never as a
-supported successful operation.
+ordinary selected-Bash behavior. A nested Bash case proves that the child shell
+may install and own its own `CHLD` trap without weakening the selected-shell
+reservation. Deliberate explicit-builtin bypass is covered only as fatal
+same-identity interference, never as a supported successful operation.
+
+A nominal completion case must also prove that helper and cleanup child exits
+after `prompt_state` leave the final state-bearing `prompt_ready`, reported, and
+live cwd/exported environment aligned.
 
 The corpus covers resize placement before, between, and after authored events,
 including multiple resizes at one frontier and zero-duration spans. A delayed
