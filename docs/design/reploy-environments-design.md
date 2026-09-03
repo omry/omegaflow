@@ -522,7 +522,12 @@ deadline. This supervision is correctness evidence within the same-identity
 threat boundary, not security evidence.
 
 Cancellation and planned finalization first give the active operation the
-bounded grace period to return to the selected shell's backend boundary. A
+bounded grace period to return to the selected shell's backend boundary. The
+Envoy forwards only the first such request to Awsh, which delivers `SIGINT` to
+the PTY foreground process group, or closes a blocked gate helper first, and
+reports the backend phase it acted on; once the completion handshake has begun
+there is nothing to signal, and the completion hook ignores `SIGINT` for the
+duration of that handshake so a late signal cannot break the persistent shell. A
 deadline cancel accepted during a finalization grace period sends no second
 signal and does not reset that timer. It changes a timely operation return to
 cleanup followed by `operation_cancelled`, or expiry to `cancel-timeout` with
@@ -1288,7 +1293,13 @@ later items are not gates for the terminal-only milestone:
    fatal resize failure in idle and active-operation states with no resize event
    or terminal operation result and logged Reploy teardown, gate continuation
    waiting for its terminal-input watermark and taking fatal session teardown
-   without a terminal operation result when that watermark times out, both serialized
+   without a terminal operation result when that watermark times out, a gate
+   interruption winning a crossed continuation, a forwarded lifecycle request
+   closing a blocked gate without an interruption, the completion hook's
+   `SIGINT` bracket surviving a lifecycle signal and terminal Ctrl-C, timeout
+   teardown discarding crossed Awsh results and taking `shell_exit` as reaping
+   evidence, the resize lane excluding every terminal-control lease, and
+   shutdown and shell exit crossing in both orders, both serialized
    inspection-cancellation winners during ordinary completion and planned
    finalization, including non-resetting cancellation during the original
    finalization grace period and cancellation during post-finalize cleanup, typed
