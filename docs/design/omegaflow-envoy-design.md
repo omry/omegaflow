@@ -560,9 +560,32 @@ inspection-worker cancellation timeout. Functions, aliases, positional
 parameters, unexported variables, and non-reserved options never leave Bash. A
 malformed report, unexpected helper, nonempty job table, readiness mismatch, or
 cleanup failure fails closed without a terminal result.
-The public completion fields remain unchanged. A2.6 retains cancellation,
-finalization, gates, resize, shell exit, and crossed lifecycle outcomes; A2.7
-retains final private-schema closure.
+The public completion fields remain unchanged. A2.6 fixes the lifecycle
+controls that follow start and the exact winner of every crossing. Recorded
+source calls the one source-facing `/omegaflow-runtime/bin/awsh gate GATE_ID`
+helper over the same socket transport; Awsh reports `gate_ready`, releases the
+blocked helper only on a private `continue` that Envoy writes after the
+terminal-input watermark is reached, and proposes `gate_interrupt` when the
+helper's connection closes first, with the interruption winning a crossed
+`continue`. Envoy forwards at most one `cancel` or `finalize` per operation,
+after `start_released`; Awsh answers with one `disposition` naming the backend
+phase it acted on: it delivers `SIGINT` to the PTY foreground process group
+under a terminal-control lease while the source is `running`, first closes a
+blocked gate helper without proposing an interruption when `gated`, and
+signals nothing once it has accepted the completion `prompt_state` connection
+(`returned`). The completion hook brackets its handshake by ignoring `SIGINT`
+and restoring the recorded `INT` disposition before Readline entry, so neither
+a lifecycle signal nor terminal Ctrl-C can abort the hook or kill its
+direct-exec helpers. Grace-period expiry is Envoy-internal: Envoy selects the
+timeout outcome, kills the selected-shell tree, discards any crossed Awsh
+result, and takes Awsh's `shell_exit` as reaping evidence; no private teardown
+request exists. The resize lane, `resize_prepare`, `resize_ready`,
+`resize_apply`, and `resized` with identical dimensions, excludes every
+terminal-control lease around Envoy's ioctl. Idle `shutdown` delivers `SIGHUP`
+and answers `closed` with the reaped status; `shell_exit` carries the reserved
+operation identifier only between `submit` and `completed`; and Awsh follows
+either terminal result with nothing but descriptor closure and a zero exit.
+A2.7 retains final private-schema closure.
 
 For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
 under the mode-0700 session runtime after the one operation-start timer has
@@ -1016,8 +1039,9 @@ workload platform. Its schema is `omegaflow-runtime-manifest-v1` and it records:
   lowercase SHA-256 digest.
 
 The manifested `bin/awsh` is also conformance-tested for its fixed socket-helper
-request set, argument-free `bash-fail-stop` mode, positive source/start markers,
-and bounded stream-framing contract. These are behaviors of the exact
+request set, argument-free `bash-fail-stop` mode, source-callable
+`gate GATE_ID` mode and its `gate` helper message, positive source/start
+markers, and bounded stream-framing contract. These are behaviors of the exact
 hashed executable, not optional application configuration.
 
 Paths are unique, normalized relative POSIX paths and may name only the fixed
