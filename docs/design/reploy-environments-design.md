@@ -10,7 +10,9 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-08-30
+- Updated: 2026-09-04
+- A2.6 is a fresh, unreviewed design-only successor of the approved A2.5
+  contract. No prior A2.6 implementation, attestation, or approval is evidence.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -321,7 +323,7 @@ establishes success.
 | Reploy | Exact deployment admission, the bootstrap workload PTY, endpoint coordinates, lifecycle truth, controller output retention, cleanup, and private crash receipts. |
 | Host OmegaFlow | Blueprint composition, deployment preparation, public host invocation, host-process stderr retention, final host-result interpretation, retained-run inspection, and publication. |
 | Controller OmegaFlow | Recording plan execution, Envoy connections, terminal-to-browser handoff, browser automation, redaction, media production and validation, publication-candidate construction, artifact finalization, and structured failure preservation. |
-| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, resize, Ctrl-C delivery, external-Awsh and selected-shell-tree supervision, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
+| OmegaFlow Envoy | Recording PTY ownership, exact terminal input and output, direct `ioctl(PTY_MASTER, TIOCSIG, SIGINT)` cancellation/finalization, direct serialized `TIOCSWINSZ` resize, operation-process lifetime identity tracking and census/cleanup, external-Awsh and selected-shell-tree supervision, operation-lifecycle state/lifecycle-deadline/timeout-result selection, crossed-outcome resolution, structured operation telemetry, output ordering, draining, and bounded workload diagnostics. |
 | Recorded workload | Project shell, tools, files, services, and all untrusted terminal or application content. |
 
 ### OmegaFlow terminal control
@@ -337,6 +339,42 @@ terminal and telemetry TCP channels. Terminal bytes remain the canonical
 recording stream but are never parsed as telemetry. The telemetry channel
 carries command completion, status, cwd, action gates, output ordering, and
 diagnostics through the versioned contracts defined by the Envoy design.
+For a running operation, Envoy is the only operation-lifecycle,
+lifecycle-deadline, timeout-result, operation-process lifetime identity-
+tracking, cleanup, and crossed-outcome owner. It issues
+`ioctl(PTY_MASTER, TIOCSIG, SIGINT)` directly on the retained PTY master; Linux
+targets the current slave foreground group, and an ioctl failure is fatal with
+no terminal operation result. A successful ioctl starts the existing grace
+deadline. Envoy makes that target safe through its controlling-terminal
+session and pidfd-backed census invariant: every group eligible to be foreground
+is persistent Bash, an adapter helper, or a current-operation descendant, and
+immediately before `TIOCSIG` Envoy samples it with
+`ioctl(PTY_MASTER, TIOCGPGRP, &foreground_pgid)`, requires a positive live
+group, and validates every `/proc` member against the controlled session ID and
+pidfd-backed controlled-tree census. The kernel then atomically targets the current group in that same
+session; inability to prove any part of the invariant is fatal before a signal
+or terminal result. Awsh remains responsible for selected-shell and completion-helper
+identity validation, shell launch/reaping, and the A2.5 completion handoff; it
+does not receive a lifecycle signal or own a lifecycle/resize state machine.
+Envoy serializes resize around the output frontier and direct
+`ioctl(PTY_MASTER, TIOCSWINSZ, ...)`, then emits `resize_applied` only after
+success. A cancel during ordinary-return cleanup sends no signal, finishes the
+existing cleanup deadline, skips inspection, and emits `operation_cancelled`;
+a finalize accepted after `input_close` is observed-return-wins. The only new
+Awsh control is the gate helper, its local gate-reply transport deadline, and
+its single gate outcome exchange. A readonly
+adapter `awsh` function accepts only `awsh gate GATE_ID` and invokes
+`/omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock gate GATE_ID`
+rather than performing application-`PATH` lookup. Awsh uses the exact
+stream-write loop and retries positive short writes under one non-resetting
+five-second reply deadline. Peer close, terminal write error, or deadline expiry
+before the complete reply commits produces exactly one interruption outcome.
+If Envoy accepts that gate outcome first, it commits the corresponding public
+event; a controller already locally in `Cancelling` or `Finalizing` consumes the
+crossed predecessor, schedules no handoff work, and stays on its lifecycle
+path. If Envoy accepts the lifecycle request first, it consumes Awsh's
+exactly-one outcome whether or not a private `continue` was sent, publishes no
+gate telemetry, and continues the selected lifecycle path.
 
 All OmegaFlow-supplied workload executables and scripts are staged from the
 installed OmegaFlow release, validated by manifest, and mounted read-only and
@@ -495,11 +533,19 @@ daemonization can hide descendants. Protocol v1 therefore has one process
 lifetime rule for every operation: when the submitted Bash source returns to
 Awsh, the completion hook sends its pre-cleanup `prompt_state`, and Awsh
 proposes `input_close` with only the operation ID and exact completion-helper
-PID. The Envoy uses that proposal as the cleanup-timer boundary, terminates and
+PID. The completion-side direct-exec helper inherits the Bash hook's temporary
+ignored `SIGINT` disposition across fork and exec; its exec entry and runtime
+preserve it while the helper blocks through Envoy's acceptance of `input_close`
+and matching `input_closed`. This
+exception is limited to the completion helper; gate and all other helpers
+retain their existing signal behavior. The Envoy
+uses that proposal as the cleanup-timer boundary, terminates and
 reaps every remaining operation-created process, reaches EOF, drains its
 output, and sends `input_closed` before any final completion report. The hook
-then uses reserved `wait` to clear Bash-owned child records, proves the job
-table empty, revalidates the adapter, and sends `prompt_ready` with the saved
+then restores canonical unset `INT` with reserved `builtin trap - INT`, verifies
+`builtin trap -p INT` is empty, uses reserved `wait` to clear Bash-owned child
+records, proves the job table empty, revalidates the adapter, and sends
+`prompt_ready` with the saved
 source status and the final recapture of history expansion, editing mode,
 physical/logical cwd, and exported environment. Awsh validates that final state
 without altering non-reserved signal traps, and uses it to resolve paths before
@@ -521,18 +567,45 @@ environment. Cancellation and planned finalization use the same cleanup and
 deadline. This supervision is correctness evidence within the same-identity
 threat boundary, not security evidence.
 
-Cancellation and planned finalization first give the active operation the
-bounded grace period to return to the selected shell's backend boundary. A
-deadline cancel accepted during a finalization grace period sends no second
-signal and does not reset that timer. It changes a timely operation return to
-cleanup followed by `operation_cancelled`, or expiry to `cancel-timeout` with
-`shell_ended: true`; a finalization result committed first still wins. If the
-selected shell does not otherwise return to its backend boundary, the Envoy
-selects timeout teardown, terminates the selected-shell tree, completes
-mandatory descendant cleanup and output drain, reports `operation_failed` with
-`cancel-timeout` or `finalize-timeout` and `shell_ended: true`, and enters the
-Envoy-initiated `shell_ended` drain. Controller OmegaFlow does not synthesize
-another prompt or dispatch another operation after that result.
+For a running operation, cancellation and planned finalization are Envoy-local
+lifecycle decisions. Envoy serializes the request with its output pump and
+issues exactly one `ioctl(PTY_MASTER, TIOCSIG, SIGINT)` on the retained PTY
+master; Linux targets the current slave foreground group. A successful ioctl
+starts the bounded grace period, while failure is fatal with no terminal
+operation result. The same Envoy-owned controlling-terminal session and
+pidfd-backed foreground-group invariant described above is mandatory before
+this ioctl; an unprovable boundary is fatal before any signal or result. A
+deadline cancel accepted during finalization grace sends no
+second ioctl and does not reset the timer; it changes a timely return to cleanup
+followed by `operation_cancelled`, or expiry to `cancel-timeout` with
+`shell_ended: true`. A cancel crossing finalization before `input_close` changes
+the intended result without another ioctl or timer reset. The completion
+handoff interval after the direct-exec `prompt_state` helper has connected and
+Awsh has validated it, but before Envoy accepts the matching `input_close`, is
+covered by these same rules: a `cancel` or `finalize` there must leave
+persistent Bash and the blocked helper alive because the helper retains the
+hook-inherited ignored `SIGINT` disposition throughout its exec entry and
+blocked exchange. Envoy then consumes `input_close` as the existing A2.5 return fact
+and completes the already-selected lifecycle outcome without a second owner
+or changed frame shape. A cancel accepted
+during ordinary-return cleanup sends no signal, finishes the existing
+non-resetting cleanup deadline, skips inspection, and emits
+`operation_cancelled`; once inspection is running, the existing worker-result /
+cancel race decides the winner. A finalize accepted after `input_close` is
+observed-return-wins and remains Envoy-local, preserving the returned status and
+ordinary inspection path. If the selected shell does not otherwise return to
+its backend boundary, Envoy selects timeout teardown, terminates the
+selected-shell tree, completes mandatory descendant cleanup and output drain,
+reports `operation_failed` with `cancel-timeout` or `finalize-timeout` and
+`shell_ended: true`, and enters the Envoy-initiated `shell_ended` drain.
+If a complete valid `input_close` is already queued but unread when timeout
+selection wins, Envoy consumes and discards it in result-pipe order, sends no
+`input_closed`, and does not enter ordinary completion or inspection; the later
+`shell_exit` remains the required reap evidence for that selected timeout.
+Controller OmegaFlow does not synthesize another prompt or dispatch another
+operation after that result. Awsh supplies only its existing Bash-local
+`input_close`, `completed`, and `shell_exit` facts and does not implement a
+second lifecycle or resize state machine.
 
 Long-lived services belong in environment setup outside the controlled
 Envoy/Awsh process tree. V1 does not preserve processes across operations;
@@ -738,16 +811,26 @@ recorded terminal operation source, where the persistent shell carries it to
 operation children as ordinary shell state without governing either shell
 launch. That freedom does not include the adapter-reserved parser state, prompt
 values, namespace, tracing and execution controls, the `CHLD` (`SIGCHLD`),
-`DEBUG`, `ERR`, and `RETURN` adapter-sensitive traps, adapter-required builtin
-state, job-control entry state, or two source-trigger bindings: source using the
+`INT` (`SIGINT`), `DEBUG`, `ERR`, and `RETURN` adapter-sensitive traps, and
+adapter-required builtin state,
+job-control entry state, or two source-trigger bindings: source using the
 reserved namespace and planned terminal input producing either reserved byte
 sequence are rejected; readonly shell mediation preflights a complete expanded
 request and canonicalizes every selected-Bash `signal_spec` using the selected
 Bash build's case-insensitive signal-name grammar and signal-name table,
 including aliases and decimal values, before deciding whether it is reserved.
-A value that canonicalizes to `SIGCHLD` is reserved regardless of spelling; the
-selected build's numeric mapping is authoritative, and queries and non-`CHLD`
-numeric traps retain ordinary selected-Bash behavior. It then refuses ordinary
+A value that canonicalizes to `SIGCHLD` or `SIGINT` is reserved regardless of
+spelling; the selected build's numeric mapping is authoritative, and queries
+and other numeric traps retain ordinary selected-Bash behavior. Recorded
+top-level source cannot install or change the selected persistent Bash's `INT`
+trap. The completion hook saves source status, may temporarily install ignore
+with reserved `builtin trap '' INT`. Its direct-exec `prompt_state` helper
+inherits that ignored disposition across fork and exec and must not reset
+`SIGINT` while it blocks through Envoy's acceptance of `input_close` and
+matching `input_closed`; the hook restores
+the one canonical unset state only after the helper is released, using reserved
+`builtin trap - INT`, and requires `builtin trap -p INT` to be empty before
+reuse. It then refuses ordinary
 source mutations of the reserved traps or required builtin enablement or
 implementation before any partial state change; and a runtime failure to
 retain or regain any cooperative reservation fails the session. Deliberate
@@ -755,7 +838,8 @@ explicit-builtin bypass remains same-identity interference, not a supported
 source capability. The `CHLD` reservation also prevents a recorded terminal
 operation's child-exit trap from mutating cwd or exported environment after the
 completion-side state snapshot and before the `completed` report. It constrains
-only the selected persistent Bash, not a nested shell's own child-exit trap. The
+only the selected persistent Bash; nested shells and ordinary child programs
+retain their own normal `CHLD` and `INT` signal handling. The
 defaults are:
 
 - a Bash package/build requirement whose resolved `/bin/bash` digest has an
@@ -1266,16 +1350,23 @@ later items are not gates for the terminal-only milestone:
    that send authored terminal bytes, fail-closed cleanup after every operation
    including ordinary background jobs, `disown`, `nohup`, `setsid`, and rapid
    double-fork daemonization, a setup service outside the controlled process
-   tree remaining unaffected, immutable `CHLD`, `DEBUG`, `ERR`, and `RETURN`
-   trap-state validation before reuse, an allowed non-reserved signal trap
+   tree remaining unaffected, immutable `CHLD`, `INT`, `DEBUG`, `ERR`, and
+   `RETURN` trap-state validation before reuse, an allowed non-reserved signal trap
    changing cwd and exported environment during cleanup with the final report
    matching live Bash, completion-side status/cwd/exported-environment handoff
    plus preservation of
    live Bash-only functions, aliases, positional parameters, variables, and
    non-reserved options, exact helper-PID binding, empty-job-table proof,
+   cancel and finalize cases injected after direct-exec `prompt_state` helper
+   connection and Awsh validation but before Envoy accepts `input_close`, with
+   the inherited ignored `SIGINT` disposition preserved and both Bash and the
+   helper surviving, `input_close` consumed as the existing A2.5 return fact,
+   and the already-selected lifecycle outcome completed,
    repeated `prompt_ready`, operation input close followed by split keepalive
    closure, dual stdout/stderr EOF, FIFO removal, and the post-readiness PTY
-   output drain, resize, Ctrl-C, command completion, cwd, newline-sensitive
+   output drain, direct Envoy `ioctl(PTY_MASTER, TIOCSWINSZ, ...)` resize,
+   direct Envoy `ioctl(PTY_MASTER, TIOCSIG, SIGINT)` cancellation/finalization,
+   Ctrl-C, command completion, cwd, newline-sensitive
    split-stream assertions, exact
    post-line-discipline PTY assertion semantics without authored input across
    terminal CRLF processing,
@@ -1295,7 +1386,14 @@ later items are not gates for the terminal-only milestone:
    workload-side file and produced-output inspection, and a setup service outside
    the controlled process tree concurrently mutating a produced file or directory
    causing typed inspection failure with no accepted digest or inspection record,
-   action gates, and ordered output ranges.
+   action gates, including positive short writes completing through the exact
+   loop, reply close/error/deadline crossings, and exactly-one interruption
+   outcome with no Awsh lifecycle state machine, reserved top-level `INT`
+   mutation rejection and completion restoration of canonical unset (including
+   direct/expanded/alias/numeric mutation, query, temporary-ignore, restore,
+   and nested-shell fixtures),
+   observed-return/lifecycle/timeout/shell-
+   exit crossings, and ordered output ranges.
 3. **Terminal-only:** Prove startup failure, controller cancellation, workload
    exit, terminal output-finalization failure, controller artifact failure,
    result-delivery failure, acknowledgement failure, cleanup failure, and
