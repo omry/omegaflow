@@ -804,6 +804,8 @@ TUTORIAL_BOOTSTRAP_RESOURCE_FILES = (
     "index.md",
     "scripts/inspect_artwork.py",
     "scripts/reset_artwork.py",
+    "scripts/start_server.sh",
+    "scripts/stop_server.sh",
     "scripts/tiny_canvas.py",
 )
 
