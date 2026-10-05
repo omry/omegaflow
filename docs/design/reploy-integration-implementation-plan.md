@@ -9,9 +9,10 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-09-04.
-- A2.6 is a fresh, unreviewed design-only worktree on the approved A2.5 base;
-  no earlier A2.6 implementation, attestation, or approval is evidence.
+- Updated: 2026-10-05.
+- A2.5 and A2.6 are approved and merged as PRs 35 and 36. The current
+  A2.7 design-only successor starts from the A2.6 merge commit
+  `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551`; it is not yet approved.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -244,20 +245,40 @@ amendment is an additional documentation gate before its affected B work.
   return fact, and complete the already-selected lifecycle outcome. Nested
   shells and ordinary child programs retain normal signal handling. Public
   telemetry fields remain unchanged.
-- A2.7 closes all private schemas and establishes the exact B1 base.
+- A2.7 closes all private schemas and establishes the exact B1 base as one
+  design-only PR. Freeze every Envoy/Awsh and Bash-helper message's direction,
+  ordered fields, arity, scalar and nested-JSON encoding, aggregate byte
+  accounting, state/identifier validation, and terminal EOF/reap rules.
+  Close the remaining `shutdown`, `shell_exit`, `closed`, and `protocol_error`
+  forms without replacing the approved start, gate, completion, or lifecycle
+  architecture. Map each recoverable rejection, terminal operation failure,
+  and fatal session failure to its existing deadline and teardown path. Inventory
+  the exact nominal, malformed, maximum-bound, and crossed-outcome cases B1 must
+  freeze and assign runtime proofs to the existing B2–B8 owners. Align all four
+  documents and their byte-current review sidecars. This slice adds no production
+  code, executable fixtures, public fields, actors, or deadlines.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
 and must complete deep design review, current-document attestation, required
 checks, and exact-head PR approval before its successor is published. No B
-implementation starts until A2.7 is approved.
+implementation starts until A2.7 is approved and merged.
+
+The exact B1 base is the merge commit of the A2.7 PR approved at its exact final
+head, with current document attestations and all required checks passing. Record
+that merge SHA in the delivery closeout evidence when delivery completes; before
+B1 work, verify it contains the approved document and sidecar bytes and is an
+ancestor of the chosen checkout.
+No draft A2.7 head, older A2.6 run, prototype commit, or PR number alone satisfies
+this base. Later unrelated main commits may follow it, but cannot substitute
+their identities for the recorded approved A2.7 boundary.
 
 ### B. Local Envoy and Awsh conformance
 
 **B1. Protocol models and fixtures**
 
-Add Go validation and canonical fixtures for inspection requests, deterministic
-IDs, resolved plans, typed results, aggregate frame bounds, malformed cases,
-failure codes, matching and mismatching handshake session IDs, and every
+From the approved A2.7 base, add Go validation and canonical fixtures for inspection
+requests, deterministic IDs, resolved plans, typed results, aggregate frame
+bounds, malformed cases, failure codes, matching and mismatching handshake session IDs, and every
 startup/control-write deadline epoch. Cover an earlier writer exiting with
 bytes still buffered, and require the fresh exclusive pre-start drain before
 `operation_started`. Freeze path-resolution and file-digest
@@ -363,6 +384,46 @@ payloads. Cover cancellation before the first private `execute` byte, while
 `start_released`, and after every later private-start phase; prove a committed
 start publishes `operation_started` and accepts `start_released` before
 ordinary cancellation and never abandons a loaded frame or adapter helper.
+Add shell-exit crossings before the first private `execute` byte, after a
+complete `execute` but before `submit`, after `submit`, after `started`, after
+accepted `start_prepared` but before Envoy writes `start_release`, after the
+complete `start_release` write but before Awsh emits `started`, after public
+`operation_started` but before `started_ack`, after `started_ack` but before
+`start_released`, and immediately after accepted `start_released`. The first
+crossing uses Awsh's empty operation-ID encoding and the existing shell-ended
+drain without an operation result; every later pre-`start_released` crossing
+is fatal under the unchanged operation-start deadline, while the final
+crossing uses ordinary shell-ended result evidence. At both added boundaries
+Awsh has registered the active operation, so `shell_exit` carries the active
+operation ID and takes the fatal no-public-result mapping under the same
+non-resetting epoch. Add execute and continue
+crossings while their `input_through` watermarks are outstanding, including
+`execute` before the operation-start epoch begins: an accepted
+`protocol_error` retains the active five-second Envoy terminal-input-barrier
+epoch without reset, supersedes the ordinary `input-barrier-timeout` mapping,
+and emits no operation result or synthetic status. The sender's individual
+control-write deadline never controls that crossing. Require bounded private
+EOF, with a zero-status Awsh reap as orderly evidence only; missing EOF, a
+nonzero or signalled Awsh reap, or expiry remains a bounded fatal teardown
+failure with the original cause retained. Retain bounded code/message evidence
+and report Reploy termination. Repeat both barrier crossings with a queued
+cancel and an outstanding resize; crossed requests resolve through fatal
+channel failure without a new state or timer. Cover partial private-frame
+crossings where Envoy has attempted its first byte but Awsh has not accepted a
+complete `execute`: the wire ID remains empty, while the Envoy start phase is
+already fatal. Repeat with queued cancel and both PTY and split setup active.
+Cover valid, malformed, unknown-code, stalled-EOF, reset, and nonzero/signalled
+Awsh `protocol_error` cases during launch, Ready/Idle, every start phase,
+Running, Gated, Continuing, grace, cleanup, live inspection, inspection
+cancellation, and drain. Preserve one active deadline epoch without reset;
+when none is active, enter the existing Envoy final drain and start its existing
+five-second epoch. The active epoch must be one of the listed Envoy phase or
+terminal-input-barrier epochs; an individual control-write timer alone cannot
+suppress that fallback. Retain bounded code/message evidence, emit no
+synthetic shell status or operation result, and report Reploy termination.
+For every variant, private EOF followed by a zero-status Awsh reap is orderly
+evidence only; missing EOF, a nonzero or signalled reap, or expiry remains a
+bounded fatal teardown failure with the original cause retained.
 Freeze the exact A2.5 ordinary-return frames and helper reports: completion
 `prompt_state` with `STATUS`, `HISTEXPAND`, `EDITING_MODE`, `PHYSICAL_CWD`,
 `LOGICAL_CWD_OR_EMPTY`, and `EXPORTED_ENV_JSON`;
@@ -380,7 +441,14 @@ non-reserved options remain live in Bash without entering a helper or private
 frame. Cover malformed and duplicate completion reports, stale or extra helper
 PIDs, early helper release, stale status/cwd/environment, and each PTY and split
 output/EOF boundary. Leave cancellation, finalization, gates, and crossed
-lifecycle cases to A2.6 and final private-schema closure to A2.7.
+lifecycle runtime proofs to B4–B8. Use the complete A2.7 private-frame inventory
+for all request/result/helper directions, including exact `shutdown`,
+`shell_exit`, `closed`, and `protocol_error` bytes, empty operation-ID encoding,
+status and PID scalars, nested JSON, concatenation, fragmentation, maximum
+aggregate sizes, unknown diagnostic codes, and terminal EOF/reap crossings.
+Freeze failure-code/result eligibility and public absent-field/empty-range cases
+from that same approved contract. The corpus is new B1 work; A2.7's case list
+does not claim fixture or implementation conformance.
 
 **B2. Awsh boundary alignment**
 
@@ -701,16 +769,49 @@ races, cleanup and drain failures, and every inspection resource limit.
 
 Prove socket and private-descriptor isolation, stable failure classes, channel
 loss, shell exit, malformed traffic, cleanup, and repeated shutdown behavior.
-For ordinary selected-shell exit, require one complete terminal `shell_exit`,
+For ordinary selected-shell exit after accepted `start_released`, require one
+complete terminal `shell_exit`,
 no later `closed`, private EOF, and a zero-status Awsh reap. Prove that premature
 EOF, a trailing result frame, reset, signal, or nonzero Awsh exit remains fatal
 after either terminal result. A processed controller-requested shutdown instead
 requires one terminal `closed`, private EOF, and a zero-status Awsh reap.
-For that terminal reap, prove the existing timer mapping: an active-operation
-`shell_exit` remains under the Envoy operation-cleanup deadline, while an idle
-`shell_exit` or `closed` remains under the already-running Envoy final-drain
-deadline. A terminal result starts or resets neither timer and leaves both
-existing five-second budgets and failure mappings unchanged.
+For that terminal reap, prove the existing timer mapping: before Envoy's first
+attempted private `execute` byte, an empty-ID `shell_exit` follows the existing
+`shell_ended` drain with no operation result; if `execute.input_through` is
+complete, the already-active operation-start deadline continues to govern split
+setup and terminal EOF/reap, while any earlier phase keeps its own bound, and
+neither that shell exit nor its terminal evidence starts, replaces, or resets a
+governing epoch. At or after that first byte and before accepted
+`start_released`, `shell_exit` is a fatal start-phase crossing under the
+unchanged operation-start deadline with no public operation result; its wire ID
+remains empty until Awsh validates and registers the complete private
+`execute`, then carries the active operation ID. Both branches retain bounded cleanup and the existing
+private EOF and zero-status Awsh reap evidence; premature EOF, reset, or a
+nonzero/signalled Awsh exit remains fatal. An active-operation `shell_exit`
+after accepted `start_released` remains under the Envoy operation-cleanup
+deadline, while an idle `shell_exit` or `closed` remains under the already
+running Envoy final-drain deadline. A terminal result starts or resets neither
+timer and leaves all existing five-second budgets and failure mappings
+unchanged. Also inject valid `protocol_error` in launch, Ready/Idle, every
+start phase, Running, Gated, Continuing, grace, cleanup, live inspection,
+inspection cancellation, and drain: retain the active epoch without reset, or
+enter Envoy-initiated final drain to start the existing five-second epoch when
+none is active. Later EOF or zero-status Awsh reap is teardown evidence only;
+missing EOF, a nonzero or signalled reap, or expiry remains a bounded fatal
+teardown failure with the original cause retained. Retain the bounded
+code/message and emit no synthetic shell status or operation result. Add the
+same explicit `execute.input_through` and
+`continue.input_through` crossings: before operation-start, retain the active
+terminal-input-barrier epoch without reset and suppress the ordinary
+`input-barrier-timeout` result; the sender's individual control-write deadline
+does not control it, and an individual control-write timer alone cannot
+suppress the existing immediate fatal drain in timerless phases. Include valid,
+malformed, and unknown-code variants, queued cancel, and an outstanding resize;
+require bounded teardown evidence: private EOF followed by a zero-status Awsh
+reap is orderly evidence only, while missing EOF, a nonzero or signalled Awsh
+reap, or expiry remains a bounded fatal teardown failure with the original
+cause retained. Emit no operation result or synthetic status and report Reploy
+termination.
 Cover both orderings of `shutdown` crossing an idle persistent-shell exit:
 observed shell exit first sends terminal `shell_exit` and resolves
 `ShutdownSent` through `shell_ended`, while accepted shutdown first preserves
@@ -948,9 +1049,9 @@ gate.
 | A1 | Approved prefix | PRs 23 through 25 are approved at their exact current heads |
 | A2.1–A2.2 | Approved prefix | PRs 30 and 31 are approved at their exact current heads |
 | A2.3 | Approved prefix | PR 33 is approved at its exact current head with current A2.3 attestations |
-| A2.4–A2.5 | Approved prefix | Approved design predecessors; their contracts remain the base for the fresh A2.6 successor |
-| A2.6 | Unreviewed worktree | Fresh design-only successor on approved A2.5; requires deep review, current attestation, green checks, and exact-head approval |
-| A2.7 | Pending | Final private-schema closure after A2.6 approval; no implementation starts before this gate |
+| A2.4–A2.5 | Approved prefix | Approved design predecessors; A2.5 PR 35 is merged |
+| A2.6 | Approved and merged | PR 36 has the approved label and is merged at `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551` |
+| A2.7 | Unreviewed worktree | One design-only private-schema closure on the approved A2.6 merge; requires deep review, current attestation, green checks, exact-head approval, and merge before B1 |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |

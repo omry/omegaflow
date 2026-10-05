@@ -1,27 +1,27 @@
 ---
 artifact: swe-design-review-attestation
-schema_version: 3
-scope_key: 2868d8d05bf7ae752d5b05e180ead0c515ebad9857bc537ce7650b185f1c43af
-scope: {"kind": "pr", "primary_target": "pr-36", "repository": "/home/omry/dev/omegaflow", "selector": "pr-36"}
-review_content_identity_sha256: 229d0fdf89c9cff620a6de8939da81c06331888d9f0bcd4e62858c6aff4f56b8
-target_content_identity_sha256: 44dafad990928f851f02d841c78811b1440a1cbd53db61af1f370ced110d9aab
-baseline_content_identity_sha256: e472f91e17569601d48fe3d718ae38c20ff22b2c3911a6f8048ca4f511791323
-target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "sha256": "1baad2504e7f6a404ae7d1341b6cf449896d52b6081bbb612d01e3453774959c"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "02f9bde3fb9e4b979862e0cd9aaf29d9d2d9abb2d2dc0918bc5d1c6e77cb1f59"}, {"path": "docs/design/reploy-environments-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "bfbe4405bd57fdfe2cbb7a1077a0fef626d362b99723087a48e478bcdf7f049a"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": "/home/omry/dev/omegaflow", "sha256": "72f89b6655bc7ab41775c207ea3aee4c9134d98dc0087a5982ebc81735e55053"}]
-baseline_documents: [{"path": "docs/BACKLOG.md", "repository": "/home/omry/dev/omegaflow", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": "/home/omry/dev/omegaflow", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
-design_dependency_documents: [{"path": "docs/BACKLOG.md", "repository": "/home/omry/dev/omegaflow", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": "/home/omry/dev/omegaflow", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
-document_repository: "/home/omry/dev/omegaflow"
+schema_version: 4
+scope_key: 619d06f67cc382998435617055e59b4a8dfcaccb549df56b3ef820b8fcf3a7ab
+scope: {"kind": "path", "primary_target": "docs/design/envoy-protocol-v1.md", "repository": ".", "selector": "docs/design/envoy-protocol-v1.md"}
+review_content_identity_sha256: 182847850fb2ee94dce84e44d1edb0ffa276033607ac6b99eff62d79df60df5c
+target_content_identity_sha256: d37bf8d15cd70fb209f5502a11f593bd940e0defa9f645682870a1a529ee301d
+baseline_content_identity_sha256: d93b64744781fb209c349be440c4ad1d8efe012b1286b1767ae0a2795d59a166
+target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "2836efb4ef5afec135f80f3f8d710daf5e4af53f79d32f908183f06984c03802"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "cb5128384d1f0fa8343cd7d6ffd69172147bb4ee5c2fa61837f37f4ac35c550e"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "900645a8198b86a338b29be619b2c45768c9b8996cbf25579175371e7a496dd6"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "bcfcef96c5e035a7280f264a94d61ef166c0bdd01ccca006127e807226dc9c51"}]
+baseline_documents: [{"path": "docs/BACKLOG.md", "repository": ".", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": ".", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
+design_dependency_documents: []
+document_repository: "."
 document_path: "docs/design/reploy-environments-design.md"
-document_revision_provenance: "4cf2ff08fb96a2185351857ca44c44c10bae4ae2"
-document_sha256: bfbe4405bd57fdfe2cbb7a1077a0fef626d362b99723087a48e478bcdf7f049a
+document_revision_provenance: "ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551"
+document_sha256: 900645a8198b86a338b29be619b2c45768c9b8996cbf25579175371e7a496dd6
 verdict: clean
-attested_at: 2026-09-07T21:57:57Z
+attested_at: 2026-10-05T21:10:02Z
 ---
-<!-- swe-design-review-attestation:v3 -->
+<!-- swe-design-review-attestation:v4 -->
 
 # SWE design-review attestation
 
 Review freshness is determined by the target and baseline document bytes
-listed in the version-3 header. Revisions are provenance only.
+listed in the version-4 header. Revisions are provenance only.
 
 ## Durable review state
 

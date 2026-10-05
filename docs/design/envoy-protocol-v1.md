@@ -5,9 +5,10 @@
 This document defines the first controller/workload contract for the
 [OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
 inspection and external-Awsh amendments become frozen only after their design
-slices are approved. A2.6 is a fresh, unreviewed design-only amendment on the
-approved A2.5 base; no prior A2.6 implementation, attestation, or approval is
-evidence. It is an internal OmegaFlow release contract. Reploy
+slices are approved. A2.7 is the fresh, unreviewed design-only amendment on
+the approved A2.6 base; A2.5 and A2.6 are approved design predecessors, and no
+prior A2.7 implementation, attestation, or approval is evidence. It is an
+internal OmegaFlow release contract. Reploy
 provides the private network, endpoint coordinates, bootstrap attachment, and
 authoritative lifecycle; it does not transport or interpret these messages.
 
@@ -32,7 +33,9 @@ adds only the public pre-start failure codes `source-syntax` and
 releases a waiting gate without becoming lifecycle cancellation. A2.6 keeps
 the public telemetry fields unchanged; its lifecycle-control, resize, gate,
 and INT-reservation details are private except where the existing public
-observed-result rules already expose them.
+observed-result rules already expose them. A2.7 adds no public telemetry
+fields; it closes the private wire forms, failure mapping, and B1 fixture
+inventory below.
 
 ## Implementation and build contract
 
@@ -148,7 +151,7 @@ on partial progress.
 | Envoy `hello` | Envoy; starts after both connections are accepted | Read and validate one complete `hello` frame, including the exact `session_id`, within 10 seconds | Fail the handshake and exit nonzero |
 | Envoy launch readiness | Envoy; starts after it accepts the complete valid `hello` and begins creating the PTY and Awsh child | Complete the Awsh exec, Bash launch, startup helper exchanges, Readline-entry proof, startup-output drain and comparison, identity and terminal checks, accept one valid private `ready`, write the complete public `ready`, and write the complete buffered startup output within 10 seconds | Emit a best-effort fatal `shell-launch-timeout` diagnostic, enter the five-second Envoy final-drain teardown without a usable public readiness barrier, close the session channels, and exit nonzero |
 | Controller `ready` | Controller; starts after the complete `hello` frame is written | Read and validate one complete `ready` frame and append terminal bytes through `ready.output_through` within 10 seconds | Fail the capture and ask Reploy to terminate |
-| Envoy operation start | Envoy; starts immediately after `execute.input_through` is satisfied, before any split directory or FIFO creation, descriptor opening, private `execute` encoding, or private write | Within 5 seconds, either complete split setup plus recoverable source rejection and split rollback, including the public `operation_failed` write, or complete split setup when selected, private source validation and syntax preflight, `submit`, the fixed Readline trigger, source-helper delivery, the `PS0` preparation barrier, the pre-start output drain, `start_release`, `started`, the public `operation_started` write, `started_ack`, the adapter-owned post-`PS0` release signal, and `start_released` | Emit a best-effort fatal `operation-start-timeout` diagnostic, close and remove any partial split setup, close the session channels, terminate and reap the controlled tree, and exit nonzero; the adapter may hold a parsed source unit, so no ordinary operation result or later operation is safe |
+| Envoy operation start | Envoy; starts immediately after `execute.input_through` is satisfied, before any split directory or FIFO creation, descriptor opening, private `execute` encoding, or private write | Within 5 seconds, either complete split setup plus recoverable source rejection and split rollback, including the public `operation_failed` write, or complete split setup when selected, private source validation and syntax preflight, `submit`, the fixed Readline trigger, source-helper delivery, the `PS0` preparation barrier, the pre-start output drain, `start_release`, `started`, the public `operation_started` write, `started_ack`, the adapter-owned post-`PS0` release signal, and `start_released`; a shell exit after the first private `execute` byte and before accepted `start_released` is a fatal crossing under this same epoch | Emit a best-effort fatal `operation-start-timeout` diagnostic, close and remove any partial split setup, close the session channels, terminate and reap the controlled tree, and exit nonzero; the adapter may hold a parsed source unit, so no ordinary operation result or later operation is safe |
 | Individual control write | Sender; starts with the first attempted transport write of one already-encoded frame | Write every byte of one telemetry JSON Lines frame or one private Awsh frame within 5 seconds; terminal input and workload-output bytes are excluded | Fail the session; delivery of a partial frame never becomes success |
 | Awsh gate helper reply | Awsh; starts with the first attempted transport write of the already-encoded `accepted` reply after the matching private `continue` | Completely write the one helper reply through the exact stream loop within 5 seconds; positive short writes are ordinary progress and do not reset the deadline | If peer close, a terminal write error, or deadline expiry prevents the complete reply, commit exactly one `gate_interrupted` outcome and never `gate_continued` |
 | Envoy cancellation/finalization grace | Envoy; starts when it selects the ordinary started-operation lifecycle path for an immediately actionable `cancel` or `finalize`, or when a queued request becomes actionable after `start_released`, and always before foreground sampling | Within one non-resetting 5-second budget, obtain a safe foreground target and apply the single `TIOCSIG(SIGINT)`, unless `input_close` or `shell_exit` wins first, then wait for the selected shell outcome. A positive sampled foreground PGID with no live members is a permitted return/reclaim crossing: resample it while racing those Bash-local facts rather than failing the topology invariant. | If the deadline wins, select `cancel-timeout` or `finalize-timeout`, terminate the selected-shell tree, complete mandatory cleanup and drain, and emit the selected timeout with `shell_ended: true`; a malformed sample, a live wrong-session or unclassifiable member, or a failed signal ioctl remains fatal with no terminal operation result |
@@ -429,7 +432,15 @@ terminal input barrier wait bounds it. Expiry while `execute` is in `Starting`
 fails the not-yet-started operation with `input-barrier-timeout`. Expiry while
 `continue` is in `Continuing` is fatal to the session: the operation is still
 blocked inside its gate, so no ordinary terminal operation result or later
-operation is possible.
+operation is possible. While either watermark is outstanding, its five-second
+terminal-input-barrier epoch is the active Envoy-owned bound, including while
+`execute` is still in `Starting` and before the operation-start epoch begins.
+An accepted `protocol_error` in either wait retains that barrier epoch without
+reset and supersedes the ordinary `execute` `input-barrier-timeout` mapping (or
+the ordinary `continue` barrier-fatal mapping): it emits no
+`operation_failed`/`input-barrier-timeout` result, synthetic shell status, or
+other operation result. The sender's individual control-write deadline does
+not replace or reset the Envoy barrier epoch.
 
 Realtime timing requires PTY execution and real publication. Presentation
 timing requires split execution and exclusive observation. Suppressed and
@@ -830,6 +841,22 @@ requirement that cannot be evaluated must not be reported as met; that
 controller still learns the shell is gone. Any operation terminal result carrying
 `shell_ended`, including a cancellation or finalization timeout, is followed by
 `Idle --> Draining`; no prompt is synthesized and no later operation starts.
+That ordinary shell-ended mapping begins only after Envoy accepts
+`start_released`. A shell exit during the private start transaction after the
+first private `execute` byte and before that acceptance is a fatal pre-commit
+crossing: it retains the operation-start deadline, closes the fatal session
+path, and emits no `operation_completed`, `operation_failed`, or other public
+operation result. This remains the same no-result/channel-close path after
+public `operation_started`, when the controller is already in `Running` or
+`Cancelling`; it does not invent a public shell-ended drain edge. A shell exit
+before the first private byte may carry an empty operation ID and follows the
+existing drain with no operation result. The internal
+Envoy operation reservation is not the wire-ID boundary: until Awsh validates
+and registers a complete private `execute` for an active operation, Awsh emits
+an empty ID; after that validation and registration, including before `submit`,
+it emits the active ID. A partial private frame can
+therefore cross with an empty ID while the Envoy phase is already fatal.
+
 That drain is Envoy-initiated, so no request supplies its reason: `draining` and
 `closed` both carry reason `shell_ended` on this path, exactly as they carry the
 controller's shutdown reason on the requested one, which is what lets the golden
@@ -867,8 +894,12 @@ Attempting the first private `execute` byte closes that cancellable pre-start
 phase because Awsh may reserve or load the source before Envoy can observe its
 reply. A later `cancel` is retained but never abandons the private transaction.
 If `rejected` wins before `submit`, Envoy completes the empty-range
-`operation_failed`; that result resolves the controller's crossed cancel. If
-`submit` wins, the private start is committed: Envoy completely publishes
+`operation_failed`; that result resolves the controller's crossed cancel. A
+`shell_exit` accepted before the first private byte remains the empty-ID drain
+case above; after the first private byte, every `shell_exit` through the
+complete start barrier is fatal, even when a `rejected` or `submit` crossing is
+pending. It never becomes ordinary shell-ended evidence. If `submit` wins, the
+private start is committed: Envoy completely publishes
 `operation_started`, writes `started_ack`, and keeps cancellation queued until
 it accepts `start_released`, which proves that the positive helper marker and
 `PS0` release completed. A cancel accepted after public start but before that
@@ -1544,7 +1575,7 @@ handoff, startup helper handshake, and exact `ready` arity. A2.4 froze source
 submission and every private field through the operation-start commit. A2.5
 freezes the ordinary-return completion and persistent-state handoff below;
 A2.6 adds only the lifecycle-control, gate, resize, and INT-reservation rules
-needed by this slice, and A2.7 closes the remaining private schemas before
+needed by that slice. A2.7 closes the remaining private schemas before
 implementation begins.
 
 | Envoy request | Purpose |
@@ -1572,6 +1603,149 @@ implementation begins.
 The Envoy validates and bounds a complete request before forwarding it. Partial
 fields, unsupported types, invalid UTF-8, invalid arity, and EOF in the middle
 of a frame are protocol failures.
+
+### A2.7 terminal and error frame closure
+
+The remaining private descriptor frames have these exact fields and order:
+
+```text
+# Envoy -> Awsh
+awsh-v1, shutdown
+
+# Awsh -> Envoy
+awsh-v1, shell_exit, ACTIVE_OPERATION_ID_OR_EMPTY, STATUS, CWD
+awsh-v1, protocol_error, CODE, MESSAGE
+awsh-v1, closed, shutdown, STATUS, CWD
+```
+
+`shutdown` has no payload fields and carries no controller-facing reason. The
+literal `shutdown` field in `closed` is the fixed private result reason; the
+public `draining.reason` and `closed.reason` remain the controller's original
+shutdown reason or the existing `shell_ended` reason. `shell_exit` uses an empty
+field, encoded by two adjacent NUL terminators, when Awsh has not validated and
+registered a complete private `execute` for an active operation. Envoy may
+already have reserved an internal operation ID or started writing a private
+`execute`; that does not change the wire form until Awsh validates the whole
+frame and registers the active operation. It otherwise repeats the active
+`OPERATION_ID`. `STATUS` is canonical decimal
+`0` through `255`; a selected-shell signal is reported as `128 + N`, as already
+specified for the public status mapping. `CWD` is the last valid absolute
+physical cwd. All PID fields, including `AWSH_PID`, `SHELL_PID`, and
+`COMPLETION_HELPER_PID`, are nonzero canonical decimal values from `1` through
+`2^31-1`; decimal scalars have no sign, plus prefix, or leading zero. `CODE`
+uses the diagnostic-code grammar and `MESSAGE` uses the diagnostic-message bound;
+neither field is optional.
+
+Every private descriptor frame counts its `awsh-v1` prefix, message type, every
+field separator, and the final NUL in the 1,048,576-byte private-frame bound.
+There is no descriptor-frame length prefix. The reader selects arity by the
+message type and the current private phase; bytes following that arity begin
+the next frame and must start with `awsh-v1`. A reader accepts arbitrary stream
+fragmentation and multiple complete frames in one read, and parses only the
+declared arity; a frame is not complete until its final NUL has arrived. It
+rejects a zero-field omission where fields are required, an extra field after
+the declared arity, an unknown private message type, a private `protocol_error`
+code with invalid grammar, or EOF before a complete terminal result. A complete
+`shell_exit` or `closed` is followed only by private EOF and a zero-status Awsh
+reap under the one Envoy-owned deadline already governing that phase: the active
+terminal-input-barrier epoch while `execute.input_through` or
+`continue.input_through` remains outstanding; after `execute.input_through` is
+satisfied, operation-start for a pre-`start_released` shell exit both before
+the first private `execute` byte and from that byte onward, operation-cleanup
+for an active operation after that boundary, and final-drain for an idle or
+draining session. The terminal frame and required EOF/reap do not start,
+replace, or reset the governing epoch.
+
+Awsh emits at most one terminal result. It emits `shell_exit` when it commits
+the selected-shell end before processing `shutdown`, including a crossing
+with shutdown already accepted by Envoy. It emits `closed` only when it processes
+the reasonless `shutdown` before committing a crossed `shell_exit`. Envoy
+retains the public shutdown or `shell_ended` reason from its own serialized
+acceptance; it never derives that public reason from the private `shutdown`
+literal. After accepting either terminal result, Envoy sends no private request,
+requires between-frame EOF, and requires Awsh to exit with status zero. A
+second terminal frame, a terminal frame with the wrong operation ID, or a
+terminal frame after private EOF is fatal. EOF, reset, or Awsh exit without a
+valid terminal frame is likewise fatal and never supplies a synthetic status,
+cwd, operation result, or successful shutdown.
+
+`protocol_error` is not an alternate terminal result. It is a bounded fatal
+report that may be sent once while the result pipe is usable. Envoy records its
+code and message as the local cause, snapshots the current phase and its
+controlling deadline, closes the private session, and never resets that epoch.
+Launch readiness retains the launch-readiness deadline; every private start
+phase through `start_released` retains the operation-start deadline; an active
+cancellation/finalization grace, operation-cleanup, inspection-cancellation,
+or final-drain epoch likewise continues unchanged. The Awsh-owned gate-helper
+reply deadline is actor-local and cannot own Envoy fatal teardown; a
+`protocol_error` during that helper exchange therefore uses Envoy's fatal drain
+unless an Envoy-owned epoch is already active.
+During an unsatisfied `execute.input_through` or `continue.input_through`
+wait, the active Envoy terminal-input-barrier epoch is that epoch: it remains
+the fatal teardown bound without reset, even before the operation-start epoch
+begins. A sender's individual control-write deadline is not a substitute for
+it. Fatal `protocol_error` handling closes the private session, retains the
+bounded cause, and requires bounded teardown evidence: private EOF followed by
+a zero-status Awsh reap is orderly evidence only. Missing EOF, a nonzero or
+signalled Awsh reap, or expiry remains a bounded fatal teardown failure with
+the original cause retained; no such evidence implies success. It emits no
+operation result or synthetic status and leaves the controller to report
+Reploy termination. Malformed protocol-error traffic is fatal under the same
+current barrier epoch when one is active; it cannot be reclassified as the
+ordinary barrier timeout result. In this rule, an active Envoy-owned deadline
+means only one of the listed launch, terminal-input-barrier, operation-start,
+cancellation/finalization-grace, operation-cleanup,
+inspection-cancellation, or final-drain epochs. An individual control-write
+timer is sender-local and never counts as one; in Ready/Idle, ordinary
+Running/Gated/Continuing, or live inspection it cannot suppress the immediate
+existing fatal drain.
+In Ready/Idle, ordinary Running/Gated/Continuing without one of those active
+epochs, and live inspection without an active inspection-cancellation epoch,
+Envoy immediately enters the existing Envoy-initiated fatal drain, which starts
+the existing five-second final-drain epoch. No new timer or public state is
+introduced. Later private EOF or a zero-status Awsh reap is teardown evidence
+only; missing EOF, a nonzero or signalled Awsh reap, or expiry remains a
+bounded fatal teardown failure with the original cause retained, and none of
+those facts implies success, a shell status, or an operation result. A
+malformed `protocol_error` cannot be used to repair a malformed frame, and no
+private error may downgrade a post-`submit` adapter failure to recoverable
+`rejected`.
+
+| Private terminal fact | Envoy acceptance rule |
+| --- | --- |
+| `shell_exit` with an active ID | Match the current operation. If Envoy has accepted `start_released`, use its status and cwd as the existing shell-ended completion/failure evidence; during any earlier private start phase, retain the operation-start deadline, take fatal no-result teardown, and emit no public shell-ended drain or operation result. |
+| `shell_exit` with an empty ID | Accept when Awsh has no active operation, including idle shutdown, an `execute` not yet sent to Awsh, or a partial private `execute` that Awsh has not validated and registered. Before Envoy's first private `execute` byte, preserve the existing accepted public drain reason; after that first byte, retain the operation-start deadline and treat the empty-ID crossing as fatal. In both cases discard crossed unstarted requests without inventing an operation result. |
+| `closed` | Accept only for the accepted reasonless `shutdown`; preserve the public shutdown reason and require the selected-shell status and cwd. |
+| `protocol_error` | Record as fatal private evidence at the current phase. During an unsatisfied `execute.input_through` or `continue.input_through` wait, retain the active five-second Envoy terminal-input-barrier epoch without reset, even before operation-start; the sender's individual control-write deadline never controls teardown. Otherwise retain one of the listed Envoy phase epochs or start the existing five-second final-drain epoch when none is active; an individual control-write timer alone never suppresses that fallback. In every case, private EOF followed by a zero-status Awsh reap is orderly teardown evidence only; missing EOF, a nonzero or signalled reap, or expiry remains a bounded fatal teardown failure with the original cause retained. Emit no operation result or synthetic status and report Reploy termination; never treat it as a shell exit, completion, or shutdown acknowledgement. |
+
+The JSON fields carried inside private frames are JSON text, not JSON strings
+containing escaped JSON. `INSPECTIONS_JSON`, `EXPORTED_ENV_JSON`, and
+`RESOLVED_INSPECTIONS_JSON` are compact UTF-8 JSON with no insignificant
+whitespace, no duplicate members, no non-finite numbers, and no NUL in decoded
+strings. Arrays retain request order. Inspection objects serialize members in this order:
+`inspection_id`, `kind`, `path`, then `producer_id`, `output_id` for `produces`.
+Resolved inspection objects use the same order with `resolved_path` replacing
+`path`; they add no result fields. Exported-environment objects use the already
+specified UTF-8 byte order of variable names. Empty arrays and objects are
+`[]` and `{}`. JSON strings escape quote and backslash, use `\b`, `\t`, `\n`,
+`\f`, and `\r` for those controls, and lowercase `\u00xx` for other permitted
+U+0001–U+001F controls. All other code points use literal UTF-8, without slash
+escaping, Unicode normalization, or surrogate escapes. Encoding preserves the
+decoded string values; it never coerces, drops, or replaces unrepresentable
+values. The complete JSON text remains one bounded field, and B1 fixtures
+freeze its exact bytes. Public JSON object-member order remains unrestricted;
+Envoy serializes a validated inspection array into this private canonical form.
+
+The scalar checks apply uniformly to every existing private form: operation and
+gate IDs use the identifier grammar; enum fields use only the closed values
+already defined for `execute`; FIFO paths are either the exact Envoy-derived
+split paths or an empty field for `pty`; and `SOURCE` is the exact bounded
+public source bytes. `PHYSICAL_CWD` and `CWD` are absolute lexical paths from
+the selected shell, while `LOGICAL_CWD_OR_EMPTY` is empty unless it names the
+same directory. `RESOLVED_INSPECTIONS_JSON` contains identifiers and kinds plus
+absolute resolved paths only, never filesystem results. Receivers validate the
+whole frame, including nested JSON, before changing private state or emitting
+the next result.
 
 ### Gate helper exchange
 
@@ -2015,8 +2189,9 @@ Private EOF is never a substitute for a result. EOF in a frame is a protocol
 failure. EOF between frames is orderly only when it immediately follows one
 complete, accepted terminal `shell_exit` or `closed`. Envoy then requires Awsh
 to be reaped with status zero under the deadline already governing that
-terminal path: the Envoy operation-cleanup deadline when `shell_exit` reports
-an active operation, and the already-running Envoy final-drain deadline for an
+terminal path: the operation-start deadline for a shell exit before accepted
+`start_released`, the Envoy operation-cleanup deadline for an active operation
+after that boundary, and the already-running Envoy final-drain deadline for an
 idle `shell_exit` or `closed`. The terminal result starts or resets neither
 timer. A reset, another result frame, or a signalled or nonzero Awsh exit after
 either terminal result remains fatal. EOF between frames before a terminal
@@ -2040,8 +2215,8 @@ the reported shell as Awsh's direct child. It closes its control writer, sends
 no later private request, and requires the terminal EOF and successful Awsh reap
 described above. Awsh's orderly termination does not replace Envoy's mandatory
 descendant cleanup and output drain before it commits the public terminal
-result. A shell exit accepted before timeout teardown is selected ordinarily
-becomes `operation_completed` carrying the reaped status and
+result. A shell exit accepted after `start_released` and before timeout teardown
+is selected ordinarily becomes `operation_completed` carrying the reaped status and
 `shell_ended: true`. It becomes `operation_failed` instead when a declared
 inspection or unresolved gate can no longer be evaluated. A shell exit caused
 by already-selected timeout teardown is reaping evidence for that timeout and
@@ -2061,8 +2236,11 @@ the selected shell starts the source, or the ordered start sequence `submit`,
 `start_prepared`, `started`, the public `operation_started` commitment, and
 `start_released`.
 `rejected` maps to a typed public pre-start failure and leaves the shell ready
-for another operation. Once started, `completed`, `shell_exit`, cancellation,
-or finalization closes the operation; no later `execute` is accepted before
+for another operation. A shell exit after the first private `execute` byte and
+before accepted `start_released` is a fatal start crossing even if `rejected`
+is pending; it does not close the operation with a public result. Once
+`start_released` is accepted, `completed`, `shell_exit`, cancellation, or
+finalization closes the operation; no later `execute` is accepted before
 Envoy completes cleanup, output drain, and the public terminal result.
 
 Envoy owns cancellation, finalization, operation-lifecycle state, lifecycle
@@ -2144,7 +2322,11 @@ bytes. The length is 1 through the `Bash-helper payload` limit and does not
 include the prefix. The client writes one complete request, calls
 `shutdown(SHUT_WR)`, and
 then reads one complete reply through EOF; the server requires EOF immediately
-after the request payload, writes one complete reply, and closes. Every read
+after the request payload, writes one complete reply, and closes. The payload limit counts the `awsh-helper-v1` prefix, message type, every
+NUL separator, and the final NUL; only the four-byte length prefix is excluded.
+The state-bearing versus no-state `prompt_ready`, and the gate versus nongate
+`accepted`, are selected by the helper phase; neither arity may be accepted in
+the other phase. Every read
 uses `recvmsg` and rejects ancillary descriptors or credentials. A short
 prefix, zero or oversized length, short payload, trailing byte, extra payload,
 invalid UTF-8, or invalid arity fails the session. Reads and writes loop over
@@ -2455,6 +2637,26 @@ leaving declared inspections or an authored gate unevaluable.
 Codes keep the diagnostic shape, and adding one is a schema change under the
 versioning rule.
 
+The private-to-public failure mapping is fixed as follows:
+
+| Private condition | Public mapping and timer behavior |
+| --- | --- |
+| Source checker rejects before `submit` | `rejected` with exactly `source-syntax` or `source-policy`; Envoy rolls back split setup under the one operation-start deadline and emits the corresponding empty-range `operation_failed`. The shell remains reusable. |
+| Malformed, oversized, invalid-UTF-8, wrong-arity, unknown-type, wrong-operation, or out-of-state private traffic; adapter `FAIL_STOP`; or a private failure after `submit` | Fatal session failure. Envoy does not reinterpret it as `rejected`, does not emit a terminal operation result, and uses the deadline already governing that phase before final drain and Reploy termination. |
+| Valid `protocol_error` from Awsh | The bounded `CODE` and `MESSAGE` are retained as the fatal local cause. The result is terminal private evidence, not a shell status or public operation result. During an unsatisfied `execute.input_through` or `continue.input_through` wait, Envoy retains the active five-second terminal-input-barrier epoch without reset, even before operation-start, and suppresses the ordinary `input-barrier-timeout` result; the sender's individual control-write deadline never becomes the controlling epoch. Otherwise Envoy retains one of the listed launch, start, grace, cleanup, inspection-cancellation, or final-drain epochs without reset, and when none is active immediately enters the existing Envoy-initiated fatal drain to start the five-second final-drain epoch; an individual control-write timer alone never suppresses that fallback. Private EOF followed by a zero-status Awsh reap is orderly teardown evidence only; missing EOF, a nonzero or signalled reap, or expiry remains a bounded fatal teardown failure with the original cause retained, with Reploy termination reporting. The Awsh-owned gate-helper reply deadline never becomes Envoy's controlling epoch. An unknown but well-formed private code remains fatal; no closed public diagnostic enum is added. |
+| Launch output, launch deadline, operation-start deadline, resize, cleanup, or inspection-worker deadline failure | Preserve the existing fatal diagnostics `shell-launch-output`, `shell-launch-timeout`, `operation-start-timeout`, `resize-failed`, `operation-cleanup`, or `inspection-cancel-timeout`, respectively, with their existing no-result and timer rules above. |
+
+Public `diagnostic.code` remains an open bounded string: an otherwise valid
+diagnostic with an unknown code is retained and is not reclassified as a
+schema error. That openness does not make malformed private traffic or a
+valid private `protocol_error.CODE` recoverable. Public conditional fields
+use omission, never JSON `null`: pre-start `operation_cancelled` omits
+`status`, `operation_finalized` omits `status`, and `shell_ended` is present
+only when true. An empty operation range has equal `output_start` and
+`output_through`; it does not remove either offset field or create a synthetic
+status. Existing public arrays omitted by their schema remain omitted, rather
+than being replaced by `null`.
+
 A `continue` barrier timeout uses the same `input-barrier-timeout` code as a
 fatal diagnostic rather than an `operation_failed` result. Awsh is still
 blocked inside the unreleased gate, so Envoy cannot reach the Awsh result
@@ -2482,9 +2684,10 @@ never overrides a failed Reploy lifecycle or cleanup result.
 
 Delivery slice B1 creates the canonical corpus under
 `tests/fixtures/envoy-protocol-v1`; that directory does not exist in this design
-revision. The Bash-launch, submission, and A2.6 control design slices must
-first freeze the exact private schemas and field order. The resulting protocol
-text, state rules, and wire examples are the fixture corpus's authoritative raw
+revision. The Bash-launch, submission, and A2.6 control slices are approved
+predecessors; this A2.7 slice freezes the remaining private schemas, failure
+mapping, and field order before B1 implementation. The resulting protocol text,
+state rules, and wire examples are the fixture corpus's authoritative raw
 material. Historical fixtures from the former implementation stack may be
 consulted as untrusted extraction material, but there is no approved
 pre-amendment fixture baseline to update. The B1 corpus contains:
@@ -2494,8 +2697,84 @@ pre-amendment fixture baseline to update. The B1 corpus contains:
   stream identity and sender timing, workload inspection results, and planned
   finalization; and
 - `awsh-frames.json`: exact private frames represented as hexadecimal bytes,
-  including the startup no-state `prompt_ready` and completion state-bearing
-  `prompt_ready` arities.
+  including the startup no-state and completion state-bearing `prompt_ready`
+  arities, the reasonless `shutdown`, terminal `shell_exit` with both empty and
+  non-empty operation IDs, fixed-reason `closed`, and `protocol_error`.
+
+A2.7 terminal-frame cases must cover every complete form in both directions,
+arbitrary fragmentation, concatenated frames, final-NUL accounting for empty
+optional fields and maximum aggregate size, canonical decimal status values,
+empty versus present operation IDs, bounded cwd/code/message fields, and rejection of missing,
+extra, invalid-UTF-8, NUL-bearing, unknown-type, invalid-code,
+duplicate, out-of-order, or trailing frames. They must prove that a complete
+`shell_exit` or `closed` is followed only by private EOF and a zero-status Awsh
+reap under the deadline governing its phase, while premature EOF, reset, or a
+nonzero/signalled Awsh exit remains fatal.
+
+The failure corpus must distinguish recoverable pre-`submit` `rejected` from
+fatal adapter and malformed-private traffic, assert each existing diagnostic
+and timer mapping, and preserve unknown valid public diagnostic codes as
+bounded diagnostics. Public pre-start cancellation/failure empty-range cases must assert omitted
+conditional fields, no JSON `null`, equal output offsets, and no invented status. Shutdown
+crossings must cover accepted `shutdown` before `shell_exit`, observed shell
+exit before `shutdown`, both terminal result forms, and the required private EOF
+and reap evidence. Explicit empty-ID cases cross an accepted idle shutdown
+and an unstarted `execute` before any private `execute` byte: the former keeps
+the requested reason when shutdown wins Envoy acceptance, while the latter
+retains the terminal-input-barrier epoch through private EOF and zero-status
+Awsh reap while `execute.input_through` is outstanding, then retains the
+operation-start epoch after that watermark but before the first private byte
+while keeping the `shell_ended` drain and emitting no invented operation result.
+Start-phase
+crossings must additionally freeze `shell_exit` before the first private
+`execute` byte (empty ID), after a complete `execute` but before `submit`, after
+`submit`, after accepted `start_prepared` but before Envoy writes `start_release`,
+after the complete `start_release` write but before Awsh emits `started`, after
+`started`, after public `operation_started` but before `started_ack`, after
+`started_ack` but before `start_released`, and immediately after accepted
+`start_released`. The first case drains without an operation result; every
+later pre-`start_released` case is fatal under the unchanged operation-start
+deadline, whether Awsh has emitted an empty ID for a partial frame or the
+accepted active ID; only the final case uses ordinary shell-ended result
+evidence. At both added boundaries Awsh has registered the active operation, so
+`shell_exit` carries the active operation ID and still takes the fatal
+no-public-result mapping under the same non-resetting epoch. Repeat each
+crossing with a queued cancel and with both PTY and split setup active, and
+assert the existing telemetry order, private EOF, zero-status Awsh reap, and
+bounded cleanup.
+
+Protocol-error cases must inject valid, malformed, unknown-code, stalled-EOF,
+reset, and nonzero/signalled-Awsh variants during launch, Ready/Idle, every
+start phase, Running, Gated, Continuing, grace, cleanup, live inspection,
+inspection cancellation, and drain. Add explicit crossings while
+`execute.input_through` and `continue.input_through` are outstanding, including
+the `execute` crossing before operation-start begins. Each valid barrier case
+must retain the active five-second terminal-input-barrier epoch without reset,
+retain bounded code/message evidence, and suppress the ordinary
+`input-barrier-timeout` result; malformed and unknown-code cases remain fatal
+under the same current barrier epoch when active. Every case emits no
+synthetic shell status or operation result and requires bounded teardown
+evidence: private EOF followed by a zero-status Awsh reap is orderly evidence
+only. Missing EOF, a nonzero or signalled Awsh reap, or expiry remains a
+bounded fatal teardown failure with the original cause retained, and every
+case reports Reploy termination.
+Repeat both barrier crossings with a queued cancel and an outstanding resize,
+proving both requests resolve through the same fatal channel failure without a
+new public state or timer.
+
+These cases are additions to the B1 corpus; they do not alter the existing public
+request or event schemas.
+
+Nested-JSON cases must preserve Unicode and embedded JSON string content,
+reject duplicate members and non-finite numbers, retain array order, and prove
+that a compact field is not decoded and re-emitted as a lossy string. Scalar
+cases must reject signed, padded, or non-decimal numeric spellings and values
+outside the existing bounds. The parser corpus must include a frame split at
+every NUL boundary and a read containing two complete frames, proving that
+transport chunking does not change acceptance or state order. A valid public
+diagnostic with an unknown code remains bounded retained evidence; an unknown but well-formed
+private `protocol_error` code is retained as fatal evidence. No case may add a public field or
+turn a fatal private failure into a recoverable operation result.
 
 The inspection corpus covers defined and undefined environment references, `~`
 and `~user`, relative paths after `cd`, files, directories, symlinks, nested
