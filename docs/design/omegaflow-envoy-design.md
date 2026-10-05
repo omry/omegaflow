@@ -8,9 +8,10 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-09-04
-- A2.6 is a fresh, unreviewed design-only successor of the approved A2.5
-  contract. No prior A2.6 implementation, attestation, or approval is evidence.
+- Updated: 2026-10-05
+- A2.5 and A2.6 are approved and merged as PRs 35 and 36. A2.7 is the
+  current, unreviewed design-only closure on the A2.6 merge base; production
+  implementation remains pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -580,8 +581,8 @@ inspection-worker cancellation timeout. Functions, aliases, positional
 parameters, unexported variables, and non-reserved options never leave Bash. A
 malformed report, unexpected helper, nonempty job table, readiness mismatch, or
 cleanup failure fails closed without a terminal result.
-The public completion fields remain unchanged. A2.6 is the fresh controls and
-crossed-outcome slice. Envoy is the sole operation-lifecycle,
+The public completion fields remain unchanged. A2.6 is the approved controls and
+crossed-outcome contract. Envoy is the sole operation-lifecycle,
 lifecycle-deadline, timeout-result-selection, operation-process lifetime
 identity tracking and census, cleanup, and crossed-outcome owner. For a running
 operation, Envoy issues `ioctl(PTY_MASTER, TIOCSIG, SIGINT)` on its retained PTY
@@ -648,8 +649,11 @@ a lifecycle request is accepted first, Envoy does not send an unsent private
 `continue` was sent,
 publishes no gate telemetry, and continues the lifecycle path from `Cancelling`
 or `Finalizing`. There is no gate acknowledgement repair loop or duplicate Awsh
-lifecycle state machine. A2.7 retains final private-
-schema closure.
+lifecycle state machine. A2.7 closes the remaining private terminal/error
+schemas, encoded bounds, failure mappings, and conformance inventory in
+[Envoy Protocol v1](envoy-protocol-v1.md). It adds no lifecycle or resize actor,
+timer, helper, or public field. B1 consumes that complete contract only after
+A2.7's exact-head approval and merge, as required by the delivery plan.
 
 For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
 under the mode-0700 session runtime after the one operation-start timer has
@@ -1387,7 +1391,7 @@ prove applicable parity, and replacement remains a separately approved change.
     fails capability validation, and the isolated milestone selects `reploy`
     explicitly. A bare-metal recording controller is deferred until justified
     by a concrete requirement.
-14. A2.6 is design-only and unreviewed. Envoy alone owns operation-lifecycle
+14. A2.6 is an approved design-only contract. Envoy alone owns operation-lifecycle
     state, lifecycle deadlines, timeout-result selection, operation-process
     lifetime identity tracking and census, cleanup,
     crossed outcomes, direct PTY `ioctl(PTY_MASTER, TIOCSIG, SIGINT)`, and
@@ -1405,5 +1409,6 @@ disposition and its exec entry and runtime preserve it while blocked through
 Envoy's acceptance of `input_close` and matching `input_closed`; cancellation
 and finalization in that interval
 must preserve Bash/helper survival, consume `input_close` as the existing A2.5
-return fact, and complete the already-selected lifecycle outcome. A2.7 closes
-private schemas, and B implementation remains deferred.
+return fact, and complete the already-selected lifecycle outcome. The current
+A2.7 successor closes private schemas; B implementation remains pending until
+that successor is approved and merged.
