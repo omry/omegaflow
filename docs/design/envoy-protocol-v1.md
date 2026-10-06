@@ -4,10 +4,11 @@
 
 This document defines the first controller/workload contract for the
 [OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
-inspection and external-Awsh amendments become frozen only after their design
-slices are approved. A2.7 is the fresh, unreviewed design-only amendment on
-the approved A2.6 base; A2.5 and A2.6 are approved design predecessors, and no
-prior A2.7 implementation, attestation, or approval is evidence. It is an
+inspection and external-Awsh amendments are approved through A2.7, merged as
+PR 38 at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. The current A2.8
+design-only successor clarifies delivery order and evidence ownership; it is
+not yet approved and changes no wire form or runtime requirement. Production
+implementation and selected-Bash qualification remain pending. It is an
 internal OmegaFlow release contract. Reploy
 provides the private network, endpoint coordinates, bootstrap attachment, and
 authoritative lifecycle; it does not transport or interpret these messages.
@@ -2716,15 +2717,15 @@ never overrides a failed Reploy lifecycle or cleanup result.
 
 ## Conformance fixtures
 
-Delivery slice B1 creates the canonical corpus under
+Delivery slice B1 creates the static canonical wire corpus under
 `tests/fixtures/envoy-protocol-v1`; that directory does not exist in this design
 revision. The Bash-launch, submission, and A2.6 control slices are approved
-predecessors; this A2.7 slice freezes the remaining private schemas, failure
+predecessors; A2.7 froze the remaining private schemas, failure
 mapping, and field order before B1 implementation. The resulting protocol text,
 state rules, and wire examples are the fixture corpus's authoritative raw
 material. Historical fixtures from the former implementation stack may be
 consulted as untrusted extraction material, but there is no approved
-pre-amendment fixture baseline to update. The B1 corpus contains:
+pre-amendment fixture baseline to update. The B1 static wire corpus contains:
 
 - `controller.jsonl`: exact controller request encodings;
 - `envoy.jsonl`: exact Envoy event encodings, including output marks covering
@@ -2734,6 +2735,25 @@ pre-amendment fixture baseline to update. The B1 corpus contains:
   including the startup no-state and completion state-bearing `prompt_ready`
   arities, the reasonless `shutdown`, terminal `shell_exit` with both empty and
   non-empty operation IDs, fixed-reason `closed`, and `protocol_error`.
+
+The remaining case descriptions define the cumulative conformance suite, not
+executable prerequisites for B1. B1 supplies exact bytes, malformed variants,
+and declarative expected state/order/deadline traces; these do not claim a real
+process, ioctl, EOF/reap, or Bash behavior has been exercised. Its startup-byte
+examples are explicitly synthetic and carry no supported build identity. B2
+adds observed startup bytes and selected-build entries only after qualifying
+the real adapter and verified Bash inputs. Build-dependent diagnostics, signal
+aliases, and startup-export values remain case descriptions in B1 until B2
+supplies concrete expectations from qualification; no placeholder asserts
+support. B2–B8 supply the executable Awsh,
+Envoy, cleanup, inspection, and failure proofs when their owning implementations
+exist; C2/C3, C5/C6, and C8 supply controller, runtime/blueprint, and Reploy
+termination proofs later.
+The [shared proof-ownership inventory](reploy-integration-implementation-plan.md#b-local-envoy-and-awsh-conformance)
+assigns those cases and prerequisites. Each case must map to its wire fixture
+and owning executable test; cross-actor cases run with the actual actors before
+the applicable complete conformance gate passes. No requirement below is
+removed or satisfied merely by moving its delivery owner.
 
 A2.7 terminal-frame cases must cover every complete form in both directions,
 arbitrary fragmentation, concatenated frames, final-NUL accounting for empty
@@ -2807,8 +2827,9 @@ Repeat both barrier crossings with a queued cancel and an outstanding resize,
 proving both requests resolve through the same fatal channel failure without a
 new public state or timer.
 
-These cases are additions to the B1 corpus; they do not alter the existing public
-request or event schemas.
+These cases extend the cumulative corpus; B1 freezes their static forms and
+expected outcomes, and their runtime owners supply executable evidence. They
+do not alter the existing public request or event schemas.
 
 Nested-JSON cases must preserve Unicode and embedded JSON string content,
 reject duplicate members and non-finite numbers, retain array order, and prove
@@ -3118,8 +3139,10 @@ shell-ended drain crossing both an unstarted `execute` and its deadline-derived
 `cancel` resolves both requests without a terminal operation result; the planned
 beat fails as unrunnable.
 
-The B1 Go protocol implementation consumes these files as its canonical wire
-corpus. Future controller implementations, including Python integration, must
+The B1 Go protocol implementation consumes the static files as its canonical
+wire corpus; runtime owners extend the same corpus with qualified build entries
+and executable evidence without replacing accepted wire expectations. Future
+controller implementations, including Python integration, must
 consume the same corpus before they are accepted as v1-compatible. Schema
 changes require a new version and fixture directory after the complete
 pre-release inspection and external-Awsh amendments are approved and their
