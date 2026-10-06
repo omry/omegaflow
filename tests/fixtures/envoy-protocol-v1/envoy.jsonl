@@ -1,0 +1,18 @@
+{"schema":"omegaflow-envoy-telemetry-v1","type":"ready","seq":1,"envoy_pid":100,"shell_pid":102,"cwd":"/work","columns":80,"rows":24,"elapsed_us":0,"output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_started","seq":1,"operation_id":"operation-1","output_start":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_ready","seq":1,"operation_id":"operation-1","gate_id":"gate-1","output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_continued","seq":1,"operation_id":"operation-1","gate_id":"gate-1","output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_gate_interrupted","seq":1,"operation_id":"operation-1","gate_id":"gate-1","output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"output_mark","seq":1,"offset":0,"stream":"pty","elapsed_us":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_completed","seq":1,"operation_id":"operation-1","status":0,"cwd":"/work","output_start":0,"output_through":0,"inspection_results":[]}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_cancelled","seq":1,"operation_id":"operation-1","cwd":"/work","output_start":0,"output_through":0,"reason":"planned"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_finalized","seq":1,"operation_id":"operation-1","cwd":"/work","output_start":0,"output_through":0,"reason":"planned","inspection_results":[]}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_failed","seq":1,"operation_id":"operation-1","output_start":0,"output_through":0,"code":"source-syntax","message":"Rejected source","cwd":"/work"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"resize_applied","seq":1,"columns":80,"rows":24,"elapsed_us":0,"output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"diagnostic","seq":1,"severity":"warning","code":"future-code","message":"Retained unknown code"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"draining","seq":1,"reason":"shutdown","output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"closed","seq":1,"reason":"shutdown","output_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_completed","seq":1,"operation_id":"operation-2","status":255,"cwd":"/work","output_start":10,"output_through":10,"inspection_results":[{"inspection_id":"inspection-1","kind":"file_exists","resolved_path":"/work/file","path_kind":"other"},{"inspection_id":"inspection-2","kind":"produces","resolved_path":"/work/directory","path_kind":"directory","producer_id":"build","output_id":"tree","sha256":"0000000000000000000000000000000000000000000000000000000000000000","digest_algorithm":"directory-v2"}],"shell_ended":true}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_cancelled","seq":1,"operation_id":"operation-2","cwd":"/work","output_start":10,"output_through":10,"reason":"cancelled","status":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"operation_failed","seq":1,"operation_id":"operation-2","output_start":10,"output_through":10,"code":"shell-ended-unresolved","message":"Shell ended","cwd":"/work","shell_ended":true}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"diagnostic","seq":1,"severity":"fatal","code":"future-code","message":"Retained unknown code","operation_id":"operation-2"}
