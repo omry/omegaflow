@@ -13,8 +13,11 @@
 - Updated: 2026-10-06
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. The current A2.8 delivery-order successor is not yet approved;
-  production implementation and Bash-build qualification remain pending.
+  predecessors. A2.8 is approved at PR 39 head
+  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
+  A2.9 successor replans delivery to one PR per numbered implementation leaf;
+  it is not yet approved. Production implementation and Bash-build qualification
+  remain pending.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -1357,8 +1360,11 @@ The validation and product decisions below remain authoritative. The temporary
 plan owns implementation sequencing and current evidence. A2.7 closes the
 private Envoy/Awsh wire contract in [Envoy Protocol v1](envoy-protocol-v1.md)
 without adding a Reploy lifecycle field or changing these environment contracts.
-Its approval and merge, and approval/merge of the A2.8 delivery-order successor,
-precede B1. B1 freezes static wire cases without requiring Bash-build support or
+Its approval and merge, and approval/merge of the A2.8 delivery-order and A2.9
+one-PR replan successors, precede preparation of B1.1. B1–D3 remain requirement
+packages; the plan's numbered leaves are the delivery selectors, each targeting
+at most 750 changed production lines with a hard ceiling of 1,000. B1 freezes
+static wire cases without requiring Bash-build support or
 runtime implementations. B2 owns the initial adapter-specific Bash qualification
 and canonical table, using verified Reploy `tool:bash` build/provenance inputs;
 C4 packages its qualified entries and generated consumers. Reploy owns Bash

@@ -5,9 +5,12 @@
 This document defines the first controller/workload contract for the
 [OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
 inspection and external-Awsh amendments are approved through A2.7, merged as
-PR 38 at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. The current A2.8
-design-only successor clarifies delivery order and evidence ownership; it is
-not yet approved and changes no wire form or runtime requirement. Production
+PR 38 at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.8 clarifies delivery
+order and evidence ownership and is approved at PR 39 head
+`f0cc6f5031576e845958933976bcf8c08669efd7`, awaiting merge. The current A2.9
+design-only successor bounds delivery to one PR per numbered implementation
+leaf; it is not yet approved. Neither successor changes a wire form or runtime
+requirement. Production
 implementation and selected-Bash qualification remain pending. It is an
 internal OmegaFlow release contract. Reploy
 provides the private network, endpoint coordinates, bootstrap attachment, and
@@ -2717,7 +2720,10 @@ never overrides a failed Reploy lifecycle or cleanup result.
 
 ## Conformance fixtures
 
-Delivery slice B1 creates the static canonical wire corpus under
+Requirement package B1 creates the static canonical wire corpus through the
+implementation plan's one-PR leaves B1.1–B1.3, after verified approved merges of
+A2.7, A2.8, and A2.9. These delivery boundaries change no protocol requirement.
+The corpus lives under
 `tests/fixtures/envoy-protocol-v1`; that directory does not exist in this design
 revision. The Bash-launch, submission, and A2.6 control slices are approved
 predecessors; A2.7 froze the remaining private schemas, failure

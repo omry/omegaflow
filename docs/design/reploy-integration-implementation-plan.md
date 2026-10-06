@@ -12,9 +12,11 @@
 - Updated: 2026-10-06.
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.5 and A2.6 remain approved
-  predecessors. The current A2.8 design-only successor repairs delivery order
-  and proof ownership; it is not yet approved. Production implementation and
-  Bash-build qualification remain pending.
+  predecessors. A2.8 is approved at PR 39 head
+  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. This
+  A2.9 design-only successor bounds implementation delivery to one PR per
+  numbered slice. Production implementation and Bash-build qualification
+  remain pending.
 - A `.review` sidecar attests only the document bytes matching its recorded
   content hash. Changed documents require fresh review and byte-current
   attestations before approval; a sidecar does not establish PR approval.
@@ -114,10 +116,34 @@ each row when its selected material is integrated into a reviewed stack slice.
 - Keep at most three unapproved PRs live at once.
 - Once a PR is approved, do not rewrite it. Corrections go into a successor PR
   and receive their own review.
-- Give each PR one contract or production subsystem responsibility.
-- Target fewer than 800 handwritten changed lines. Split a PR before 1,200
-  handwritten changed lines unless the excess is mechanically generated or a
-  focused golden-fixture corpus.
+- Each numbered implementation delivery slice below produces exactly one PR
+  with one contract or subsystem responsibility. B1–D3 are requirement packages,
+  not executable delivery selectors; use a leaf ID such as B1.1. A package closes
+  only after all its leaves and its cumulative gate pass.
+- Target at most 750 changed production lines per PR; 1,000 is the hard ceiling.
+  Count production additions plus deletions against the PR's exact base, including
+  Go/Python/Bash code, executable helpers, build/staging tools, runtime
+  configuration, and generated production text. Do not use net growth or omit
+  production code because it is copied from a prototype or placed beside tests.
+  Tests, test-only fixtures, documentation, and review metadata do not count
+  toward this production limit; report their sizes and the total diff separately.
+  Report binary production assets separately with their provenance and review
+  method; a binary cannot conceal handwritten production code.
+- The estimates below are production-line planning allowances, not measured
+  prototype diffs or promises. Prepare each leaf against its actual base before
+  coding: name owned paths, record production/test/fixture estimates, acceptance
+  command, prerequisites, and remaining cross-slice proof cases. Above 750 and
+  through 1,000, record why the responsibility cannot usefully be split and obtain
+  an agent-owned preparation/review disposition within the authorized scope.
+  Above 1,000, split and review the revised leaf boundaries before implementation
+  continues; neither generated files nor golden fixtures exempt production text.
+  Never move required behavior into an untracked follow-up merely to meet size.
+- Recheck the actual production diff before commit and after review corrections.
+  If scope or growth invalidates a boundary, replan before publication. Replace
+  an unstarted leaf with explicitly numbered successors and update dependencies,
+  proof mapping, and ledger; do not deliver multiple PRs under one leaf ID. An
+  approved PR stays immutable; any correction is a separately named successor
+  slice and PR, with its own acceptance and size checks.
 - Do not combine design, runtime packaging, controller lifecycle, terminal
   adaptation, browser work, or publication work merely because raw material
   previously placed them in one commit.
@@ -274,11 +300,17 @@ amendment is an additional documentation gate before its affected B work.
   Preserve every A2.7 case, actor, frame, bound, timer, and terminal-only gate.
   Review the aligned plan and protocol evidence descriptions with current
   document attestations before B1 starts.
+- A2.9 replaces broad implementation selectors with the bounded leaf catalogue
+  below, targeting 750 and never exceeding 1,000 changed production lines per
+  PR. Preserve the complete A2.7/A2.8 requirements and final real-actor gates;
+  add explicit predecessor, isolated acceptance, and last-prerequisite proof
+  ownership for each leaf. Review and approve this plan before preparing B1.1.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
 and must complete deep design review, current-document attestation, required
 checks, and exact-head PR approval before its successor is published. No B
-implementation starts until A2.7 and this A2.8 successor are approved and merged.
+implementation starts until A2.7, A2.8, and this A2.9 successor are approved and
+merged.
 
 The exact B1 base is the merge commit of the A2.7 PR approved at its exact final
 head, with current document attestations and all required checks passing. Record
@@ -293,11 +325,13 @@ byte-current documents and attestations. Record both boundaries; A2.8 corrects
 delivery order without replacing A2.7's approved protocol contract. Preparation
 and review of this successor do not complete or silently resume the blocked B1
 delivery campaign; its next preparation step must resolve the newly approved
-slice scope before opening implementation PRs.
+slice scope before opening implementation PRs. Also verify and record the
+approved A2.9 merge and its current attestations before preparing B1.1; the
+replan does not resume the old B1 campaign.
 
 ### B. Local Envoy and Awsh conformance
 
-**B1. Protocol models and fixtures**
+**Requirement package B1. Protocol models and fixtures**
 
 Add Go protocol models, strict encoding/decoding and validation, and canonical
 wire fixtures under `tests/fixtures/envoy-protocol-v1`, from the approved A2.7
@@ -545,11 +579,11 @@ Freeze failure-code/result eligibility and public absent-field/empty-range cases
 from that same approved contract. B1 creates the static corpus and each owner
 adds its executable evidence; A2.7's case list claims neither.
 
-**B2. Awsh boundary alignment**
+**Requirement package B2. Awsh boundary alignment**
 
 Own the initial Bash qualification harness and canonical digest-keyed table,
-including the generator for host-preparation, Envoy, and Awsh consumers. Split
-this work and the adapter implementation into bounded successors under B2;
+including the generator for host-preparation, Envoy, and Awsh consumers. Deliver
+this work and the adapter implementation in the numbered B2 leaves below;
 the table is produced alongside the adapter, not required as a finished C4
 artifact before the first B2 code can be reviewed. Prepare table validation and
 the harness first, then measure the implemented launch/submission/return path
@@ -651,7 +685,7 @@ mixed, and multiple-target mutation rejection; allowed queries; temporary
 ignore and canonical restore; and normal nested-shell and child-program signal
 handling.
 
-**B3. Envoy session foundation**
+**Requirement package B3. Envoy session foundation**
 
 Implement launch, readiness, relay, and start coordination against B2's adapter
 and qualified builds. The ordinary-return sequence below fixes the coordination
@@ -693,7 +727,7 @@ implementations at their cumulative closeouts and the final B gate. The B3
 harness is isolated evidence and must not be exposed as a complete production
 execution path; unsupported later-slice behavior has no B3 conformance claim.
 
-**B4. Operation boundaries and controls**
+**Requirement package B4. Operation boundaries and controls**
 
 Implement the real control decisions, timers, PTY ioctls, and public/private
 ordering on B2/B3. Until B6 supplies real descendant tracking and cleanup,
@@ -820,7 +854,7 @@ gate telemetry, while continuing from `Cancelling` or `Finalizing`. Cover all
 of those crossings and prove no acknowledgement repair loop or private
 state-machine regression.
 
-**B5. Split execution**
+**Requirement package B5. Split execution**
 
 Implement real split resources and barriers on B2–B4. Until B6 is available,
 isolated cases use shared controlled commands and a deterministic descendant
@@ -847,7 +881,7 @@ the complete exact logical stdout and stderr byte sequences under interleaved
 presentation; do not normalize, merge, or reorder those retained inputs to
 match presentation order.
 
-**B6. Process cleanup and exclusive observation**
+**Requirement package B6. Process cleanup and exclusive observation**
 
 Own the ordinary-return cleanup sequence below, integrating B5's split
 barriers and B4's lifecycle/output boundaries; its full real conformance closes
@@ -924,7 +958,7 @@ later if setup cannot handle a compelling use case. Any future deterministic
 process ceiling belongs to a Reploy-owned kernel-enforced workload/session
 domain.
 
-**B7. Workload inspection**
+**Requirement package B7. Workload inspection**
 
 Resolve configured paths in persistent Bash state from the final
 state-bearing `prompt_ready`, perform bounded workload existence/type/hash
@@ -947,7 +981,7 @@ exhausting the cancellation deadline: emit the fatal
 prevent a later operation, and take fatal session teardown. Also cover mutation
 races, cleanup and drain failures, and every inspection resource limit.
 
-**B8. Failure and isolation hardening**
+**Requirement package B8. Failure and isolation hardening**
 
 Prove socket and private-descriptor isolation, stable failure classes, channel
 loss, shell exit, malformed traffic, cleanup, and repeated shutdown behavior.
@@ -1027,12 +1061,12 @@ qualification and local conformance evidence.
 
 ### C. Controller and Reploy boundaries
 
-**C1. Public Reploy codecs**
+**Requirement package C1. Public Reploy codecs**
 
 Extract strict public controlled-session event, request, and host-result codecs
 with the broad fixture corpus, without controller lifecycle or subprocess code.
 
-**C2. Controller lifecycle state machine**
+**Requirement package C2. Controller lifecycle state machine**
 
 Implement lifecycle ordering, attachment startup, completion, termination,
 acknowledgement, cancellation, stderr retention, and failure handling against a
@@ -1040,7 +1074,7 @@ deterministic fake client. Accept ordinary completion from the controller's
 `Cancelling` state when the serialized inspection result wins before
 cancellation.
 
-**C3. Envoy session client**
+**Requirement package C3. Envoy session client**
 
 Implement the Python terminal/telemetry client against the canonical Envoy v1
 fixtures, including inspection results and cross-channel output barriers. Its
@@ -1052,7 +1086,7 @@ against both reserved Readline sequences before `execute`; keep
 `execute.input_through` controller-local and require the exact public
 `operation_started` barrier before operation-authored terminal input.
 
-**C4. Runtime build artifact**
+**Requirement package C4. Runtime build artifact**
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
 required runtime files. Package B2's qualified canonical digest-keyed Bash-build
@@ -1077,7 +1111,7 @@ stream-framing validation, and
 argument-free non-returning `bash-fail-stop` mode, plus the fixed empty
 `etc/inputrc`.
 
-**C5. Runtime staging**
+**Requirement package C5. Runtime staging**
 
 Materialize a manifest-validated read-only `/omegaflow-runtime` tree without
 blueprint composition or controller execution. Prove staging rejects missing or
@@ -1096,7 +1130,7 @@ the host copies only verified installed artifacts into a fresh
 private directory, writes the manifest last, makes the staged tree
 non-writable, and never assembles it from a project checkout.
 
-**C6. Blueprint schema and composition**
+**Requirement package C6. Blueprint schema and composition**
 
 Add typed controller/workload blueprint models, Hydra composition, read-only
 controller configuration, resolved YAML retention, and fixture conformance.
@@ -1121,14 +1155,14 @@ at writable target `/run/omegaflow` with `update_policy: preserve`, extend it
 with the same-named Docker `tmpfs`, retain that effective plan, and reject a
 missing, read-only, overridden, differently materialized, or overlapping mount.
 
-**C7. Controller run input**
+**Requirement package C7. Controller run input**
 
 Prepare the bounded `omegaflow-controller-run-v1` manifest and declared assets,
 stage them as a read-only controller-only `/omegaflow-input` mount, and add the
 internal controller command that validates the schema, paths, hashes, bounds,
 and recording plan before starting the session client.
 
-**C8. Controlled-session invocation**
+**Requirement package C8. Controlled-session invocation**
 
 Prepare separate deployments, invoke the public controlled-session command,
 resolve only trusted opened endpoints, and retain the exact host result and
@@ -1151,7 +1185,7 @@ the terminal runner consumes them.
 
 ### D. Terminal-only integration milestone
 
-**D1. Envoy-backed terminal runner**
+**Requirement package D1. Envoy-backed terminal runner**
 
 Adapt `PersistentTerminalRunner` to the Envoy session while preserving command
 status, cwd, input, resize, Ctrl-C, output policies, assertions, action gates,
@@ -1172,7 +1206,7 @@ output range, do not use synthetic termination status to satisfy or fail an
 authored exit-code assertion, and invalidate assertions on finalization failure
 or user cancellation.
 
-**D2. Direct terminal artifacts**
+**Requirement package D2. Direct terminal artifacts**
 
 Write the private raw log, asciicast, and timeline directly from controller
 presentation events plus Envoy terminal and telemetry events. Do not introduce
@@ -1207,7 +1241,7 @@ any authored event is committed, plus stderr-before-resize-before-stdout and
 stdout-before-resize-before-stderr schedules. Require the controller's raw-log
 writer to reach the covered frontier before publishing the resize event.
 
-**D3. Isolated Reploy end-to-end proof**
+**Requirement package D3. Isolated Reploy end-to-end proof**
 
 Run one internal demo or tutorial through a real isolated Reploy workload.
 Exercise a curses application and one nested interactive shell while hostile
@@ -1252,6 +1286,165 @@ separate pre-start stale-listener probe and post-gate endpoint health check, and
 reject a temporal unready-to-ready transition without the current operation's
 gate.
 
+## One-PR implementation delivery catalogue
+
+This catalogue partitions the requirement packages above; it does not replace
+or weaken any clause or case in them. Every leaf inherits its package's exact
+actors, wire forms, failure/result rules, deadlines, bounds, and acceptance
+cases for the responsibility named in its row. The last leaf of each package
+runs its cumulative package gate. The final B8.4 and D3.3 gates remain mandatory.
+All 64 leaves are pending; the numbers below are estimates of changed production
+lines, not evidence that implementation or qualification exists.
+
+### Ordering and proof accounting
+
+Execute B, then C, then D. Within each phase use table order; each leaf requires
+its preceding leaf's approved implementation in addition to the named semantic
+prerequisites. The first B leaf requires the approved merged A2.7–A2.9 boundary;
+C1.1 follows B8.4 and D1.1 follows C8.2. This conservative order is intentional:
+no future implementation is a prerequisite for an earlier leaf's isolated
+acceptance. `B2` or another package in the prerequisites column means all its
+leaves and cumulative gate. The table names dependencies that explain the
+acceptance boundary, not permission to bypass earlier approvals.
+
+Verified Reploy candidate acquisition/provenance and the resolved regular
+`/bin/bash` placement are prerequisites for the first real-shell test in B2.3,
+not merely for B2.8 support admission. B2.1/B2.2 can use synthetic inputs for
+schema/transport tests without that external evidence. B2.3–B2.7 use those
+verified candidates in an isolated test tree without advertising support. B2.8
+admits only measured entries. Every later leaf that changes the adapter or
+trusted-input bytes must rerun B2's harness for affected entries and regenerate
+consumers before retaining support or running dependent real-actor acceptance;
+this includes B4.3's gate rcfile/helper change and C4.2's packaged assets. A
+prior clean qualification of different bytes never satisfies that leaf.
+
+A leaf may test its real implementation with deterministic peers only at the
+already approved internal boundaries. Test-only peers cannot be enabled through
+production configuration or claimed as actual missing actors. Earlier leaves
+may implement modules without an executable entrypoint until safe assembly is
+available; do not ship a partially safe runtime path. Incomplete integration
+cases stay explicitly pending, with their last prerequisite and closure leaf:
+
+- B1 static cases acquire concrete Bash-dependent expectations in B2.8, real
+  startup/start evidence in B3.4, controls/gates in B4.4, split resource evidence
+  in B5.3, actual descendants/EOF/lifecycle evidence in B6.5, inspection races
+  in B7.3, and full failure/isolation evidence in B8.4.
+- B4 gates and lifecycle use the approved isolated census/cleanup peer until
+  B6.1–B6.5. B5 uses the cleanup peer until B6.3. These are acceptance dependencies
+  only for the crossing proofs, not a circular prerequisite for B4 or B5 code.
+- Real ordinary-return cleanup and split EOF close in B6.3; exclusive ranges and
+  finalization close in B6.4; actual foreground/cancel/helper crossings close in
+  B6.5; Python compiler rejection closes separately in B6.6; inspection/lifecycle
+  crossings close in B7.3. B8.4 reruns all B cases.
+- Controller crossings close in C2.3 with the fake client, then C3.3 with the real
+  client and real local actors. C4.2 requalifies changed packaged bytes. Staged
+  asset behavior closes in C5.2; final composed launch validation in C6.3;
+  actual Reploy termination in C8.2 and real bootstrap/launch isolation in D3.2.
+- Runner assertion integration closes in D1.3, reusing B6.6 compiler rejection. Artifact frontier and resize schedules close
+  in D2.4. The full real isolated workload and presentation/routing/failure
+  matrix closes in D3.3; it cannot be replaced by any isolated predecessor.
+
+During B1.3, assign a stable case ID to every shared-inventory case and map it to
+its static fixture, requirement package, implementation leaf, exact prerequisites,
+and closure leaf. Later leaf preparation must refine this mapping for every
+clause it implements, including cases found in package bodies outside the shared
+inventory. Record actual test commands/results and pending crossings in each PR.
+The package's last leaf checks that no case is lost or ambiguously owned; a missing
+case prevents closeout. A discovered production fix belongs to the leaf owning
+that behavior, or a newly reviewed correction leaf if its PR is already approved;
+proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget.
+
+### B delivery leaves
+
+| Slice | Production estimate | Semantic prerequisites | Owned implementation | Acceptance and retained pending proof |
+| --- | ---: | --- | --- | --- |
+| B1.1 | 400–650 | A2.7–A2.9 merged | Go public wire models, encoders/decoders, public bounds and validation | Public nominal/malformed/maximum corpus; no runtime actors |
+| B1.2 | 450–700 | B1.1 | Private and helper wire models, length framing, strict scalar/nested JSON validation | Every private/helper form, direction, fragmentation and concatenation; no Bash execution |
+| B1.3 | 100–300 | B1.1–B1.2 | Static trace/case indexing and corpus completeness tooling | Complete B1 inventory, synthetic startup bounds, ordering/deadline traces and leaf/closure mapping; concrete build values pending B2.8 |
+| B2.1 | 350–600 | B1 | Canonical candidate/qualified table admission validator, consumer generator and executable qualification runner | Reject unknown/stale consumers; candidate metadata cannot authorize production support; actual measurements pending B2.8 |
+| B2.2 | 350–650 | B1.2, B2.1 | Awsh helper socket transport and non-returning fail-stop helper mode | Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior |
+| B2.3 | 450–700 | B2.1–B2.2; verified candidate inputs and /bin/bash placement | Selected-shell launch, fixed startup assets, topology, descriptor intake/lease and readiness | Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry |
+| B2.4 | 450–700 | B2.3 | Readonly namespace, canonical parser state and whole-request trap/builtin mediation | Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior |
+| B2.5 | 450–700 | B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection |
+| B2.6 | 350–650 | B2.5 | Awsh active start record, PS0/post-PS0 handshake and split-entry sentinel | Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3 |
+| B2.7 | 450–700 | B2.6 | Completion hook, helper identity, Bash inspection-path resolution and state/Readline handoff | Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5 |
+| B2.8 | 100–350 | B2.1–B2.7; verified Reploy build inputs and resolved /bin/bash placement | Qualification measurements, supported-entry admission and generated consumer integration | Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf |
+| B3.1 | 350–600 | B1, B2 | Envoy listeners, session handshake, actor-local deadlines and bounded channel writes | Actual transport/IDs; deterministic startup peer; real startup pending B3.2 |
+| B3.2 | 450–700 | B3.1, B2.8 | PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup | Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown |
+| B3.3 | 400–650 | B3.2 | Byte relay, stream marks, input watermark and operation-start sequencing | Fresh drain, setup timer, serialized submit and public/private start barriers; isolated setup/cleanup peers |
+| B3.4 | 250–500 | B3.3, B2.7 | Ordinary-return coordination and foundation assembly | Real Bash/Awsh return frames with bounded cleanup peer; full B3 coordination suite; actual split/descendants/inspection pending B5/B6/B7 |
+| B4.1 | 350–600 | B3 | PTY output frontiers, resize serialization and direct TIOCSWINSZ | Idle/active/Starting resize, continuous output, drain winners and fatal ioctl failure; split equivalent pending B5.3 |
+| B4.2 | 450–700 | B3, B4.1 | Cancel/finalize decisions, grace timer, foreground validation and direct TIOCSIG | Start crossings, empty foreground resampling, no-signal failure and exactly one signal with census/cleanup peer; actual descendants pending B6.5 |
+| B4.3 | 350–650 | B4.2, B2.2 | Fixed awsh gate function/helper, continuation watermark and committed outcomes | Hostile PATH, short writes, one reply deadline, gate-ready/continue/interrupted and input-barrier failure; requalify affected adapter/trusted bytes before retaining support |
+| B4.4 | 150–400 | B4.1–B4.3 | Integrated control dispatch and crossed outcome handling | B4 isolated suite including completion-helper window and queued frames/timer selection; real split/cleanup/inspection crossings pending B5.3/B6.5/B7.3 |
+| B5.1 | 350–600 | B3, B4 | Split setup, private FIFO modes, readers/keepalives and bounded rollback | Every partial failure, original start deadline, queued cancel and rollback; replaces B3 setup peer |
+| B5.2 | 400–650 | B5.1 | Separate stdout/stderr pump, exact logical byte ranges and sender marks | Interleaving and zero-byte boundaries without normalizing logical streams |
+| B5.3 | 250–500 | B5.2, B4.1 | Split resize frontiers and cleanup-completion/dual-EOF/removal integration | Complete B5 isolated suite; cleanup peer before keepalive close; actual writer-retaining descendants pending B6.3 |
+| B6.1 | 450–700 | B2–B5 | Envoy subreaper, pidfd lifetime identity and repeated /proc census | Real controlled-tree identity, rapid fork/adoption and foreground classification; no independent Awsh lifecycle |
+| B6.2 | 400–650 | B6.1 | Descendant termination, adopted-child reap and bounded cleanup engine | Background/disown/nohup/setsid/double-fork cases, helper exclusion and outside-tree preservation |
+| B6.3 | 400–650 | B6.2, B3.4, B5.3 | Ordinary-return cleanup, input closure, split EOF/removal and final drain integration | Replace cleanup peers; real helper blocking, job-table clearance, final census and one cleanup deadline |
+| B6.4 | 300–550 | B6.3, B4 | Envoy exclusive evidence ranges, assertion eligibility and planned-end outcomes | Closed runtime ranges, real status versus finalization outcome and invalidation; Python compile-time rejection belongs only to B6.6 |
+| B6.5 | 200–450 | B6.1–B6.4, B4.4 | Actual census/cleanup wiring into lifecycle controls and race handling | Complete B6 runtime suite; real foreground switches, helper survival, timeout reap, post-result cancel/finalize and split crossings; inspection pending B7.3 |
+| B6.6 | 100–300 | B6.4–B6.5; existing Python plan compiler | Python compiler validation of interactive output assertions and continuation input | Reject output_contains/output_regex when any operation or continuation sends text/key/control; preserve wait_for synchronization; complete B6 cumulative gate; later runner wiring belongs to D1.3 |
+| B7.1 | 350–600 | B2–B6 | Envoy bounded file/directory inspection algorithms and live resolution conformance | Exercise B2.7 Awsh path resolution with live state; native file compatibility, separately tagged directory digests, special entries, mutation races and limits |
+| B7.2 | 300–550 | B7.1 | Restricted short-lived Envoy worker, channel isolation and typed results | No inherited session channels or controller filesystem probes; bounded result and reap |
+| B7.3 | 250–500 | B7.2, B6.5 | Worker acceptance/cancellation serialization and lifecycle integration | Both inspection winners, finalize status preservation, blocked-worker fatal timeout; complete B7 suite |
+| B8.1 | 250–500 | B2–B7 | Descriptor/socket isolation and malformed/channel-loss teardown hardening | Isolation, malformed/unknown-code traffic and channel-loss injection with actual local actors |
+| B8.2 | 300–550 | B8.1 | Terminal shell_exit/closed/private EOF/Awsh reap and idle shutdown crossings | Exact terminal ordering, zero/nonzero/signalled reap distinctions and both idle shutdown winners |
+| B8.3 | 300–550 | B8.2 | Captured deadline and protocol_error teardown crossings | Every start/barrier/grace/cleanup/inspection/drain epoch, same-turn expiry priority, queued cancel/resize; no new timer |
+| B8.4 | 0–200 | B8.1–B8.3 | Local conformance runner/report assembly | Entire B1–B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves |
+
+### C delivery leaves
+
+| Slice | Production estimate | Semantic prerequisites | Owned implementation | Acceptance and retained pending proof |
+| --- | ---: | --- | --- | --- |
+| C1.1 | 350–600 | B8.4 | Public Reploy event/request codecs | Strict controlled-session event/request corpus without lifecycle or subprocess code |
+| C1.2 | 250–450 | C1.1 | Host-result codec and codec integration | Complete C1 nominal/malformed/maximum corpus |
+| C2.1 | 350–600 | C1 | Controller startup/attachment/lifecycle core | Deterministic fake-client ordering, readiness and ordinary completion |
+| C2.2 | 350–650 | C2.1 | Cancellation, termination, acknowledgement, stderr and failure retention | Fake-client cancellation/ack/failure paths and bounded retained diagnostics |
+| C2.3 | 150–350 | C2.2, B4/B7 contracts | Crossed controller events and lifecycle assembly | Complete C2 fake-client race matrix including ordinary completion winning inspection cancel; actual client pending C3.3 |
+| C3.1 | 350–600 | C1, C2, B1 | Python Envoy transport, strict decoding and readiness buffering | Fragmentation, bounded pre-ready terminal bytes and raw-log first-prompt barrier |
+| C3.2 | 350–650 | C3.1 | Source/input validation, operation submission, telemetry/output frontier handling | Reserved source/input rejection, controller-local input_through and exact operation_started gating |
+| C3.3 | 200–450 | C3.2, B8.4 | Inspection/control results and controller-client assembly | Complete C3 suite with real local Envoy/Awsh; crossed lifecycle and channel barriers; real Reploy termination pending C8.2 |
+| C4.1 | 350–600 | B8.4, B2.8 | Reproducible runtime builds and manifest generation | Exact Envoy/Awsh/fixed rcfile/inputrc/terminal/locale asset identities and platform outputs |
+| C4.2 | 200–450 | C4.1, B2.1/B2.8 | Qualified table packaging, regenerated consumers and package qualification enforcement | Reject stale/unqualified entries; rerun exact packaged changed bytes; complete C4 artifact gate |
+| C5.1 | 350–600 | C4 | Manifest validation and private read-only staging | Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly |
+| C5.2 | 200–450 | C5.1, B2 | Staged asset conformance and trusted-asset validation | Exact staged rcfile/helper/inputrc/terminal/locale behavior and framing/fail-stop; complete C5 suite |
+| C6.1 | 350–600 | C5 | Typed controller/workload blueprint models and Hydra composition | Complete resolved models, read-only controller config and retained YAML; no post-composition repair |
+| C6.2 | 300–550 | C6.1 | Launch environment reserved-value composition and validation | Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values |
+| C6.3 | 350–650 | C6.2, C4/C5/B2.8 | Trusted mounts, resolved /bin/bash qualification and final launch preflight | Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate |
+| C7.1 | 300–500 | C2/C3, C5/C6 | Bounded controller input manifest and declared asset validation | Schema/path/hash/bounds/recording-plan rejection before client start |
+| C7.2 | 200–400 | C7.1 | Read-only controller-only input mount and internal command assembly | Exact /omegaflow-input isolation and validated invocation; complete C7 gate |
+| C8.1 | 350–600 | C1–C7 | Controlled-session capability preflight and separate deployment invocation | Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints |
+| C8.2 | 300–550 | C8.1 | Host result/stderr retention, partial artifacts and Reploy termination reporting | Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates |
+
+### D delivery leaves
+
+| Slice | Production estimate | Semantic prerequisites | Owned implementation | Acceptance and retained pending proof |
+| --- | ---: | --- | --- | --- |
+| D1.1 | 350–600 | C1–C8 | Envoy-backed runner/session adapter and pre-cutover routing | Status/cwd/session behavior; omitted FIFO host versus explicit reploy/host matrix and no default cutover |
+| D1.2 | 350–650 | D1.1, B4/B7 | Runner input/resize/Ctrl-C/gates/inspection and output policy adaptation | Existing runner behavior, produced outputs and structured diagnostics with local actors |
+| D1.3 | 300–550 | D1.2, B6 | Runner assertion evidence and recording-end finalization integration | Reuse B6.6 compiler rejection; exact logical stream and PTY CRLF bytes, completed ranges/status, cancellation/failure invalidation; complete D1 gate |
+| D2.1 | 300–500 | D1, C3 | Exact private raw log and distinct presentation/timeline event writer | Raw-byte retention, protocol-like terminal text, synthesized prompt/command ordering; no recorder PTY/process |
+| D2.2 | 350–600 | D2.1 | Direct asciicast encoding and incremental presentation modes | Fragmented/invalid UTF-8, real/suppress/replace and authored output schedule; no asciinema record |
+| D2.3 | 350–650 | D2.2, B4/B5 | Resize tagging and publication-frontier scheduler | Prompt/typing/Starting seams, delayed acknowledgements/watermarks and covered split prefixes |
+| D2.4 | 100–350 | D2.1–D2.3 | Artifact writer integration and ordering conformance tooling | Complete D2 queue-tie/zero-duration/continuous-output/authored-order matrix and raw writer frontier gate |
+| D3.1 | 100–300 | D1/D2, C8 | Real isolated Reploy demo harness and retained evidence tooling | Repeated nominal demo, curses/nested shell, routing and all presentation modes; not yet final milestone |
+| D3.2 | 0–200 | D3.1, C6/C8 | Hostile-launch and startup/exit/cancel/cleanup failure proof scenarios | Real bootstrap and controlled-shell terminal/locale isolation, resource accounting and partial artifacts; fixes go to owning correction leaves |
+| D3.3 | 0–200 | D3.2 and all preceding B/C/D leaves | Controller/artifact/result/ack failure proof and milestone closeout | Complete real terminal-only matrix, no pending mandatory case, retained artifacts/diagnostics and accounted resources; authorizes E planning only |
+
+Proof-focused leaves B1.3, B8.4, D2.4, and D3.1–D3.3 must land concrete
+tracked fixture, scenario, test, or existing-runner/report-tool changes in their
+own PR, plus retained execution evidence. A closeout-only or empty administrative
+PR does not satisfy a leaf. Use the existing test runners where possible; do not
+invent a new framework to manufacture a production diff. Preparation must name
+the exact deliverable and acceptance command before execution; code fixes found
+by these leaves follow the owning-correction rule above.
+
+The later E stacks stay deferred and need their own reviewed leaf plans under
+the same one-PR and production-line rules; this catalogue does not authorize
+browser/publication/host-parity/FIFO-cutover implementation.
+
 ## Progress ledger
 
 | Slice | State | Evidence |
@@ -1262,10 +1455,11 @@ gate.
 | A2.4–A2.5 | Approved prefix | Approved design predecessors; A2.5 PR 35 is merged |
 | A2.6 | Approved and merged | PR 36 has the approved label and is merged at `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551` |
 | A2.7 | Approved and merged | PR 38 approved at head `750209eec2946309c2abc93a47a91078099edb52` and merged at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; approved document/sidecar bytes and required checks verified |
-| A2.8 | Unapproved worktree | Delivery-order and proof-ownership repair on the A2.7 merge; requires fresh design review/attestations, green checks, exact-head approval, and merge before B1 |
-| B1–B8 | Pending | Raw material only |
-| C1–C8 | Pending | Raw material only |
-| D1–D3 | Pending | Raw material only |
+| A2.8 | Approved, awaiting merge | PR 39 is open with the approved label at exact head `f0cc6f5031576e845958933976bcf8c08669efd7`; approval/merge status verified before this replan |
+| A2.9 | Unapproved worktree | One-PR leaf replan; requires deep design review, current attestations, required checks, exact-head approval and merge before B1.1 |
+| B1.1–B8.4 | Pending | 35 one-PR leaves; raw material only |
+| C1.1–C8.2 | Pending | 19 one-PR leaves; raw material only |
+| D1.1–D3.3 | Pending | 10 one-PR leaves; raw material only |
 | E | Deferred | Requires terminal-only gate |
 
 Update this table only from executed checks and current review state. Historical
