@@ -11,8 +11,11 @@
 - Updated: 2026-10-06
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. The current A2.8 delivery-order successor is not yet approved;
-  production implementation and Bash-build qualification remain pending.
+  predecessors. A2.8 is approved at PR 39 head
+  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
+  A2.9 successor replans delivery to one PR per numbered implementation leaf;
+  it is not yet approved. Production implementation and Bash-build qualification
+  remain pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -1270,6 +1273,11 @@ consumers. Reploy `tool:bash` acquisition/support evidence is an input to
 OmegaFlow qualification, not a substitute for the adapter-specific proofs or
 the resolved regular `/bin/bash` launch contract. This delivery correction
 changes no actor, lifecycle, wire form, bound, or acceptance requirement.
+A2.9 retains these requirement packages and assigns their implementation to
+one-PR leaves, targeting at most 750 changed production lines with a hard ceiling
+of 1,000. The plan owns leaf prerequisites and pending-crossing closure; all
+cross-slice acceptance below remains mandatory. Prepare B1.1 only after the
+approved A2.7, A2.8, and A2.9 merge boundaries are verified.
 
 ## Cross-slice Acceptance Validation
 
