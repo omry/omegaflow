@@ -1,0 +1,8 @@
+{"schema":"omegaflow-envoy-telemetry-v1","type":"hello","seq":1,"session_id":"0123456789abcdef0123456789abcdef"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":1,"operation_id":"operation-1","source":"printf \"hello\\n\"","execution_shape":"pty","timing":"realtime","publication":"real","observation":"shared","inspections":[],"input_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"continue","seq":1,"operation_id":"operation-1","gate_id":"gate-1","input_through":0}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"cancel","seq":1,"operation_id":"operation-1","reason":"planned"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"finalize","seq":1,"operation_id":"operation-1","reason":"planned"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"resize","seq":1,"columns":80,"rows":24}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"shutdown","seq":1,"reason":"complete"}
+{"schema":"omegaflow-envoy-telemetry-v1","type":"execute","seq":1,"operation_id":"operation-2","source":":","execution_shape":"split","timing":"presentation","publication":"replace","observation":"exclusive","inspections":[{"inspection_id":"inspection-1","kind":"file_exists","path":"${HOME}/file"},{"inspection_id":"inspection-2","kind":"produces","path":"directory","producer_id":"build","output_id":"tree"}],"input_through":10}
