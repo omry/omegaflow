@@ -10,9 +10,10 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-09-04
-- A2.6 is a fresh, unreviewed design-only successor of the approved A2.5
-  contract. No prior A2.6 implementation, attestation, or approval is evidence.
+- Updated: 2026-10-05
+- A2.5 and A2.6 are approved and merged as PRs 35 and 36. A2.7 is the
+  current, unreviewed design-only closure on the A2.6 merge base; production
+  implementation remains pending.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -1352,7 +1353,11 @@ The rebuilt delivery order is:
    and refresh as later stacks.
 
 The validation and product decisions below remain authoritative. The temporary
-plan owns implementation sequencing and current evidence.
+plan owns implementation sequencing and current evidence. A2.7 closes the
+private Envoy/Awsh wire contract in [Envoy Protocol v1](envoy-protocol-v1.md)
+without adding a Reploy lifecycle field or changing these environment contracts.
+Its approval and merge precede B1; local conformance does not require production
+Reploy integration to be ready.
 
 ## Validation Plan
 

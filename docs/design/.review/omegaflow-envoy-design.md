@@ -1,27 +1,27 @@
 ---
 artifact: swe-design-review-attestation
-schema_version: 3
-scope_key: 2868d8d05bf7ae752d5b05e180ead0c515ebad9857bc537ce7650b185f1c43af
-scope: {"kind": "pr", "primary_target": "pr-36", "repository": "/home/omry/dev/omegaflow", "selector": "pr-36"}
-review_content_identity_sha256: 229d0fdf89c9cff620a6de8939da81c06331888d9f0bcd4e62858c6aff4f56b8
-target_content_identity_sha256: 44dafad990928f851f02d841c78811b1440a1cbd53db61af1f370ced110d9aab
-baseline_content_identity_sha256: e472f91e17569601d48fe3d718ae38c20ff22b2c3911a6f8048ca4f511791323
-target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": "/home/omry/dev/omegaflow", "sha256": "1baad2504e7f6a404ae7d1341b6cf449896d52b6081bbb612d01e3453774959c"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "02f9bde3fb9e4b979862e0cd9aaf29d9d2d9abb2d2dc0918bc5d1c6e77cb1f59"}, {"path": "docs/design/reploy-environments-design.md", "repository": "/home/omry/dev/omegaflow", "sha256": "bfbe4405bd57fdfe2cbb7a1077a0fef626d362b99723087a48e478bcdf7f049a"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": "/home/omry/dev/omegaflow", "sha256": "72f89b6655bc7ab41775c207ea3aee4c9134d98dc0087a5982ebc81735e55053"}]
-baseline_documents: [{"path": "docs/BACKLOG.md", "repository": "/home/omry/dev/omegaflow", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": "/home/omry/dev/omegaflow", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
+schema_version: 4
+scope_key: 619d06f67cc382998435617055e59b4a8dfcaccb549df56b3ef820b8fcf3a7ab
+scope: {"kind": "path", "primary_target": "docs/design/envoy-protocol-v1.md", "repository": ".", "selector": "docs/design/envoy-protocol-v1.md"}
+review_content_identity_sha256: 0f0a681be37e2322c88b5dbdf9b5e105eac000d81f008a6e3c5d231e829120f1
+target_content_identity_sha256: 60670f352feb4d1ea4776db973fa8867079047e8aa9577105d4342a685800ae6
+baseline_content_identity_sha256: d93b64744781fb209c349be440c4ad1d8efe012b1286b1767ae0a2795d59a166
+target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "45313f0e8b635be4262b8af55088f913d91822652f07f5c2ab7eb016ef1b36ff"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "cb5128384d1f0fa8343cd7d6ffd69172147bb4ee5c2fa61837f37f4ac35c550e"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "900645a8198b86a338b29be619b2c45768c9b8996cbf25579175371e7a496dd6"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "fc0365331872f13898a2d498f6272afb32cda71ab7ac20636b819e30feaaa755"}]
+baseline_documents: [{"path": "docs/BACKLOG.md", "repository": ".", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": ".", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
 design_dependency_documents: []
-document_repository: "/home/omry/dev/omegaflow"
+document_repository: "."
 document_path: "docs/design/omegaflow-envoy-design.md"
-document_revision_provenance: "4cf2ff08fb96a2185351857ca44c44c10bae4ae2"
-document_sha256: 02f9bde3fb9e4b979862e0cd9aaf29d9d2d9abb2d2dc0918bc5d1c6e77cb1f59
+document_revision_provenance: "ee6b6eebcd3416f5a5474eebe21babafaea9dbb2"
+document_sha256: cb5128384d1f0fa8343cd7d6ffd69172147bb4ee5c2fa61837f37f4ac35c550e
 verdict: clean
-attested_at: 2026-09-07T21:57:56Z
+attested_at: 2026-10-06T05:17:18Z
 ---
-<!-- swe-design-review-attestation:v3 -->
+<!-- swe-design-review-attestation:v4 -->
 
 # SWE design-review attestation
 
 Review freshness is determined by the target and baseline document bytes
-listed in the version-3 header. Revisions are provenance only.
+listed in the version-4 header. Revisions are provenance only.
 
 ## Durable review state
 
