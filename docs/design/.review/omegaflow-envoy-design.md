@@ -3,18 +3,18 @@ artifact: swe-design-review-attestation
 schema_version: 4
 scope_key: 619d06f67cc382998435617055e59b4a8dfcaccb549df56b3ef820b8fcf3a7ab
 scope: {"kind": "path", "primary_target": "docs/design/envoy-protocol-v1.md", "repository": ".", "selector": "docs/design/envoy-protocol-v1.md"}
-review_content_identity_sha256: 0f0a681be37e2322c88b5dbdf9b5e105eac000d81f008a6e3c5d231e829120f1
-target_content_identity_sha256: 60670f352feb4d1ea4776db973fa8867079047e8aa9577105d4342a685800ae6
+review_content_identity_sha256: e692dd0589cd3d13e91dce26c6dc885c1189ba1b6ebcc23b3d67b7392654ad27
+target_content_identity_sha256: 17909d154361f86329e5188f760f1e96e5ac4d12e06ee12bb43b6471195db0bc
 baseline_content_identity_sha256: d93b64744781fb209c349be440c4ad1d8efe012b1286b1767ae0a2795d59a166
-target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "45313f0e8b635be4262b8af55088f913d91822652f07f5c2ab7eb016ef1b36ff"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "cb5128384d1f0fa8343cd7d6ffd69172147bb4ee5c2fa61837f37f4ac35c550e"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "900645a8198b86a338b29be619b2c45768c9b8996cbf25579175371e7a496dd6"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "fc0365331872f13898a2d498f6272afb32cda71ab7ac20636b819e30feaaa755"}]
+target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "ba6c43299fae2645c56b10ccc30ea18d069073c38707eec6deb60535735b642e"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "b1aeae2bdbd45daf7ced59490342fb9e65af684a20687970b7130dccafd48c7a"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "431e9c34d1db9d42115306cf86f001da39c313842d69e728ad7f6a4ae5defdfa"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "394dc16742e4435af3398a59a2a3b9bde40a019171fda8014f9dc68582a53196"}]
 baseline_documents: [{"path": "docs/BACKLOG.md", "repository": ".", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": ".", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
 design_dependency_documents: []
 document_repository: "."
 document_path: "docs/design/omegaflow-envoy-design.md"
-document_revision_provenance: "ee6b6eebcd3416f5a5474eebe21babafaea9dbb2"
-document_sha256: cb5128384d1f0fa8343cd7d6ffd69172147bb4ee5c2fa61837f37f4ac35c550e
+document_revision_provenance: "2dfe224d0a08de4ac71333fbf4a81b16a4063f20"
+document_sha256: b1aeae2bdbd45daf7ced59490342fb9e65af684a20687970b7130dccafd48c7a
 verdict: clean
-attested_at: 2026-10-06T05:17:18Z
+attested_at: 2026-10-06T11:11:15Z
 ---
 <!-- swe-design-review-attestation:v4 -->
 

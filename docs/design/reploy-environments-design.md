@@ -10,10 +10,11 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-10-05
-- A2.5 and A2.6 are approved and merged as PRs 35 and 36. A2.7 is the
-  current, unreviewed design-only closure on the A2.6 merge base; production
-  implementation remains pending.
+- Updated: 2026-10-06
+- A2.7 is approved and merged as PR 38 at
+  `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
+  predecessors. The current A2.8 delivery-order successor is not yet approved;
+  production implementation and Bash-build qualification remain pending.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -1356,8 +1357,16 @@ The validation and product decisions below remain authoritative. The temporary
 plan owns implementation sequencing and current evidence. A2.7 closes the
 private Envoy/Awsh wire contract in [Envoy Protocol v1](envoy-protocol-v1.md)
 without adding a Reploy lifecycle field or changing these environment contracts.
-Its approval and merge precede B1; local conformance does not require production
-Reploy integration to be ready.
+Its approval and merge, and approval/merge of the A2.8 delivery-order successor,
+precede B1. B1 freezes static wire cases without requiring Bash-build support or
+runtime implementations. B2 owns the initial adapter-specific Bash qualification
+and canonical table, using verified Reploy `tool:bash` build/provenance inputs;
+C4 packages its qualified entries and generated consumers. Reploy owns Bash
+acquisition and supported target tuples; OmegaFlow owns adapter qualification
+and still requires the resolved regular `/bin/bash`. Actual releases, tuples,
+and executable placement must be evidenced before support is claimed. Local
+conformance needs those verified build inputs, but not production Reploy
+session integration. Existing host-recorder retirement remains later work.
 
 ## Validation Plan
 

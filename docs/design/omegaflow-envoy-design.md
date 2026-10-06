@@ -8,10 +8,11 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-10-05
-- A2.5 and A2.6 are approved and merged as PRs 35 and 36. A2.7 is the
-  current, unreviewed design-only closure on the A2.6 merge base; production
-  implementation remains pending.
+- Updated: 2026-10-06
+- A2.7 is approved and merged as PR 38 at
+  `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
+  predecessors. The current A2.8 delivery-order successor is not yet approved;
+  production implementation and Bash-build qualification remain pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -652,8 +653,9 @@ or `Finalizing`. There is no gate acknowledgement repair loop or duplicate Awsh
 lifecycle state machine. A2.7 closes the remaining private terminal/error
 schemas, encoded bounds, failure mappings, and conformance inventory in
 [Envoy Protocol v1](envoy-protocol-v1.md). It adds no lifecycle or resize actor,
-timer, helper, or public field. B1 consumes that complete contract only after
-A2.7's exact-head approval and merge, as required by the delivery plan.
+timer, helper, or public field. B1 consumes that complete contract after A2.7's
+exact-head approval and merge and the A2.8 delivery-order gate, as required by
+the delivery plan.
 
 For split execution, Envoy creates and owns two mode-0600 per-operation FIFOs
 under the mode-0700 session runtime after the one operation-start timer has
@@ -1261,6 +1263,13 @@ Delivery now proceeds through five gated phases:
 
 The cross-slice acceptance requirements below remain product requirements. The
 temporary plan owns their implementation order and evidence status.
+Its A2.8 successor separates B1's static wire corpus from later executable
+proofs. B2 owns initial selected-Bash qualification and the canonical table
+alongside the Awsh adapter; C4 packages the qualified table and generated
+consumers. Reploy `tool:bash` acquisition/support evidence is an input to
+OmegaFlow qualification, not a substitute for the adapter-specific proofs or
+the resolved regular `/bin/bash` launch contract. This delivery correction
+changes no actor, lifecycle, wire form, bound, or acceptance requirement.
 
 ## Cross-slice Acceptance Validation
 
@@ -1409,6 +1418,7 @@ disposition and its exec entry and runtime preserve it while blocked through
 Envoy's acceptance of `input_close` and matching `input_closed`; cancellation
 and finalization in that interval
 must preserve Bash/helper survival, consume `input_close` as the existing A2.5
-return fact, and complete the already-selected lifecycle outcome. The current
-A2.7 successor closes private schemas; B implementation remains pending until
-that successor is approved and merged.
+return fact, and complete the already-selected lifecycle outcome. A2.7 closed
+the private schemas and is approved and merged. B implementation remains pending
+behind the current A2.8 delivery-order successor's approval and merge; its
+static and executable evidence owners are fixed by the implementation plan.
