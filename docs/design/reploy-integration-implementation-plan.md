@@ -9,10 +9,17 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-10-05.
-- A2.5 and A2.6 are approved and merged as PRs 35 and 36. The current
-  A2.7 design-only successor starts from the A2.6 merge commit
-  `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551`; it is not yet approved.
+- Updated: 2026-10-06.
+- A2.7 is approved and merged as PR 38 at
+  `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.5 and A2.6 remain approved
+  predecessors. The current A2.8 design-only successor repairs delivery order
+  and proof ownership; it is not yet approved. Production implementation and
+  Bash-build qualification remain pending.
+- A `.review` sidecar attests only the document bytes matching its recorded
+  content hash. Changed documents require fresh review and byte-current
+  attestations before approval; a sidecar does not establish PR approval.
+  The A2.7 merge retains the historical document and sidecar evidence for that
+  approved boundary.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -257,11 +264,21 @@ amendment is an additional documentation gate before its affected B work.
   freeze and assign runtime proofs to the existing B2–B8 owners. Align all four
   documents and their byte-current review sidecars. This slice adds no production
   code, executable fixtures, public fields, actors, or deadlines.
+- A2.8 repairs the implementation dependency order on the approved A2.7 merge.
+  Separate B1's static wire corpus and expected traces from executable proofs
+  owned by B2–B8 and the later controller/runtime slices. Assign initial
+  Bash-build qualification, the canonical table, and its consumer generation to
+  B2 alongside the adapter it measures; C4 packages those artifacts. Record the
+  external Reploy `tool:bash` inputs and the still-required `/bin/bash`
+  placement decision without inventing supported releases or claiming delivery.
+  Preserve every A2.7 case, actor, frame, bound, timer, and terminal-only gate.
+  Review the aligned plan and protocol evidence descriptions with current
+  document attestations before B1 starts.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
 and must complete deep design review, current-document attestation, required
 checks, and exact-head PR approval before its successor is published. No B
-implementation starts until A2.7 is approved and merged.
+implementation starts until A2.7 and this A2.8 successor are approved and merged.
 
 The exact B1 base is the merge commit of the A2.7 PR approved at its exact final
 head, with current document attestations and all required checks passing. Record
@@ -271,12 +288,75 @@ ancestor of the chosen checkout.
 No draft A2.7 head, older A2.6 run, prototype commit, or PR number alone satisfies
 this base. Later unrelated main commits may follow it, but cannot substitute
 their identities for the recorded approved A2.7 boundary.
+The implementation checkout must also contain the approved A2.8 merge and its
+byte-current documents and attestations. Record both boundaries; A2.8 corrects
+delivery order without replacing A2.7's approved protocol contract. Preparation
+and review of this successor do not complete or silently resume the blocked B1
+delivery campaign; its next preparation step must resolve the newly approved
+slice scope before opening implementation PRs.
 
 ### B. Local Envoy and Awsh conformance
 
 **B1. Protocol models and fixtures**
 
-From the approved A2.7 base, add Go validation and canonical fixtures for inspection
+Add Go protocol models, strict encoding/decoding and validation, and canonical
+wire fixtures under `tests/fixtures/envoy-protocol-v1`, from the approved A2.7
+contract and A2.8 delivery order. Cover every public, private, and helper form,
+direction, field order, arity, scalar/nested-JSON encoding, aggregate bound,
+fragmentation, concatenation, and malformed case in the shared inventory below.
+Freeze contract-defined expected traces for handshake IDs, stream marks, absent
+fields and empty ranges, failure/result eligibility, ordering, deadline epochs, and crossed
+outcomes. These are declarative inputs and expectations, not recorded evidence
+from an Awsh, Envoy, or controller implementation. Include deterministic path
+and digest examples, with the native `directory` and protocol `directory-v2`
+encodings tagged separately; live Bash expansion and inspection belong to B7.
+
+Startup fixtures use explicitly synthetic zero-to-4,096-byte strings to test
+bounds and `ready.output_through` encodings, including mismatch, overflow, EOF,
+and incomplete-barrier expectations. They assert no supported Bash digest or
+observed startup bytes. Source/frame examples and helper messages likewise
+freeze the approved bytes without claiming a selected Bash has parsed or
+executed them. B2 adds real build entries and selected-shell evidence later.
+For build-dependent values, such as checker/trap diagnostics, signal aliases,
+or startup-export results, B1 records the scenario and proof owner rather than
+inventing an expected value. B2 supplies the concrete expectations from the
+selected build's qualification evidence.
+
+Gate: the Go models and validators pass the complete static corpus, and each
+runtime case is traceable to its owner below. B1 requires neither a Bash support
+matrix nor an adapter, Envoy, generated build-table consumer, runtime package,
+or live Reploy session. No executable proof is marked passed by a static fixture.
+
+**Shared conformance inventory and proof ownership**
+
+The following inventory is cumulative across delivery slices. B1 freezes its
+wire inputs and expected outcomes. Each executable claim must also acquire
+test evidence in the owning implementation slice; "prove" below is not a B1
+acceptance requirement. Record the mapping from each case to its fixture and
+owning test as the corpus is implemented. A deterministic peer can isolate a
+slice, but does not prove the absent peer's production behavior. Cross-actor
+cases run again with the real actors when all owners are available.
+An earlier slice's closeout requires its implemented behavior and isolated
+boundary tests, not a later slice's implementation. Record the remaining
+cross-slice cases explicitly as pending, and close them in the slice that adds
+their last prerequisite. For example, B4's split/cleanup/inspection crossings
+close with B5/B6/B7 respectively; they cannot require those successors before
+B4 is reviewed. This permits bounded delivery, not a partial-conformance claim.
+
+| Evidence | Owner and prerequisites |
+| --- | --- |
+| Static wire models, bounds, malformed bytes, and expected ordering/deadline traces | B1; approved A2.7 contract and A2.8 order only |
+| Real Bash-build entries, source parsing/execution, suffix isolation, Readline, reserved-state mediation, persistent state, and Awsh-side helper/completion behavior | B2; B1 plus verified candidate Bash inputs; an isolated PTY and deterministic Envoy peer exercise Awsh without a production Envoy or C4 package |
+| Envoy/Awsh startup, startup-byte comparison, readiness, output drain/relay, and private/public start barriers | B3; B1 and the corresponding B2 adapter and qualified build |
+| Output/input barriers, completion coordination, resize, gates, cancellation, finalization, and lifecycle crossings | B4; B2/B3 foundations; split, cleanup, and inspection crossings also require B5/B6/B7 respectively |
+| Split setup/rollback, stream marks, writer keepalives, independent EOF, and FIFO removal | B5; B2/B3 foundations and B4 boundaries |
+| Real descendant census/termination/reap, completion-helper survival, job-table cleanup, final drain, and exclusive observation | B6; B2–B5; rerun ordinary-return and lifecycle crossings with actual cleanup |
+| Live path resolution, native file-digest compatibility, tagged directory digests, instability/resource limits, worker isolation, and inspection cancellation | B7; B2–B6 |
+| Isolation, malformed traffic, channel loss, terminal EOF/reap, shutdown, and captured-deadline/fatal teardown crossings | B8; B2–B7; include startup, split, cleanup, and inspection variants |
+| Controller-side buffering and first-prompt barriers, crossed controller lifecycle events, and termination requests | C2/C3; B1 corpus and corresponding local runtime proofs; C2 uses a fake client, C3 tests the actual session client, and C8 proves real Reploy termination |
+| Manifested assets and launch-environment/blueprint rejection before materialization or Bash launch | C5/C6; qualified table and C4 artifacts |
+
+The cumulative suite covers inspection
 requests, deterministic IDs, resolved plans, typed results, aggregate frame
 bounds, malformed cases, failure codes, matching and mismatching handshake session IDs, and every
 startup/control-write deadline epoch. Cover an earlier writer exiting with
@@ -462,10 +542,47 @@ for all request/result/helper directions, including exact `shutdown`,
 status and PID scalars, nested JSON, concatenation, fragmentation, maximum
 aggregate sizes, unknown diagnostic codes, and terminal EOF/reap crossings.
 Freeze failure-code/result eligibility and public absent-field/empty-range cases
-from that same approved contract. The corpus is new B1 work; A2.7's case list
-does not claim fixture or implementation conformance.
+from that same approved contract. B1 creates the static corpus and each owner
+adds its executable evidence; A2.7's case list claims neither.
 
 **B2. Awsh boundary alignment**
+
+Own the initial Bash qualification harness and canonical digest-keyed table,
+including the generator for host-preparation, Envoy, and Awsh consumers. Split
+this work and the adapter implementation into bounded successors under B2;
+the table is produced alongside the adapter, not required as a finished C4
+artifact before the first B2 code can be reviewed. Prepare table validation and
+the harness first, then measure the implemented launch/submission/return path
+against each exact candidate build. Use the fixed rcfile/helper/inputrc and
+trusted terminal/locale inputs from the approved contract in a local test tree;
+C4 later builds and manifests the same artifacts rather than supplying the
+first qualification harness. Deterministic Envoy replies exercise Awsh's
+boundary only; B3–B8 must prove actual Envoy coordination and cleanup.
+
+Reploy's `tool:bash` delivery supplies immutable acquisition/provenance and
+advertised target tuples. OmegaFlow owns qualification of the exact resolved
+regular `/bin/bash` under its adapter. Record the candidate's release, target
+tuple, artifact/executable digests and Reploy definition/lock identity, the
+resolved executable and system-rc condition, and the adapter and trusted-input
+identities used for the measurements. Reploy support alone does not qualify an
+OmegaFlow build. Resolve placement/export collisions against `/bin/bash` before
+qualifying a tuple; do not replace that contract with a new path override.
+Linux amd64 and arm64 need separate genuine target evidence before either is
+advertised; versions, tuples, and digests are inputs still to be supplied, not
+placeholders to mark supported. No live Reploy session is needed for local
+qualification once its verified build inputs are available.
+
+Populate each entry's system rc path or `none`, startup-export transformation,
+catchable-signal inventory, Readline readiness/keymap/no-redisplay/UTF-8/
+maximum-line behavior, and exact startup PTY bytes from repeatable selected-
+build tests. Keep harness candidates distinct from shipped supported entries;
+candidate data may bootstrap isolated tests, but production consumers accept
+only qualified entries. Freeze observed bytes and generate all consumers from
+that one source, with stale-generation and unknown/mismatched-digest rejection
+checks. B2 closeout requires real evidence for every advertised entry and all
+B2-owned cases in the shared inventory. A missing external build input blocks
+the affected qualification work, not B1; adapter or trusted-input changes
+require rerunning the affected qualification before support is retained.
 
 Align execution-policy framing, persistent Bash state, inspection-path
 resolution, and descriptor non-inheritance with the amended protocol. Awsh
@@ -536,21 +653,58 @@ handling.
 
 **B3. Envoy session foundation**
 
+Implement launch, readiness, relay, and start coordination against B2's adapter
+and qualified builds. The ordinary-return sequence below fixes the coordination
+boundary; B3 may isolate later process-cleanup and split responsibilities with
+deterministic peers. B5/B6 close its real split/descendant-cleanup cases, B7
+closes inspection cases, and B8 closes terminal failure variants. B3's closeout
+does not require those later implementations or claim their conformance.
+
 Implement listeners, the controller-generated session-ID handshake, the
 independent actor-local connect/hello/ready deadlines, one PTY, persistent
 Awsh/Bash startup, shared PTY execution, exact byte relay, bounded control
 writes, an empty `HISTFILE` for controlled Bash after application
-environment delegation, and orderly shutdown. Own the exact Awsh exec handoff,
+environment delegation, and idle-session shutdown. Active-operation shutdown integrates B4–B6 later.
+Own the exact Awsh exec handoff,
 startup-output pump and 4,096-byte cap, build-entry comparison, complete public
 `ready` write before terminal release, `ready.output_through`, and takeover of
 incomplete launch cleanup. Own `execute.input_through` before private submit,
-start the one operation-start timer before any split directory/FIFO setup, own
-bounded rollback of every partial setup, mode-0600 split FIFO creation and
-reader/keepalive ownership, the serialized
+start the one operation-start timer before invoking the execution-mode setup
+boundary, including B5's later split directory/FIFO setup; do not reset it when
+that boundary returns. B3 uses a shared-PTY no-op setup boundary and an isolated
+deterministic peer for setup delay/failure and rollback completion; real split
+setup and rollback belong to B5. Own the serialized
 internal `0x18 0x02` PTY write, the fresh pre-start drain and mark,
 `start_release`/`started` ordering, complete public `operation_started` before
 `started_ack`, acceptance of private `start_released`, and the operation-start
-deadline and teardown. Serialize cancel with the first attempted private
+deadline and teardown coordination with the same setup/cleanup boundaries.
+In B3's isolated foundation harness, use shared-PTY operations without authored
+background descendants. Exercise the real Awsh/Bash `input_close` ->
+`input_closed` -> state-bearing `prompt_ready` -> `completed` coordination with
+an internal deterministic cleanup peer: it reports bounded cleanup completion
+or failure before Envoy may send `input_closed`; it never replaces or adds a
+wire frame, shell hook, or lifecycle owner. Inject peer delays and failures to
+prove that the helper remains blocked and no reusable completion is published
+before the cleanup boundary succeeds. This proves coordination only. B6 owns
+the actual descendant census/termination/reap and cleanup deadline, B5 owns
+split keepalive/EOF/removal, B4 owns lifecycle controls and terminal output
+barriers, and B7 owns inspection. Re-run the same coordination with those real
+implementations at their cumulative closeouts and the final B gate. The B3
+harness is isolated evidence and must not be exposed as a complete production
+execution path; unsupported later-slice behavior has no B3 conformance claim.
+
+**B4. Operation boundaries and controls**
+
+Implement the real control decisions, timers, PTY ioctls, and public/private
+ordering on B2/B3. Until B6 supplies real descendant tracking and cleanup,
+isolated B4 cases use a deterministic census/cleanup boundary and a controlled
+persistent Bash/helper foreground group; this does not prove the census or
+cleanup implementation. Keep cases requiring actual descendants, split
+streams, or inspection pending for B6, B5, or B7 respectively, then rerun them
+with those implementations. The final acceptance clauses below retain their
+full production invariants; a peer is only slice-isolation evidence.
+
+Serialize cancel with the first attempted private
 `execute` byte: retain later cancellation, allow `rejected` to commit pre-start
 failure, and after `submit` finish public start and wait for `start_released`
 before Envoy applies the ordinary started-operation cancellation path. The path
@@ -563,26 +717,6 @@ controlling-terminal session and pidfd-backed foreground-group invariant; an
 unprovable boundary is fatal before the signal. Queue a cancel first accepted between
 public start and `start_released` under the same rule; it is never forwarded to
 an Awsh lifecycle transaction.
-For ordinary return, sequence the `input_close` proposal/timer boundary with
-only the active operation ID and exact completion-helper PID; permanently close
-operation input, terminate live authored descendants and reap adopted children
-while preserving only the exact completion helper and descriptor-free Bash wait
-records, close both split writer keepalives, drain both split readers to
-independent EOF, remove the FIFOs, and send `input_closed`. Only then does Awsh
-release the blocked `prompt_state` helper; Bash restores and verifies canonical
-unset `INT`, clears its own wait records with reserved `wait`, proves the empty
-job table and adapter state, recaptures the
-final state in state-bearing `prompt_ready`, and Awsh validates it and resolves
-paths before the terminal-control handoff and Readline re-entry. Awsh then sends
-`completed` with the saved source status, physical cwd, and resolved inspection
-plan. The one non-resetting five-second operation-cleanup deadline ends only after Envoy has
-proved the final census and performed the fresh PTY drain/output-through
-barrier after `completed`; workload inspection runs afterward under the
-controller-owned operation deadline and its existing inspection-cancellation
-timeout. A failure at any cleanup, helper, readiness, EOF, drain, or removal
-step is fatal and emits no terminal operation result.
-
-**B4. Operation boundaries and controls**
 
 Implement output barriers, completion, input, resize, cancellation, action
 gates, planned finalization, and final drain. Linearize every accepted resize in
@@ -688,6 +822,17 @@ state-machine regression.
 
 **B5. Split execution**
 
+Implement real split resources and barriers on B2–B4. Until B6 is available,
+isolated cases use shared controlled commands and a deterministic descendant
+cleanup-completion boundary before closing writer keepalives. Real descendants
+retaining split writers and cleanup/EOF races remain pending for B6; B5 must
+not claim those cases passed from its peer.
+
+Own bounded rollback of every partial split setup, mode-0600 split FIFO
+creation, and reader/keepalive ownership under B3's already-running
+operation-start timer. Exercise setup success, every partial failure and
+rollback, deadline expiry during setup, and cancellation queued across setup;
+B3's setup peer is replaced by the real implementation for these cases.
 Implement separate stdout/stderr supervision, ordered terminal forwarding,
 sender-stamped output marks, and split-stream conformance. Extend B4's active
 operation resize frontier across every split stdout/stderr source before
@@ -703,6 +848,28 @@ presentation; do not normalize, merge, or reorder those retained inputs to
 match presentation order.
 
 **B6. Process cleanup and exclusive observation**
+
+Own the ordinary-return cleanup sequence below, integrating B5's split
+barriers and B4's lifecycle/output boundaries; its full real conformance closes
+at B6 rather than B3. B7 supplies the later inspection implementation.
+For ordinary return, sequence the `input_close` proposal/timer boundary with
+only the active operation ID and exact completion-helper PID; permanently close
+operation input, terminate live authored descendants and reap adopted children
+while preserving only the exact completion helper and descriptor-free Bash wait
+records, close both split writer keepalives, drain both split readers to
+independent EOF, remove the FIFOs, and send `input_closed`. Only then does Awsh
+release the blocked `prompt_state` helper; Bash restores and verifies canonical
+unset `INT`, clears its own wait records with reserved `wait`, proves the empty
+job table and adapter state, recaptures the
+final state in state-bearing `prompt_ready`, and Awsh validates it and resolves
+paths before the terminal-control handoff and Readline re-entry. Awsh then sends
+`completed` with the saved source status, physical cwd, and resolved inspection
+plan. The one non-resetting five-second operation-cleanup deadline ends only after Envoy has
+proved the final census and performed the fresh PTY drain/output-through
+barrier after `completed`; workload inspection runs afterward under the
+controller-owned operation deadline and its existing inspection-cancellation
+timeout. A failure at any cleanup, helper, readiness, EOF, drain, or removal
+step is fatal and emits no terminal operation result.
 
 Implement fail-closed exclusive evidence ranges for checked, suppressed,
 replaced, and presentation-timed operations. Reject `output_contains` and
@@ -849,8 +1016,14 @@ observed shell exit first sends terminal `shell_exit` and resolves
 the requested shutdown reason whether Awsh sends `closed` or a crossed terminal
 `shell_exit`.
 
-Gate: the complete local Envoy/Awsh conformance suite passes. No Reploy or
-terminal-runner integration is required to review the individual B slices.
+Gate: the complete local Envoy/Awsh conformance suite passes, including every
+B2–B8-owned executable case above with the real local actors and actual qualified
+Bash builds. Static expectations and deterministic peers do not satisfy this
+gate. C2/C3 controller and C5/C6 staging/blueprint proofs remain gates of their
+own later slices, and all apply at the terminal-only milestone. No live Reploy
+or terminal-runner integration is required to review the individual B slices;
+verified Reploy Bash-build inputs are required for the corresponding real-build
+qualification and local conformance evidence.
 
 ### C. Controller and Reploy boundaries
 
@@ -882,8 +1055,14 @@ against both reserved Readline sequences before `execute`; keep
 **C4. Runtime build artifact**
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
-required runtime files. Generate host preparation, Envoy, and Awsh consumers
-from one canonical digest-keyed Bash-build table containing the system rc path,
+required runtime files. Package B2's qualified canonical digest-keyed Bash-build
+table and regenerate its host preparation, Envoy, and Awsh consumers using the
+same generator; reject stale consumers and unsupported or unqualified entries.
+C4 does not originate the table or defer its first executable qualification.
+If packaging changes the adapter or trusted-input bytes used for qualification,
+rerun B2's harness against the packaged assets before accepting the affected
+entries and artifact; earlier qualification of different bytes is insufficient.
+The table contains the system rc path,
 startup-export transform, catchable-signal inventory, startup Readline behavior,
 source-loader/submit-macro keymap, no-redisplay, UTF-8 cursor, and maximum-line
 behavior, and exact bounded startup PTY bytes. Build and manifest the fixed
@@ -1082,7 +1261,8 @@ gate.
 | A2.3 | Approved prefix | PR 33 is approved at its exact current head with current A2.3 attestations |
 | A2.4–A2.5 | Approved prefix | Approved design predecessors; A2.5 PR 35 is merged |
 | A2.6 | Approved and merged | PR 36 has the approved label and is merged at `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551` |
-| A2.7 | Unreviewed worktree | One design-only private-schema closure on the approved A2.6 merge; requires deep review, current attestation, green checks, exact-head approval, and merge before B1 |
+| A2.7 | Approved and merged | PR 38 approved at head `750209eec2946309c2abc93a47a91078099edb52` and merged at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; approved document/sidecar bytes and required checks verified |
+| A2.8 | Unapproved worktree | Delivery-order and proof-ownership repair on the A2.7 merge; requires fresh design review/attestations, green checks, exact-head approval, and merge before B1 |
 | B1–B8 | Pending | Raw material only |
 | C1–C8 | Pending | Raw material only |
 | D1–D3 | Pending | Raw material only |
