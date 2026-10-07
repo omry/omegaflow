@@ -1,0 +1,1982 @@
+{
+  "version": 1,
+  "source": "docs/design/reploy-integration-implementation-plan.md",
+  "source_sha256": "bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a",
+  "authorities": [
+    {
+      "path": "docs/design/envoy-protocol-v1.md",
+      "sha256": "de70574c83e4e1b839bc5f7b8309b8ef59c072855583633a714e44806c17aa16"
+    },
+    {
+      "path": "docs/design/omegaflow-envoy-design.md",
+      "sha256": "24a62626aee0cf53082e13c8ccc877eabe0fda5516d410411c5529683904b4de"
+    },
+    {
+      "path": "docs/design/reploy-environments-design.md",
+      "sha256": "1bdd85de920571954648f1e36d7c92ee39c24d644993c57ffe92994162cf3c9d"
+    },
+    {
+      "path": "docs/design/reploy-integration-implementation-plan.md",
+      "sha256": "bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a"
+    }
+  ],
+  "begin": "The cumulative suite covers inspection",
+  "end": "**Requirement package B2.",
+  "requirements": [
+    {
+      "id": "INV-001",
+      "text": "The cumulative suite covers inspection requests, deterministic IDs, resolved plans, typed results, aggregate frame bounds, malformed cases, failure codes, matching and mismatching handshake session IDs, and every startup/control-write deadline epoch."
+    },
+    {
+      "id": "INV-002",
+      "text": "Cover an earlier writer exiting with bytes still buffered, and require the fresh exclusive pre-start drain before `operation_started`."
+    },
+    {
+      "id": "INV-003",
+      "text": "Freeze path-resolution and file-digest compatibility with the native runner, including undefined variables, `~user`, symlinks, and nested special entries."
+    },
+    {
+      "id": "INV-004",
+      "text": "Directory digests are deliberately not native-compatible: freeze separately tagged fixtures for the native `directory` encoding and the protocol's `directory-v2` framing instead."
+    },
+    {
+      "id": "INV-005",
+      "text": "Also freeze zero-byte boundary fixtures for the first PTY and split operation and for a first operation that fails or is cancelled before starting."
+    },
+    {
+      "id": "INV-006",
+      "text": "Require the initial `pty` boundary-only stream, repetition of the current stream when no new byte selected one, and a same-offset `stdout` or `stderr` mark before the first actual split-stream byte."
+    },
+    {
+      "id": "INV-007",
+      "text": "Freeze every supported Bash-build entry's exact zero-to-4,096-byte startup PTY string and `ready.output_through`."
+    },
+    {
+      "id": "INV-008",
+      "text": "Cover fragmented and delayed startup bytes, cross-connection delivery before `ready`, zero and maximum-size entries, mismatch, extra byte, overflow, premature EOF, and an incomplete barrier."
+    },
+    {
+      "id": "INV-009",
+      "text": "Prove the raw range begins at offset zero as `pty` at elapsed time zero and contains no real Bash prompt byte."
+    },
+    {
+      "id": "INV-010",
+      "text": "Freeze the exact A2.4 private frames and helper messages, canonical brace frame, independent source/frame syntax checks, source and aggregate bounds, the hard post-source LF boundary, `0x18 0x01` loader and `0x18 0x02` submit bindings in the fixed idle keymap, command-substitution marker, source rejection codes, and one non-resetting operation-start deadline."
+    },
+    {
+      "id": "INV-011",
+      "text": "Prove the canonical suffix performs no command lookup when source defines a function named `:` or disables the `:` builtin, and preserves zero and nonzero status under source-enabled `errexit`."
+    },
+    {
+      "id": "INV-012",
+      "text": "Freeze readonly `trap` and `enable` mediation for the adapter-sensitive `CHLD` (`SIGCHLD`), `INT` (`SIGINT`), `DEBUG`, `ERR`, and `RETURN` traps and the exact adapter-required builtin set."
+    },
+    {
+      "id": "INV-013",
+      "text": "Keep POSIX mode disabled and adapter-reserved, and keep `POSIXLY_CORRECT` unset and readonly, because POSIX special-builtin precedence would otherwise bypass the `trap` mediator."
+    },
+    {
+      "id": "INV-014",
+      "text": "Before deciding whether a target is reserved, the readonly `trap` mediator must canonicalize every selected-Bash `signal_spec` after expansion using the selected Bash build's case-insensitive signal-name grammar and signal-name table, including aliases and decimal values, so the selected build's numeric `SIGCHLD` or `SIGINT` spelling cannot bypass the reservation; no portable hardcoded numeric constant is assumed."
+    },
+    {
+      "id": "INV-015",
+      "text": "Queries and other numeric trap mutations retain ordinary selected-Bash behavior."
+    },
+    {
+      "id": "INV-016",
+      "text": "The `CHLD` reservation prevents an adapter-owned helper child exit from asynchronously running a selected-shell `CHLD` trap and mutating persistent shell state across adapter boundaries."
+    },
+    {
+      "id": "INV-017",
+      "text": "Recorded top-level source cannot install or change the selected persistent Bash's `INT` trap."
+    },
+    {
+      "id": "INV-018",
+      "text": "The completion hook may temporarily ignore `INT` during its helper and cleanup window, then must restore the one canonical unset state with reserved `builtin trap - INT` and require `builtin trap -p INT` to be empty."
+    },
+    {
+      "id": "INV-019",
+      "text": "Nested shells and ordinary child programs retain their own normal signal handling."
+    },
+    {
+      "id": "INV-020",
+      "text": "Prove prohibited direct and expanded-argument mutations fail-stop before state changes, including direct and expanded `CHLD`/`SIGCHLD` and `INT`/`SIGINT` spellings, lowercase names, aliases, and direct and expanded decimal spellings of the selected build's numeric values (17 and 2 on the supported Linux builds), `trap 'exit 42' DEBUG`, `trap 'exit 42' CHLD`, `trap 'cd /tmp' SIGCHLD`, and `enable -n kill`."
+    },
+    {
+      "id": "INV-021",
+      "text": "Also prove dynamic load or replacement and dynamic unload cannot target a required builtin, and that recorded source cannot redefine or unset the readonly `awsh` function."
+    },
+    {
+      "id": "INV-022",
+      "text": "Cover combined options, multiple names, and mixed reserved/non- reserved targets, with complete post-expansion argument preflight before any partial mutation."
+    },
+    {
+      "id": "INV-023",
+      "text": "Reserved-state queries, including numeric `SIGCHLD` and `SIGINT` queries, and positive enablement remain allowed, while trap changes using other numeric signals and every operation on non-reserved traps and builtins preserve ordinary selected-Bash behavior."
+    },
+    {
+      "id": "INV-024",
+      "text": "Prove direct, combined, and expanded attempts to enable POSIX mode through `set`, `shopt`, or their explicit-`builtin` forms leave the mode disabled because assignment or unset attempts cannot change readonly-unset `POSIXLY_CORRECT`; an immediately following `trap 'exit 42' INT` must still be mediated."
+    },
+    {
+      "id": "INV-025",
+      "text": "Retain the selected Bash build's exact status and diagnostic for each attempt rather than adding adapter fail-stop behavior."
+    },
+    {
+      "id": "INV-026",
+      "text": "POSIX queries and requests that leave it disabled remain ordinary selected-Bash behavior, and a positive top-level `set -- ...` case must preserve positional-parameter state."
+    },
+    {
+      "id": "INV-027",
+      "text": "A nested Bash case proves that the child shell may install and own its own `CHLD` and `INT` traps without weakening the selected-shell reservation; an ordinary child program may install its own signal handler."
+    },
+    {
+      "id": "INV-028",
+      "text": "Gate-command cases prove that bare `awsh gate GATE_ID` reaches only the fixed absolute helper despite a hostile application `PATH`; explicit function bypass is an ordinary authored command, not a structured gate."
+    },
+    {
+      "id": "INV-029",
+      "text": "A nominal completion case must also prove that helper and cleanup child exits after `prompt_state` leave the final state-bearing `prompt_ready`, reported, and live cwd/exported environment aligned, including when an allowed non-reserved signal trap changes them during cleanup."
+    },
+    {
+      "id": "INV-030",
+      "text": "Classify explicit builtin-lookup bypass as fatal same-identity interference rather than a supported operation."
+    },
+    {
+      "id": "INV-031",
+      "text": "Cover minimum and maximum source, multiline source, comments, quotations, heredocs including an unterminated heredoc whose selected Bash checker warns while returning zero, zero status plus empty stdout and stderr as the success condition for both parse checks, trailing LF, parser-state-dependent rejection, fixed interactive-comment handling, reserved names and input sequences including adjacent-step boundaries, duplicate and crossed helper phases, mismatched IDs, no-redisplay behavior, and failures on both sides of public `operation_started`."
+    },
+    {
+      "id": "INV-032",
+      "text": "Freeze the source-loader and `PS0` positive success markers, the adapter-owned post-`PS0` signal and private `start_released` result, argument-free fail-stop mode, split `INNER_ENTERED` sentinel, and the post-sentinel restoration that makes the first authored expansion or command observe the exact preceding shell status."
+    },
+    {
+      "id": "INV-033",
+      "text": "Freeze the Linux helper-stream length prefix, half-close, and EOF boundaries."
+    },
+    {
+      "id": "INV-034",
+      "text": "Cover partial helper output, malformed or missing markers, nonzero exit, signal and disconnect; stdout and stderr redirection-open failures versus authored status 1; split setup and rollback under the original start timer; fragmented and short prefixes and payloads, zero and oversized lengths, trailing bytes, ancillary data, deliberately small socket buffers, and exact maximum request and reply payloads."
+    },
+    {
+      "id": "INV-035",
+      "text": "Cover cancellation before the first private `execute` byte, while `rejected` or `submit` is pending, after public start but before `start_released`, and after every later private-start phase; prove a committed start publishes `operation_started` and accepts `start_released` before ordinary cancellation and never abandons a loaded frame or adapter helper."
+    },
+    {
+      "id": "INV-036",
+      "text": "Add shell-exit crossings before the first private `execute` byte, after a complete `execute` but before `submit`, after `submit`, after `started`, after accepted `start_prepared` but before Envoy writes `start_release`, after the complete `start_release` write but before Awsh emits `started`, after public `operation_started` but before `started_ack`, after `started_ack` but before `start_released`, and immediately after accepted `start_released`."
+    },
+    {
+      "id": "INV-037",
+      "text": "The first crossing uses Awsh's empty operation-ID encoding and the existing shell-ended drain without an operation result."
+    },
+    {
+      "id": "INV-038",
+      "text": "Capture the terminal-input-barrier epoch when the watermark is outstanding, or operation-start after it is satisfied; retain that epoch for private EOF, zero-status Awsh reap, and any pre-start split rollback."
+    },
+    {
+      "id": "INV-039",
+      "text": "Final-drain starts at the existing drain-entry boundary and does not replace or extend the captured bound."
+    },
+    {
+      "id": "INV-040",
+      "text": "Freeze captured-epoch expiry before final-drain, both deadlines due in one dispatch turn (captured expiry first), successful closure/rollback followed by final-drain expiry, and both successful."
+    },
+    {
+      "id": "INV-041",
+      "text": "Captured expiry is fatal with the existing phase diagnostic and no operation result or successful public `closed`; successful closure/rollback ends that epoch and final-drain continues with its remaining budget, without reset."
+    },
+    {
+      "id": "INV-042",
+      "text": "Late crossed input cannot start a discarded operation."
+    },
+    {
+      "id": "INV-043",
+      "text": "Every later pre-`start_released` crossing is fatal under the unchanged operation-start deadline, while the final crossing uses ordinary shell-ended result evidence."
+    },
+    {
+      "id": "INV-044",
+      "text": "At both added boundaries Awsh has registered the active operation, so `shell_exit` carries the active operation ID and takes the fatal no-public-result mapping under the same non-resetting epoch."
+    },
+    {
+      "id": "INV-045",
+      "text": "Add execute and continue crossings while their `input_through` watermarks are outstanding, including `execute` before the operation-start epoch begins: an accepted `protocol_error` retains the active five-second Envoy terminal-input-barrier epoch without reset, supersedes the ordinary `input-barrier-timeout` mapping, and emits no operation result or synthetic status."
+    },
+    {
+      "id": "INV-046",
+      "text": "The sender's individual control-write deadline never controls that crossing."
+    },
+    {
+      "id": "INV-047",
+      "text": "Require bounded private closure and Awsh reap under that epoch."
+    },
+    {
+      "id": "INV-048",
+      "text": "EOF without an accepted `shell_exit` or `closed` remains fatal, and zero, nonzero, or signalled Awsh reap is fatal teardown evidence only."
+    },
+    {
+      "id": "INV-049",
+      "text": "The `shell-launch` case requires its existing nonzero exit; a zero status never makes protocol-error EOF orderly."
+    },
+    {
+      "id": "INV-050",
+      "text": "Missing EOF, an unreaped Awsh, or expiry is an additional bounded teardown failure with the original cause retained."
+    },
+    {
+      "id": "INV-051",
+      "text": "Retain bounded code/message evidence and report Reploy termination."
+    },
+    {
+      "id": "INV-052",
+      "text": "Repeat both barrier crossings with a queued cancel and an outstanding resize; crossed requests resolve through fatal channel failure without a new state or timer."
+    },
+    {
+      "id": "INV-053",
+      "text": "Cover partial private-frame crossings where Envoy has attempted its first byte but Awsh has not accepted a complete `execute`: the wire ID remains empty, while the Envoy start phase is already fatal."
+    },
+    {
+      "id": "INV-054",
+      "text": "Repeat with queued cancel and both PTY and split setup active."
+    },
+    {
+      "id": "INV-055",
+      "text": "Cover valid, malformed, unknown-code, stalled-EOF, reset, and nonzero/signalled Awsh `protocol_error` cases during launch, Ready/Idle, every start phase, Running, Gated, Continuing, grace, cleanup, live inspection, inspection cancellation, and drain."
+    },
+    {
+      "id": "INV-056",
+      "text": "Preserve one active deadline epoch without reset; when none is active, enter the existing Envoy final drain and start its existing five-second epoch."
+    },
+    {
+      "id": "INV-057",
+      "text": "The active epoch must be one of the listed Envoy phase or terminal-input-barrier epochs; an individual control-write timer alone cannot suppress that fallback."
+    },
+    {
+      "id": "INV-058",
+      "text": "Retain bounded code/message evidence, emit no synthetic shell status or operation result, and report Reploy termination."
+    },
+    {
+      "id": "INV-059",
+      "text": "For every variant, private EOF without an accepted `shell_exit` or `closed` remains fatal, and every zero, nonzero, or signalled Awsh reap is fatal teardown evidence only."
+    },
+    {
+      "id": "INV-060",
+      "text": "Preserve the existing nonzero `shell-launch` exit; missing EOF, an unreaped Awsh, or expiry is an additional bounded teardown failure with the original cause retained."
+    },
+    {
+      "id": "INV-061",
+      "text": "Freeze the exact A2.5 ordinary-return frames and helper reports: completion `prompt_state` with `STATUS`, `HISTEXPAND`, `EDITING_MODE`, `PHYSICAL_CWD`, `LOGICAL_CWD_OR_EMPTY`, and `EXPORTED_ENV_JSON`; startup no-state `prompt_ready` and completion state-bearing `prompt_ready` with the saved source `STATUS` plus final `HISTEXPAND`, `EDITING_MODE`, physical/logical cwd, and exported environment; Awsh `input_close` with the active operation ID and exact direct-exec helper PID; Envoy `input_closed` with only the operation ID; and Awsh `completed` with status, physical cwd, and `RESOLVED_INSPECTIONS_JSON`."
+    },
+    {
+      "id": "INV-062",
+      "text": "Freeze their ordinary-return ordering, the exact completion-helper cleanup exclusion, post-cleanup `wait`/empty-job-table proof, repeated adapter validation, final-state validation and use by Awsh, Readline termios transition, and final PTY drain."
+    },
+    {
+      "id": "INV-063",
+      "text": "Prove functions, aliases, positional parameters, unexported variables, and non-reserved options remain live in Bash without entering a helper or private frame."
+    },
+    {
+      "id": "INV-064",
+      "text": "Cover malformed and duplicate completion reports, stale or extra helper PIDs, early helper release, stale status/cwd/environment, and each PTY and split output/EOF boundary."
+    },
+    {
+      "id": "INV-065",
+      "text": "Leave cancellation, finalization, gates, and crossed lifecycle runtime proofs to B4–B8."
+    },
+    {
+      "id": "INV-066",
+      "text": "Use the complete A2.7 private-frame inventory for all request/result/helper directions, including exact `shutdown`, `shell_exit`, `closed`, and `protocol_error` bytes, empty operation-ID encoding, status and PID scalars, nested JSON, concatenation, fragmentation, maximum aggregate sizes, unknown diagnostic codes, and terminal EOF/reap crossings."
+    },
+    {
+      "id": "INV-067",
+      "text": "Freeze failure-code/result eligibility and public absent-field/empty-range cases from that same approved contract."
+    },
+    {
+      "id": "INV-068",
+      "text": "B1 creates the static corpus and each owner adds its executable evidence; A2.7's case list claims neither."
+    }
+  ],
+  "leaves": {
+    "B1.1": {
+      "prerequisites": "A2.7–A2.9 merged",
+      "implementation": "Go public wire models, encoders/decoders, public bounds and validation",
+      "acceptance": "Public nominal/malformed/maximum corpus; no runtime actors"
+    },
+    "B1.2": {
+      "prerequisites": "B1.1",
+      "implementation": "Private and helper wire models, length framing, strict scalar/nested JSON validation",
+      "acceptance": "Every private/helper form, direction, fragmentation and concatenation; no Bash execution"
+    },
+    "B1.3": {
+      "prerequisites": "B1.1–B1.2",
+      "implementation": "Static trace/case indexing and corpus completeness tooling",
+      "acceptance": "Complete B1 inventory, synthetic startup bounds, ordering/deadline traces and leaf/closure mapping; concrete build values pending B2.8"
+    },
+    "B2.1": {
+      "prerequisites": "B1",
+      "implementation": "Canonical candidate/qualified table admission validator, consumer generator and executable qualification runner",
+      "acceptance": "Reject unknown/stale consumers; candidate metadata cannot authorize production support; actual measurements pending B2.8"
+    },
+    "B2.2": {
+      "prerequisites": "B1.2, B2.1",
+      "implementation": "Awsh helper socket transport and non-returning fail-stop helper mode",
+      "acceptance": "Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior"
+    },
+    "B2.3": {
+      "prerequisites": "B2.1–B2.2; verified candidate inputs and /bin/bash placement",
+      "implementation": "Selected-shell launch, fixed startup assets, topology, descriptor intake/lease and readiness",
+      "acceptance": "Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry"
+    },
+    "B2.4": {
+      "prerequisites": "B2.3",
+      "implementation": "Readonly namespace, canonical parser state and whole-request trap/builtin mediation",
+      "acceptance": "Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior"
+    },
+    "B2.5": {
+      "prerequisites": "B2.4",
+      "implementation": "Source checker, canonical source frame, loader/submit Readline bindings and status restoration",
+      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection"
+    },
+    "B2.6": {
+      "prerequisites": "B2.5",
+      "implementation": "Awsh active start record, PS0/post-PS0 handshake and split-entry sentinel",
+      "acceptance": "Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3"
+    },
+    "B2.7": {
+      "prerequisites": "B2.6",
+      "implementation": "Completion hook, helper identity, Bash inspection-path resolution and state/Readline handoff",
+      "acceptance": "Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5"
+    },
+    "B2.8": {
+      "prerequisites": "B2.1–B2.7; verified Reploy build inputs and resolved /bin/bash placement",
+      "implementation": "Qualification measurements, supported-entry admission and generated consumer integration",
+      "acceptance": "Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf"
+    },
+    "B3.1": {
+      "prerequisites": "B1, B2",
+      "implementation": "Envoy listeners, session handshake, actor-local deadlines and bounded channel writes",
+      "acceptance": "Actual transport/IDs; deterministic startup peer; real startup pending B3.2"
+    },
+    "B3.2": {
+      "prerequisites": "B3.1, B2.8",
+      "implementation": "PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup",
+      "acceptance": "Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown"
+    },
+    "B3.3": {
+      "prerequisites": "B3.2",
+      "implementation": "Byte relay, stream marks, input watermark and operation-start sequencing",
+      "acceptance": "Fresh drain, setup timer, serialized submit and public/private start barriers; isolated setup/cleanup peers"
+    },
+    "B3.4": {
+      "prerequisites": "B3.3, B2.7",
+      "implementation": "Ordinary-return coordination and foundation assembly",
+      "acceptance": "Real Bash/Awsh return frames with bounded cleanup peer; full B3 coordination suite; actual split/descendants/inspection pending B5/B6/B7"
+    },
+    "B4.1": {
+      "prerequisites": "B3",
+      "implementation": "PTY output frontiers, resize serialization and direct TIOCSWINSZ",
+      "acceptance": "Idle/active/Starting resize, continuous output, drain winners and fatal ioctl failure; split equivalent pending B5.3"
+    },
+    "B4.2": {
+      "prerequisites": "B3, B4.1",
+      "implementation": "Cancel/finalize decisions, grace timer, foreground validation and direct TIOCSIG",
+      "acceptance": "Start crossings, empty foreground resampling, no-signal failure and exactly one signal with census/cleanup peer; actual descendants pending B6.5"
+    },
+    "B4.3": {
+      "prerequisites": "B4.2, B2.2",
+      "implementation": "Fixed awsh gate function/helper, continuation watermark and committed outcomes",
+      "acceptance": "Hostile PATH, short writes, one reply deadline, gate-ready/continue/interrupted and input-barrier failure; requalify affected adapter/trusted bytes before retaining support"
+    },
+    "B4.4": {
+      "prerequisites": "B4.1–B4.3",
+      "implementation": "Integrated control dispatch and crossed outcome handling",
+      "acceptance": "B4 isolated suite including completion-helper window and queued frames/timer selection; real split/cleanup/inspection crossings pending B5.3/B6.5/B7.3"
+    },
+    "B5.1": {
+      "prerequisites": "B3, B4",
+      "implementation": "Split setup, private FIFO modes, readers/keepalives and bounded rollback",
+      "acceptance": "Every partial failure, original start deadline, queued cancel and rollback; replaces B3 setup peer"
+    },
+    "B5.2": {
+      "prerequisites": "B5.1",
+      "implementation": "Separate stdout/stderr pump, exact logical byte ranges and sender marks",
+      "acceptance": "Interleaving and zero-byte boundaries without normalizing logical streams"
+    },
+    "B5.3": {
+      "prerequisites": "B5.2, B4.1",
+      "implementation": "Split resize frontiers and cleanup-completion/dual-EOF/removal integration",
+      "acceptance": "Complete B5 isolated suite; cleanup peer before keepalive close; actual writer-retaining descendants pending B6.3"
+    },
+    "B6.1": {
+      "prerequisites": "B2–B5",
+      "implementation": "Envoy subreaper, pidfd lifetime identity and repeated /proc census",
+      "acceptance": "Real controlled-tree identity, rapid fork/adoption and foreground classification; no independent Awsh lifecycle"
+    },
+    "B6.2": {
+      "prerequisites": "B6.1",
+      "implementation": "Descendant termination, adopted-child reap and bounded cleanup engine",
+      "acceptance": "Background/disown/nohup/setsid/double-fork cases, helper exclusion and outside-tree preservation"
+    },
+    "B6.3": {
+      "prerequisites": "B6.2, B3.4, B5.3",
+      "implementation": "Ordinary-return cleanup, input closure, split EOF/removal and final drain integration",
+      "acceptance": "Replace cleanup peers; real helper blocking, job-table clearance, final census and one cleanup deadline"
+    },
+    "B6.4": {
+      "prerequisites": "B6.3, B4",
+      "implementation": "Envoy exclusive evidence ranges, assertion eligibility and planned-end outcomes",
+      "acceptance": "Closed runtime ranges, real status versus finalization outcome and invalidation; Python compile-time rejection belongs only to B6.6"
+    },
+    "B6.5": {
+      "prerequisites": "B6.1–B6.4, B4.4",
+      "implementation": "Actual census/cleanup wiring into lifecycle controls and race handling",
+      "acceptance": "Complete B6 runtime suite; real foreground switches, helper survival, timeout reap, post-result cancel/finalize and split crossings; inspection pending B7.3"
+    },
+    "B6.6": {
+      "prerequisites": "B6.4–B6.5; existing Python plan compiler",
+      "implementation": "Python compiler validation of interactive output assertions and continuation input",
+      "acceptance": "Reject output_contains/output_regex when any operation or continuation sends text/key/control; preserve wait_for synchronization; complete B6 cumulative gate; later runner wiring belongs to D1.3"
+    },
+    "B7.1": {
+      "prerequisites": "B2–B6",
+      "implementation": "Envoy bounded file/directory inspection algorithms and live resolution conformance",
+      "acceptance": "Exercise B2.7 Awsh path resolution with live state; native file compatibility, separately tagged directory digests, special entries, mutation races and limits"
+    },
+    "B7.2": {
+      "prerequisites": "B7.1",
+      "implementation": "Restricted short-lived Envoy worker, channel isolation and typed results",
+      "acceptance": "No inherited session channels or controller filesystem probes; bounded result and reap"
+    },
+    "B7.3": {
+      "prerequisites": "B7.2, B6.5",
+      "implementation": "Worker acceptance/cancellation serialization and lifecycle integration",
+      "acceptance": "Both inspection winners, finalize status preservation, blocked-worker fatal timeout; complete B7 suite"
+    },
+    "B8.1": {
+      "prerequisites": "B2–B7",
+      "implementation": "Descriptor/socket isolation and malformed/channel-loss teardown hardening",
+      "acceptance": "Isolation, malformed/unknown-code traffic and channel-loss injection with actual local actors"
+    },
+    "B8.2": {
+      "prerequisites": "B8.1",
+      "implementation": "Terminal shell_exit/closed/private EOF/Awsh reap and idle shutdown crossings",
+      "acceptance": "Exact terminal ordering, zero/nonzero/signalled reap distinctions and both idle shutdown winners"
+    },
+    "B8.3": {
+      "prerequisites": "B8.2",
+      "implementation": "Captured deadline and protocol_error teardown crossings",
+      "acceptance": "Every start/barrier/grace/cleanup/inspection/drain epoch, same-turn expiry priority, queued cancel/resize; no new timer"
+    },
+    "B8.4": {
+      "prerequisites": "B8.1–B8.3",
+      "implementation": "Local conformance runner/report assembly",
+      "acceptance": "Entire B1–B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
+    },
+    "C1.1": {
+      "prerequisites": "B8.4",
+      "implementation": "Public Reploy event/request codecs",
+      "acceptance": "Strict controlled-session event/request corpus without lifecycle or subprocess code"
+    },
+    "C1.2": {
+      "prerequisites": "C1.1",
+      "implementation": "Host-result codec and codec integration",
+      "acceptance": "Complete C1 nominal/malformed/maximum corpus"
+    },
+    "C2.1": {
+      "prerequisites": "C1",
+      "implementation": "Controller startup/attachment/lifecycle core",
+      "acceptance": "Deterministic fake-client ordering, readiness and ordinary completion"
+    },
+    "C2.2": {
+      "prerequisites": "C2.1",
+      "implementation": "Cancellation, termination, acknowledgement, stderr and failure retention",
+      "acceptance": "Fake-client cancellation/ack/failure paths and bounded retained diagnostics"
+    },
+    "C2.3": {
+      "prerequisites": "C2.2, B4/B7 contracts",
+      "implementation": "Crossed controller events and lifecycle assembly",
+      "acceptance": "Complete C2 fake-client race matrix including ordinary completion winning inspection cancel; actual client pending C3.3"
+    },
+    "C3.1": {
+      "prerequisites": "C1, C2, B1",
+      "implementation": "Python Envoy transport, strict decoding and readiness buffering",
+      "acceptance": "Fragmentation, bounded pre-ready terminal bytes and raw-log first-prompt barrier"
+    },
+    "C3.2": {
+      "prerequisites": "C3.1",
+      "implementation": "Source/input validation, operation submission, telemetry/output frontier handling",
+      "acceptance": "Reserved source/input rejection, controller-local input_through and exact operation_started gating"
+    },
+    "C3.3": {
+      "prerequisites": "C3.2, B8.4",
+      "implementation": "Inspection/control results and controller-client assembly",
+      "acceptance": "Complete C3 suite with real local Envoy/Awsh; crossed lifecycle and channel barriers; real Reploy termination pending C8.2"
+    },
+    "C4.1": {
+      "prerequisites": "B8.4, B2.8",
+      "implementation": "Reproducible runtime builds and manifest generation",
+      "acceptance": "Exact Envoy/Awsh/fixed rcfile/inputrc/terminal/locale asset identities and platform outputs"
+    },
+    "C4.2": {
+      "prerequisites": "C4.1, B2.1/B2.8",
+      "implementation": "Qualified table packaging, regenerated consumers and package qualification enforcement",
+      "acceptance": "Reject stale/unqualified entries; rerun exact packaged changed bytes; complete C4 artifact gate"
+    },
+    "C5.1": {
+      "prerequisites": "C4",
+      "implementation": "Manifest validation and private read-only staging",
+      "acceptance": "Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly"
+    },
+    "C5.2": {
+      "prerequisites": "C5.1, B2",
+      "implementation": "Staged asset conformance and trusted-asset validation",
+      "acceptance": "Exact staged rcfile/helper/inputrc/terminal/locale behavior and framing/fail-stop; complete C5 suite"
+    },
+    "C6.1": {
+      "prerequisites": "C5",
+      "implementation": "Typed controller/workload blueprint models and Hydra composition",
+      "acceptance": "Complete resolved models, read-only controller config and retained YAML; no post-composition repair"
+    },
+    "C6.2": {
+      "prerequisites": "C6.1",
+      "implementation": "Launch environment reserved-value composition and validation",
+      "acceptance": "Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values"
+    },
+    "C6.3": {
+      "prerequisites": "C6.2, C4/C5/B2.8",
+      "implementation": "Trusted mounts, resolved /bin/bash qualification and final launch preflight",
+      "acceptance": "Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate"
+    },
+    "C7.1": {
+      "prerequisites": "C2/C3, C5/C6",
+      "implementation": "Bounded controller input manifest and declared asset validation",
+      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start"
+    },
+    "C7.2": {
+      "prerequisites": "C7.1",
+      "implementation": "Read-only controller-only input mount and internal command assembly",
+      "acceptance": "Exact /omegaflow-input isolation and validated invocation; complete C7 gate"
+    },
+    "C8.1": {
+      "prerequisites": "C1–C7",
+      "implementation": "Controlled-session capability preflight and separate deployment invocation",
+      "acceptance": "Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints"
+    },
+    "C8.2": {
+      "prerequisites": "C8.1",
+      "implementation": "Host result/stderr retention, partial artifacts and Reploy termination reporting",
+      "acceptance": "Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates"
+    },
+    "D1.1": {
+      "prerequisites": "C1–C8",
+      "implementation": "Envoy-backed runner/session adapter and pre-cutover routing",
+      "acceptance": "Status/cwd/session behavior; omitted FIFO host versus explicit reploy/host matrix and no default cutover"
+    },
+    "D1.2": {
+      "prerequisites": "D1.1, B4/B7",
+      "implementation": "Runner input/resize/Ctrl-C/gates/inspection and output policy adaptation",
+      "acceptance": "Existing runner behavior, produced outputs and structured diagnostics with local actors"
+    },
+    "D1.3": {
+      "prerequisites": "D1.2, B6",
+      "implementation": "Runner assertion evidence and recording-end finalization integration",
+      "acceptance": "Reuse B6.6 compiler rejection; exact logical stream and PTY CRLF bytes, completed ranges/status, cancellation/failure invalidation; complete D1 gate"
+    },
+    "D2.1": {
+      "prerequisites": "D1, C3",
+      "implementation": "Exact private raw log and distinct presentation/timeline event writer",
+      "acceptance": "Raw-byte retention, protocol-like terminal text, synthesized prompt/command ordering; no recorder PTY/process"
+    },
+    "D2.2": {
+      "prerequisites": "D2.1",
+      "implementation": "Direct asciicast encoding and incremental presentation modes",
+      "acceptance": "Fragmented/invalid UTF-8, real/suppress/replace and authored output schedule; no asciinema record"
+    },
+    "D2.3": {
+      "prerequisites": "D2.2, B4/B5",
+      "implementation": "Resize tagging and publication-frontier scheduler",
+      "acceptance": "Prompt/typing/Starting seams, delayed acknowledgements/watermarks and covered split prefixes"
+    },
+    "D2.4": {
+      "prerequisites": "D2.1–D2.3",
+      "implementation": "Artifact writer integration and ordering conformance tooling",
+      "acceptance": "Complete D2 queue-tie/zero-duration/continuous-output/authored-order matrix and raw writer frontier gate"
+    },
+    "D3.1": {
+      "prerequisites": "D1/D2, C8",
+      "implementation": "Real isolated Reploy demo harness and retained evidence tooling",
+      "acceptance": "Repeated nominal demo, curses/nested shell, routing and all presentation modes; not yet final milestone"
+    },
+    "D3.2": {
+      "prerequisites": "D3.1, C6/C8",
+      "implementation": "Hostile-launch and startup/exit/cancel/cleanup failure proof scenarios",
+      "acceptance": "Real bootstrap and controlled-shell terminal/locale isolation, resource accounting and partial artifacts; fixes go to owning correction leaves"
+    },
+    "D3.3": {
+      "prerequisites": "D3.2 and all preceding B/C/D leaves",
+      "implementation": "Controller/artifact/result/ack failure proof and milestone closeout",
+      "acceptance": "Complete real terminal-only matrix, no pending mandatory case, retained artifacts/diagnostics and accounted resources; authorizes E planning only"
+    }
+  },
+  "package_requirements": [
+    {
+      "id": "PACKAGE-B1.1",
+      "leaf": "B1.1",
+      "acceptance": "Public nominal/malformed/maximum corpus; no runtime actors"
+    },
+    {
+      "id": "PACKAGE-B1.2",
+      "leaf": "B1.2",
+      "acceptance": "Every private/helper form, direction, fragmentation and concatenation; no Bash execution"
+    },
+    {
+      "id": "PACKAGE-B1.3",
+      "leaf": "B1.3",
+      "acceptance": "Complete B1 inventory, synthetic startup bounds, ordering/deadline traces and leaf/closure mapping; concrete build values pending B2.8"
+    },
+    {
+      "id": "PACKAGE-B2.1",
+      "leaf": "B2.1",
+      "acceptance": "Reject unknown/stale consumers; candidate metadata cannot authorize production support; actual measurements pending B2.8"
+    },
+    {
+      "id": "PACKAGE-B2.2",
+      "leaf": "B2.2",
+      "acceptance": "Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior"
+    },
+    {
+      "id": "PACKAGE-B2.3",
+      "leaf": "B2.3",
+      "acceptance": "Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry"
+    },
+    {
+      "id": "PACKAGE-B2.4",
+      "leaf": "B2.4",
+      "acceptance": "Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior"
+    },
+    {
+      "id": "PACKAGE-B2.5",
+      "leaf": "B2.5",
+      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection"
+    },
+    {
+      "id": "PACKAGE-B2.6",
+      "leaf": "B2.6",
+      "acceptance": "Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3"
+    },
+    {
+      "id": "PACKAGE-B2.7",
+      "leaf": "B2.7",
+      "acceptance": "Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5"
+    },
+    {
+      "id": "PACKAGE-B2.8",
+      "leaf": "B2.8",
+      "acceptance": "Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf"
+    },
+    {
+      "id": "PACKAGE-B3.1",
+      "leaf": "B3.1",
+      "acceptance": "Actual transport/IDs; deterministic startup peer; real startup pending B3.2"
+    },
+    {
+      "id": "PACKAGE-B3.2",
+      "leaf": "B3.2",
+      "acceptance": "Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown"
+    },
+    {
+      "id": "PACKAGE-B3.3",
+      "leaf": "B3.3",
+      "acceptance": "Fresh drain, setup timer, serialized submit and public/private start barriers; isolated setup/cleanup peers"
+    },
+    {
+      "id": "PACKAGE-B3.4",
+      "leaf": "B3.4",
+      "acceptance": "Real Bash/Awsh return frames with bounded cleanup peer; full B3 coordination suite; actual split/descendants/inspection pending B5/B6/B7"
+    },
+    {
+      "id": "PACKAGE-B4.1",
+      "leaf": "B4.1",
+      "acceptance": "Idle/active/Starting resize, continuous output, drain winners and fatal ioctl failure; split equivalent pending B5.3"
+    },
+    {
+      "id": "PACKAGE-B4.2",
+      "leaf": "B4.2",
+      "acceptance": "Start crossings, empty foreground resampling, no-signal failure and exactly one signal with census/cleanup peer; actual descendants pending B6.5"
+    },
+    {
+      "id": "PACKAGE-B4.3",
+      "leaf": "B4.3",
+      "acceptance": "Hostile PATH, short writes, one reply deadline, gate-ready/continue/interrupted and input-barrier failure; requalify affected adapter/trusted bytes before retaining support"
+    },
+    {
+      "id": "PACKAGE-B4.4",
+      "leaf": "B4.4",
+      "acceptance": "B4 isolated suite including completion-helper window and queued frames/timer selection; real split/cleanup/inspection crossings pending B5.3/B6.5/B7.3"
+    },
+    {
+      "id": "PACKAGE-B5.1",
+      "leaf": "B5.1",
+      "acceptance": "Every partial failure, original start deadline, queued cancel and rollback; replaces B3 setup peer"
+    },
+    {
+      "id": "PACKAGE-B5.2",
+      "leaf": "B5.2",
+      "acceptance": "Interleaving and zero-byte boundaries without normalizing logical streams"
+    },
+    {
+      "id": "PACKAGE-B5.3",
+      "leaf": "B5.3",
+      "acceptance": "Complete B5 isolated suite; cleanup peer before keepalive close; actual writer-retaining descendants pending B6.3"
+    },
+    {
+      "id": "PACKAGE-B6.1",
+      "leaf": "B6.1",
+      "acceptance": "Real controlled-tree identity, rapid fork/adoption and foreground classification; no independent Awsh lifecycle"
+    },
+    {
+      "id": "PACKAGE-B6.2",
+      "leaf": "B6.2",
+      "acceptance": "Background/disown/nohup/setsid/double-fork cases, helper exclusion and outside-tree preservation"
+    },
+    {
+      "id": "PACKAGE-B6.3",
+      "leaf": "B6.3",
+      "acceptance": "Replace cleanup peers; real helper blocking, job-table clearance, final census and one cleanup deadline"
+    },
+    {
+      "id": "PACKAGE-B6.4",
+      "leaf": "B6.4",
+      "acceptance": "Closed runtime ranges, real status versus finalization outcome and invalidation; Python compile-time rejection belongs only to B6.6"
+    },
+    {
+      "id": "PACKAGE-B6.5",
+      "leaf": "B6.5",
+      "acceptance": "Complete B6 runtime suite; real foreground switches, helper survival, timeout reap, post-result cancel/finalize and split crossings; inspection pending B7.3"
+    },
+    {
+      "id": "PACKAGE-B6.6",
+      "leaf": "B6.6",
+      "acceptance": "Reject output_contains/output_regex when any operation or continuation sends text/key/control; preserve wait_for synchronization; complete B6 cumulative gate; later runner wiring belongs to D1.3"
+    },
+    {
+      "id": "PACKAGE-B7.1",
+      "leaf": "B7.1",
+      "acceptance": "Exercise B2.7 Awsh path resolution with live state; native file compatibility, separately tagged directory digests, special entries, mutation races and limits"
+    },
+    {
+      "id": "PACKAGE-B7.2",
+      "leaf": "B7.2",
+      "acceptance": "No inherited session channels or controller filesystem probes; bounded result and reap"
+    },
+    {
+      "id": "PACKAGE-B7.3",
+      "leaf": "B7.3",
+      "acceptance": "Both inspection winners, finalize status preservation, blocked-worker fatal timeout; complete B7 suite"
+    },
+    {
+      "id": "PACKAGE-B8.1",
+      "leaf": "B8.1",
+      "acceptance": "Isolation, malformed/unknown-code traffic and channel-loss injection with actual local actors"
+    },
+    {
+      "id": "PACKAGE-B8.2",
+      "leaf": "B8.2",
+      "acceptance": "Exact terminal ordering, zero/nonzero/signalled reap distinctions and both idle shutdown winners"
+    },
+    {
+      "id": "PACKAGE-B8.3",
+      "leaf": "B8.3",
+      "acceptance": "Every start/barrier/grace/cleanup/inspection/drain epoch, same-turn expiry priority, queued cancel/resize; no new timer"
+    },
+    {
+      "id": "PACKAGE-B8.4",
+      "leaf": "B8.4",
+      "acceptance": "Entire B1–B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
+    },
+    {
+      "id": "PACKAGE-C1.1",
+      "leaf": "C1.1",
+      "acceptance": "Strict controlled-session event/request corpus without lifecycle or subprocess code"
+    },
+    {
+      "id": "PACKAGE-C1.2",
+      "leaf": "C1.2",
+      "acceptance": "Complete C1 nominal/malformed/maximum corpus"
+    },
+    {
+      "id": "PACKAGE-C2.1",
+      "leaf": "C2.1",
+      "acceptance": "Deterministic fake-client ordering, readiness and ordinary completion"
+    },
+    {
+      "id": "PACKAGE-C2.2",
+      "leaf": "C2.2",
+      "acceptance": "Fake-client cancellation/ack/failure paths and bounded retained diagnostics"
+    },
+    {
+      "id": "PACKAGE-C2.3",
+      "leaf": "C2.3",
+      "acceptance": "Complete C2 fake-client race matrix including ordinary completion winning inspection cancel; actual client pending C3.3"
+    },
+    {
+      "id": "PACKAGE-C3.1",
+      "leaf": "C3.1",
+      "acceptance": "Fragmentation, bounded pre-ready terminal bytes and raw-log first-prompt barrier"
+    },
+    {
+      "id": "PACKAGE-C3.2",
+      "leaf": "C3.2",
+      "acceptance": "Reserved source/input rejection, controller-local input_through and exact operation_started gating"
+    },
+    {
+      "id": "PACKAGE-C3.3",
+      "leaf": "C3.3",
+      "acceptance": "Complete C3 suite with real local Envoy/Awsh; crossed lifecycle and channel barriers; real Reploy termination pending C8.2"
+    },
+    {
+      "id": "PACKAGE-C4.1",
+      "leaf": "C4.1",
+      "acceptance": "Exact Envoy/Awsh/fixed rcfile/inputrc/terminal/locale asset identities and platform outputs"
+    },
+    {
+      "id": "PACKAGE-C4.2",
+      "leaf": "C4.2",
+      "acceptance": "Reject stale/unqualified entries; rerun exact packaged changed bytes; complete C4 artifact gate"
+    },
+    {
+      "id": "PACKAGE-C5.1",
+      "leaf": "C5.1",
+      "acceptance": "Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly"
+    },
+    {
+      "id": "PACKAGE-C5.2",
+      "leaf": "C5.2",
+      "acceptance": "Exact staged rcfile/helper/inputrc/terminal/locale behavior and framing/fail-stop; complete C5 suite"
+    },
+    {
+      "id": "PACKAGE-C6.1",
+      "leaf": "C6.1",
+      "acceptance": "Complete resolved models, read-only controller config and retained YAML; no post-composition repair"
+    },
+    {
+      "id": "PACKAGE-C6.2",
+      "leaf": "C6.2",
+      "acceptance": "Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values"
+    },
+    {
+      "id": "PACKAGE-C6.3",
+      "leaf": "C6.3",
+      "acceptance": "Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate"
+    },
+    {
+      "id": "PACKAGE-C7.1",
+      "leaf": "C7.1",
+      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start"
+    },
+    {
+      "id": "PACKAGE-C7.2",
+      "leaf": "C7.2",
+      "acceptance": "Exact /omegaflow-input isolation and validated invocation; complete C7 gate"
+    },
+    {
+      "id": "PACKAGE-C8.1",
+      "leaf": "C8.1",
+      "acceptance": "Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints"
+    },
+    {
+      "id": "PACKAGE-C8.2",
+      "leaf": "C8.2",
+      "acceptance": "Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates"
+    },
+    {
+      "id": "PACKAGE-D1.1",
+      "leaf": "D1.1",
+      "acceptance": "Status/cwd/session behavior; omitted FIFO host versus explicit reploy/host matrix and no default cutover"
+    },
+    {
+      "id": "PACKAGE-D1.2",
+      "leaf": "D1.2",
+      "acceptance": "Existing runner behavior, produced outputs and structured diagnostics with local actors"
+    },
+    {
+      "id": "PACKAGE-D1.3",
+      "leaf": "D1.3",
+      "acceptance": "Reuse B6.6 compiler rejection; exact logical stream and PTY CRLF bytes, completed ranges/status, cancellation/failure invalidation; complete D1 gate"
+    },
+    {
+      "id": "PACKAGE-D2.1",
+      "leaf": "D2.1",
+      "acceptance": "Raw-byte retention, protocol-like terminal text, synthesized prompt/command ordering; no recorder PTY/process"
+    },
+    {
+      "id": "PACKAGE-D2.2",
+      "leaf": "D2.2",
+      "acceptance": "Fragmented/invalid UTF-8, real/suppress/replace and authored output schedule; no asciinema record"
+    },
+    {
+      "id": "PACKAGE-D2.3",
+      "leaf": "D2.3",
+      "acceptance": "Prompt/typing/Starting seams, delayed acknowledgements/watermarks and covered split prefixes"
+    },
+    {
+      "id": "PACKAGE-D2.4",
+      "leaf": "D2.4",
+      "acceptance": "Complete D2 queue-tie/zero-duration/continuous-output/authored-order matrix and raw writer frontier gate"
+    },
+    {
+      "id": "PACKAGE-D3.1",
+      "leaf": "D3.1",
+      "acceptance": "Repeated nominal demo, curses/nested shell, routing and all presentation modes; not yet final milestone"
+    },
+    {
+      "id": "PACKAGE-D3.2",
+      "leaf": "D3.2",
+      "acceptance": "Real bootstrap and controlled-shell terminal/locale isolation, resource accounting and partial artifacts; fixes go to owning correction leaves"
+    },
+    {
+      "id": "PACKAGE-D3.3",
+      "leaf": "D3.3",
+      "acceptance": "Complete real terminal-only matrix, no pending mandatory case, retained artifacts/diagnostics and accounted resources; authorizes E planning only"
+    }
+  ],
+  "static_only": true,
+  "qualified_builds": [],
+  "case_ids": [
+    "B1-C001-contract",
+    "B1-C002-contract",
+    "B1-C003-contract",
+    "B1-C004-contract",
+    "B1-C005-contract",
+    "B1-C006-contract",
+    "B1-C007-contract",
+    "B1-C008-contract",
+    "B1-C009-contract",
+    "B1-C010-contract",
+    "B1-C011-contract",
+    "B1-C012-contract",
+    "B1-C013-contract",
+    "B1-C014-contract",
+    "B1-C015-contract",
+    "B1-C016-contract",
+    "B1-C017-contract",
+    "B1-C018-contract",
+    "B1-C019-contract",
+    "B1-C020-contract",
+    "B1-C021-contract",
+    "B1-C022-contract",
+    "B1-C023-contract",
+    "B1-C024-contract",
+    "B1-C025-contract",
+    "B1-C026-contract",
+    "B1-C027-contract",
+    "B1-C028-contract",
+    "B1-C029-contract",
+    "B1-C030-contract",
+    "B1-C031-contract",
+    "B1-C032-contract",
+    "B1-C033-contract",
+    "B1-C034-contract",
+    "B1-C035-contract",
+    "B1-C036-contract",
+    "B1-C037-contract",
+    "B1-C038-contract",
+    "B1-C039-contract",
+    "B1-C040-contract",
+    "B1-C041-contract",
+    "B1-C042-contract",
+    "B1-C043-contract",
+    "B1-C044-contract",
+    "B1-C045-contract",
+    "B1-C046-contract",
+    "B1-C047-contract",
+    "B1-C048-contract",
+    "B1-C049-contract",
+    "B1-C050-contract",
+    "B1-C051-contract",
+    "B1-C052-contract",
+    "B1-C053-contract",
+    "B1-C054-contract",
+    "B1-C055-contract",
+    "B1-C056-contract",
+    "B1-C057-contract",
+    "B1-C058-contract",
+    "B1-C059-contract",
+    "B1-C060-contract",
+    "B1-C061-contract",
+    "B1-C062-contract",
+    "B1-C063-contract",
+    "B1-C064-contract",
+    "B1-C065-contract",
+    "B1-C066-contract",
+    "B1-C067-contract",
+    "B1-C068-contract",
+    "B1-C066-public-nominal",
+    "B1-C066-public-wrong-direction",
+    "B1-C066-public-wrong-arity",
+    "B1-C066-public-unknown-type",
+    "B1-C066-public-duplicate",
+    "B1-C066-public-out-of-order",
+    "B1-C066-public-invalid-utf8",
+    "B1-C066-public-nul",
+    "B1-C066-public-signed-number",
+    "B1-C066-public-padded-number",
+    "B1-C066-public-non-decimal",
+    "B1-C066-public-scalar-min",
+    "B1-C066-public-scalar-max",
+    "B1-C066-public-scalar-overflow",
+    "B1-C066-public-aggregate-max",
+    "B1-C066-public-aggregate-overflow",
+    "B1-C066-public-fragmentation",
+    "B1-C066-public-concatenation",
+    "B1-C066-public-truncated",
+    "B1-C066-public-trailing",
+    "B1-C066-private-nominal",
+    "B1-C066-private-wrong-direction",
+    "B1-C066-private-wrong-arity",
+    "B1-C066-private-unknown-type",
+    "B1-C066-private-duplicate",
+    "B1-C066-private-out-of-order",
+    "B1-C066-private-invalid-utf8",
+    "B1-C066-private-nul",
+    "B1-C066-private-signed-number",
+    "B1-C066-private-padded-number",
+    "B1-C066-private-non-decimal",
+    "B1-C066-private-scalar-min",
+    "B1-C066-private-scalar-max",
+    "B1-C066-private-scalar-overflow",
+    "B1-C066-private-aggregate-max",
+    "B1-C066-private-aggregate-overflow",
+    "B1-C066-private-fragmentation",
+    "B1-C066-private-concatenation",
+    "B1-C066-private-truncated",
+    "B1-C066-private-trailing",
+    "B1-C066-helper-nominal",
+    "B1-C066-helper-wrong-direction",
+    "B1-C066-helper-wrong-arity",
+    "B1-C066-helper-unknown-type",
+    "B1-C066-helper-duplicate",
+    "B1-C066-helper-out-of-order",
+    "B1-C066-helper-invalid-utf8",
+    "B1-C066-helper-nul",
+    "B1-C066-helper-signed-number",
+    "B1-C066-helper-padded-number",
+    "B1-C066-helper-non-decimal",
+    "B1-C066-helper-scalar-min",
+    "B1-C066-helper-scalar-max",
+    "B1-C066-helper-scalar-overflow",
+    "B1-C066-helper-aggregate-max",
+    "B1-C066-helper-aggregate-overflow",
+    "B1-C066-helper-fragmentation",
+    "B1-C066-helper-concatenation",
+    "B1-C066-helper-truncated",
+    "B1-C066-helper-trailing",
+    "B1-C001-inspection-id",
+    "B1-C001-deterministic-operation-id",
+    "B1-C001-resolved-plan",
+    "B1-C001-typed-result",
+    "B1-C001-unknown-diagnostic",
+    "B1-C001-matching-session",
+    "B1-C001-mismatching-session",
+    "B1-C001-controller-connect",
+    "B1-C001-envoy-accept",
+    "B1-C001-envoy-hello",
+    "B1-C001-envoy-launch",
+    "B1-C001-controller-ready",
+    "B1-C001-individual-control-write",
+    "B1-C005-pty-start",
+    "B1-C005-pty-failed-before-start",
+    "B1-C005-pty-cancelled-before-start",
+    "B1-C005-pty-repeat-current-stream",
+    "B1-C005-stdout-start",
+    "B1-C005-stdout-failed-before-start",
+    "B1-C005-stdout-cancelled-before-start",
+    "B1-C005-stdout-repeat-current-stream",
+    "B1-C005-stderr-start",
+    "B1-C005-stderr-failed-before-start",
+    "B1-C005-stderr-cancelled-before-start",
+    "B1-C005-stderr-repeat-current-stream",
+    "B1-C003-undefined-variable",
+    "B1-C003-defined-variable",
+    "B1-C003-tilde",
+    "B1-C003-tilde-user",
+    "B1-C003-relative-after-cd",
+    "B1-C003-symlink",
+    "B1-C003-nested-special",
+    "B1-C003-missing",
+    "B1-C003-unsupported-top-level",
+    "B1-C003-directory-tag",
+    "B1-C003-directory-v2-tag",
+    "B1-C011-suffix-colon-function-0",
+    "B1-C011-suffix-colon-function-1",
+    "B1-C011-suffix-colon-function-255",
+    "B1-C011-suffix-colon-disabled-0",
+    "B1-C011-suffix-colon-disabled-1",
+    "B1-C011-suffix-colon-disabled-255",
+    "B1-C020-CHLD-direct",
+    "B1-C020-CHLD-expanded",
+    "B1-C020-CHLD-mixed-targets",
+    "B1-C020-CHLD-multiple-targets",
+    "B1-C020-SIGCHLD-direct",
+    "B1-C020-SIGCHLD-expanded",
+    "B1-C020-SIGCHLD-mixed-targets",
+    "B1-C020-SIGCHLD-multiple-targets",
+    "B1-C020-chld-direct",
+    "B1-C020-chld-expanded",
+    "B1-C020-chld-mixed-targets",
+    "B1-C020-chld-multiple-targets",
+    "B1-C020-sigchld-direct",
+    "B1-C020-sigchld-expanded",
+    "B1-C020-sigchld-mixed-targets",
+    "B1-C020-sigchld-multiple-targets",
+    "B1-C020-INT-direct",
+    "B1-C020-INT-expanded",
+    "B1-C020-INT-mixed-targets",
+    "B1-C020-INT-multiple-targets",
+    "B1-C020-SIGINT-direct",
+    "B1-C020-SIGINT-expanded",
+    "B1-C020-SIGINT-mixed-targets",
+    "B1-C020-SIGINT-multiple-targets",
+    "B1-C020-int-direct",
+    "B1-C020-int-expanded",
+    "B1-C020-int-mixed-targets",
+    "B1-C020-int-multiple-targets",
+    "B1-C020-sigint-direct",
+    "B1-C020-sigint-expanded",
+    "B1-C020-sigint-mixed-targets",
+    "B1-C020-sigint-multiple-targets",
+    "B1-C020-DEBUG-direct",
+    "B1-C020-DEBUG-expanded",
+    "B1-C020-DEBUG-mixed-targets",
+    "B1-C020-DEBUG-multiple-targets",
+    "B1-C020-ERR-direct",
+    "B1-C020-ERR-expanded",
+    "B1-C020-ERR-mixed-targets",
+    "B1-C020-ERR-multiple-targets",
+    "B1-C020-RETURN-direct",
+    "B1-C020-RETURN-expanded",
+    "B1-C020-RETURN-mixed-targets",
+    "B1-C020-RETURN-multiple-targets",
+    "B1-C020-selected-numeric-CHLD-direct",
+    "B1-C020-selected-numeric-CHLD-expanded",
+    "B1-C020-selected-numeric-CHLD-mixed-targets",
+    "B1-C020-selected-numeric-CHLD-multiple-targets",
+    "B1-C020-selected-numeric-INT-direct",
+    "B1-C020-selected-numeric-INT-expanded",
+    "B1-C020-selected-numeric-INT-mixed-targets",
+    "B1-C020-selected-numeric-INT-multiple-targets",
+    "B1-C021-builtin-disable",
+    "B1-C021-builtin-dynamic-load",
+    "B1-C021-builtin-replace",
+    "B1-C021-builtin-dynamic-unload",
+    "B1-C021-redefine-awsh",
+    "B1-C021-unset-awsh",
+    "B1-C022-combined-options",
+    "B1-C022-multiple-names",
+    "B1-C022-mixed-reserved-nonreserved",
+    "B1-C022-reserved-query",
+    "B1-C022-numeric-CHLD-query",
+    "B1-C022-numeric-INT-query",
+    "B1-C022-positive-enable",
+    "B1-C022-nonreserved-numeric-trap",
+    "B1-C022-nonrequired-builtin-modes",
+    "B1-C024-set-direct",
+    "B1-C024-set-expanded",
+    "B1-C024-set-combined",
+    "B1-C024-shopt-direct",
+    "B1-C024-shopt-expanded",
+    "B1-C024-shopt-combined",
+    "B1-C024-builtin-set-direct",
+    "B1-C024-builtin-set-expanded",
+    "B1-C024-builtin-set-combined",
+    "B1-C024-builtin-shopt-direct",
+    "B1-C024-builtin-shopt-expanded",
+    "B1-C024-builtin-shopt-combined",
+    "B1-C024-assignment-direct",
+    "B1-C024-assignment-expanded",
+    "B1-C024-assignment-combined",
+    "B1-C024-unset-direct",
+    "B1-C024-unset-expanded",
+    "B1-C024-unset-combined",
+    "B1-C027-posix-query",
+    "B1-C027-posix-disabled-request",
+    "B1-C027-set-positional",
+    "B1-C027-nested-CHLD",
+    "B1-C027-nested-INT",
+    "B1-C027-ordinary-child-handler",
+    "B1-C027-explicit-builtin-bypass",
+    "B1-C031-minimum-source",
+    "B1-C031-maximum-source",
+    "B1-C031-multiline",
+    "B1-C031-comments",
+    "B1-C031-quotes",
+    "B1-C031-heredoc",
+    "B1-C031-unterminated-heredoc-warning-zero-status",
+    "B1-C031-trailing-LF",
+    "B1-C031-aliases",
+    "B1-C031-extglob",
+    "B1-C031-posix",
+    "B1-C031-history",
+    "B1-C031-interactive-comments",
+    "B1-C031-reserved-namespace",
+    "B1-C031-reserved-input",
+    "B1-C031-adjacent-step-input",
+    "B1-C031-duplicate-helper",
+    "B1-C031-crossed-helper",
+    "B1-C031-wrong-ID",
+    "B1-C031-no-redisplay",
+    "B1-C031-pre-public-start-failure",
+    "B1-C031-post-public-start-failure",
+    "B1-C031-checker-nonzero",
+    "B1-C031-checker-stdout",
+    "B1-C031-checker-stderr",
+    "B1-C032-source-positive-marker",
+    "B1-C032-PS0-positive-marker",
+    "B1-C032-post-PS0-signal",
+    "B1-C032-start-released",
+    "B1-C032-fail-stop-no-arguments",
+    "B1-C032-INNER_ENTERED-zero",
+    "B1-C032-first-expansion-status",
+    "B1-C032-first-command-status",
+    "B1-C032-stdout-open-failure",
+    "B1-C032-stderr-open-failure",
+    "B1-C032-authored-status-one",
+    "B1-C032-partial-output",
+    "B1-C032-missing-marker",
+    "B1-C032-malformed-marker",
+    "B1-C032-helper-nonzero",
+    "B1-C032-helper-signal",
+    "B1-C032-helper-disconnect",
+    "B1-C033-prefix-every-split",
+    "B1-C033-payload-every-split",
+    "B1-C033-short-prefix",
+    "B1-C033-short-payload",
+    "B1-C033-zero-length",
+    "B1-C033-oversized-length",
+    "B1-C033-trailing-data",
+    "B1-C033-ancillary-data",
+    "B1-C033-missing-half-close",
+    "B1-C033-premature-EOF",
+    "B1-C033-small-socket-buffer",
+    "B1-C033-max-request",
+    "B1-C033-max-reply",
+    "B1-C033-positive-short-write",
+    "B1-C036-before-first-byte-pty-cancel-false",
+    "B1-C036-before-first-byte-pty-cancel-true",
+    "B1-C036-before-first-byte-split-cancel-false",
+    "B1-C036-before-first-byte-split-cancel-true",
+    "B1-C036-partial-execute-pty-cancel-false",
+    "B1-C036-partial-execute-pty-cancel-true",
+    "B1-C036-partial-execute-split-cancel-false",
+    "B1-C036-partial-execute-split-cancel-true",
+    "B1-C036-complete-execute-pty-cancel-false",
+    "B1-C036-complete-execute-pty-cancel-true",
+    "B1-C036-complete-execute-split-cancel-false",
+    "B1-C036-complete-execute-split-cancel-true",
+    "B1-C036-submit-pty-cancel-false",
+    "B1-C036-submit-pty-cancel-true",
+    "B1-C036-submit-split-cancel-false",
+    "B1-C036-submit-split-cancel-true",
+    "B1-C036-start-prepared-pty-cancel-false",
+    "B1-C036-start-prepared-pty-cancel-true",
+    "B1-C036-start-prepared-split-cancel-false",
+    "B1-C036-start-prepared-split-cancel-true",
+    "B1-C036-start-release-written-pty-cancel-false",
+    "B1-C036-start-release-written-pty-cancel-true",
+    "B1-C036-start-release-written-split-cancel-false",
+    "B1-C036-start-release-written-split-cancel-true",
+    "B1-C036-started-pty-cancel-false",
+    "B1-C036-started-pty-cancel-true",
+    "B1-C036-started-split-cancel-false",
+    "B1-C036-started-split-cancel-true",
+    "B1-C036-public-operation-started-pty-cancel-false",
+    "B1-C036-public-operation-started-pty-cancel-true",
+    "B1-C036-public-operation-started-split-cancel-false",
+    "B1-C036-public-operation-started-split-cancel-true",
+    "B1-C036-started-ack-pty-cancel-false",
+    "B1-C036-started-ack-pty-cancel-true",
+    "B1-C036-started-ack-split-cancel-false",
+    "B1-C036-started-ack-split-cancel-true",
+    "B1-C036-start-released-pty-cancel-false",
+    "B1-C036-start-released-pty-cancel-true",
+    "B1-C036-start-released-split-cancel-false",
+    "B1-C036-start-released-split-cancel-true",
+    "B1-C035-before-first-byte",
+    "B1-C035-partial-execute",
+    "B1-C035-complete-execute",
+    "B1-C035-submit",
+    "B1-C035-start-prepared",
+    "B1-C035-start-release-written",
+    "B1-C035-started",
+    "B1-C035-public-operation-started",
+    "B1-C035-started-ack",
+    "B1-C035-start-released",
+    "B1-C040-terminal-input-barrier-captured-expiry",
+    "B1-C040-terminal-input-barrier-both-expire",
+    "B1-C040-terminal-input-barrier-closure-then-drain-expiry",
+    "B1-C040-terminal-input-barrier-success",
+    "B1-C040-operation-start-captured-expiry",
+    "B1-C040-operation-start-both-expire",
+    "B1-C040-operation-start-closure-then-drain-expiry",
+    "B1-C040-operation-start-success",
+    "B1-C055-launch-valid",
+    "B1-C055-launch-malformed",
+    "B1-C055-launch-unknown-code",
+    "B1-C055-launch-stalled-EOF",
+    "B1-C055-launch-reset",
+    "B1-C055-launch-zero-reap",
+    "B1-C055-launch-nonzero-reap",
+    "B1-C055-launch-signalled-reap",
+    "B1-C055-launch-missing-EOF",
+    "B1-C055-launch-unreaped",
+    "B1-C055-launch-expiry",
+    "B1-C055-ready-valid",
+    "B1-C055-ready-malformed",
+    "B1-C055-ready-unknown-code",
+    "B1-C055-ready-stalled-EOF",
+    "B1-C055-ready-reset",
+    "B1-C055-ready-zero-reap",
+    "B1-C055-ready-nonzero-reap",
+    "B1-C055-ready-signalled-reap",
+    "B1-C055-ready-missing-EOF",
+    "B1-C055-ready-unreaped",
+    "B1-C055-ready-expiry",
+    "B1-C055-idle-valid",
+    "B1-C055-idle-malformed",
+    "B1-C055-idle-unknown-code",
+    "B1-C055-idle-stalled-EOF",
+    "B1-C055-idle-reset",
+    "B1-C055-idle-zero-reap",
+    "B1-C055-idle-nonzero-reap",
+    "B1-C055-idle-signalled-reap",
+    "B1-C055-idle-missing-EOF",
+    "B1-C055-idle-unreaped",
+    "B1-C055-idle-expiry",
+    "B1-C055-execute-input-barrier-valid",
+    "B1-C055-execute-input-barrier-malformed",
+    "B1-C055-execute-input-barrier-unknown-code",
+    "B1-C055-execute-input-barrier-stalled-EOF",
+    "B1-C055-execute-input-barrier-reset",
+    "B1-C055-execute-input-barrier-zero-reap",
+    "B1-C055-execute-input-barrier-nonzero-reap",
+    "B1-C055-execute-input-barrier-signalled-reap",
+    "B1-C055-execute-input-barrier-missing-EOF",
+    "B1-C055-execute-input-barrier-unreaped",
+    "B1-C055-execute-input-barrier-expiry",
+    "B1-C055-continue-input-barrier-valid",
+    "B1-C055-continue-input-barrier-malformed",
+    "B1-C055-continue-input-barrier-unknown-code",
+    "B1-C055-continue-input-barrier-stalled-EOF",
+    "B1-C055-continue-input-barrier-reset",
+    "B1-C055-continue-input-barrier-zero-reap",
+    "B1-C055-continue-input-barrier-nonzero-reap",
+    "B1-C055-continue-input-barrier-signalled-reap",
+    "B1-C055-continue-input-barrier-missing-EOF",
+    "B1-C055-continue-input-barrier-unreaped",
+    "B1-C055-continue-input-barrier-expiry",
+    "B1-C055-partial-execute-valid",
+    "B1-C055-partial-execute-malformed",
+    "B1-C055-partial-execute-unknown-code",
+    "B1-C055-partial-execute-stalled-EOF",
+    "B1-C055-partial-execute-reset",
+    "B1-C055-partial-execute-zero-reap",
+    "B1-C055-partial-execute-nonzero-reap",
+    "B1-C055-partial-execute-signalled-reap",
+    "B1-C055-partial-execute-missing-EOF",
+    "B1-C055-partial-execute-unreaped",
+    "B1-C055-partial-execute-expiry",
+    "B1-C055-complete-execute-valid",
+    "B1-C055-complete-execute-malformed",
+    "B1-C055-complete-execute-unknown-code",
+    "B1-C055-complete-execute-stalled-EOF",
+    "B1-C055-complete-execute-reset",
+    "B1-C055-complete-execute-zero-reap",
+    "B1-C055-complete-execute-nonzero-reap",
+    "B1-C055-complete-execute-signalled-reap",
+    "B1-C055-complete-execute-missing-EOF",
+    "B1-C055-complete-execute-unreaped",
+    "B1-C055-complete-execute-expiry",
+    "B1-C055-submit-valid",
+    "B1-C055-submit-malformed",
+    "B1-C055-submit-unknown-code",
+    "B1-C055-submit-stalled-EOF",
+    "B1-C055-submit-reset",
+    "B1-C055-submit-zero-reap",
+    "B1-C055-submit-nonzero-reap",
+    "B1-C055-submit-signalled-reap",
+    "B1-C055-submit-missing-EOF",
+    "B1-C055-submit-unreaped",
+    "B1-C055-submit-expiry",
+    "B1-C055-start-prepared-valid",
+    "B1-C055-start-prepared-malformed",
+    "B1-C055-start-prepared-unknown-code",
+    "B1-C055-start-prepared-stalled-EOF",
+    "B1-C055-start-prepared-reset",
+    "B1-C055-start-prepared-zero-reap",
+    "B1-C055-start-prepared-nonzero-reap",
+    "B1-C055-start-prepared-signalled-reap",
+    "B1-C055-start-prepared-missing-EOF",
+    "B1-C055-start-prepared-unreaped",
+    "B1-C055-start-prepared-expiry",
+    "B1-C055-start-release-written-valid",
+    "B1-C055-start-release-written-malformed",
+    "B1-C055-start-release-written-unknown-code",
+    "B1-C055-start-release-written-stalled-EOF",
+    "B1-C055-start-release-written-reset",
+    "B1-C055-start-release-written-zero-reap",
+    "B1-C055-start-release-written-nonzero-reap",
+    "B1-C055-start-release-written-signalled-reap",
+    "B1-C055-start-release-written-missing-EOF",
+    "B1-C055-start-release-written-unreaped",
+    "B1-C055-start-release-written-expiry",
+    "B1-C055-started-valid",
+    "B1-C055-started-malformed",
+    "B1-C055-started-unknown-code",
+    "B1-C055-started-stalled-EOF",
+    "B1-C055-started-reset",
+    "B1-C055-started-zero-reap",
+    "B1-C055-started-nonzero-reap",
+    "B1-C055-started-signalled-reap",
+    "B1-C055-started-missing-EOF",
+    "B1-C055-started-unreaped",
+    "B1-C055-started-expiry",
+    "B1-C055-public-operation-started-valid",
+    "B1-C055-public-operation-started-malformed",
+    "B1-C055-public-operation-started-unknown-code",
+    "B1-C055-public-operation-started-stalled-EOF",
+    "B1-C055-public-operation-started-reset",
+    "B1-C055-public-operation-started-zero-reap",
+    "B1-C055-public-operation-started-nonzero-reap",
+    "B1-C055-public-operation-started-signalled-reap",
+    "B1-C055-public-operation-started-missing-EOF",
+    "B1-C055-public-operation-started-unreaped",
+    "B1-C055-public-operation-started-expiry",
+    "B1-C055-started-ack-valid",
+    "B1-C055-started-ack-malformed",
+    "B1-C055-started-ack-unknown-code",
+    "B1-C055-started-ack-stalled-EOF",
+    "B1-C055-started-ack-reset",
+    "B1-C055-started-ack-zero-reap",
+    "B1-C055-started-ack-nonzero-reap",
+    "B1-C055-started-ack-signalled-reap",
+    "B1-C055-started-ack-missing-EOF",
+    "B1-C055-started-ack-unreaped",
+    "B1-C055-started-ack-expiry",
+    "B1-C055-start-released-valid",
+    "B1-C055-start-released-malformed",
+    "B1-C055-start-released-unknown-code",
+    "B1-C055-start-released-stalled-EOF",
+    "B1-C055-start-released-reset",
+    "B1-C055-start-released-zero-reap",
+    "B1-C055-start-released-nonzero-reap",
+    "B1-C055-start-released-signalled-reap",
+    "B1-C055-start-released-missing-EOF",
+    "B1-C055-start-released-unreaped",
+    "B1-C055-start-released-expiry",
+    "B1-C055-running-valid",
+    "B1-C055-running-malformed",
+    "B1-C055-running-unknown-code",
+    "B1-C055-running-stalled-EOF",
+    "B1-C055-running-reset",
+    "B1-C055-running-zero-reap",
+    "B1-C055-running-nonzero-reap",
+    "B1-C055-running-signalled-reap",
+    "B1-C055-running-missing-EOF",
+    "B1-C055-running-unreaped",
+    "B1-C055-running-expiry",
+    "B1-C055-gated-valid",
+    "B1-C055-gated-malformed",
+    "B1-C055-gated-unknown-code",
+    "B1-C055-gated-stalled-EOF",
+    "B1-C055-gated-reset",
+    "B1-C055-gated-zero-reap",
+    "B1-C055-gated-nonzero-reap",
+    "B1-C055-gated-signalled-reap",
+    "B1-C055-gated-missing-EOF",
+    "B1-C055-gated-unreaped",
+    "B1-C055-gated-expiry",
+    "B1-C055-continuing-valid",
+    "B1-C055-continuing-malformed",
+    "B1-C055-continuing-unknown-code",
+    "B1-C055-continuing-stalled-EOF",
+    "B1-C055-continuing-reset",
+    "B1-C055-continuing-zero-reap",
+    "B1-C055-continuing-nonzero-reap",
+    "B1-C055-continuing-signalled-reap",
+    "B1-C055-continuing-missing-EOF",
+    "B1-C055-continuing-unreaped",
+    "B1-C055-continuing-expiry",
+    "B1-C055-grace-valid",
+    "B1-C055-grace-malformed",
+    "B1-C055-grace-unknown-code",
+    "B1-C055-grace-stalled-EOF",
+    "B1-C055-grace-reset",
+    "B1-C055-grace-zero-reap",
+    "B1-C055-grace-nonzero-reap",
+    "B1-C055-grace-signalled-reap",
+    "B1-C055-grace-missing-EOF",
+    "B1-C055-grace-unreaped",
+    "B1-C055-grace-expiry",
+    "B1-C055-cleanup-valid",
+    "B1-C055-cleanup-malformed",
+    "B1-C055-cleanup-unknown-code",
+    "B1-C055-cleanup-stalled-EOF",
+    "B1-C055-cleanup-reset",
+    "B1-C055-cleanup-zero-reap",
+    "B1-C055-cleanup-nonzero-reap",
+    "B1-C055-cleanup-signalled-reap",
+    "B1-C055-cleanup-missing-EOF",
+    "B1-C055-cleanup-unreaped",
+    "B1-C055-cleanup-expiry",
+    "B1-C055-live-inspection-valid",
+    "B1-C055-live-inspection-malformed",
+    "B1-C055-live-inspection-unknown-code",
+    "B1-C055-live-inspection-stalled-EOF",
+    "B1-C055-live-inspection-reset",
+    "B1-C055-live-inspection-zero-reap",
+    "B1-C055-live-inspection-nonzero-reap",
+    "B1-C055-live-inspection-signalled-reap",
+    "B1-C055-live-inspection-missing-EOF",
+    "B1-C055-live-inspection-unreaped",
+    "B1-C055-live-inspection-expiry",
+    "B1-C055-inspection-cancellation-valid",
+    "B1-C055-inspection-cancellation-malformed",
+    "B1-C055-inspection-cancellation-unknown-code",
+    "B1-C055-inspection-cancellation-stalled-EOF",
+    "B1-C055-inspection-cancellation-reset",
+    "B1-C055-inspection-cancellation-zero-reap",
+    "B1-C055-inspection-cancellation-nonzero-reap",
+    "B1-C055-inspection-cancellation-signalled-reap",
+    "B1-C055-inspection-cancellation-missing-EOF",
+    "B1-C055-inspection-cancellation-unreaped",
+    "B1-C055-inspection-cancellation-expiry",
+    "B1-C055-drain-valid",
+    "B1-C055-drain-malformed",
+    "B1-C055-drain-unknown-code",
+    "B1-C055-drain-stalled-EOF",
+    "B1-C055-drain-reset",
+    "B1-C055-drain-zero-reap",
+    "B1-C055-drain-nonzero-reap",
+    "B1-C055-drain-signalled-reap",
+    "B1-C055-drain-missing-EOF",
+    "B1-C055-drain-unreaped",
+    "B1-C055-drain-expiry",
+    "B1-C052-execute-valid-cancel-resize",
+    "B1-C052-execute-malformed-cancel-resize",
+    "B1-C052-execute-unknown-code-cancel-resize",
+    "B1-C052-continue-valid-cancel-resize",
+    "B1-C052-continue-malformed-cancel-resize",
+    "B1-C052-continue-unknown-code-cancel-resize",
+    "B1-C064-prompt-state",
+    "B1-C064-input-close",
+    "B1-C064-input-closed",
+    "B1-C064-prompt-ready",
+    "B1-C064-completed",
+    "B1-C064-cleanup-helper-exclusion",
+    "B1-C064-wait-record-removal",
+    "B1-C064-empty-jobs",
+    "B1-C064-repeat-adapter-validation",
+    "B1-C064-fresh-termios",
+    "B1-C064-final-PTY-drain",
+    "B1-C064-live-function",
+    "B1-C064-live-alias",
+    "B1-C064-live-positional",
+    "B1-C064-live-unexported",
+    "B1-C064-live-options",
+    "B1-C064-stale-PID",
+    "B1-C064-extra-PID",
+    "B1-C064-wrong-parent",
+    "B1-C064-wrong-executable",
+    "B1-C064-early-release",
+    "B1-C064-stale-status",
+    "B1-C064-stale-cwd",
+    "B1-C064-stale-env",
+    "B1-C064-duplicate",
+    "B1-C064-malformed",
+    "B1-C064-PTY-EOF",
+    "B1-C064-stdout-EOF",
+    "B1-C064-stderr-EOF",
+    "B1-C064-helper-INT-ignore",
+    "B1-C064-canonical-INT-restore",
+    "B1-C064-allowed-trap-final-state",
+    "B1-C065-cancel-input-close",
+    "B1-C065-cancel-shell-exit",
+    "B1-C065-cancel-live-foreground",
+    "B1-C065-cancel-grace-expiry",
+    "B1-C065-cancel-invalid-foreground",
+    "B1-C065-cancel-wrong-session",
+    "B1-C065-cancel-unclassifiable",
+    "B1-C065-cancel-unexpected-live-member",
+    "B1-C065-cancel-ioctl-failure",
+    "B1-C065-finalize-input-close",
+    "B1-C065-finalize-shell-exit",
+    "B1-C065-finalize-live-foreground",
+    "B1-C065-finalize-grace-expiry",
+    "B1-C065-finalize-invalid-foreground",
+    "B1-C065-finalize-wrong-session",
+    "B1-C065-finalize-unclassifiable",
+    "B1-C065-finalize-unexpected-live-member",
+    "B1-C065-finalize-ioctl-failure",
+    "B1-C065-clean-census",
+    "B1-C065-nested-foreground",
+    "B1-C065-foreground-switch",
+    "B1-C065-positive-empty-then-input-close",
+    "B1-C065-positive-empty-then-shell-exit",
+    "B1-C065-positive-empty-then-live",
+    "B1-C065-positive-empty-then-timeout",
+    "B1-C065-completion-helper-cancel-window",
+    "B1-C065-completion-helper-finalize-window",
+    "B1-C065-cancel-after-input-close",
+    "B1-C065-finalize-after-input-close",
+    "B1-C065-cancel-cross-finalize",
+    "B1-C065-shell-exit-before-timeout",
+    "B1-C065-shell-exit-after-timeout",
+    "B1-C065-queued-input-close-after-timeout",
+    "B1-C065-gate-ready-lifecycle-False-continue-False",
+    "B1-C065-gate-ready-lifecycle-False-continue-True",
+    "B1-C065-gate-ready-lifecycle-True-continue-False",
+    "B1-C065-gate-ready-lifecycle-True-continue-True",
+    "B1-C065-gate-continued-lifecycle-False-continue-False",
+    "B1-C065-gate-continued-lifecycle-False-continue-True",
+    "B1-C065-gate-continued-lifecycle-True-continue-False",
+    "B1-C065-gate-continued-lifecycle-True-continue-True",
+    "B1-C065-gate-interrupted-lifecycle-False-continue-False",
+    "B1-C065-gate-interrupted-lifecycle-False-continue-True",
+    "B1-C065-gate-interrupted-lifecycle-True-continue-False",
+    "B1-C065-gate-interrupted-lifecycle-True-continue-True",
+    "B1-C065-controller-cancelling-operation_ready",
+    "B1-C065-controller-cancelling-operation_continued",
+    "B1-C065-controller-cancelling-operation_gate_interrupted",
+    "B1-C065-controller-finalizing-operation_ready",
+    "B1-C065-controller-finalizing-operation_continued",
+    "B1-C065-controller-finalizing-operation_gate_interrupted",
+    "B1-C028-hostile-PATH",
+    "B1-C028-success-short-writes",
+    "B1-C028-peer-close",
+    "B1-C028-terminal-write-error",
+    "B1-C028-reply-timeout",
+    "B1-C028-continue-input-delayed",
+    "B1-C028-continue-input-timeout",
+    "B1-C034-setup-directory",
+    "B1-C034-setup-stdout-FIFO",
+    "B1-C034-setup-stderr-FIFO",
+    "B1-C034-setup-reader",
+    "B1-C034-setup-keepalive",
+    "B1-C034-setup-validation",
+    "B1-C034-rollback-close",
+    "B1-C034-rollback-unlink",
+    "B1-C034-stdout-EOF",
+    "B1-C034-stderr-EOF",
+    "B1-C034-keepalive-after-cleanup",
+    "B1-C034-remove-after-dual-EOF",
+    "B1-C034-interleaved-logical-bytes",
+    "B1-C034-same-offset-first-stream",
+    "B1-C034-continuous-output-resize",
+    "B1-C034-no-covered-prefix-resize",
+    "B1-C062-background",
+    "B1-C062-disown",
+    "B1-C062-nohup",
+    "B1-C062-setsid",
+    "B1-C062-double-fork",
+    "B1-C062-outside-tree-service",
+    "B1-C062-helper-exclusion",
+    "B1-C062-adopted-child-reap",
+    "B1-C062-cleanup-timeout",
+    "B1-C062-cancel-during-cleanup",
+    "B1-C062-cancel-after-finalize",
+    "B1-C062-shell-ended-cancel-race",
+    "B1-C062-finalize-after-return",
+    "B1-C062-exclusive-checked",
+    "B1-C062-exclusive-suppress",
+    "B1-C062-exclusive-replace",
+    "B1-C062-planned-end-status",
+    "B1-C062-finalization-failure-invalid-range",
+    "B1-C062-user-cancel-invalid-range",
+    "B1-C062-compiler-operation-input",
+    "B1-C062-compiler-continuation-input",
+    "B1-C062-wait-for-preserved",
+    "B1-C003-mutate-before-read",
+    "B1-C003-mutate-during-read",
+    "B1-C003-mutate-between-snapshots",
+    "B1-C003-byte-change",
+    "B1-C003-length-change",
+    "B1-C003-replace-path",
+    "B1-C003-metadata-change",
+    "B1-C003-directory-insert",
+    "B1-C003-directory-remove",
+    "B1-C003-directory-rename",
+    "B1-C003-symlink-target-change",
+    "B1-C003-missing-identity-metadata",
+    "B1-C003-unchanged",
+    "B1-C003-entry-budget",
+    "B1-C003-file-byte-budget",
+    "B1-C003-path-budget",
+    "B1-C003-worker-channel-isolation",
+    "B1-C003-worker-result-first",
+    "B1-C003-worker-cancel-first",
+    "B1-C003-finalized-result-first",
+    "B1-C003-blocked-worker-cancel-timeout",
+    "B1-C003-finalize-preserves-status",
+    "B1-C048-shell_exit-orderly",
+    "B1-C048-shell_exit-premature-EOF",
+    "B1-C048-shell_exit-trailing-frame",
+    "B1-C048-shell_exit-reset",
+    "B1-C048-shell_exit-signal",
+    "B1-C048-shell_exit-nonzero-reap",
+    "B1-C048-shell_exit-missing-EOF",
+    "B1-C048-shell_exit-missing-reap",
+    "B1-C048-closed-orderly",
+    "B1-C048-closed-premature-EOF",
+    "B1-C048-closed-trailing-frame",
+    "B1-C048-closed-reset",
+    "B1-C048-closed-signal",
+    "B1-C048-closed-nonzero-reap",
+    "B1-C048-closed-missing-EOF",
+    "B1-C048-closed-missing-reap",
+    "B1-C037-shutdown-first",
+    "B1-C037-shell-exit-first",
+    "B1-C010-start-order",
+    "B1-C062-completion-order",
+    "B1-C028-gate-success-order",
+    "B1-C010-canonical-frame-pty-0",
+    "B1-C010-canonical-frame-pty-255",
+    "B1-C010-canonical-frame-split-0",
+    "B1-C010-canonical-frame-split-255",
+    "B1-C003-path-example-relative",
+    "B1-C003-path-example-defined",
+    "B1-C003-path-example-undefined",
+    "B1-C003-path-example-tilde",
+    "B1-C003-path-example-tilde-user",
+    "B1-PACKAGE-B1.1",
+    "B1-PACKAGE-B1.2",
+    "B1-PACKAGE-B1.3",
+    "B1-PACKAGE-B2.1",
+    "B1-PACKAGE-B2.2",
+    "B1-PACKAGE-B2.3",
+    "B1-PACKAGE-B2.4",
+    "B1-PACKAGE-B2.5",
+    "B1-PACKAGE-B2.6",
+    "B1-PACKAGE-B2.7",
+    "B1-PACKAGE-B2.8",
+    "B1-PACKAGE-B3.1",
+    "B1-PACKAGE-B3.2",
+    "B1-PACKAGE-B3.3",
+    "B1-PACKAGE-B3.4",
+    "B1-PACKAGE-B4.1",
+    "B1-PACKAGE-B4.2",
+    "B1-PACKAGE-B4.3",
+    "B1-PACKAGE-B4.4",
+    "B1-PACKAGE-B5.1",
+    "B1-PACKAGE-B5.2",
+    "B1-PACKAGE-B5.3",
+    "B1-PACKAGE-B6.1",
+    "B1-PACKAGE-B6.2",
+    "B1-PACKAGE-B6.3",
+    "B1-PACKAGE-B6.4",
+    "B1-PACKAGE-B6.5",
+    "B1-PACKAGE-B6.6",
+    "B1-PACKAGE-B7.1",
+    "B1-PACKAGE-B7.2",
+    "B1-PACKAGE-B7.3",
+    "B1-PACKAGE-B8.1",
+    "B1-PACKAGE-B8.2",
+    "B1-PACKAGE-B8.3",
+    "B1-PACKAGE-B8.4",
+    "B1-PACKAGE-C1.1",
+    "B1-PACKAGE-C1.2",
+    "B1-PACKAGE-C2.1",
+    "B1-PACKAGE-C2.2",
+    "B1-PACKAGE-C2.3",
+    "B1-PACKAGE-C3.1",
+    "B1-PACKAGE-C3.2",
+    "B1-PACKAGE-C3.3",
+    "B1-PACKAGE-C4.1",
+    "B1-PACKAGE-C4.2",
+    "B1-PACKAGE-C5.1",
+    "B1-PACKAGE-C5.2",
+    "B1-PACKAGE-C6.1",
+    "B1-PACKAGE-C6.2",
+    "B1-PACKAGE-C6.3",
+    "B1-PACKAGE-C7.1",
+    "B1-PACKAGE-C7.2",
+    "B1-PACKAGE-C8.1",
+    "B1-PACKAGE-C8.2",
+    "B1-PACKAGE-D1.1",
+    "B1-PACKAGE-D1.2",
+    "B1-PACKAGE-D1.3",
+    "B1-PACKAGE-D2.1",
+    "B1-PACKAGE-D2.2",
+    "B1-PACKAGE-D2.3",
+    "B1-PACKAGE-D2.4",
+    "B1-PACKAGE-D3.1",
+    "B1-PACKAGE-D3.2",
+    "B1-PACKAGE-D3.3",
+    "B1-C066-wire-controller-1",
+    "B1-C066-wire-controller-2",
+    "B1-C066-wire-controller-3",
+    "B1-C066-wire-controller-4",
+    "B1-C066-wire-controller-5",
+    "B1-C066-wire-controller-6",
+    "B1-C066-wire-controller-7",
+    "B1-C066-wire-controller-8",
+    "B1-C066-wire-envoy-1",
+    "B1-C066-wire-envoy-2",
+    "B1-C066-wire-envoy-3",
+    "B1-C066-wire-envoy-4",
+    "B1-C066-wire-envoy-5",
+    "B1-C066-wire-envoy-6",
+    "B1-C066-wire-envoy-7",
+    "B1-C066-wire-envoy-8",
+    "B1-C066-wire-envoy-9",
+    "B1-C066-wire-envoy-10",
+    "B1-C066-wire-envoy-11",
+    "B1-C066-wire-envoy-12",
+    "B1-C066-wire-envoy-13",
+    "B1-C066-wire-envoy-14",
+    "B1-C066-wire-envoy-15",
+    "B1-C066-wire-envoy-16",
+    "B1-C066-wire-envoy-17",
+    "B1-C066-wire-envoy-18",
+    "B1-C066-wire-public-invalid-1",
+    "B1-C066-wire-public-invalid-2",
+    "B1-C066-wire-public-invalid-3",
+    "B1-C066-wire-public-invalid-4",
+    "B1-C066-wire-public-invalid-5",
+    "B1-C066-wire-public-invalid-6",
+    "B1-C066-wire-public-invalid-7",
+    "B1-C066-wire-public-invalid-8",
+    "B1-C066-wire-public-invalid-9",
+    "B1-C066-wire-public-invalid-10",
+    "B1-C066-wire-public-invalid-11",
+    "B1-C066-wire-public-invalid-12",
+    "B1-C066-wire-public-invalid-13",
+    "B1-C066-wire-public-invalid-14",
+    "B1-C066-wire-public-invalid-15",
+    "B1-C066-wire-public-invalid-16",
+    "B1-C066-wire-public-invalid-17",
+    "B1-C066-wire-public-invalid-18",
+    "B1-C066-wire-public-invalid-19",
+    "B1-C066-wire-public-invalid-20",
+    "B1-C066-wire-public-invalid-21",
+    "B1-C066-wire-public-invalid-22",
+    "B1-C066-wire-public-invalid-23",
+    "B1-C066-wire-public-invalid-24",
+    "B1-C066-wire-public-invalid-25",
+    "B1-C066-wire-public-invalid-26",
+    "B1-C066-wire-public-invalid-27",
+    "B1-C066-wire-public-invalid-28",
+    "B1-C066-wire-public-invalid-29",
+    "B1-C066-wire-public-invalid-30",
+    "B1-C066-wire-public-invalid-31",
+    "B1-C066-wire-public-invalid-32",
+    "B1-C066-wire-public-invalid-33",
+    "B1-C066-wire-public-invalid-34",
+    "B1-C066-wire-public-invalid-35",
+    "B1-C066-wire-public-invalid-36",
+    "B1-C066-wire-public-invalid-37",
+    "B1-C066-wire-public-invalid-38",
+    "B1-C066-wire-public-invalid-39",
+    "B1-C066-wire-public-invalid-40",
+    "B1-C066-wire-public-invalid-41",
+    "B1-C066-wire-public-invalid-42",
+    "B1-C066-wire-public-invalid-43",
+    "B1-C066-wire-public-invalid-44",
+    "B1-C066-wire-public-invalid-45",
+    "B1-C066-wire-public-maximum-1",
+    "B1-C066-wire-private-1",
+    "B1-C066-wire-private-2",
+    "B1-C066-wire-private-3",
+    "B1-C066-wire-private-4",
+    "B1-C066-wire-private-5",
+    "B1-C066-wire-private-6",
+    "B1-C066-wire-private-7",
+    "B1-C066-wire-private-8",
+    "B1-C066-wire-private-9",
+    "B1-C066-wire-private-10",
+    "B1-C066-wire-private-11",
+    "B1-C066-wire-private-12",
+    "B1-C066-wire-private-13",
+    "B1-C066-wire-private-14",
+    "B1-C066-wire-private-15",
+    "B1-C066-wire-private-16",
+    "B1-C066-wire-private-17",
+    "B1-C066-wire-private-18",
+    "B1-C066-wire-private-19",
+    "B1-C066-wire-private-20",
+    "B1-C066-wire-private-21",
+    "B1-C066-wire-private-22",
+    "B1-C066-wire-helper-1",
+    "B1-C066-wire-helper-2",
+    "B1-C066-wire-helper-3",
+    "B1-C066-wire-helper-4",
+    "B1-C066-wire-helper-5",
+    "B1-C066-wire-helper-6",
+    "B1-C066-wire-helper-7",
+    "B1-C066-wire-helper-8",
+    "B1-C066-wire-helper-9",
+    "B1-C066-wire-helper-10",
+    "B1-C066-wire-helper-11",
+    "B1-C066-wire-helper-12",
+    "B1-C066-wire-helper-13",
+    "B1-C001-control-write-controller",
+    "B1-C001-control-write-awsh",
+    "B1-C036-before-first-byte-pty-cancel-false-watermark-outstanding",
+    "B1-C036-before-first-byte-pty-cancel-true-watermark-outstanding",
+    "B1-C036-before-first-byte-split-cancel-false-watermark-outstanding",
+    "B1-C036-before-first-byte-split-cancel-true-watermark-outstanding",
+    "B1-C036-start-released-pty-cancel-false-watermark-outstanding",
+    "B1-C036-start-released-pty-cancel-true-watermark-outstanding",
+    "B1-C036-start-released-split-cancel-false-watermark-outstanding",
+    "B1-C036-start-released-split-cancel-true-watermark-outstanding",
+    "B1-AUX-startup-zero",
+    "B1-AUX-startup-maximum",
+    "B1-AUX-startup-fragmented",
+    "B1-AUX-startup-delayed",
+    "B1-AUX-startup-before-ready",
+    "B1-AUX-startup-mismatch",
+    "B1-AUX-startup-extra",
+    "B1-AUX-startup-overflow",
+    "B1-AUX-startup-premature-EOF",
+    "B1-AUX-startup-incomplete-barrier",
+    "B1-AUX-digest-file-bytes",
+    "B1-AUX-digest-directory-empty",
+    "B1-AUX-digest-directory-v2-empty",
+    "B1-AUX-digest-directory-tree",
+    "B1-AUX-digest-directory-v2-tree",
+    "B1-AUX-private-execute-pty",
+    "B1-AUX-private-continue",
+    "B1-AUX-private-start-release",
+    "B1-AUX-private-started-ack",
+    "B1-AUX-private-input-closed",
+    "B1-AUX-private-shutdown",
+    "B1-AUX-private-ready",
+    "B1-AUX-private-submit",
+    "B1-AUX-private-start-prepared",
+    "B1-AUX-private-started",
+    "B1-AUX-private-start-released",
+    "B1-AUX-private-gate-ready",
+    "B1-AUX-private-gate-continued",
+    "B1-AUX-private-gate-interrupted",
+    "B1-AUX-private-input-close",
+    "B1-AUX-private-completed",
+    "B1-AUX-private-rejected",
+    "B1-AUX-private-shell-exit-active",
+    "B1-AUX-private-protocol-error",
+    "B1-AUX-private-closed",
+    "B1-AUX-private-shell-exit-idle",
+    "B1-AUX-private-execute-split",
+    "B1-AUX-helper-startup-state",
+    "B1-AUX-helper-startup-ready",
+    "B1-AUX-helper-completion-state",
+    "B1-AUX-helper-completion-ready",
+    "B1-AUX-helper-source-request",
+    "B1-AUX-helper-prepared-request",
+    "B1-AUX-helper-gate-request",
+    "B1-AUX-helper-startup-accepted",
+    "B1-AUX-helper-completion-accepted",
+    "B1-AUX-helper-prepared-accepted",
+    "B1-AUX-helper-gate-accepted",
+    "B1-AUX-helper-source-pty",
+    "B1-AUX-helper-source-split"
+  ]
+}
