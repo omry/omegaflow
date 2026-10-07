@@ -1,0 +1,22 @@
+{"id":"private-execute-pty","direction":"envoy","fields":["awsh-v1","execute","op","pty","realtime","real","shared","[]","","","printf 'héllo\\n'\n"]}
+{"id":"private-continue","direction":"envoy","fields":["awsh-v1","continue","op","gate"]}
+{"id":"private-start-release","direction":"envoy","fields":["awsh-v1","start_release","op"]}
+{"id":"private-started-ack","direction":"envoy","fields":["awsh-v1","started_ack","op"]}
+{"id":"private-input-closed","direction":"envoy","fields":["awsh-v1","input_closed","op"]}
+{"id":"private-shutdown","direction":"envoy","fields":["awsh-v1","shutdown"]}
+{"id":"private-ready","direction":"awsh","fields":["awsh-v1","ready","1","2147483647","/work/../physical"]}
+{"id":"private-submit","direction":"awsh","fields":["awsh-v1","submit","op"]}
+{"id":"private-start-prepared","direction":"awsh","fields":["awsh-v1","start_prepared","op"]}
+{"id":"private-started","direction":"awsh","fields":["awsh-v1","started","op"]}
+{"id":"private-start-released","direction":"awsh","fields":["awsh-v1","start_released","op"]}
+{"id":"private-gate-ready","direction":"awsh","fields":["awsh-v1","gate_ready","op","gate"]}
+{"id":"private-gate-continued","direction":"awsh","fields":["awsh-v1","gate_continued","op","gate"]}
+{"id":"private-gate-interrupted","direction":"awsh","fields":["awsh-v1","gate_interrupted","op","gate"]}
+{"id":"private-input-close","direction":"awsh","fields":["awsh-v1","input_close","op","42"]}
+{"id":"private-completed","direction":"awsh","fields":["awsh-v1","completed","op","255","/work","[{\"inspection_id\":\"exists\",\"kind\":\"file_exists\",\"resolved_path\":\"/work/file\"},{\"inspection_id\":\"product\",\"kind\":\"produces\",\"resolved_path\":\"/work/out\",\"producer_id\":\"p\",\"output_id\":\"o\"}]"]}
+{"id":"private-rejected","direction":"awsh","fields":["awsh-v1","rejected","op","source-syntax","Invalid syntax"]}
+{"id":"private-shell-exit-active","direction":"awsh","fields":["awsh-v1","shell_exit","op","0","/work"]}
+{"id":"private-protocol-error","direction":"awsh","fields":["awsh-v1","protocol_error","shell-launch","Launch failed"]}
+{"id":"private-closed","direction":"awsh","fields":["awsh-v1","closed","shutdown","0","/work"]}
+{"id":"private-shell-exit-idle","direction":"awsh","fields":["awsh-v1","shell_exit","","130","/work"]}
+{"id":"private-execute-split","direction":"envoy","fields":["awsh-v1","execute","op","split","presentation","replace","exclusive","[{\"inspection_id\":\"exists\",\"kind\":\"file_exists\",\"path\":\"$HOME/a\\nb\"},{\"inspection_id\":\"product\",\"kind\":\"produces\",\"path\":\"out\",\"producer_id\":\"p\",\"output_id\":\"o\"}]","/run/omegaflow/session/split/op.stdout","/run/omegaflow/session/split/op.stderr","printf 'done'\n"]}
