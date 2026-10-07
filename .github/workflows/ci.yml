@@ -10,6 +10,33 @@ permissions:
   contents: read
 
 jobs:
+  envoy:
+    name: Envoy Go
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runtime/envoy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: runtime/envoy/go.mod
+          cache: false
+
+      - name: Test public protocol
+        run: go test -race ./...
+
+      - name: Vet Envoy module
+        run: go vet ./...
+
+      - name: Build Linux targets
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath ./...
+
   python:
     name: Python tests
     runs-on: ubuntu-latest
