@@ -1,0 +1,15 @@
+# Fixed startup-only adapter. Execution and completion arrive in B2.4–B2.7.
+PS1=''
+PS2=''
+PS0=''
+__awsh_prompt() {
+    local __awsh_status=$? __awsh_history=off __awsh_editing=emacs
+    [[ $- == *H* ]] && __awsh_history=on
+    [[ -o vi ]] && __awsh_editing=vi
+    /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$__awsh_status" "$__awsh_history" "$__awsh_editing" || /omegaflow-runtime/bin/awsh bash-fail-stop
+    PS1=''
+    /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready || /omegaflow-runtime/bin/awsh bash-fail-stop
+}
+readonly -f __awsh_prompt
+PROMPT_COMMAND=__awsh_prompt
+readonly PROMPT_COMMAND
