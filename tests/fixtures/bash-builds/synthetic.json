@@ -1,0 +1,27 @@
+{
+  "note": "Synthetic schema values only. No real Bash build, release, startup bytes or qualification is claimed.",
+  "candidate": {
+    "release": "synthetic",
+    "target": {"os": "linux", "arch": "amd64", "os_release_id": "synthetic", "version_id": "1"},
+    "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "executable_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "definition_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "lock_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "resolved_path": "/synthetic/bin/bash",
+    "system_rc": "none"
+  },
+  "measurements": {
+    "startup_pty_base64": "",
+    "startup_export": {"unset": ["SYNTHETIC_REMOVED"], "set": {"SYNTHETIC_ADDED": "value"}},
+    "catchable_signals": {"INT": 2, "CHLD": 17, "USR1": 10},
+    "readline": {
+      "keymap": "synthetic-idle",
+      "loader_hex": "1801",
+      "submit_hex": "1802",
+      "readiness": true,
+      "no_redisplay": true,
+      "utf8_cursor": true,
+      "maximum_line_bytes": 1048576
+    }
+  }
+}
