@@ -1,0 +1,1 @@
+Add B2.2 Awsh helper Unix-stream transport with strict framing, ancillary rejection, exact writes, and an output-empty non-returning fail-stop command. Shell runtime assembly and Bash qualification remain later delivery slices.
