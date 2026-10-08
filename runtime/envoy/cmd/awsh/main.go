@@ -9,8 +9,13 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 || os.Args[1] != "bash-fail-stop" {
-		os.Exit(2)
+	if len(os.Args) == 2 && os.Args[1] == "bash-fail-stop" {
+		helper.FailStop()
 	}
-	helper.FailStop()
+	if len(os.Args) >= 2 && os.Args[1] == "bash-helper" {
+		if helper.StartupCommand(os.Args[2:]) == nil {
+			return
+		}
+	}
+	os.Exit(2)
 }
