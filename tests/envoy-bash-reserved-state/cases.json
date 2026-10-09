@@ -1,0 +1,959 @@
+{
+  "schema": 1,
+  "slice": "B2.4",
+  "cases": [
+    {
+      "id": "B1-C020-CHLD-direct",
+      "command": "trap \"exit 42\" CHLD",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-CHLD-expanded",
+      "command": "target=CHLD; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-CHLD-mixed-targets",
+      "command": "trap \"exit 42\" USR2 CHLD",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-CHLD-multiple-targets",
+      "command": "trap \"exit 42\" CHLD USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGCHLD-direct",
+      "command": "trap \"exit 42\" SIGCHLD",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGCHLD-expanded",
+      "command": "target=SIGCHLD; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGCHLD-mixed-targets",
+      "command": "trap \"exit 42\" USR2 SIGCHLD",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGCHLD-multiple-targets",
+      "command": "trap \"exit 42\" SIGCHLD USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-chld-direct",
+      "command": "trap \"exit 42\" chld",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-chld-expanded",
+      "command": "target=chld; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-chld-mixed-targets",
+      "command": "trap \"exit 42\" USR2 chld",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-chld-multiple-targets",
+      "command": "trap \"exit 42\" chld USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigchld-direct",
+      "command": "trap \"exit 42\" sigchld",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigchld-expanded",
+      "command": "target=sigchld; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigchld-mixed-targets",
+      "command": "trap \"exit 42\" USR2 sigchld",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigchld-multiple-targets",
+      "command": "trap \"exit 42\" sigchld USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-INT-direct",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-INT-expanded",
+      "command": "target=INT; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-INT-mixed-targets",
+      "command": "trap \"exit 42\" USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-INT-multiple-targets",
+      "command": "trap \"exit 42\" INT USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGINT-direct",
+      "command": "trap \"exit 42\" SIGINT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGINT-expanded",
+      "command": "target=SIGINT; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGINT-mixed-targets",
+      "command": "trap \"exit 42\" USR2 SIGINT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-SIGINT-multiple-targets",
+      "command": "trap \"exit 42\" SIGINT USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-int-direct",
+      "command": "trap \"exit 42\" int",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-int-expanded",
+      "command": "target=int; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-int-mixed-targets",
+      "command": "trap \"exit 42\" USR2 int",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-int-multiple-targets",
+      "command": "trap \"exit 42\" int USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigint-direct",
+      "command": "trap \"exit 42\" sigint",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigint-expanded",
+      "command": "target=sigint; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigint-mixed-targets",
+      "command": "trap \"exit 42\" USR2 sigint",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-sigint-multiple-targets",
+      "command": "trap \"exit 42\" sigint USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-DEBUG-direct",
+      "command": "trap \"exit 42\" DEBUG",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-DEBUG-expanded",
+      "command": "target=DEBUG; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-DEBUG-mixed-targets",
+      "command": "trap \"exit 42\" USR2 DEBUG",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-DEBUG-multiple-targets",
+      "command": "trap \"exit 42\" DEBUG USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-ERR-direct",
+      "command": "trap \"exit 42\" ERR",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-ERR-expanded",
+      "command": "target=ERR; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-ERR-mixed-targets",
+      "command": "trap \"exit 42\" USR2 ERR",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-ERR-multiple-targets",
+      "command": "trap \"exit 42\" ERR USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-RETURN-direct",
+      "command": "trap \"exit 42\" RETURN",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-RETURN-expanded",
+      "command": "target=RETURN; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-RETURN-mixed-targets",
+      "command": "trap \"exit 42\" USR2 RETURN",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-RETURN-multiple-targets",
+      "command": "trap \"exit 42\" RETURN USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-CHLD-direct",
+      "command": "trap \"exit 42\" \"${CHLD_NUMBER}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-CHLD-expanded",
+      "command": "target=\"${CHLD_NUMBER}\"; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-CHLD-mixed-targets",
+      "command": "trap \"exit 42\" USR2 \"${CHLD_NUMBER}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-CHLD-multiple-targets",
+      "command": "trap \"exit 42\" \"${CHLD_NUMBER}\" USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-INT-direct",
+      "command": "trap \"exit 42\" \"${INT_NUMBER}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-INT-expanded",
+      "command": "target=\"${INT_NUMBER}\"; trap \"exit 42\" \"$target\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-INT-mixed-targets",
+      "command": "trap \"exit 42\" USR2 \"${INT_NUMBER}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C020-selected-numeric-INT-multiple-targets",
+      "command": "trap \"exit 42\" \"${INT_NUMBER}\" USR2 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-builtin-disable",
+      "command": "enable -n echo builtin",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-enable-disable",
+      "command": "enable -n echo enable",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-exec-disable",
+      "command": "enable -n echo exec",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-jobs-disable",
+      "command": "enable -n echo jobs",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-kill-disable",
+      "command": "enable -n echo kill",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-return-disable",
+      "command": "enable -n echo return",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-trap-disable",
+      "command": "enable -n echo trap",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-wait-disable",
+      "command": "enable -n echo wait",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-builtin-dynamic-load",
+      "command": "enable -f /missing echo builtin",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-enable-dynamic-load",
+      "command": "enable -f /missing echo enable",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-exec-dynamic-load",
+      "command": "enable -f /missing echo exec",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-jobs-dynamic-load",
+      "command": "enable -f /missing echo jobs",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-kill-dynamic-load",
+      "command": "enable -f /missing echo kill",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-return-dynamic-load",
+      "command": "enable -f /missing echo return",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-trap-dynamic-load",
+      "command": "enable -f /missing echo trap",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-wait-dynamic-load",
+      "command": "enable -f /missing echo wait",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-builtin-replace",
+      "command": "enable -f/missing echo builtin",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-enable-replace",
+      "command": "enable -f/missing echo enable",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-exec-replace",
+      "command": "enable -f/missing echo exec",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-jobs-replace",
+      "command": "enable -f/missing echo jobs",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-kill-replace",
+      "command": "enable -f/missing echo kill",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-return-replace",
+      "command": "enable -f/missing echo return",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-trap-replace",
+      "command": "enable -f/missing echo trap",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-wait-replace",
+      "command": "enable -f/missing echo wait",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-builtin-dynamic-unload",
+      "command": "enable -d echo builtin",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-enable-dynamic-unload",
+      "command": "enable -d echo enable",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-exec-dynamic-unload",
+      "command": "enable -d echo exec",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-jobs-dynamic-unload",
+      "command": "enable -d echo jobs",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-kill-dynamic-unload",
+      "command": "enable -d echo kill",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-return-dynamic-unload",
+      "command": "enable -d echo return",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-trap-dynamic-unload",
+      "command": "enable -d echo trap",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-builtin-wait-dynamic-unload",
+      "command": "enable -d echo wait",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C024-set-direct",
+      "command": "set -o posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-set-expanded",
+      "command": "args=(-o posix); set \"${args[@]}\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-set-combined",
+      "command": "set -Ho posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-shopt-direct",
+      "command": "shopt -so posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-shopt-expanded",
+      "command": "args=(-so posix); shopt \"${args[@]}\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-shopt-combined",
+      "command": "shopt -so posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-set-direct",
+      "command": "builtin set -o posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-set-expanded",
+      "command": "args=(-o posix); builtin set \"${args[@]}\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-set-combined",
+      "command": "builtin set -Ho posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-shopt-direct",
+      "command": "builtin shopt -so posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-shopt-expanded",
+      "command": "args=(-so posix); builtin shopt \"${args[@]}\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-builtin-shopt-combined",
+      "command": "builtin shopt -so posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-assignment-direct",
+      "command": "POSIXLY_CORRECT=1",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-assignment-expanded",
+      "command": "name=POSIXLY_CORRECT; builtin export \"$name=1\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-assignment-combined",
+      "command": "builtin export ordinary=yes POSIXLY_CORRECT=1",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-unset-direct",
+      "command": "unset POSIXLY_CORRECT",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-unset-expanded",
+      "command": "name=POSIXLY_CORRECT; unset \"$name\"",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C024-unset-combined",
+      "command": "unset ordinary POSIXLY_CORRECT",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C012-contract",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C013-contract",
+      "command": "set -o posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C014-contract",
+      "command": "trap \"cd /tmp\" sIgChLd",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C015-contract",
+      "command": "trap -p INT",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C016-contract",
+      "command": "/omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state 0 off emacs; builtin trap -p CHLD; builtin printf \"%s\" \"$PWD\"",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C017-contract",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C019-contract",
+      "command": "/bin/bash --noprofile --norc -c 'trap \"exit 42\" INT; kill -INT $$'",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C020-contract",
+      "command": "enable -n kill",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C021-contract",
+      "command": "unset -f awsh",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-contract",
+      "command": "trap \"exit 42\" USR1 INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C023-contract",
+      "command": "enable kill",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C024-contract",
+      "command": "builtin shopt -so posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C025-contract",
+      "command": "set -o posix",
+      "mode": "native",
+      "after": "posix"
+    },
+    {
+      "id": "B1-C026-contract",
+      "command": "set -- alpha beta; builtin printf \"%s\\n\" \"$@\"",
+      "mode": "native",
+      "expected_stdout": "alpha\nbeta\n"
+    },
+    {
+      "id": "B1-C027-contract",
+      "command": "/bin/bash --noprofile --norc -c 'trap \"printf CHILD_CHLD\" CHLD; trap \"printf CHILD_INT\" INT; /bin/true; kill -INT $$'",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C021-redefine-awsh",
+      "command": "awsh() { builtin printf REPLACED; }",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C021-unset-awsh",
+      "command": "unset -f awsh",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-multiple-names",
+      "command": "trap \"exit 42\" CHLD INT",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C022-mixed-reserved-nonreserved",
+      "command": "trap \"exit 42\" CHLD USR2",
+      "mode": "fatal"
+    },
+    {
+      "id": "B1-C022-reserved-query",
+      "command": "trap -lp CHLD INT DEBUG ERR RETURN",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-numeric-CHLD-query",
+      "command": "trap -p \"$CHLD_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-numeric-INT-query",
+      "command": "trap -p \"$INT_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-positive-enable",
+      "command": "enable builtin enable exec jobs kill return trap wait",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-nonreserved-numeric-trap",
+      "command": "trap \"builtin printf HANDLED\" \"$USR2_NUMBER\"; builtin kill -USR2 $$; trap -p \"$USR2_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C022-nonrequired-builtin-modes",
+      "command": "enable -n echo; enable echo; enable -d echo; enable -f /missing echo",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C027-posix-query",
+      "command": "set -o posix; shopt -qo posix; builtin printf \"%s\\n\" \"$?\"",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C027-posix-disabled-request",
+      "command": "set +o posix; shopt -uo posix",
+      "mode": "native"
+    },
+    {
+      "id": "B1-C027-set-positional",
+      "command": "set -- alpha beta; builtin printf \"%s\\n\" \"$@\"",
+      "mode": "native",
+      "expected_stdout": "alpha\nbeta\n"
+    },
+    {
+      "id": "B1-C027-nested-CHLD",
+      "command": "/bin/bash --noprofile --norc -c 'trap \"printf CHILD_CHLD\" CHLD; /bin/true'",
+      "mode": "native",
+      "expected_stdout": "CHILD_CHLD"
+    },
+    {
+      "id": "B1-C027-nested-INT",
+      "command": "/bin/bash --noprofile --norc -c 'trap \"printf CHILD_INT\" INT; kill -INT $$'",
+      "mode": "native",
+      "expected_stdout": "CHILD_INT"
+    },
+    {
+      "id": "B1-C027-ordinary-child-handler",
+      "command": "/usr/bin/python3 -c 'import os,signal; signal.signal(signal.SIGINT,lambda *args:print(\"CHILD_INT\")); os.kill(os.getpid(),signal.SIGINT)'",
+      "mode": "native",
+      "expected_stdout": "CHILD_INT\n"
+    },
+    {
+      "id": "B1-C022-combined-options",
+      "command": "trap -p CHLD INT",
+      "mode": "native",
+      "static_discrepancy": "Static expected whole-request-rejected contradicts the approved query-allowed contract; needs owning B1 correction."
+    },
+    {
+      "id": "B2.4-canonical-entry",
+      "command": "builtin set -o; builtin shopt -p expand_aliases extdebug extglob interactive_comments; builtin trap -p CHLD INT DEBUG ERR RETURN; builtin declare -p POSIXLY_CORRECT; builtin declare -pF trap enable awsh",
+      "mode": "canonical"
+    },
+    {
+      "id": "B2.4-readonly-namespace",
+      "command": "builtin unset -f trap enable awsh __OMEGAFLOW_AWSH_FAIL_STOP; builtin declare -pF trap enable awsh __OMEGAFLOW_AWSH_FAIL_STOP",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-136",
+      "command": "args=(-an echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-137",
+      "command": "args=(-sn echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-138",
+      "command": "args=(-dn echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-139",
+      "command": "args=(-f/missing echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-140",
+      "command": "args=(-nf /missing echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-141",
+      "command": "args=(-n -- echo kill); enable \"${args[@]}\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-enable-query-142",
+      "command": "enable -np kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-143",
+      "command": "enable -pn kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-144",
+      "command": "enable -p -f /missing kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-145",
+      "command": "enable -p -d kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-146",
+      "command": "enable -a kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-147",
+      "command": "enable -s kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-148",
+      "command": "enable -- kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-enable-query-149",
+      "command": "enable -Z kill",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-reset-02",
+      "command": "trap -- 02",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-plus2",
+      "command": "trap -- +2",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-017",
+      "command": "trap -- 017",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-plus17",
+      "command": "trap -- +17",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-debug",
+      "command": "trap -- debug",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-err",
+      "command": "trap -- err",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-reset-return",
+      "command": "trap -- return",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-complete-157",
+      "command": "trap 0 \"$INT_NUMBER\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-complete-158",
+      "command": "trap - \"${USR2_NUMBER}\" \"$CHLD_NUMBER\"",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-complete-159",
+      "command": "trap \"cd /tmp\" SIGCHLD",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-complete-160",
+      "command": "trap \"exit 42\" DEBUG",
+      "mode": "fatal"
+    },
+    {
+      "id": "B2.4-trap-native-161",
+      "command": "trap -",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-162",
+      "command": "trap -- \"+2\" TERM",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-163",
+      "command": "trap \"echo OK\" 130",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-164",
+      "command": "trap \"echo OK\" SIGDEBUG",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-165",
+      "command": "trap -pn INT",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-166",
+      "command": "trap \"\" TERM; trap - TERM",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-trap-native-167",
+      "command": "trap \":\" EXIT; trap -p EXIT",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-disabled-ordinary-168",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal",
+      "setup": "enable -n local shift getopts read printf"
+    },
+    {
+      "id": "B2.4-disabled-ordinary-169",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal",
+      "setup": "enable -n set shopt unset readonly"
+    },
+    {
+      "id": "B2.4-disabled-ordinary-170",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal",
+      "setup": "enable -n :; :(){ builtin printf BAD; }"
+    },
+    {
+      "id": "B2.4-disabled-ordinary-171",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal",
+      "setup": "trap \"builtin printf BAD_EXIT\" EXIT"
+    },
+    {
+      "id": "B2.4-posix-next-trap",
+      "command": "set -o posix; trap \"exit 42\" INT",
+      "mode": "fatal",
+      "allow_stderr": true
+    },
+    {
+      "id": "B2.4-shopt-next-trap",
+      "command": "builtin shopt -so posix; trap \"exit 42\" INT",
+      "mode": "fatal",
+      "allow_stderr": true
+    },
+    {
+      "id": "B2.4-fail-stop-fallback",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fallback"
+    },
+    {
+      "id": "B2.4-awsh-arity",
+      "command": "awsh; builtin printf \"%s\\n\" \"$?\"; awsh wrong id; builtin printf \"%s\\n\" \"$?\"",
+      "mode": "native",
+      "expected_stdout": "2\n2\n"
+    },
+    {
+      "id": "B2.4-selected-pseudo-number-DEBUG",
+      "command": "trap -- \"$DEBUG_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-selected-pseudo-number-ERR",
+      "command": "trap -- \"$ERR_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-selected-pseudo-number-RETURN",
+      "command": "trap -- \"$RETURN_NUMBER\"",
+      "mode": "native"
+    },
+    {
+      "id": "B2.4-errexit-refusal",
+      "command": "trap \"exit 42\" INT",
+      "mode": "fatal",
+      "setup": "set -e"
+    },
+    {
+      "id": "B2.4-awsh-hostile-path",
+      "command": "PATH=/hostile; awsh gate id; builtin printf \"%s\\n\" \"$?\"",
+      "mode": "native",
+      "expected_stdout": "2\n"
+    },
+    {
+      "id": "B2.4-prompt-disabled-local",
+      "mode": "prompt",
+      "command": "enable -n local; set -H; builtin false\n__OMEGAFLOW_AWSH_PROMPT; builtin printf \"PROMPT_OK\\n\""
+    }
+  ],
+  "package_case": "B1-PACKAGE-B2.4",
+  "pending": [
+    "B2.8 qualification/build-specific expectations",
+    "B4.3 gate helper transport",
+    "B2.5/B2.6/B2.7 recurring state/start/completion",
+    "B1-C022-combined-options owning static correction"
+  ]
+}
