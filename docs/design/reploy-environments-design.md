@@ -10,14 +10,15 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-10-06
+- Updated: 2026-10-09
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
-  A2.9 successor replans delivery to one PR per numbered implementation leaf;
-  it is not yet approved. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.4 have approved
+  partial implementation. The current A2.10 echo-off handoff amendment and
+  owning B2.3.3 readiness correction remain unapproved/pending. The complete
+  production execution path and Bash-build qualification remain pending.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -891,6 +892,20 @@ defaults are:
   to the short-lived source helper and assigned to Bash's reserved Readline
   buffer only after complete private capture and positive-marker validation,
   rather than written through the PTY;
+- echo disabled before each adapter-owned Readline entry, with actual entry
+  proved by canonical input becoming disabled while echo stays disabled; Awsh
+  retains the complete fresh workload terminal state separately, restores and
+  verifies that exact state through its existing terminal-control lease after
+  matching `started_ack` and before the start helper's successful reply, and
+  keeps restoration and reply under the original start epoch. Intentional raw
+  or no-echo state persists; terminal bytes are never filtered to hide a frame;
+- Envoy suspends controller-terminal reads after satisfying
+  `execute.input_through` until accepting matching `start_released`. The
+  controller may write after public `operation_started`, but socket
+  backpressure holds ordinary keys and Ctrl-C until workload termios
+  restoration and start-helper completion are proved. The original start
+  deadline, private control and output relay remain active, and fatal start
+  failure forwards none of the held input;
 - the fixed helper stream framing: each mode-0600 Unix stream connection carries
   one bounded four-byte big-endian length-prefixed request, request half-close,
   one length-prefixed reply, and reply EOF; exact read/write loops tolerate
