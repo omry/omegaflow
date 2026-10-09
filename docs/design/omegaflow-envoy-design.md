@@ -8,14 +8,15 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-10-06
+- Updated: 2026-10-09
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
-  A2.9 successor replans delivery to one PR per numbered implementation leaf;
-  it is not yet approved. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.4 have approved
+  partial implementation. The current A2.10 echo-off handoff amendment and
+  owning B2.3.3 readiness correction remain unapproved/pending. The complete
+  production execution path and Bash-build qualification remain pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -464,7 +465,11 @@ foreground.
 Before reporting the selected shell ready, Awsh verifies parentage, session,
 foreground group, fixed-rcfile startup, the startup helper exchange, and actual
 Readline entry. The fixed adapter leaves the real Bash primary-prompt display
-empty. Awsh drains the slave-side terminal output and closes every PTY-slave
+empty. Before Readline entry, Awsh saves the complete fresh workload terminal
+state, sets canonical input on and echo off, and verifies the exact prepared
+state. Actual entry clears canonical input while echo remains off; this keeps
+the privately loaded source frame out of terminal output. Awsh drains the
+slave-side terminal output and closes every PTY-slave
 descriptor it owns before private readiness. Envoy requires the pre-ready
 PTY-master bytes to match the selected Bash-build entry exactly, then commits
 public `ready` with their exclusive raw-log end in `output_through` before
@@ -530,14 +535,27 @@ the source, and uses a short-lived Bash helper to return a canonical brace frame
 to a private loader buffer. The readonly loader assigns `READLINE_LINE` only
 after validating the complete reply and its positive success marker. Envoy writes
 only the fixed two-byte adapter trigger on the PTY. The selected Bash/Readline
-build accepts the private loader and `accept-line` macro without redisplaying
-the frame, and its output-empty `PS0` helper blocks before execution. A helper
+build accepts the private loader and `accept-line` macro with echo disabled
+before Readline entry, without redisplaying the frame, and its output-empty
+`PS0` helper blocks before execution. A helper
 error enters a manifested non-returning fail-stop primitive instead of
 returning to the loader macro or `PS0`; fatal teardown is the only release.
 Awsh's
 `start_prepared`/`started` and Envoy's `start_release`/`started_ack` keep Bash
 blocked until Envoy has drained preceding output, completely published
-`operation_started`, and fixed `output_start`. After the `PS0` marker is
+`operation_started`, and fixed `output_start`. After matching `started_ack`,
+Awsh restores and reads back the exact saved workload terminal state through
+its existing validated close-on-exec lease before sending the start helper a
+successful reply. Restoration and that reply use the original start deadline;
+failure releases no authored command. The saved state may intentionally be raw
+or no-echo, so restoration never means enabling echo unconditionally.
+Controller input sent after public `operation_started`, including Ctrl-C, is
+held by Envoy's suspended terminal reads until matching `start_released`, with
+socket backpressure rather than an unbounded application buffer. The existing
+start deadline and output/private-control processing continue while input is
+held; fatal start failure releases none of it. Ordinary
+completion recaptures the full post-cleanup state before preparing the next
+echo-off Readline entry. After the `PS0` marker is
 validated, the first adapter-owned Bash command signals its direct Awsh parent;
 Awsh's shell-neutral `start_released` result gives Envoy the exact safe release
 boundary. Cancellation remains pre-start
@@ -1427,6 +1445,7 @@ Envoy's acceptance of `input_close` and matching `input_closed`; cancellation
 and finalization in that interval
 must preserve Bash/helper survival, consume `input_close` as the existing A2.5
 return fact, and complete the already-selected lifecycle outcome. A2.7 closed
-the private schemas and is approved and merged. B implementation remains pending
-behind the current A2.8 delivery-order successor's approval and merge; its
-static and executable evidence owners are fixed by the implementation plan.
+the private schemas and is approved and merged. A2.8 and A2.9 are also merged;
+B1 and B2.1–B2.4 have approved partial implementation. A2.10 and its owning
+B2.3.3 readiness correction precede B2.5 completion; the plan fixes the remaining
+static and executable evidence owners and preserves the complete conformance gate.
