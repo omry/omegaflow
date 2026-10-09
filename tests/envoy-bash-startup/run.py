@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated B2.3.2 startup proof on verified Reploy candidates, not admission."""
+"""Isolated startup and B2.3.3 restoration proof on verified candidates."""
 
 import argparse
 import hashlib
@@ -106,7 +106,7 @@ def main():
                      "-e", f"OMEGAFLOW_CANDIDATE_SIGNALS={json.dumps(signals)}",
                      "--entrypoint=/omegaflow-runtime/bin/startup.test", iid,
                      "-test.v", "-test.timeout=120s", "-test.gocoverdir=/proof-coverage",
-                     "-test.run=^Test(QualifiedLaunchFailsClosed|RealCandidateStartup)$"],
+                     "-test.run=^Test(QualifiedLaunchFailsClosed|RealCandidateStartup|TerminalLeaseRestoration)$"],
                     stdout=log, stderr=subprocess.STDOUT, timeout=135)
             results.append({"release": release, "source_image": image, "test_image": iid,
                             "executable_sha256": candidate["observed"]["executable_sha256"],
@@ -114,6 +114,20 @@ def main():
                             "qualified": False})
             if run.returncode:
                 raise RuntimeError(f"candidate {release} failed; see {artifacts['launch_log']}")
+            raw_log = output / f"{release}-raw-restoration.log"
+            with raw_log.open("w") as log:
+                raw = subprocess.run(
+                    ["docker", "run", "--rm", "--network=none", "-e",
+                     "OMEGAFLOW_TEST_INITIAL_RAW=1", "-e",
+                     f"OMEGAFLOW_CANDIDATE_DIGEST={candidate['observed']['executable_sha256']}",
+                     "-e", f"OMEGAFLOW_CANDIDATE_SIGNALS={json.dumps(signals)}",
+                     "--entrypoint=/omegaflow-runtime/bin/startup.test", iid,
+                     "-test.v", "-test.timeout=120s", "-test.run=^TestRealCandidateStartup$"],
+                    stdout=log, stderr=subprocess.STDOUT, timeout=135)
+            results[-1]["raw_restoration"] = {"returncode": raw.returncode, "log": str(raw_log),
+                                             "log_sha256": hashlib.sha256(raw_log.read_bytes()).hexdigest()}
+            if raw.returncode:
+                raise RuntimeError(f"candidate {release} raw restoration failed; see {raw_log}")
             faults = {}
             for name, script in {**FAULTS, **{name: (context / "etc/awsh-bashrc").read_text()
                                            for name in ("blocked-result", "release-during-ready", "exit-during-ready")}}.items():
