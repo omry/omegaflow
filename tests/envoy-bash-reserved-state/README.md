@@ -69,6 +69,9 @@ The prompt regression disables the ordinary `local` builtin, enables source-visi
 history, and returns status 1 before calling the exact prompt hook.
 The real Awsh helper must send the saved state and startup readiness in order to
 a deterministic socket peer. Both complete request frames remain in the proof.
+Prompt cases append their command to a test-only rcfile and use actual `-i`
+startup. The selected Bash `-i -c` form skips Readline initialization and crashes
+when `bind -x` is followed by `set -o emacs`; it is not Awsh's launch form.
 This exercises the existing prompt forms, not the later completion/cleanup path.
 
 The approved adapter reservations are cooperative. Explicit `builtin`/`command`

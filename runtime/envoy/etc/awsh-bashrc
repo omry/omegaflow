@@ -1,4 +1,4 @@
-# Fixed adapter entry state. Submission and completion arrive in B2.5–B2.7.
+# Fixed adapter entry state. Active start and completion arrive in B2.6–B2.7.
 builtin unset POSIXLY_CORRECT
 builtin readonly POSIXLY_CORRECT
 # Declaring this special variable resets selected-Bash parser defaults; install
@@ -152,11 +152,54 @@ awsh() {
         builtin return 2
     fi
 }
+# set remains an ordinary workload builtin. Temporarily enable it only for
+# fixed adapter settings, then restore its disabled state before authored source.
+__OMEGAFLOW_AWSH_SET() {
+    __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin trap - EXIT; builtin enable -p)$'\n'
+    if [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable set\n'* ]]; then
+        builtin set "$@"
+    else
+        builtin enable set
+        builtin set "$@"
+        builtin enable -n set
+    fi
+}
+__OMEGAFLOW_AWSH_ENTER() {
+    if [[ -z ${2#on} ]]; then
+        __OMEGAFLOW_AWSH_SET -H
+    else
+        __OMEGAFLOW_AWSH_SET +H
+    fi
+    __OMEGAFLOW_AWSH_SET -o "$3"
+    builtin return "$1"
+}
+__OMEGAFLOW_AWSH_RETURN() { builtin return "$1"; }
+__OMEGAFLOW_AWSH_LOAD() {
+    if __OMEGAFLOW_AWSH_BUFFER=$(builtin trap - EXIT; /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock source && builtin enable printf && builtin printf x); then
+        __OMEGAFLOW_AWSH_MARKER=${__OMEGAFLOW_AWSH_BUFFER: -2:1}
+        # The shell-owned final x preserves bytes after the helper's final x.
+        [[ -z ${__OMEGAFLOW_AWSH_MARKER#x} && ${__OMEGAFLOW_AWSH_BUFFER: -3:1} == '}' ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        __OMEGAFLOW_AWSH_BUFFER=${__OMEGAFLOW_AWSH_BUFFER:0:${#__OMEGAFLOW_AWSH_BUFFER}-2}
+        # Reject unsafe attributes; keep readonly assignment faults isolated.
+        [[ ! -R READLINE_LINE && ! -R READLINE_POINT && ${READLINE_LINE@a} != *[aAilu]* && ${READLINE_POINT@a} != *[aAlu]* ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        (builtin trap - EXIT; READLINE_LINE= READLINE_POINT=0) >/dev/null 2>&1 || __OMEGAFLOW_AWSH_FAIL_STOP
+        READLINE_LINE=$__OMEGAFLOW_AWSH_BUFFER
+        READLINE_POINT=${#READLINE_LINE}
+        [[ $READLINE_LINE == "$__OMEGAFLOW_AWSH_BUFFER" && $READLINE_POINT == "${#READLINE_LINE}" ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+}
+builtin readonly -f __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD
+builtin bind -m emacs-standard -x '"\C-x\C-a":__OMEGAFLOW_AWSH_LOAD'
+builtin bind -m emacs-standard '"\C-x\C-b":"\C-x\C-a\C-m"'
 __OMEGAFLOW_AWSH_PROMPT() {
     # local is an ordinary workload builtin and may have been disabled.
     __OMEGAFLOW_AWSH_STATUS=$? __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
     [[ ${-#*H} != "$-" ]] && __OMEGAFLOW_AWSH_HISTORY=on
+    [[ -o emacs || -o vi ]] || __OMEGAFLOW_AWSH_FAIL_STOP
     [[ -o vi ]] && __OMEGAFLOW_AWSH_EDITING=vi
+    __OMEGAFLOW_AWSH_SET +H -o emacs
     /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
     PS1=''
     /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready || __OMEGAFLOW_AWSH_FAIL_STOP

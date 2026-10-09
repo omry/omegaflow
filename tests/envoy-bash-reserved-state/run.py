@@ -90,16 +90,18 @@ MUTATIONS = {
 }
 
 
-def shell(command, rcfile=RCFILE):
+def shell(command, rcfile=RCFILE, startup=False):
     # A private controlling terminal permits genuine interactive Bash behavior,
     # notably readonly-assignment errors that end a noninteractive shell.
     master, slave = pty.openpty()
     try:
-        proc = subprocess.Popen(
-            ['/bin/bash', '--noprofile', '--rcfile', str(rcfile), '-i', '-c',
+        invocation = ['/bin/bash', '--noprofile', '--rcfile', str(rcfile), '-i']
+        if not startup:
+            invocation += ['-c',
              'CHLD_NUMBER=$(builtin kill -l CHLD); INT_NUMBER=$(builtin kill -l INT); '
              'USR2_NUMBER=$(builtin kill -l USR2); DEBUG_NUMBER=$(builtin kill -l DEBUG); '
-             'ERR_NUMBER=$(builtin kill -l ERR); RETURN_NUMBER=$(builtin kill -l RETURN)\n' + command],
+             'ERR_NUMBER=$(builtin kill -l ERR); RETURN_NUMBER=$(builtin kill -l RETURN)\n' + command]
+        proc = subprocess.Popen(invocation,
             stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             start_new_session=True,
             preexec_fn=lambda: fcntl.ioctl(0, termios.TIOCSCTTY, 0))
@@ -112,8 +114,8 @@ def shell(command, rcfile=RCFILE):
     return proc
 
 
-def completed(command, rcfile=RCFILE):
-    proc = shell(command, rcfile)
+def completed(command, rcfile=RCFILE, startup=False):
+    proc = shell(command, rcfile, startup)
     try:
         out, err = proc.communicate(timeout=5)
     except subprocess.TimeoutExpired:
@@ -181,7 +183,12 @@ def prompt(case, directory):
         thread.start()
         observed, completion_error = None, None
         try:
-            observed = completed(case['command'])
+            # bind -x followed by set -o emacs can crash selected Bash under
+            # -i -c, which skips Readline initialization. Exercise this prompt
+            # hook in the real startup form, without typing source into a PTY.
+            fixture = directory / 'prompt.bashrc'
+            fixture.write_text(RCFILE.read_text() + '\n' + case['command'] + '\nbuiltin exit "$?"\n')
+            observed = completed('', fixture, startup=True)
         except AssertionError as error:
             completion_error = str(error)
         finally:
