@@ -1,23 +1,23 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a",
+  "source_sha256": "77820bcb6d483f21bb9880620bcc4ef98572fe30b3cf9f0c68fe22022071a40d",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
-      "sha256": "de70574c83e4e1b839bc5f7b8309b8ef59c072855583633a714e44806c17aa16"
+      "sha256": "564019654b8be917d378b62b409e8fc18853a49305cbfae4d43c27fd71deaaa4"
     },
     {
       "path": "docs/design/omegaflow-envoy-design.md",
-      "sha256": "24a62626aee0cf53082e13c8ccc877eabe0fda5516d410411c5529683904b4de"
+      "sha256": "a1522f6c2bcb9783fdcfc61aab9fd36b453b1492faa525687b34e2c3db6da2b3"
     },
     {
       "path": "docs/design/reploy-environments-design.md",
-      "sha256": "1bdd85de920571954648f1e36d7c92ee39c24d644993c57ffe92994162cf3c9d"
+      "sha256": "6d19f63d397b3d0334e19a76a94bb41a9cac58b723737053c9b51d597c9606a0"
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a"
+      "sha256": "77820bcb6d483f21bb9880620bcc4ef98572fe30b3cf9f0c68fe22022071a40d"
     }
   ],
   "begin": "The cumulative suite covers inspection",

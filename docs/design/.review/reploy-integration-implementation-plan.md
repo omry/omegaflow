@@ -3,18 +3,18 @@ artifact: swe-design-review-attestation
 schema_version: 4
 scope_key: 8f5ec9452741760eead3268c5e0812e3751a723866433995c1711a5c9133f139
 scope: {"kind": "path", "primary_target": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "selector": "docs/design/reploy-integration-implementation-plan.md"}
-review_content_identity_sha256: 0aefc90d0c1d7c47865201c9b2325567a657b400d907a7e691941592b0c1f567
-target_content_identity_sha256: ae9ed9d15a5e4a2eb264fe548ace9dedc812226f9c15b7dd0d83c7047889bf14
+review_content_identity_sha256: 537cbeb84d5c432b421d087ed083b5ade1a46540c409789c5e8998955abb4e56
+target_content_identity_sha256: 739edf507b1a5a04e1e65fe84962bf0fa3aecf62d4171f7ab7fd8a6d7c7f1168
 baseline_content_identity_sha256: d93b64744781fb209c349be440c4ad1d8efe012b1286b1767ae0a2795d59a166
-target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "de70574c83e4e1b839bc5f7b8309b8ef59c072855583633a714e44806c17aa16"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "24a62626aee0cf53082e13c8ccc877eabe0fda5516d410411c5529683904b4de"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "1bdd85de920571954648f1e36d7c92ee39c24d644993c57ffe92994162cf3c9d"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a"}]
+target_documents: [{"path": "docs/design/envoy-protocol-v1.md", "repository": ".", "sha256": "564019654b8be917d378b62b409e8fc18853a49305cbfae4d43c27fd71deaaa4"}, {"path": "docs/design/omegaflow-envoy-design.md", "repository": ".", "sha256": "a1522f6c2bcb9783fdcfc61aab9fd36b453b1492faa525687b34e2c3db6da2b3"}, {"path": "docs/design/reploy-environments-design.md", "repository": ".", "sha256": "6d19f63d397b3d0334e19a76a94bb41a9cac58b723737053c9b51d597c9606a0"}, {"path": "docs/design/reploy-integration-implementation-plan.md", "repository": ".", "sha256": "77820bcb6d483f21bb9880620bcc4ef98572fe30b3cf9f0c68fe22022071a40d"}]
 baseline_documents: [{"path": "docs/BACKLOG.md", "repository": ".", "sha256": "7c8806d142b11af6603dfc4fd1067005090106c97dcd14d773821315bbb2b03b"}, {"path": "docs/runtime-dependencies.md", "repository": ".", "sha256": "ea989e6cff43e71b8346f226d1eb89db4d246006ce57288ce393928d86f2a349"}]
 design_dependency_documents: []
 document_repository: "."
 document_path: "docs/design/reploy-integration-implementation-plan.md"
-document_revision_provenance: "f4dca54640534969cf0e37b8cbd87be6cea4a9a5"
-document_sha256: bd9b2514e515b5247f17d46d89b0f8bba3da767c9771c9d8638295326f18383a
+document_revision_provenance: "9929a451ceb81918102f2e581f1b4ddcdd68200e"
+document_sha256: 77820bcb6d483f21bb9880620bcc4ef98572fe30b3cf9f0c68fe22022071a40d
 verdict: clean
-attested_at: 2026-10-06T15:04:34Z
+attested_at: 2026-10-09T14:22:26Z
 ---
 <!-- swe-design-review-attestation:v4 -->
 

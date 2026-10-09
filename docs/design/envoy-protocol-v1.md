@@ -6,12 +6,15 @@ This document defines the first controller/workload contract for the
 [OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
 inspection and external-Awsh amendments are approved through A2.7, merged as
 PR 38 at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.8 clarifies delivery
-order and evidence ownership and is approved at PR 39 head
-`f0cc6f5031576e845958933976bcf8c08669efd7`, awaiting merge. The current A2.9
-design-only successor bounds delivery to one PR per numbered implementation
-leaf; it is not yet approved. Neither successor changes a wire form or runtime
-requirement. Production
-implementation and selected-Bash qualification remain pending. It is an
+order and evidence ownership and is merged as PR 39 at
+`31e9a497bca99139e00ef64c2a4c4042a4b89e78`. A2.9 bounds delivery to one PR
+per numbered implementation leaf and is merged as PR 40 at
+`e10e61614f25c06da12fba2610803126390be1e7`. Neither changes a wire form or
+runtime requirement. B1 and B2.1–B2.4 have approved partial implementation.
+The current A2.10 amendment corrects echo-off Readline entry and exact workload
+terminal-state restoration; its approval and owning B2.3.3 correction remain
+pending. The complete production execution path and selected-Bash qualification
+remain pending. It is an
 internal OmegaFlow release contract. Reploy
 provides the private network, endpoint coordinates, bootstrap attachment, and
 authoritative lifecycle; it does not transport or interpret these messages.
@@ -1933,7 +1936,8 @@ before it reaches the PTY. The adapter-owned idle Readline boundary
 always uses the `emacs-standard` keymap. The active Readline build binds
 `0x18 0x01` there to the readonly source-loader function and binds `0x18 0x02`
 to one macro that dispatches `0x18 0x01` followed by `accept-line`. The selected
-Bash-build table must prove that the whole macro is consumed before redisplay,
+Bash-build table must prove no frame redisplay with echo disabled before
+Readline entry and restored only while the parsed frame is blocked in `PS0`,
 so neither source nor the canonical frame is written to the PTY. A missing or
 changed binding, redisplay byte, unexpected helper request, or secondary prompt
 after the trigger fails the session under the operation-start deadline.
@@ -2061,8 +2065,12 @@ The start commitment is ordered as follows:
    `started`, and still does not release Bash.
 6. Envoy snapshots `output_start`, completely writes public
    `operation_started`, and completely writes `started_ack`.
-7. Awsh enters the matching release-signal phase and then sends the helper's
-   `accepted` reply. The helper emits its one captured success marker and exits
+7. After accepting matching `started_ack`, Awsh restores the exact saved
+   workload termios state through one validated terminal-control lease and
+   verifies a complete readback. Restoration consumes the unchanged Envoy-owned
+   operation-start budget. Awsh enters the matching release-signal phase and
+   only then sends the helper's `accepted` reply. The helper emits its one
+   captured success marker and exits
    zero, the wrapper validates and removes the marker, and `PS0` completes with
    empty output.
 8. Bash executes `START_RELEASED` as the first adapter-owned frame command. Its
@@ -2191,9 +2199,10 @@ as the completion state and resolves the inspection plan from the final accepted
 physical/logical cwd and exported environment. Under one terminal-control lease
 it first reads and records the complete post-cleanup pre-Readline termios state,
 replacing the earlier `prompt_state` termios snapshot for this completion
-boundary. It then repeats the startup handoff: set `ICANON` and `ECHO`, verify
-the remaining state against that fresh snapshot, reply `accepted`, and observe
-the selected Bash build clear both bits on actual Readline entry. It then
+boundary. It then repeats the startup handoff: set `ICANON` and clear `ECHO`,
+verify the complete prepared state against that fresh snapshot with only those
+two changes, reply `accepted`, and observe the selected Bash build clear
+`ICANON` while `ECHO` remains clear on actual Readline entry. It then
 `tcdrain`s and closes the lease. This transition, not helper EOF, an empty
 prompt, or a live Bash PID, proves that Bash reached the reusable boundary.
 Operation input remains closed, so Readline cannot consume bytes for this or a
@@ -2440,8 +2449,9 @@ split paths or empty fields, and exact source. The fixed helper validates the
 response and emits only the matching canonical Readline frame and final marker
 described above. `start_prepared` is accepted exactly once
 after that source response. Its `accepted` reply is withheld until Awsh has
-written `started`, accepted matching `started_ack`, and is ready to release
-Bash. After validating that complete reply, the helper writes exactly the
+written `started`, accepted matching `started_ack`, restored and verified the
+exact saved workload terminal state, and is ready to release Bash under the
+unchanged operation-start epoch. After validating that complete reply, the helper writes exactly the
 captured ASCII `x` success marker to its standard output and exits zero;
 the readonly wrapper removes that marker, so `PS0` remains output-empty.
 `accepted` is also the sole successful `prompt_ready` reply. A helper
@@ -2492,15 +2502,48 @@ byte may enter the PTY stream.
 After accepting startup `prompt_ready`, Awsh uses the complete workload state
 captured with startup `prompt_state`. After accepting completion `prompt_ready`,
 it first reads and records a fresh complete workload state after descendant
-cleanup and Bash wait-record removal. Awsh then sets both `ICANON` and `ECHO` on
-its controlling terminal, reads the complete termios state back, and replies
-`accepted` only after both bits are observed set and the remainder matches the
-applicable fresh workload state. The helper remains blocked until that reply.
-The fixed Bash/Readline build must then clear both bits on entry to interactive
-input. Awsh observes that second exact transition, records the resulting active
+cleanup and Bash wait-record removal. Awsh retains that complete fresh state as
+the workload reference for the next submitted operation. Through one validated
+terminal-control lease it sets `ICANON` and clears `ECHO`, reads the complete
+termios state back, and replies `accepted` only after that exact prepared state
+is observed: the two bits have those values and every remaining field matches
+the fresh workload reference. The helper remains blocked until that reply.
+The fixed Bash/Readline build must then clear `ICANON` on entry to interactive
+input while `ECHO` remains clear. Awsh observes that second exact transition,
+records the resulting active
 termios state, and treats it as the applicable readiness boundary. Startup
 output, prompt bytes, helper closure, or a live Bash PID is never substitute
 readiness evidence.
+
+Echo must already be disabled when Readline enters; changing it inside the
+source loader is too late to prevent redisplay of the canonical frame. The
+loader and submit bindings remain unchanged. Echo stays disabled through source
+capture, frame acceptance and the blocked `PS0` preparation helper. There is no
+terminal-output filtering or setup command typed into the recorded terminal.
+
+After matching `started_ack` and before the successful `start_prepared` helper
+reply, Awsh takes one validated terminal-control lease, writes the complete
+saved workload reference and reads it back for exact equality, including all
+flags, speeds and control characters. It closes the lease on every outcome.
+It restores the saved state rather than enabling echo unconditionally: an
+operation may intentionally leave raw or no-echo mode for the next operation.
+The reference remains the complete fresh prompt-boundary snapshot; the prepared
+or active Readline state never replaces it. At ordinary return, the post-cleanup
+recapture replaces that reference before the next Readline handoff.
+
+Restoration and the existing complete helper reply consume the original
+Envoy-owned operation-start epoch, without starting or resetting a deadline.
+Awsh checks its existing phase context before restoration, after the lease
+completes and before permitting the successful reply. Cancellation of that
+context means fatal teardown or channel loss, not a public operation cancel.
+A wrong terminal identity, failed write, failed or mismatched readback,
+cancelled phase context, or failed complete reply releases no successful helper
+outcome and takes the existing fatal start path. Bash remains blocked before
+any authored command. Envoy retains start-timeout selection and teardown under
+its unchanged deadline. An ordinary cancel accepted during this window remains
+queued until `start_released`; it cannot bypass restoration or abort the
+committed start. There is no new timer, message, helper, actor or ordinary
+cancellation path inside Awsh.
 
 After observing that transition, Awsh takes one terminal-control lease, calls
 `tcdrain`, and closes the lease. At startup it then sends private `ready`; at
@@ -2636,7 +2679,8 @@ lease** rather than a retained slave descriptor. Awsh opens `/dev/tty` with
 and the expected selected-shell foreground group, performs only the operation
 authorized by the current private state, and closes it on every outcome before
 another helper or terminal transaction is admitted. The source, completion,
-and gate/readiness rules define which private phases may acquire this lease;
+gate/readiness, and post-`started_ack` restoration rules define which private
+phases may acquire this lease;
 ordinary descendants never inherit it.
 
 Any failure before private `ready` stops accepting helpers, terminates and reaps
@@ -2724,9 +2768,10 @@ Requirement package B1 creates the static canonical wire corpus through the
 implementation plan's one-PR leaves B1.1–B1.3, after verified approved merges of
 A2.7, A2.8, and A2.9. These delivery boundaries change no protocol requirement.
 The corpus lives under
-`tests/fixtures/envoy-protocol-v1`; that directory does not exist in this design
-revision. The Bash-launch, submission, and A2.6 control slices are approved
-predecessors; A2.7 froze the remaining private schemas, failure
+`tests/fixtures/envoy-protocol-v1`; B1.1–B1.3 are approved partial implementation
+and the static corpus exists. It is not executable evidence from the remaining
+runtime actors. The A2.3 Bash-launch, A2.4 submission, and A2.6 control design
+slices are approved predecessors; A2.7 froze the remaining private schemas, failure
 mapping, and field order before B1 implementation. The resulting protocol text,
 state rules, and wire examples are the fixture corpus's authoritative raw
 material. Historical fixtures from the former implementation stack may be
@@ -2967,11 +3012,22 @@ mode, history expansion, or disabled `interactive_comments`. They require zero
 checker status and empty checker stdout and stderr for both source-only and
 canonical-frame checks. They prove that helper IPC carries the exact source,
 the PTY receives
-only `0x18 0x02`, the loader macro performs no redisplay, command substitution
+only `0x18 0x02`, the loader macro performs no redisplay with echo disabled
+before Readline entry, command substitution
 preserves trailing LF through the final marker, the canonical brace group
 expands `PS0` exactly once, its first adapter-owned command sends the one
 post-`PS0` release signal, and no source or output executes before the complete
-public `operation_started` and private `started_ack`. They also cover each
+public `operation_started` and private `started_ack`. Terminal-handoff cases
+prove exact saved-state restoration before the helper success reply, ordinary
+typed input, password input, curses and nested interactive shells, and repeated
+operations preserving intentional raw or no-echo state. Negative controls
+expose frame bytes when echo is enabled at entry and lose ordinary input echo
+when restoration is omitted. Wrong-session/foreground leases, terminal write
+and readback failures or mismatch, phase-context cancellation before or after
+restoration, and helper-reply failure release no authored command. Envoy cases
+cross restoration and reply with its original start-deadline expiry and queued
+cancel, without a new epoch. Full start and completion integrations remain
+B2.6/B2.7 proofs; B2.3.3 owns isolated terminal-handoff evidence. They also cover each
 start-handshake frame fragmented or delayed at its own pipe boundary,
 duplicate or out-of-order helper messages and private frames, a missing release
 signal, a release signal before its phase is armed, and a second signal
