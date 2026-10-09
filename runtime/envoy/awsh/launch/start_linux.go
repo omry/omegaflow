@@ -26,6 +26,7 @@ type Session struct {
 	ShellPID            int
 	State               protocol.PromptState
 	ActiveTermios       syscall.Termios
+	workloadTermios     syscall.Termios
 	Signals             chan os.Signal
 	Reaped              chan shellReap
 	child               *selectedChild
@@ -280,6 +281,7 @@ func (s *Session) startup(ctx context.Context) error {
 			}
 			s.State = state.PromptState
 			reference, err = s.terminal.snapshot(ctx)
+			s.workloadTermios = reference
 		} else {
 			if _, ok := m.(*protocol.HelperStartupReady); !ok {
 				return fmt.Errorf("expected startup no-state prompt_ready")
@@ -321,6 +323,28 @@ func (s *Session) startup(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// RestoreWorkloadTermios restores the saved workload state, not Readline's
+// active state. The start owner supplies its existing phase deadline and must
+// withhold helper success if restoration fails; that integration is separate.
+func (s *Session) RestoreWorkloadTermios(ctx context.Context) error {
+	if _, ok := ctx.Deadline(); !ok {
+		return fmt.Errorf("restoration requires the existing phase deadline")
+	}
+	s.mu.Lock()
+	ready := s.ready && !s.closing
+	s.mu.Unlock()
+	if !ready {
+		return fmt.Errorf("selected shell is not ready")
+	}
+	if err := s.verifyShell(); err != nil {
+		return err
+	}
+	if err := s.terminal.restore(ctx, s.workloadTermios); err != nil {
+		return err
+	}
+	return s.verifyShell()
 }
 
 // The wire validator checks encoding/bounds; the actor checks directory identity.

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -232,7 +233,23 @@ func TestSupervisorProcess(t *testing.T) {
 	if len(before) != len(after) {
 		os.Exit(35)
 	}
-	evidence, _ := json.Marshal(map[string]any{"awsh_pid": os.Getpid(), "shell_pid": s.ShellPID, "state": s.State, "active_termios": s.ActiveTermios})
+	workload, readline := s.workloadTermios, s.ActiveTermios
+	if e = s.RestoreWorkloadTermios(context.Background()); e == nil {
+		os.Exit(43)
+	}
+	ended, end := context.WithCancel(ctx)
+	end()
+	if e = s.RestoreWorkloadTermios(ended); !errors.Is(e, context.Canceled) {
+		os.Exit(43)
+	}
+	if e = s.RestoreWorkloadTermios(ctx); e != nil {
+		os.Exit(43)
+	}
+	restored, e := s.terminal.snapshot(ctx)
+	if e != nil || restored != workload || s.ActiveTermios != readline || s.workloadTermios != workload {
+		os.Exit(43)
+	}
+	evidence, _ := json.Marshal(map[string]any{"awsh_pid": os.Getpid(), "shell_pid": s.ShellPID, "state": s.State, "active_termios": s.ActiveTermios, "workload_termios": workload, "restored_termios": restored})
 	f := os.NewFile(6, "test-evidence")
 	f.Write(append(evidence, '\n'))
 	var done [1]byte
@@ -307,6 +324,19 @@ func TestRealCandidateStartup(t *testing.T) {
 	for attempt := 0; attempt < 3; attempt++ {
 		t.Run(strconv.Itoa(attempt), func(t *testing.T) {
 			master, slave := openPTY(t)
+			if os.Getenv("OMEGAFLOW_TEST_INITIAL_RAW") == "1" {
+				state, err := termios(int(slave.Fd()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				state.Lflag &^= syscall.ICANON | syscall.ECHO | syscall.ISIG
+				state.Oflag &^= syscall.OPOST
+				state.Iflag &^= syscall.ICRNL | syscall.IXON
+				state.Cc[syscall.VINTR], state.Cc[syscall.VMIN], state.Cc[syscall.VTIME] = 7, 1, 0
+				if err = ioctl(int(slave.Fd()), syscall.TCSETS, unsafe.Pointer(&state)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			controlR, controlW, e := os.Pipe()
 			if e != nil {
 				t.Fatal(e)
@@ -506,6 +536,18 @@ func TestRealCandidateStartup(t *testing.T) {
 			line, e := bufio.NewReader(evidenceR).ReadBytes('\n')
 			if e != nil {
 				t.Fatal(e)
+			}
+			var measured struct {
+				Workload syscall.Termios `json:"workload_termios"`
+				Restored syscall.Termios `json:"restored_termios"`
+			}
+			if e = json.Unmarshal(line, &measured); e != nil || measured.Restored != measured.Workload {
+				t.Fatalf("invalid restoration evidence: %s: %v", line, e)
+			}
+			if os.Getenv("OMEGAFLOW_TEST_INITIAL_RAW") == "1" &&
+				(measured.Workload.Lflag&(syscall.ICANON|syscall.ECHO|syscall.ISIG) != 0 ||
+					measured.Workload.Oflag&syscall.OPOST != 0 || measured.Workload.Cc[syscall.VINTR] != 7) {
+				t.Fatalf("workload raw/no-echo reference lost: %s", line)
 			}
 			t.Logf("candidate=%s ready=%+v evidence=%s", digest, ready, line)
 			fds, e := os.ReadDir("/proc/" + strconv.FormatInt(ready.AwshPID, 10) + "/fd")
