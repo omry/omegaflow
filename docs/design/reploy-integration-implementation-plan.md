@@ -9,14 +9,16 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-10-06.
+- Updated: 2026-10-09.
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. This
-  A2.9 design-only successor bounds implementation delivery to one PR per
-  numbered slice. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.4 have approved
+  partial implementation, including the B2.3.1/B2.3.2 split. B2.5 is preserved
+  uncommitted work. This A2.10 successor corrects the echo-off terminal handoff
+  before an owning B2.3.3 readiness correction and B2.5 closeout. The complete
+  production execution path and supported Bash-build qualification remain pending.
 - A `.review` sidecar attests only the document bytes matching its recorded
   content hash. Changed documents require fresh review and byte-current
   attestations before approval; a sidecar does not establish PR approval.
@@ -305,12 +307,32 @@ amendment is an additional documentation gate before its affected B work.
   PR. Preserve the complete A2.7/A2.8 requirements and final real-actor gates;
   add explicit predecessor, isolated acceptance, and last-prerequisite proof
   ownership for each leaf. Review and approve this plan before preparing B1.1.
+- A2.10 corrects the terminal handoff after real B2.5 candidate tests exposed
+  canonical-frame redisplay. Save the complete fresh workload termios state,
+  prepare `ICANON` on and `ECHO` off before every adapter-owned Readline entry,
+  and prove entry by `ICANON` clearing while `ECHO` stays clear. After matching
+  `started_ack`, restore and verify the exact saved state through the existing
+  terminal-control lease before the start helper's successful reply. Preserve
+  intentional raw/no-echo state and the post-cleanup recapture for the next
+  operation. Keep the original Envoy-owned start epoch, queued-cancel ordering,
+  all wire forms, actors, helper markers and failure mappings. Align all four
+  governing documents and current attestations. This is one design-only PR;
+  refresh only the static inventory's document-byte bindings after review,
+  retaining every frozen wire byte, case ID and pending runtime claim;
+  B2.3.3 owns the readiness implementation correction, B2.5 submission proof,
+  B2.6 start integration, B2.7 completion integration and B2.8 qualification.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
 and must complete deep design review, current-document attestation, required
 checks, and exact-head PR approval before its successor is published. No B
 implementation starts until A2.7, A2.8, and this A2.9 successor are approved and
 merged.
+
+A2.10 is a successor of the approved B2.4 stack tip. Its exact-head approval
+and current document attestations precede B2.3.3 publication; B2.3.3 approval
+precedes B2.5 completion. These successors require approval, not predecessor
+merge. Approved PR49 and PR50 stay immutable. No correction enables a complete
+production runtime or admits a supported Bash entry before its existing gate.
 
 The exact B1 base is the merge commit of the A2.7 PR approved at its exact final
 head, with current document attestations and all required checks passing. Record
@@ -634,7 +656,13 @@ Implement Awsh's exact one-exec descriptor intake, digest-selected generated
 Bash-build-table consumer, fixed rcfile/helper startup exchange, empty primary
 prompt, signal reset, process/session/foreground topology, Readline termios
 proof, first terminal drain, private readiness, selected-shell reaping, and
-partial-launch cleanup. Implement the A2.4 source checker and private active
+partial-launch cleanup. A2.10 requires echo off before Readline entry, a separate
+complete fresh workload termios reference, and exact restoration/readback under
+the existing terminal lease before the post-`started_ack` helper success reply.
+B2.3.3 corrects the existing readiness primitive; B2.6 integrates restoration
+into the real start owner, and B2.7 recaptures the post-cleanup reference before
+the next Readline entry. All consume existing phase budgets; Envoy remains the
+start-deadline and lifecycle owner. Implement the A2.4 source checker and private active
 operation record, parent-side `SIGUSR1` reception installed before Bash launch,
 fixed helper request/reply arities, canonical source-frame
 emitter, readonly adapter namespace, canonical parser/trap/trace/job-control
@@ -1293,8 +1321,11 @@ or weaken any clause or case in them. Every leaf inherits its package's exact
 actors, wire forms, failure/result rules, deadlines, bounds, and acceptance
 cases for the responsibility named in its row. The last leaf of each package
 runs its cumulative package gate. The final B8.4 and D3.3 gates remain mandatory.
-All 64 leaves are pending; the numbers below are estimates of changed production
-lines, not evidence that implementation or qualification exists.
+The original catalogue has 64 requirement anchors. Its B2.3 implementation was
+split into B2.3.1/B2.3.2, and A2.10 adds the B2.3.3 owning correction below.
+The retained B2.3 row is a historical requirement anchor, not an executable
+selector. The progress ledger records approved partial delivery; estimates
+are not implementation or qualification evidence.
 
 ### Ordering and proof accounting
 
@@ -1306,6 +1337,16 @@ no future implementation is a prerequisite for an earlier leaf's isolated
 acceptance. `B2` or another package in the prerequisites column means all its
 leaves and cumulative gate. The table names dependencies that explain the
 acceptance boundary, not permission to bypass earlier approvals.
+
+For this correction, A2.10 follows approved B2.4, then B2.3.3 follows A2.10
+and B2.4, then B2.5 follows B2.3.3. This preserves the approved predecessor
+commits and adds no merge prerequisite. The existing static B2.3 case identities
+remain requirement anchors: B2.3.1 owns launch, B2.3.2 startup coordination,
+and B2.3.3 the corrected terminal handoff. Existing `B1-C031-no-redisplay` and
+`B1-C064-fresh-termios` proofs retain their submission and completion owners;
+their readiness primitive additionally needs B2.3.3. Preparation records each
+exact owning test and pending cross-actor closure, without claiming that a
+historical static case proves the amended runtime behavior.
 
 Verified Reploy candidate acquisition/provenance and the resolved regular
 `/bin/bash` placement are prerequisites for the first real-shell test in B2.3,
@@ -1364,7 +1405,10 @@ proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget
 | B2.1 | 350–600 | B1 | Canonical candidate/qualified table admission validator, consumer generator and executable qualification runner | Reject unknown/stale consumers; candidate metadata cannot authorize production support; actual measurements pending B2.8 |
 | B2.2 | 350–650 | B1.2, B2.1 | Awsh helper socket transport and non-returning fail-stop helper mode | Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior |
 | B2.3 | 450–700 | B2.1–B2.2; verified candidate inputs and /bin/bash placement | Selected-shell launch, fixed startup assets, topology, descriptor intake/lease and readiness | Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry |
+| B2.3.1 | 450–750 | B2.1–B2.2; verified candidate inputs and /bin/bash placement | Descriptor handoff, controlling-terminal topology and raw selected-shell launch | Real candidate launch, parent/session/foreground and signal reset, descriptor isolation, partial-launch failure and reap; approved PR48 |
+| B2.3.2 | 450–750 | B2.3.1 | Ordered startup helpers, fixed assets, terminal leases and initial readiness | Real candidate empty prompt, complete termios/readiness transition, terminal drain/slave closure and bounded cleanup; approved PR49; A2.10 handoff correction belongs to B2.3.3 |
 | B2.4 | 450–700 | B2.3 | Readonly namespace, canonical parser state and whole-request trap/builtin mediation | Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior |
+| B2.3.3 | 80–220 | A2.10 approved; B2.3.2/B2.4 | Echo-off Readline preparation, retained complete workload termios reference and exact existing-lease restoration/readback primitive | Real candidate readiness, no retained or inherited lease, exact state restoration and fatal identity/write/readback/context failure; start integration pending B2.6, fresh completion reference pending B2.7, support admission pending B2.8 |
 | B2.5 | 450–700 | B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection |
 | B2.6 | 350–650 | B2.5 | Awsh active start record, PS0/post-PS0 handshake and split-entry sentinel | Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3 |
 | B2.7 | 450–700 | B2.6 | Completion hook, helper identity, Bash inspection-path resolution and state/Readline handoff | Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5 |
@@ -1455,9 +1499,16 @@ browser/publication/host-parity/FIFO-cutover implementation.
 | A2.4–A2.5 | Approved prefix | Approved design predecessors; A2.5 PR 35 is merged |
 | A2.6 | Approved and merged | PR 36 has the approved label and is merged at `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551` |
 | A2.7 | Approved and merged | PR 38 approved at head `750209eec2946309c2abc93a47a91078099edb52` and merged at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; approved document/sidecar bytes and required checks verified |
-| A2.8 | Approved, awaiting merge | PR 39 is open with the approved label at exact head `f0cc6f5031576e845958933976bcf8c08669efd7`; approval/merge status verified before this replan |
-| A2.9 | Unapproved worktree | One-PR leaf replan; requires deep design review, current attestations, required checks, exact-head approval and merge before B1.1 |
-| B1.1–B8.4 | Pending | 35 one-PR leaves; raw material only |
+| A2.8 | Approved and merged | PR39 at `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; exact approved head `f0cc6f5031576e845958933976bcf8c08669efd7` |
+| A2.9 | Approved and merged | PR40 at `e10e61614f25c06da12fba2610803126390be1e7`; exact approved head `0286b0255e321f26cdf84e833dd5b1b3a13ffcb3` |
+| B1.1–B1.3 | Approved partial implementation | PR42 `36b59a73e346f908175fbee9fe9847284ea9aaa1`, PR43 `08bd24b3280584a3a9aeb970f11596e0122750a4`, PR45 `35632529e0770feab62f1279b1fbc64b3254569e`; static wire/case evidence only |
+| B2.1–B2.2 | Approved partial implementation | PR46 `2d27b1e8c738e0287d3acf9e811d97cf11dd5296`, PR47 `47ef02f071d314522f4029647ea78a36935edff3`; no supported Bash admission |
+| B2.3.1–B2.3.2 | Approved partial implementation | PR48 `9e25e3a0516ec67941e4c02c833c39ab4d3cf9f7`, PR49 `d843ed43536c60fd4548a7cc1cd0e5fbef8fc59f`; candidate launch/startup evidence; changed handoff requires B2.3.3 |
+| B2.4 | Approved partial implementation | PR50 `9929a451ceb81918102f2e581f1b4ddcdd68200e`; real candidate reserved-state proofs; immutable predecessor |
+| A2.10 | Unapproved amendment | Echo-off entry and exact workload-state restoration; requires design review, current attestations, required checks and exact-head approval |
+| B2.3.3 | Pending owning correction | Implements A2.10 readiness primitive without rewriting approved PR49 |
+| B2.5 | Preserved uncommitted WIP | Real candidate redisplay finding prompted A2.10; successful isolated investigation is feasibility evidence, not slice acceptance |
+| B2.6–B8.4 | Pending | Start/completion integration, qualification and real-actor conformance remain delivery requirements |
 | C1.1–C8.2 | Pending | 19 one-PR leaves; raw material only |
 | D1.1–D3.3 | Pending | 10 one-PR leaves; raw material only |
 | E | Deferred | Requires terminal-only gate |
