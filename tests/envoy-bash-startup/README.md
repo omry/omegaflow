@@ -1,9 +1,14 @@
-# B2.3.2 — Startup readiness and terminal leases
+# B2.3.2/B2.3.3 — Startup readiness and exact terminal restoration
 
 This isolated runner exercises the actual local Awsh startup module and socket
 helper against verified Reploy Bash candidates. It follows the approved PR48
 selected-child launch/reaper, then validates the two startup helper phases,
-complete pre-Readline termios readback, Readline entry and terminal topology.
+complete echo-off pre-Readline termios readback, Readline entry and terminal topology.
+The complete workload reference remains separate from the active Readline state.
+The isolated supervisor invokes the restoration primitive after readiness and
+compares every field with that reference. Normal and initially raw/no-echo
+starts retain their selected flags and control characters. This invocation tests
+the primitive; B2.6 still owns its actual start-helper integration and ordering.
 Private `ready` follows inherited-slave closure and a fresh descriptor-free
 terminal-control lease and drain. Helpers emit no terminal bytes; the rcfile's
 visible primary prompt is empty.
@@ -45,6 +50,15 @@ Nominal runs also prove that a rejected terminal lease closes its descriptor. A 
 helper zombie is reap evidence for the future Envoy/subreaper owner, not a live
 helper or an Awsh operation-cleanup claim. The blocked writer retains exactly
 its deliberately prefilled bytes and publishes no readiness frame.
+
+Each candidate also runs three starts with raw/no-echo terminal input and altered
+control characters. The retained logs include the complete workload, active
+Readline and restored states. Restoration rejects a missing phase deadline and
+cancelled context without publishing helper success. The separate real-PTY lease
+suite checks wrong session/foreground, kernel-denied TCSETS or TCGETS, normalized
+readback mismatch, expired/cancelled context, cancellation before a lease returns,
+and descriptor closure/non-inheritance. Kernel faults use seccomp only in isolated
+test processes; no production injection or alternate terminal backend exists.
 
 The test-only supervisor supplies a deadline and candidate signals. Production
 `Start` requires an exact qualified generated-table entry and the caller's
