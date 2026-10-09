@@ -70,9 +70,14 @@ func (t *Terminal) snapshot(ctx context.Context) (state syscall.Termios, err err
 }
 
 func (t *Terminal) prepareReadline(ctx context.Context, reference syscall.Termios) error {
+	expected := reference
+	expected.Lflag |= syscall.ICANON
+	expected.Lflag &^= syscall.ECHO
+	return t.restore(ctx, expected)
+}
+
+func (t *Terminal) restore(ctx context.Context, expected syscall.Termios) error {
 	return t.lease(ctx, func(fd int) error {
-		expected := reference
-		expected.Lflag |= syscall.ICANON | syscall.ECHO
 		if err := ioctl(fd, syscall.TCSETS, unsafe.Pointer(&expected)); err != nil {
 			return err
 		}
