@@ -1,0 +1,155 @@
+[
+  {
+    "id": "B2.5-minimum",
+    "source": "#"
+  },
+  {
+    "id": "B2.5-maximum",
+    "maximum": true
+  },
+  {
+    "id": "B2.5-unicode-no-redisplay",
+    "source": "# SOURCE_MUST_NOT_REDISPLAY\nprintf '%s\\n' 'αβé🙂'",
+    "output": [
+      "αβé🙂\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-preceding-status",
+    "status": 17,
+    "source": "printf 'PRIOR:%s\\n' \"$?\"",
+    "output": [
+      "PRIOR:17\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-history-vi",
+    "status": 255,
+    "history": "on",
+    "editing": "vi",
+    "source": "printf 'PRIOR:%s\\n' \"$?\"; [[ ${-#*H} != \"$-\" && -o vi ]] && printf 'MODE_OK\\n'",
+    "output": [
+      "PRIOR:255\r\n",
+      "MODE_OK\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-multiline-quotes-comments",
+    "source": "printf '%s\\n' '} \"quoted\"'\n# SOURCE_MUST_NOT_REDISPLAY\nprintf 'SECOND\\n'\n",
+    "output": [
+      "} \"quoted\"\r\n",
+      "SECOND\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-heredoc",
+    "source": "cat <<'EOF'\n} literal\nEOF",
+    "output": [
+      "} literal\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-backslash-boundary",
+    "source": "printf 'BOUNDARY\\n' \\\n",
+    "output": [
+      "BOUNDARY\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-colon-function-zero",
+    "source": ":() { printf 'BAD_COLON\\n'; }; set -e; true",
+    "result": 0,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-colon-function-nonzero",
+    "source": ":() { printf 'BAD_COLON\\n'; }; set -e; false && printf BAD",
+    "result": 1,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-colon-disabled",
+    "source": "enable -n :; set -e; (exit 255) && printf BAD",
+    "result": 255,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-set-disabled",
+    "setup": "builtin enable -n set",
+    "source": "builtin enable -p | /bin/grep '^enable set$' && printf BAD; printf 'SET_STILL_DISABLED\\n'",
+    "output": [
+      "SET_STILL_DISABLED\r\n"
+    ],
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-partial-reply",
+    "fault": "partial-reply"
+  },
+  {
+    "id": "B2.5-trailing-reply",
+    "fault": "trailing-reply"
+  },
+  {
+    "id": "B2.5-empty-reply",
+    "fault": "empty-reply"
+  },
+  {
+    "id": "B2.5-readonly-line",
+    "setup": "builtin readonly READLINE_LINE",
+    "fault": "readonly-line"
+  },
+  {
+    "id": "B2.5-readonly-point",
+    "setup": "builtin readonly READLINE_POINT",
+    "fault": "readonly-point"
+  },
+  {
+    "id": "B2.5-missing-marker",
+    "fault": "missing-marker",
+    "helper_fault": {
+      "stdout": "}",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-malformed-marker",
+    "fault": "malformed-marker",
+    "helper_fault": {
+      "stdout": "}y",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-duplicate-marker",
+    "fault": "duplicate-marker",
+    "helper_fault": {
+      "stdout": "}xx",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-empty-success",
+    "fault": "empty-success",
+    "helper_fault": {
+      "stdout": "",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-nonzero-helper",
+    "fault": "nonzero-helper",
+    "helper_fault": {
+      "stdout": "}x",
+      "status": 1
+    }
+  }
+]
