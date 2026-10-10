@@ -324,7 +324,13 @@ func validateNested(v reflect.Value) error {
 	seen := map[string]bool{}
 	for i := 0; i < v.Len(); i++ {
 		entry := v.Index(i)
-		if err := validateFields(entry); err != nil {
+		if plan, ok := entry.Interface().(ResolvedInspection); ok {
+			// Private plans precede filesystem inspection. Preserve lexical path
+			// segments: cleaning link/../file can change the selected target.
+			if !identifier.MatchString(plan.InspectionID) || !oneOf(plan.Kind, "file_exists", "produces") || !bounded(plan.ResolvedPath, MaxPathBytes, true) {
+				return fmt.Errorf("invalid private inspection plan")
+			}
+		} else if err := validateFields(entry); err != nil {
 			return err
 		}
 		id := entry.FieldByName("InspectionID").String()

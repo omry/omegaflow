@@ -170,7 +170,7 @@ func TestPrivateNestedLimits(t *testing.T) {
 	if _, err := EncodePrivate(completed, AwshToEnvoy); err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range []ResolvedInspection{{InspectionID: "i", Kind: "file_exists", ResolvedPath: "/x", OutputID: "o"}, {InspectionID: "i", Kind: "produces", ResolvedPath: "/x"}, {InspectionID: "i", Kind: "file_exists", ResolvedPath: "/x/"}} {
+	for _, entry := range []ResolvedInspection{{InspectionID: "i", Kind: "file_exists", ResolvedPath: "/x", OutputID: "o"}, {InspectionID: "i", Kind: "produces", ResolvedPath: "/x"}, {InspectionID: "i", Kind: "file_exists", ResolvedPath: "relative"}} {
 		c := completed
 		c.Inspections = []ResolvedInspection{entry}
 		if _, err := EncodePrivate(c, AwshToEnvoy); err == nil {
