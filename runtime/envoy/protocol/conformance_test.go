@@ -634,7 +634,8 @@ func buildExpandedContracts() map[string]expandedContractRule {
 	ok(2, "C001", "unknown-diagnostic", "unknown-code-retained", "", "diagnostic-only", "diagnostic-frame-validated unknown-code-retained diagnostic-not-operation-result")
 	// A2.4/A2.6 reserved-state mediation; selected-build observations stay pending.
 	bind(3, "C021", "redefine-awsh unset-awsh", "readonly-awsh-preserved", "", nil, 0, "", "source-mutation-request readonly-awsh-guard readonly-awsh-preserved")
-	bad(4, "C022", "combined-options multiple-names mixed-reserved-nonreserved", "whole-request-rejected", "argv-expanded complete-preflight whole-request-rejected reserved-state-canonical")
+	ok(4, "C022", "combined-options", "query-preserved", "ordinary-result", "ordinary-selected-Bash-result", "argv-expanded complete-preflight query reserved-state-canonical")
+	bad(4, "C022", "multiple-names mixed-reserved-nonreserved", "whole-request-rejected", "argv-expanded complete-preflight whole-request-rejected reserved-state-canonical")
 	ok(5, "C022", "reserved-query", "query-preserved", "ordinary-result", "ordinary-selected-Bash-result", "ordinary-request query reserved-state-canonical")
 	ok(5, "C022", "numeric-CHLD-query numeric-INT-query", "selected-build-numeric-query-preserved", "ordinary-result", "ordinary-selected-Bash-result", "ordinary-request selected-build-numeric-query reserved-state-canonical")
 	ok(5, "C022", "positive-enable", "positive-enable-preserved", "ordinary-result", "ordinary-selected-Bash-result", "ordinary-request positive-enable reserved-state-canonical")
