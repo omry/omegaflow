@@ -1,4 +1,4 @@
-# Fixed adapter entry state. Active start and completion arrive in B2.6–B2.7.
+# Fixed adapter entry state. Completion validation arrives in B2.7.
 builtin unset POSIXLY_CORRECT
 builtin readonly POSIXLY_CORRECT
 # Declaring this special variable resets selected-Bash parser defaults; install
@@ -11,7 +11,8 @@ builtin trap - CHLD INT DEBUG ERR RETURN
 builtin enable builtin enable exec jobs kill return trap wait
 PS1=''
 PS2=''
-PS0=''
+PS0='$(__OMEGAFLOW_AWSH_PREPARE)'
+builtin readonly PS0
 
 # No source-visible return, including a broken or unexpectedly returning helper.
 # Disable job notification so the stopped helper cannot release foreground Bash.
@@ -174,6 +175,16 @@ __OMEGAFLOW_AWSH_ENTER() {
     builtin return "$1"
 }
 __OMEGAFLOW_AWSH_RETURN() { builtin return "$1"; }
+__OMEGAFLOW_AWSH_PREPARE() {
+    if __OMEGAFLOW_AWSH_PREPARED=$(builtin trap - EXIT; /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock start-prepared && builtin enable printf && builtin printf x); then
+        [[ ${#__OMEGAFLOW_AWSH_PREPARED} == 2 && -z ${__OMEGAFLOW_AWSH_PREPARED#xx} ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+} 2>/dev/null
+__OMEGAFLOW_AWSH_START_RELEASED() {
+    builtin kill -s USR1 -- "$PPID" || __OMEGAFLOW_AWSH_FAIL_STOP
+} 2>/dev/null
 __OMEGAFLOW_AWSH_LOAD() {
     if __OMEGAFLOW_AWSH_BUFFER=$(builtin trap - EXIT; /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock source && builtin enable printf && builtin printf x); then
         __OMEGAFLOW_AWSH_MARKER=${__OMEGAFLOW_AWSH_BUFFER: -2:1}
@@ -190,7 +201,7 @@ __OMEGAFLOW_AWSH_LOAD() {
         __OMEGAFLOW_AWSH_FAIL_STOP
     fi
 }
-builtin readonly -f __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD
+builtin readonly -f __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD __OMEGAFLOW_AWSH_PREPARE __OMEGAFLOW_AWSH_START_RELEASED
 builtin bind -m emacs-standard -x '"\C-x\C-a":__OMEGAFLOW_AWSH_LOAD'
 builtin bind -m emacs-standard '"\C-x\C-b":"\C-x\C-a\C-m"'
 __OMEGAFLOW_AWSH_PROMPT() {

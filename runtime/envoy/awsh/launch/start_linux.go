@@ -40,6 +40,9 @@ type Session struct {
 	ready               bool
 	closing             bool
 	stopOnce, closeOnce sync.Once
+	startMu             sync.Mutex
+	active              *startRecord
+	startFailed         bool
 }
 
 // Start admits only a qualified, exact build. No executable supervise command

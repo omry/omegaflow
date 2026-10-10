@@ -35,9 +35,10 @@ existing startup-form prompt exchange. Before accepting `prompt_ready`, that
 peer retains the complete workload terminal state, enables ICANON, clears ECHO,
 and requires exact readback. A2.10 and B2.3.3 own this approved transition in the
 actual startup module; its affected startup suite runs separately.
-`START_RELEASED` is an explicit test-only
-no-op: B2.6 owns its signal and active-operation machinery, and B2.7 owns the
-completion handoff. This test cannot prove those absent implementations.
+`START_RELEASED` uses the real builtin signal and the real PS0 helper. This
+synthetic peer restores workload termios before accepting preparation and observes
+one release signal. B2.6 separately proves Awsh private start ordering; B2.7 owns
+the completion handoff and descendant cleanup.
 
 The 17 real helper cases cover minimum/maximum source, UTF-8, preceding status,
 history and vi restoration, comments, quotes, heredocs, source-boundary LF,
