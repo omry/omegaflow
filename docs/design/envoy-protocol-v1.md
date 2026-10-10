@@ -10,13 +10,13 @@ order and evidence ownership and is merged as PR 39 at
 `31e9a497bca99139e00ef64c2a4c4042a4b89e78`. A2.9 bounds delivery to one PR
 per numbered implementation leaf and is merged as PR 40 at
 `e10e61614f25c06da12fba2610803126390be1e7`. Neither changes a wire form or
-runtime requirement. B1 and B2.1–B2.4 have approved partial implementation.
-The current A2.10 amendment corrects echo-off Readline entry and exact workload
-terminal-state restoration; its approval and owning B2.3.3 correction remain
-pending. The complete production execution path and selected-Bash qualification
-remain pending. It is an
-internal OmegaFlow release contract. Reploy
-provides the private network, endpoint coordinates, bootstrap attachment, and
+runtime requirement. B1 and B2.1–B2.7 have approved partial implementation,
+including A2.10/PR51, B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56,
+and the B1.2.1/PR55 private-codec and B1.3.1/PR57 corpus successors.
+A2.11's manifest-bound qualification-output amendment and its owning B2.1.1
+correction remain pending. The complete production execution path and
+selected-Bash qualification remain pending. It is an internal OmegaFlow
+release contract. Reploy provides the private network, endpoint coordinates, bootstrap attachment, and
 authoritative lifecycle; it does not transport or interpret these messages.
 
 Version 1 covers:
@@ -2605,14 +2605,36 @@ child with this exact argument sequence:
 ```
 
 The explicit manifested rcfile replaces the user interactive rcfile. OmegaFlow
-ships one versioned Bash-build table generated into host preparation code,
-Envoy, and Awsh from the same canonical source. It is keyed by the lowercase
-SHA-256 digest of `/bin/bash` and records that build's compiled system-wide
+ships one versioned Bash-build table and generates host preparation, Envoy,
+and Awsh schema consumers from the same canonical schema. It is keyed by the
+lowercase SHA-256 digest of `/bin/bash` and records that build's compiled system-wide
 interactive rc path or `none`, deterministic startup-export transformation,
 catchable signal inventory, Readline behavior required by the startup
 handshake, the loader/submit macro's fixed keymap, no-redisplay, UTF-8 cursor,
 and maximum-canonical-line behavior, and the exact bounded startup PTY byte
 string through the first `tcdrain`.
+
+The qualified Bash-build table is generated as a separate readable regular
+runtime payload at `/omegaflow-runtime/etc/bash-builds.json`, covered by the
+runtime manifest and the read-only runtime mount. Generated Envoy and Awsh
+consumer code reads only that fixed path, validates its manifest-bound bytes
+and strict qualified-entry schema, and independently selects the exact resolved
+Bash entry. Host preparation consumes the same canonical table. Neither table
+contents nor their digest are compiled into Envoy or Awsh, including generated
+source comments or build identity inputs. Runtime consumer code is generated
+from the table schema; stale schema consumers and stale generated table data
+are rejected separately.
+
+Qualification binds the complete actual Awsh executable, fixed Bash rcfile,
+empty inputrc, terminal entry, and complete selected locale tree. The generated
+qualified table is an output of qualification, not an adapter input to its own
+receipt. Its manifest digest is checked independently; this does not exempt
+any executable or behavioral asset from exact-byte qualification. Any change
+to a bound adapter input requires rerunning the affected qualification before
+support is retained, including changes made by later runtime leaves. No new
+wire message, actor, timer, configurable table path, or Reploy capability is
+introduced by this artifact separation.
+
 Preparation requires one exact table entry. Envoy re-hashes `/bin/bash` and,
 when the entry names a system rc path, requires that path to be absent. An
 Awsh re-hashes the same resolved regular executable and selects the same entry
@@ -2651,7 +2673,10 @@ LOCPATH=/omegaflow-runtime/lib/locale
 ```
 
 Before starting Awsh, Envoy validates the mounted runtime manifest and the
-actual read-only assets. `/omegaflow-runtime/etc/awsh-bashrc` must be a readable
+actual read-only assets. The fixed regular
+`/omegaflow-runtime/etc/bash-builds.json` must match the manifest and pass the
+strict qualified-table validation defined above.
+`/omegaflow-runtime/etc/awsh-bashrc` must be a readable
 regular file whose digest matches the manifest and whose fixed content installs
 only the adapter startup hooks defined here, including the output-empty primary
 prompt invariant; it sources no other file and resolves no command through
