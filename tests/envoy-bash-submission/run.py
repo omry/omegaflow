@@ -73,14 +73,14 @@ def descendants(pid):
                     children.append((int(entry.name), fields[0]))
             except (FileNotFoundError, ProcessLookupError):
                 pass
-    return children
+    return children + [descendant for child, _ in children for descendant in descendants(child)]
 
 
 def readline(case, directory):
     """Actual interactive Bash + actual helper; only its Awsh peer is synthetic.
 
-    B2.6 owns START_RELEASED. Its test-only no-op replacement admits no signal,
-    private/public start or completion-cleanup claim from this proof.
+    The peer releases the real PS0 helper and observes the real signal, but
+    does not implement Awsh private/public ordering or completion cleanup.
     """
     directory.mkdir()
     source = case.get('source', '#')
@@ -89,8 +89,6 @@ def readline(case, directory):
     status = case.get('status', 0)
     history, editing = case.get('history', 'off'), case.get('editing', 'emacs')
     script = RCFILE.read_text()
-    script += '\n__OMEGAFLOW_AWSH_START_RELEASED() { builtin return 0; }\n'
-    script += 'builtin readonly -f __OMEGAFLOW_AWSH_START_RELEASED\n'
     script += f'builtin set {"-H" if history == "on" else "+H"} -o {editing}\n'
     script += case.get('setup', '') + '\n'
     script += f'__OMEGAFLOW_AWSH_RETURN {status}\n'
@@ -100,6 +98,8 @@ def readline(case, directory):
     SOCKET.unlink(missing_ok=True)
     master, slave = pty.openpty()
     raw, requests, terminal_states, error, proc = bytearray(), [], [], None, None
+    releases = []
+    previous_signal = signal.signal(signal.SIGUSR1, lambda *_: releases.append(time.monotonic()))
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(SOCKET))
     listener.listen(4)
@@ -177,6 +177,24 @@ def readline(case, directory):
                     pass
                 else:
                     reply(connection, fields)
+        if case.get('prepared_wire_fault'):
+            connection, _ = listener.accept()
+            with connection:
+                connection.settimeout(5)
+                _, fields = receive(connection)
+                requests.append(fields)
+                if fields != ['awsh-helper-v1', 'start_prepared']:
+                    raise AssertionError('unexpected prepared request')
+                fault = case['prepared_wire_fault']
+                if fault == 'partial':
+                    connection.sendall(b'\0\0\0\x20short')
+                elif fault == 'trailing':
+                    reply(connection, ['awsh-helper-v1', 'accepted'])
+                    connection.sendall(b'!')
+                elif fault == 'wrong-phase':
+                    reply(connection, ['awsh-helper-v1', 'source'])
+                elif fault != 'empty':
+                    raise AssertionError('unknown prepared wire fault')
         if case.get('fault'):
             deadline = time.monotonic() + 5
             stopped = None
@@ -187,15 +205,43 @@ def readline(case, directory):
                     break
                 time.sleep(.01)
             if stopped is None:
-                raise AssertionError('loader failure returned instead of fail-stop')
+                raise AssertionError('PS0 failure returned instead of fail-stop' if case.get('prepared_fault') else 'loader failure returned instead of fail-stop')
+            drain(master, raw)
+            if case.get('prepared_fault'):
+                pending = bytes(raw[before:])
+                for control in [b'\x1b[?2004h', b'\x1b[?2004l', b'\x1b[K', b'\r', b'\n']:
+                    pending = pending.replace(control, b'')
+                if pending:
+                    raise AssertionError('source/frame/PS0 bytes after prepared helper failure')
             os.kill(stopped, signal.SIGCONT)
             time.sleep(.03)
             if (stopped, 'T') not in descendants(proc.pid):
                 raise AssertionError('fail-stop helper returned after SIGCONT')
         else:
+            connection, _ = listener.accept()
+            with connection:
+                connection.settimeout(5)
+                data, fields = receive(connection)
+                requests.append(fields)
+                if fields != ['awsh-helper-v1', 'start_prepared']:
+                    raise AssertionError('unexpected prepared helper request')
+                if releases:
+                    raise AssertionError('release signal before prepared acceptance')
+                drain(master, raw)
+                pending = bytes(raw[before:])
+                for control in [b'\x1b[?2004h', b'\x1b[?2004l', b'\x1b[K', b'\r', b'\n']:
+                    pending = pending.replace(control, b'')
+                if pending:
+                    raise AssertionError('source/frame/PS0 output before prepared acceptance')
+                termios.tcsetattr(master, termios.TCSANOW, terminal_states[-1]['workload'])
+                if termios.tcgetattr(master) != terminal_states[-1]['workload']:
+                    raise AssertionError('workload restoration mismatch')
+                reply(connection, ['awsh-helper-v1', 'accepted'])
             prompt([str(case.get('result', 0)), case.get('final_history', history),
                     case.get('final_editing', editing)])
             time.sleep(.03)
+            if len(releases) != 1:
+                raise AssertionError('missing or duplicate release signal')
             drain(master, raw)
             output = bytes(raw[before:])
             for expected in case.get('output', []):
@@ -225,6 +271,7 @@ def readline(case, directory):
         drain(master, raw)
         os.close(master)
         listener.close()
+        signal.signal(signal.SIGUSR1, previous_signal)
         SOCKET.unlink(missing_ok=True)
         (directory / 'terminal.raw').write_bytes(raw)
         save(directory / 'observations.json', {
@@ -235,7 +282,7 @@ def readline(case, directory):
                 {name: attrs[:6] + [[value[0] if isinstance(value, bytes) else value
                                     for value in attrs[6]]]
                  for name, attrs in state.items()} for state in terminal_states],
-            'error': error, 'qualified': False, 'start_release': 'test-only no-op',
+            'error': error, 'qualified': False, 'start_release': 'real PS0 helper and builtin signal; synthetic peer', 'release_signals': len(releases),
             'completion': 'startup-form peer; no descendant cleanup proof'})
 
 
