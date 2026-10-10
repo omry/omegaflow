@@ -1,4 +1,4 @@
-# Fixed adapter entry state. Completion validation arrives in B2.7.
+# Fixed adapter entry state and ordinary completion handoff.
 builtin unset POSIXLY_CORRECT
 builtin readonly POSIXLY_CORRECT
 # Declaring this special variable resets selected-Bash parser defaults; install
@@ -204,17 +204,91 @@ __OMEGAFLOW_AWSH_LOAD() {
 builtin readonly -f __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD __OMEGAFLOW_AWSH_PREPARE __OMEGAFLOW_AWSH_START_RELEASED
 builtin bind -m emacs-standard -x '"\C-x\C-a":__OMEGAFLOW_AWSH_LOAD'
 builtin bind -m emacs-standard '"\C-x\C-b":"\C-x\C-a\C-m"'
+# The substitution becomes the exact peer process; no shell child remains.
+__OMEGAFLOW_AWSH_COMPLETION_STATE() {
+    builtin trap - EXIT
+    builtin exec /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$@"
+}
+# Validate in an isolated shell so temporary ordinary builtin enablement cannot
+# change the persistent workload. Trap values are captured in the parent: Bash
+# resets non-ignored dispositions when entering an ordinary subshell.
+__OMEGAFLOW_AWSH_VALIDATE() (
+    builtin trap - EXIT
+    [[ -z ${POSIXLY_CORRECT+x} && ${POSIXLY_CORRECT@a} == *r* &&
+       ${PS0@a} == *r* && $PS0 == '$(__OMEGAFLOW_AWSH_PREPARE)' &&
+       ${PROMPT_COMMAND@a} == *r* && $PROMPT_COMMAND == __OMEGAFLOW_AWSH_PROMPT &&
+       -z $PS1 && -z $PS2 && $1 == "$2" ]] || builtin return 1
+    __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin enable -p)$'\n'
+    for __OMEGAFLOW_AWSH_NAME in builtin enable exec jobs kill return trap wait; do
+        [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable '"$__OMEGAFLOW_AWSH_NAME"$'\n'* ]] || builtin return 1
+    done
+    builtin enable declare bind shopt
+    builtin shopt -u nocasematch
+    [[ -z $(builtin declare -F builtin command exec jobs kill return wait) ]] || builtin return 1
+    for __OMEGAFLOW_AWSH_NAME in __OMEGAFLOW_AWSH_FAIL_STOP __OMEGAFLOW_AWSH_TRAP_PREFLIGHT __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD __OMEGAFLOW_AWSH_PREPARE __OMEGAFLOW_AWSH_START_RELEASED __OMEGAFLOW_AWSH_PROMPT __OMEGAFLOW_AWSH_COMPLETION_STATE __OMEGAFLOW_AWSH_VALIDATE trap enable awsh; do
+        [[ $(builtin declare -p -F "$__OMEGAFLOW_AWSH_NAME") == "declare -fr $__OMEGAFLOW_AWSH_NAME" ]] || builtin return 1
+    done
+    [[ ! -o histexpand && ! -o errexit && ! -o errtrace && ! -o functrace &&
+       ! -o posix && ! -o noexec && ! -o verbose && ! -o xtrace && -o monitor && -o emacs && ! -o vi ]] || builtin return 1
+    builtin shopt -q interactive_comments || builtin return 1
+    if builtin shopt -q expand_aliases || builtin shopt -q extdebug || builtin shopt -q extglob; then builtin return 1; fi
+    __OMEGAFLOW_AWSH_BINDINGS=$(builtin bind -m emacs-standard -X)
+    [[ $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-a": "__OMEGAFLOW_AWSH_LOAD"'* || $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-a" "__OMEGAFLOW_AWSH_LOAD"'* ]] || builtin return 1
+    __OMEGAFLOW_AWSH_BINDINGS=$(builtin bind -m emacs-standard -s)
+    [[ $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-b": "\C-x\C-a\C-m"'* ]] || builtin return 1
+)
 __OMEGAFLOW_AWSH_PROMPT() {
-    # local is an ordinary workload builtin and may have been disabled.
-    __OMEGAFLOW_AWSH_STATUS=$? __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
+    # Save status, verify reserved traps and ignore INT before state capture.
+    __OMEGAFLOW_AWSH_STATUS=$?
+    if [[ ${__OMEGAFLOW_AWSH_STARTED-} == 1 ]]; then
+        [[ -z $(builtin declare -F builtin command) && -z $(command builtin declare -F builtin command) ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        [[ -z $__OMEGAFLOW_AWSH_TRAPS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        builtin trap '' INT
+    fi
+    __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
     [[ ${-#*H} != "$-" ]] && __OMEGAFLOW_AWSH_HISTORY=on
     [[ -o emacs || -o vi ]] || __OMEGAFLOW_AWSH_FAIL_STOP
     [[ -o vi ]] && __OMEGAFLOW_AWSH_EDITING=vi
-    __OMEGAFLOW_AWSH_SET +H -o emacs
-    /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
-    PS1=''
-    /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready || __OMEGAFLOW_AWSH_FAIL_STOP
-}
-builtin readonly -f __OMEGAFLOW_AWSH_FAIL_STOP __OMEGAFLOW_AWSH_TRAP_PREFLIGHT __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT __OMEGAFLOW_AWSH_PROMPT trap enable awsh
+    if [[ ${__OMEGAFLOW_AWSH_STARTED-} == 1 ]]; then
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        __OMEGAFLOW_AWSH_SET +H +e +E +T +o posix +n +v +x -m -o emacs
+        __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin trap - EXIT; builtin enable -p)$'\n'
+        builtin enable shopt
+        builtin shopt -u expand_aliases extdebug extglob
+        builtin shopt -s interactive_comments
+        [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable shopt\n'* ]] || builtin enable -n shopt
+        __OMEGAFLOW_AWSH_VALIDATE "$__OMEGAFLOW_AWSH_TRAPS" "trap -- '' SIGINT" || __OMEGAFLOW_AWSH_FAIL_STOP
+        # Deferred permitted traps must observe the workload's option state.
+        # Canonical validation above ran before restoring these two fields.
+        __OMEGAFLOW_AWSH_ENTER 0 "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING"
+        if __OMEGAFLOW_AWSH_REPLY=$(__OMEGAFLOW_AWSH_COMPLETION_STATE "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING"); then
+            [[ -z $__OMEGAFLOW_AWSH_REPLY ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        else
+            __OMEGAFLOW_AWSH_FAIL_STOP
+        fi
+        builtin trap - INT
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        [[ -z $__OMEGAFLOW_AWSH_TRAPS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        if builtin wait; then ((1)); else ((1)); fi
+        __OMEGAFLOW_AWSH_JOBS=$(builtin trap - EXIT; builtin jobs -p)
+        [[ -z $__OMEGAFLOW_AWSH_JOBS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        # Capture cleanup trap changes before preparing canonical Readline state.
+        __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
+        [[ ${-#*H} != "$-" ]] && __OMEGAFLOW_AWSH_HISTORY=on
+        [[ -o emacs || -o vi ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        [[ -o vi ]] && __OMEGAFLOW_AWSH_EDITING=vi
+        __OMEGAFLOW_AWSH_SET +H -o emacs
+        __OMEGAFLOW_AWSH_VALIDATE "$__OMEGAFLOW_AWSH_TRAPS" '' || __OMEGAFLOW_AWSH_FAIL_STOP
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_SET +H -o emacs
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
+        PS1=''
+        __OMEGAFLOW_AWSH_STARTED=1
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready || __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+} 2>/dev/null
+builtin readonly -f __OMEGAFLOW_AWSH_FAIL_STOP __OMEGAFLOW_AWSH_TRAP_PREFLIGHT __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT __OMEGAFLOW_AWSH_PROMPT __OMEGAFLOW_AWSH_COMPLETION_STATE __OMEGAFLOW_AWSH_VALIDATE trap enable awsh
 PROMPT_COMMAND=__OMEGAFLOW_AWSH_PROMPT
 builtin readonly PROMPT_COMMAND
