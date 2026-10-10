@@ -14,17 +14,22 @@ import (
 
 const SocketPath = "/run/omegaflow/session/bash/helper.sock"
 
-// StartupCommand implements only startup arities; later helper phases belong
-// to their owning implementation leaves. The caller emits no terminal output.
+// StartupCommand serves startup and the state-bearing completion prompt.
+// Every successful invocation emits no terminal output.
 func StartupCommand(args []string) error {
 	if len(args) < 2 || args[0] != "--socket="+SocketPath {
 		return fmt.Errorf("invalid helper invocation")
 	}
 	var request protocol.HelperMessage
+	phase := protocol.HelperStartup
 	switch args[1] {
-	case "prompt-state":
+	case "prompt-state", "prompt-ready":
+		if args[1] == "prompt-ready" && len(args) == 2 {
+			request = protocol.HelperStartupReady{}
+			break
+		}
 		if len(args) != 5 {
-			return fmt.Errorf("invalid prompt-state arity")
+			return fmt.Errorf("invalid prompt arity")
 		}
 		status, err := strconv.ParseInt(args[2], 10, 64)
 		if err != nil || strconv.FormatInt(status, 10) != args[2] {
@@ -34,21 +39,21 @@ func StartupCommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		request = protocol.HelperPromptState{PromptState: state}
-	case "prompt-ready":
-		if len(args) != 2 {
-			return fmt.Errorf("invalid startup prompt-ready arity")
+		if args[1] == "prompt-state" {
+			request = protocol.HelperPromptState{PromptState: state}
+		} else {
+			request, phase = protocol.HelperCompletionReady{PromptState: state}, protocol.HelperCompletion
 		}
-		request = protocol.HelperStartupReady{}
 	default:
 		return fmt.Errorf("unsupported helper request")
 	}
+
 	// The actor supervises the blocked helper under its current phase deadline.
 	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: SocketPath, Net: "unix"})
 	if err != nil {
 		return err
 	}
-	reply, err := Exchange(c, protocol.HelperStartup, request)
+	reply, err := Exchange(c, phase, request)
 	if err != nil {
 		return err
 	}
