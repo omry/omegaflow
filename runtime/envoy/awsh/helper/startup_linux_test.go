@@ -8,7 +8,9 @@ import (
 
 func TestStartupHelperArguments(t *testing.T) {
 	for _, args := range [][]string{nil, {"wrong", "prompt-ready"}, {"--socket=" + SocketPath},
-		{"--socket=" + SocketPath, "prompt-ready", "extra"}, {"--socket=" + SocketPath, "prompt-state"},
+		{"--socket=" + SocketPath, "prompt-ready", "extra"},
+		{"--socket=" + SocketPath, "prompt-ready", "01", "on", "emacs"},
+		{"--socket=" + SocketPath, "prompt-ready", "0", "bad", "emacs"}, {"--socket=" + SocketPath, "prompt-state"},
 		{"--socket=" + SocketPath, "prompt-state", "01", "on", "emacs"}, {"--socket=" + SocketPath, "gate", "id"},
 		{"--socket=" + SocketPath, "prompt-state", "256", "on", "emacs"}, {"--socket=" + SocketPath, "prompt-state", "0", "bad", "emacs"}} {
 		if err := StartupCommand(args); err == nil {
