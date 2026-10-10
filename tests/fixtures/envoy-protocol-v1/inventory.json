@@ -1,23 +1,23 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "92b6e08682daedcd75187093716f29d9acf4ff8fed6da409eacfd2d1ec84041e",
+  "source_sha256": "82f8115ad5f0cc45dbe3fdfda0386be3f01839542b52a11fb568f5d0ff9c6f57",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
-      "sha256": "bce30641c8ca98f4f759c3d44649a1df77d965dcbef9ed06ab7be57a3ed2b7b4"
+      "sha256": "49e7ca536c72a012de1a89f1a29833b891cf940775eadec0371bea17ca37ae68"
     },
     {
       "path": "docs/design/omegaflow-envoy-design.md",
-      "sha256": "16f8967deb708230b9b16434db6807dfb93f4752cc408aa2ca38666878def623"
+      "sha256": "f915bab4e0925687b929ad1b9116ccdefc07792eb4fcc87e82390340ec01fedd"
     },
     {
       "path": "docs/design/reploy-environments-design.md",
-      "sha256": "88ad4aecbe1880c269f37d3cb8ac5f8fd55a2e69778b73f2e2167aad2028aea4"
+      "sha256": "bd571dc7e55c05997cde51f6f4ff2f193b9023293fbaa41eea7a929a136b5a16"
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "92b6e08682daedcd75187093716f29d9acf4ff8fed6da409eacfd2d1ec84041e"
+      "sha256": "82f8115ad5f0cc45dbe3fdfda0386be3f01839542b52a11fb568f5d0ff9c6f57"
     }
   ],
   "begin": "The cumulative suite covers inspection",
@@ -348,7 +348,7 @@
       "acceptance": "Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5"
     },
     "B2.8": {
-      "prerequisites": "B2.1–B2.7; verified Reploy build inputs and resolved /bin/bash placement",
+      "prerequisites": "B2.1–B2.7, B1.3.1, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement",
       "implementation": "Qualification measurements, supported-entry admission and generated consumer integration",
       "acceptance": "Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf"
     },
