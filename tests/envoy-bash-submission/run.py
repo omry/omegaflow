@@ -112,7 +112,7 @@ def readline(case, directory):
         os.close(slave)
         slave = None
 
-        def prompt(expected):
+        def prompt(expected, completion=False):
             workload = None
             for phase in ['prompt_state', 'prompt_ready']:
                 connection, _ = listener.accept()
@@ -129,9 +129,13 @@ def readline(case, directory):
                         if not Path(fields[5]).is_absolute() or not isinstance(json.loads(fields[7]), dict):
                             raise AssertionError('invalid prompt snapshot')
                         workload = termios.tcgetattr(master)
-                    elif len(fields) != 2:
+                    elif len(fields) != (8 if completion else 2):
                         raise AssertionError('invalid readiness arity')
                     else:
+                        if completion:
+                            if fields[2:5] != expected or not Path(fields[5]).is_absolute() or not isinstance(json.loads(fields[7]), dict):
+                                raise AssertionError('invalid final prompt snapshot')
+                            workload = termios.tcgetattr(master)
                         prepared = copy.deepcopy(workload)
                         prepared[3] = (prepared[3] | termios.ICANON) & ~termios.ECHO
                         termios.tcsetattr(master, termios.TCSANOW, prepared)
@@ -238,7 +242,7 @@ def readline(case, directory):
                     raise AssertionError('workload restoration mismatch')
                 reply(connection, ['awsh-helper-v1', 'accepted'])
             prompt([str(case.get('result', 0)), case.get('final_history', history),
-                    case.get('final_editing', editing)])
+                    case.get('final_editing', editing)], completion=True)
             time.sleep(.03)
             if len(releases) != 1:
                 raise AssertionError('missing or duplicate release signal')
@@ -283,7 +287,7 @@ def readline(case, directory):
                                     for value in attrs[6]]]
                  for name, attrs in state.items()} for state in terminal_states],
             'error': error, 'qualified': False, 'start_release': 'real PS0 helper and builtin signal; synthetic peer', 'release_signals': len(releases),
-            'completion': 'startup-form peer; no descendant cleanup proof'})
+            'completion': 'state-bearing final peer; no descendant cleanup proof'})
 
 
 MUTATIONS = {

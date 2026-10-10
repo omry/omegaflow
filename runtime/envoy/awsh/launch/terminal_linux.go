@@ -78,24 +78,32 @@ func (t *Terminal) prepareReadline(ctx context.Context, reference syscall.Termio
 
 func (t *Terminal) restore(ctx context.Context, expected syscall.Termios) error {
 	return t.lease(ctx, func(fd int) error {
-		if err := ioctl(fd, syscall.TCSETS, unsafe.Pointer(&expected)); err != nil {
-			return err
-		}
-		actual, err := termios(fd)
-		if err == nil && actual != expected {
-			err = fmt.Errorf("termios write mismatch")
-		}
-		return err
+		return restoreTermios(fd, expected)
 	})
+}
+
+func restoreTermios(fd int, expected syscall.Termios) error {
+	if err := ioctl(fd, syscall.TCSETS, unsafe.Pointer(&expected)); err != nil {
+		return err
+	}
+	actual, err := termios(fd)
+	if err == nil && actual != expected {
+		err = fmt.Errorf("termios write mismatch")
+	}
+	return err
 }
 
 func (t *Terminal) drain(ctx context.Context) error {
 	return t.lease(ctx, func(fd int) error {
-		// Linux tcdrain is TCSBRK with a nonzero argument, not a pointer.
-		_, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), 0x5409, 1)
-		if e != 0 {
-			return e
-		}
-		return nil
+		return drainTerminal(fd)
 	})
+}
+
+func drainTerminal(fd int) error {
+	// Linux tcdrain is TCSBRK with a nonzero argument, not a pointer.
+	_, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), 0x5409, 1)
+	if e != 0 {
+		return e
+	}
+	return nil
 }

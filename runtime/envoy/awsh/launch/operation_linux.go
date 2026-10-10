@@ -30,13 +30,14 @@ const (
 // This record owns only the adapter's start exchange. Envoy owns cancellation,
 // deadlines and teardown; completion owns the later return to an idle boundary.
 type startRecord struct {
-	ctx      context.Context
-	request  protocol.PrivateExecute
-	source   protocol.HelperSourceReply
-	phase    startPhase
-	prepared *net.UnixConn
-	stop     func() bool
-	done     chan struct{}
+	ctx                context.Context
+	request            protocol.PrivateExecute
+	source             protocol.HelperSourceReply
+	phase              startPhase
+	prepared           *net.UnixConn
+	preparedUnregister func()
+	stop               func() bool
+	done               chan struct{}
 }
 
 // BeginStart admits a complete execute at the previously validated empty
@@ -164,14 +165,19 @@ func (s *Session) AcceptStartHelper() error {
 	if err != nil {
 		return s.failStart(err)
 	}
-	s.mu.Lock()
-	s.peers = append(s.peers, c)
-	closing := s.closing
-	s.mu.Unlock()
+	unregister, closing := s.registerPeer(c)
 	if closing {
-		c.Close()
+		unregister()
+		_ = c.Close()
 		return s.failStart(fmt.Errorf("start interrupted"))
 	}
+	keep := false
+	defer func() {
+		if !keep {
+			_ = c.Close()
+			unregister()
+		}
+	}()
 	if err = c.SetDeadline(deadline); err != nil {
 		return s.failStart(err)
 	}
@@ -188,7 +194,7 @@ func (s *Session) AcceptStartHelper() error {
 		r.phase = startSourceDelivered
 		return nil
 	}
-	r.prepared, r.phase = c, startPrepared
+	r.prepared, r.preparedUnregister, r.phase, keep = c, unregister, startPrepared, true
 	if err = s.startWrite(protocol.PrivateStartPrepared{OperationID: r.request.OperationID}); err != nil {
 		return s.failStart(err)
 	}
@@ -226,7 +232,16 @@ func (s *Session) HandleStartControl(m protocol.PrivateMessage) error {
 		}
 		r.phase = startSignal // arm BEFORE the helper success can release Bash
 		if err := helper.Reply(r.prepared, protocol.HelperStartPrepared, protocol.HelperAccepted{}); err != nil {
+			if r.preparedUnregister != nil {
+				r.preparedUnregister()
+				r.preparedUnregister = nil
+			}
+			r.prepared = nil
 			return s.failStart(err)
+		}
+		if r.preparedUnregister != nil {
+			r.preparedUnregister()
+			r.preparedUnregister = nil
 		}
 		r.prepared = nil
 	default:
@@ -289,6 +304,17 @@ func (s *Session) startWrite(m protocol.PrivateMessage) error {
 
 func (s *Session) failStart(err error) error {
 	s.startFailed = true
+	if s.active != nil && s.active.preparedUnregister != nil {
+		if s.active.prepared != nil {
+			_ = s.active.prepared.Close()
+			s.active.prepared = nil
+		}
+		s.active.preparedUnregister()
+		s.active.preparedUnregister = nil
+	}
+	if s.completion != nil {
+		s.stopCompletion(err)
+	}
 	if s.active != nil && s.active.stop != nil {
 		_ = finishCancellation(s.active.ctx, s.active.stop, s.active.done, err)
 		s.active.stop = nil

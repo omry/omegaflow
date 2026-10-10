@@ -35,7 +35,7 @@ type Session struct {
 	result              *os.File
 	dirCreated          bool
 	mu                  sync.Mutex
-	peers               []*net.UnixConn
+	peers               map[*net.UnixConn]struct{}
 	helperFDs           []int
 	ready               bool
 	closing             bool
@@ -43,6 +43,7 @@ type Session struct {
 	startMu             sync.Mutex
 	active              *startRecord
 	startFailed         bool
+	completion          *completionRecord
 }
 
 // Start admits only a qualified, exact build. No executable supervise command
@@ -246,58 +247,61 @@ func (s *Session) startup(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		s.mu.Lock()
-		if s.closing {
-			s.mu.Unlock()
-			c.Close()
+		unregister, closing := s.registerPeer(c)
+		if closing {
+			unregister()
+			_ = c.Close()
 			return fmt.Errorf("startup closed")
 		}
-		s.peers = append(s.peers, c)
-		s.mu.Unlock()
-		if err = c.SetDeadline(deadline); err != nil {
-			return err
-		}
-		group, fd, err := s.helperIdentity(c)
-		if err != nil {
-			return err
-		}
-		s.mu.Lock()
-		if s.closing {
-			s.mu.Unlock()
-			syscall.Close(fd)
-			return fmt.Errorf("startup closed")
-		}
-		s.helperFDs = append(s.helperFDs, fd)
-		s.mu.Unlock()
-		m, err := helper.ReadRequest(c, protocol.HelperStartup)
-		if err != nil {
-			return err
-		}
-		s.terminal.foreground = group
-		if i == 0 {
-			state, ok := m.(*protocol.HelperPromptState)
-			if !ok {
-				return fmt.Errorf("expected startup prompt_state")
-			}
-			if err = validateLiveState(state.PromptState, s.ShellPID); err != nil {
+		err = func() error {
+			defer unregister()
+			defer c.Close()
+			if err := c.SetDeadline(deadline); err != nil {
 				return err
 			}
-			s.State = state.PromptState
-			reference, err = s.terminal.snapshot(ctx)
-			s.workloadTermios = reference
-		} else {
-			if _, ok := m.(*protocol.HelperStartupReady); !ok {
-				return fmt.Errorf("expected startup no-state prompt_ready")
+			group, fd, err := s.helperIdentity(c)
+			if err != nil {
+				return err
 			}
-			err = s.terminal.prepareReadline(ctx, reference)
-		}
+			s.mu.Lock()
+			if s.closing {
+				s.mu.Unlock()
+				syscall.Close(fd)
+				return fmt.Errorf("startup closed")
+			}
+			s.helperFDs = append(s.helperFDs, fd)
+			s.mu.Unlock()
+			m, err := helper.ReadRequest(c, protocol.HelperStartup)
+			if err != nil {
+				return err
+			}
+			s.terminal.foreground = group
+			if i == 0 {
+				state, ok := m.(*protocol.HelperPromptState)
+				if !ok {
+					return fmt.Errorf("expected startup prompt_state")
+				}
+				if err = validateLiveState(state.PromptState, s.ShellPID); err != nil {
+					return err
+				}
+				s.State = state.PromptState
+				reference, err = s.terminal.snapshot(ctx)
+				s.workloadTermios = reference
+			} else {
+				if _, ok := m.(*protocol.HelperStartupReady); !ok {
+					return fmt.Errorf("expected startup no-state prompt_ready")
+				}
+				err = s.terminal.prepareReadline(ctx, reference)
+			}
+			if err != nil {
+				return err
+			}
+			if err = s.verifyShell(); err != nil {
+				return err
+			}
+			return helper.Reply(c, protocol.HelperStartup, protocol.HelperAccepted{})
+		}()
 		if err != nil {
-			return err
-		}
-		if err = s.verifyShell(); err != nil {
-			return err
-		}
-		if err = helper.Reply(c, protocol.HelperStartup, protocol.HelperAccepted{}); err != nil {
 			return err
 		}
 	}
@@ -413,27 +417,13 @@ func (s *Session) verifyShell() error {
 }
 
 func (s *Session) helperIdentity(c *net.UnixConn) (group, fd int, err error) {
-	raw, err := c.SyscallConn()
+	pid, err := helperPeerPID(c)
 	if err != nil {
 		return 0, -1, err
-	}
-	var cred *syscall.Ucred
-	var inner error
-	err = raw.Control(func(n uintptr) {
-		cred, inner = syscall.GetsockoptUcred(int(n), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
-	})
-	if err != nil {
-		return 0, -1, err
-	}
-	if inner != nil {
-		return 0, -1, inner
-	}
-	if cred.Uid != uint32(os.Geteuid()) || cred.Pid <= 0 {
-		return 0, -1, fmt.Errorf("helper credentials mismatch")
 	}
 	// A pidfd holds only this startup helper's lifetime identity. It is not an
 	// operation-descendant census and cannot authorize operation lifecycle signals.
-	n, _, errno := syscall.Syscall(434, uintptr(cred.Pid), 0, 0)
+	n, _, errno := syscall.Syscall(434, uintptr(pid), 0, 0)
 	if errno != 0 {
 		return 0, -1, errno
 	}
@@ -443,12 +433,12 @@ func (s *Session) helperIdentity(c *net.UnixConn) (group, fd int, err error) {
 			syscall.Close(fd)
 		}
 	}()
-	parent, group, session, err := processIdentity(int(cred.Pid))
+	parent, group, session, err := processIdentity(pid)
 	if err != nil {
 		return 0, fd, err
 	}
-	exe, e := os.Readlink("/proc/" + strconv.Itoa(int(cred.Pid)) + "/exe")
-	if e != nil || parent != s.ShellPID || session != os.Getpid() || (group != s.ShellPID && group != int(cred.Pid)) || exe != "/omegaflow-runtime/bin/awsh" {
+	exe, e := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
+	if e != nil || parent != s.ShellPID || session != os.Getpid() || (group != s.ShellPID && group != pid) || exe != "/omegaflow-runtime/bin/awsh" {
 		return 0, fd, fmt.Errorf("helper identity mismatch")
 	}
 	if err = s.verifyShell(); err != nil {
@@ -457,16 +447,63 @@ func (s *Session) helperIdentity(c *net.UnixConn) (group, fd int, err error) {
 	return group, fd, nil
 }
 
+func helperPeerPID(c *net.UnixConn) (int, error) {
+	raw, err := c.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	var cred *syscall.Ucred
+	var inner error
+	err = raw.Control(func(n uintptr) {
+		cred, inner = syscall.GetsockoptUcred(int(n), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
+	})
+	if err != nil {
+		return 0, err
+	}
+	if inner != nil {
+		return 0, inner
+	}
+	if cred.Uid != uint32(os.Geteuid()) || cred.Pid <= 0 {
+		return 0, fmt.Errorf("helper credentials mismatch")
+	}
+	return int(cred.Pid), nil
+}
+
 func (s *Session) interruptIO() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.closing = true
-	if s.listener != nil {
-		s.listener.Close()
+	listener := s.listener
+	peers := make([]*net.UnixConn, 0, len(s.peers))
+	for c := range s.peers {
+		peers = append(peers, c)
 	}
-	for _, c := range s.peers {
+	s.peers = nil
+	s.mu.Unlock()
+	if listener != nil {
+		listener.Close()
+	}
+	for _, c := range peers {
 		c.Close()
 	}
+}
+
+func (s *Session) registerPeer(c *net.UnixConn) (func(), bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		return func() {}, true
+	}
+	if s.peers == nil {
+		s.peers = make(map[*net.UnixConn]struct{})
+	}
+	s.peers[c] = struct{}{}
+	return func() { s.unregisterPeer(c) }, false
+}
+
+func (s *Session) unregisterPeer(c *net.UnixConn) {
+	s.mu.Lock()
+	delete(s.peers, c)
+	s.mu.Unlock()
 }
 
 // Freeze only the selected Bash during failed startup, before closing helper
@@ -548,6 +585,12 @@ func (s *Session) stopStartup() {
 func (s *Session) Close() {
 	s.closeOnce.Do(func() {
 		s.stopStartup()
+		// Closing I/O first wakes an in-flight completion before taking its lock.
+		s.startMu.Lock()
+		if s.completion != nil {
+			s.stopCompletion(nil)
+		}
+		s.startMu.Unlock()
 		if s.Handoff.Slave > 2 {
 			syscall.Close(s.Handoff.Slave)
 		}
