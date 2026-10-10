@@ -80,12 +80,12 @@ interference. B2.7 owns immutable completion-state validation and its fatal
 bypass cases; B8.4 closes real-actor failure evidence. This leaf does not claim
 those proofs or add wrappers around `builtin` and `command`.
 
-An existing static discrepancy remains explicit: `B1-C022-combined-options`
-contains the query `trap -p CHLD INT` but expects whole-request rejection. The
-approved protocol permits that query. This runner preserves the literal input,
-proves native query behavior and records `pending-owning-correction` for the
-static expectation. The approved B1 fixture is unchanged; its correction must
-receive its own owning successor review before cumulative corpus closeout.
+The B1.3.1 owning successor corrects `B1-C022-combined-options` to the approved
+ordinary query outcome. Its literal `trap -p CHLD INT` input is preserved, and
+this runner compares its status and output with native selected-Bash behavior.
+The static oracle still rejects actual reserved and mixed-target mutations.
+Approved PR45 remains immutable; B1.3.1 changes only the successor corpus and
+its pending-correction annotations. Build qualification remains with B2.8.
 
 Actual Awsh/Bash startup is checked separately with
 `tests/envoy-bash-startup/run.py` after this trusted rcfile change. Source frames,

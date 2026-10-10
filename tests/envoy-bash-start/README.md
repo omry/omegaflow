@@ -45,7 +45,8 @@ B1-C032 maps to split entry versus authored status; B1-C033 reuses strict helper
 framing and EOF tests; B1-C035 maps to the start phases. Real Envoy publication,
 terminal forwarding and queued cancellation are B3/B4/B6 responsibilities.
 Completion validation and making a released session reusable remain B2.7.
-The B1-C022 correction remains a separate B1 successor before B2.8.
+The B1.3.1 successor owns the B1-C022 query-corpus correction before B2.8;
+approved PR45 remains immutable.
 
 Mutations use temporary Go overlays and read-only test bind mounts. They first
 run the original `/run` ownership predicate against the non-root acceptance case
