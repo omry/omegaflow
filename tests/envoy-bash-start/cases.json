@@ -1,0 +1,96 @@
+[
+  {
+    "id": "B2.6-PS0-missing",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "",
+    "status": 0
+  },
+  {
+    "id": "B2.6-PS0-wrong",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "q",
+    "status": 0
+  },
+  {
+    "id": "B2.6-PS0-duplicate",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "xx",
+    "status": 0
+  },
+  {
+    "id": "B2.6-PS0-trailing-LF",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "x\n",
+    "status": 0
+  },
+  {
+    "id": "B2.6-PS0-partial",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "x-partial",
+    "status": 0
+  },
+  {
+    "id": "B2.6-PS0-nonzero",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "x",
+    "status": 2
+  },
+  {
+    "id": "B2.6-PS0-nocasematch",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "X",
+    "status": 0,
+    "setup": "builtin shopt -s nocasematch"
+  },
+  {
+    "id": "B2.6-PS0-signal",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "marker": "",
+    "status": 0,
+    "signal": true
+  },
+  {
+    "id": "B2.6-PS0-wire-empty",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "prepared_wire_fault": "empty"
+  },
+  {
+    "id": "B2.6-PS0-wire-partial",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "prepared_wire_fault": "partial"
+  },
+  {
+    "id": "B2.6-PS0-wire-trailing",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "prepared_wire_fault": "trailing"
+  },
+  {
+    "id": "B2.6-PS0-wire-wrong-phase",
+    "source": "printf 'AUTHORED_START\\n'",
+    "fault": "prepared-wrapper",
+    "prepared_fault": true,
+    "prepared_wire_fault": "wrong-phase"
+  }
+]

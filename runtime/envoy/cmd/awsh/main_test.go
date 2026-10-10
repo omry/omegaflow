@@ -19,7 +19,9 @@ func TestFixedFailStopCommand(t *testing.T) {
 	if out, e := exec.Command("go", "build", "-buildvcs=false", "-o", bin, ".").CombinedOutput(); e != nil {
 		t.Fatalf("build %v %s", e, out)
 	}
-	for _, args := range [][]string{nil, {"bash-fail-stop", "extra"}, {"bash-helper"}, {"other"}} {
+	for _, args := range [][]string{nil, {"bash-fail-stop", "extra"}, {"bash-helper"}, {"other"},
+		{"bash-helper", "--socket=/tmp/wrong", "start-prepared"},
+		{"bash-helper", "--socket=/run/omegaflow/session/bash/helper.sock", "start-prepared", "extra"}} {
 		out, e := exec.Command(bin, args...).CombinedOutput()
 		exit, ok := e.(*exec.ExitError)
 		if !ok || exit.ExitCode() != 2 || len(out) != 0 {
