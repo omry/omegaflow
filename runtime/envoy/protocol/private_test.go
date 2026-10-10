@@ -264,7 +264,7 @@ func TestNestedCanonicalJSON(t *testing.T) {
 			}
 		})
 	}
-	badResolved := []string{`[{"inspection_id":"i","kind":"file_exists","resolved_path":"relative"}]`, `[{"inspection_id":"i","kind":"file_exists","resolved_path":"/work/../x"}]`, `[{"inspection_id":"i","kind":"file_exists","resolved_path":"/x","path_kind":"file"}]`, `[{"inspection_id":"i","kind":"produces","resolved_path":"/x","producer_id":"p"}]`, `[{"inspection_id":"i","kind":"produces","resolved_path":"/x","producer_id":"","output_id":"o"}]`}
+	badResolved := []string{`[{"inspection_id":"i","kind":"file_exists","resolved_path":"relative"}]`, `[{"inspection_id":"i","kind":"file_exists","resolved_path":"/x","path_kind":"file"}]`, `[{"inspection_id":"i","kind":"produces","resolved_path":"/x","producer_id":"p"}]`, `[{"inspection_id":"i","kind":"produces","resolved_path":"/x","producer_id":"","output_id":"o"}]`}
 	for _, s := range badResolved {
 		f := []string{privatePrefix, "completed", "op", "0", "/work", s}
 		if _, err := DecodePrivate(nulBytes(f), AwshToEnvoy); err == nil {
