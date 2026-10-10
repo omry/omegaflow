@@ -8,15 +8,17 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-10-09
+- Updated: 2026-10-11
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
   predecessors. A2.8 is merged as PR 39 at
   `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
-  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.4 have approved
-  partial implementation. The current A2.10 echo-off handoff amendment and
-  owning B2.3.3 readiness correction remain unapproved/pending. The complete
-  production execution path and Bash-build qualification remain pending.
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
+  partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
+  B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
+  corpus successors. A2.11's qualification-output amendment and its owning
+  B2.1.1 correction remain pending. The complete production execution path
+  and Bash-build qualification remain pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -844,6 +846,27 @@ input fails startup. Awsh then launches Bash. Terminal, Readline, locale, and
 Bash startup lookup cannot fall through to application-controlled data under
 `HOME`, `/etc`, or another search directory.
 
+The qualified Bash-build table is generated as a separate readable regular
+runtime payload at `/omegaflow-runtime/etc/bash-builds.json`, covered by the
+runtime manifest and the read-only runtime mount. Generated Envoy and Awsh
+consumer code reads only that fixed path, validates its manifest-bound bytes
+and strict qualified-entry schema, and independently selects the exact resolved
+Bash entry. Host preparation consumes the same canonical table. Neither table
+contents nor their digest are compiled into Envoy or Awsh, including generated
+source comments or build identity inputs. Runtime consumer code is generated
+from the table schema; stale schema consumers and stale generated table data
+are rejected separately.
+
+Qualification binds the complete actual Awsh executable, fixed Bash rcfile,
+empty inputrc, terminal entry, and complete selected locale tree. The generated
+qualified table is an output of qualification, not an adapter input to its own
+receipt. Its manifest digest is checked independently; this does not exempt
+any executable or behavioral asset from exact-byte qualification. Any change
+to a bound adapter input requires rerunning the affected qualification before
+support is retained, including changes made by later runtime leaves. No new
+wire message, actor, timer, configurable table path, or Reploy capability is
+introduced by this artifact separation.
+
 Application environment required by planned operations is delegated
 explicitly, then the Envoy installs the trusted terminal, Readline, and locale
 values and an empty `HISTFILE` as the final launch values so neither an
@@ -1107,6 +1130,7 @@ executable at `/omegaflow-runtime` in the workload:
 │   └── awsh
 ├── etc/
 │   ├── awsh-bashrc
+│   ├── bash-builds.json
 │   └── inputrc
 ├── share/terminfo/
 │   └── .../xterm-256color
@@ -1152,7 +1176,8 @@ hashed executable, not optional application configuration.
 
 Paths are unique, normalized relative POSIX paths and may name only the fixed
 `bin`, `etc`, `share/terminfo`, and `lib/locale` roots. The trusted launch data
-consists of `etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
+consists of the generated qualified `etc/bash-builds.json`,
+`etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
 `xterm-256color` entry below `share/terminfo`, and every regular file in the
 complete selected `C.UTF-8` tree below `lib/locale`. The manifest itself is not
 listed as a payload file. Staging rejects missing or additional payload files,
@@ -1171,9 +1196,9 @@ The frozen Hydra blueprint contract provides all of the following:
 - one configured non-root workload identity;
 - the verified runtime directory mounted read-only and executable at
   `/omegaflow-runtime`;
-- the manifest-validated Bash rcfile, empty Readline file, exact trusted
-  terminal entry, and complete trusted locale tree in that non-shadowable
-  runtime mount;
+- the manifest-validated qualified `etc/bash-builds.json`, Bash rcfile, empty
+  Readline file, exact trusted terminal entry, and complete trusted locale tree
+  in that non-shadowable runtime mount;
 - a writable reserved runtime root at `/run/omegaflow`, outside that mount,
   where Envoy can exclusively create `/run/omegaflow/session` mode 0700;
 - two private TCP endpoint declarations reserved for the Envoy terminal and
@@ -1446,6 +1471,8 @@ and finalization in that interval
 must preserve Bash/helper survival, consume `input_close` as the existing A2.5
 return fact, and complete the already-selected lifecycle outcome. A2.7 closed
 the private schemas and is approved and merged. A2.8 and A2.9 are also merged;
-B1 and B2.1–B2.4 have approved partial implementation. A2.10 and its owning
-B2.3.3 readiness correction precede B2.5 completion; the plan fixes the remaining
-static and executable evidence owners and preserves the complete conformance gate.
+B1 and B2.1–B2.7 have approved partial implementation, including A2.10/PR51,
+B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 codec
+and B1.3.1/PR57 corpus successors. The pending A2.11 amendment and B2.1.1
+correction precede B2.8 qualification. The plan fixes the remaining executable
+evidence owners and preserves the complete production conformance gate.
