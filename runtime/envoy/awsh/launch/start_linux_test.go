@@ -157,7 +157,13 @@ func TestSupervisorProcess(t *testing.T) {
 	}
 	// Confine the process-wide mask to this isolated supervisor subprocess.
 	syscall.Umask(0777)
-	s, e := start(ctx, Handoff{3, 4, 5, "/run/omegaflow/session"}, signals)
+	var s *Session
+	if receipt := os.Getenv("OMEGAFLOW_QUALIFIED_RECEIPT"); receipt != "" {
+		os.Unsetenv("OMEGAFLOW_QUALIFIED_RECEIPT")
+		s, e = qualificationStart(ctx, Handoff{3, 4, 5, "/run/omegaflow/session"}, digest, receipt)
+	} else {
+		s, e = start(ctx, Handoff{3, 4, 5, "/run/omegaflow/session"}, signals)
+	}
 	if e != nil {
 		f := os.NewFile(6, "test-evidence")
 		fmt.Fprintln(f, e)

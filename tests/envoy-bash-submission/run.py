@@ -98,6 +98,17 @@ def readline(case, directory):
     SOCKET.unlink(missing_ok=True)
     master, slave = pty.openpty()
     raw, requests, terminal_states, error, proc = bytearray(), [], [], None, None
+    split_readers, split_output = {}, {}
+    shape = case.get('execution_shape', 'pty')
+    if shape not in ('pty', 'split'):
+        raise ValueError('unknown test execution shape')
+    if shape == 'split':
+        parent = Path('/run/omegaflow/session/split')
+        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        for stream in ('stdout', 'stderr'):
+            path = parent / ('op1.' + stream)
+            os.mkfifo(path, 0o600)
+            split_readers[stream] = os.open(path, os.O_RDWR | os.O_NONBLOCK)
     releases = []
     previous_signal = signal.signal(signal.SIGUSR1, lambda *_: releases.append(time.monotonic()))
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -170,7 +181,8 @@ def readline(case, directory):
                 if fields != ['awsh-helper-v1', 'source']:
                     raise AssertionError('source request is not argument-free')
                 fields = ['awsh-helper-v1', 'source', 'op1', str(status), history, editing,
-                          'pty', '', '', source]
+                          shape, '/run/omegaflow/session/split/op1.stdout' if shape == 'split' else '',
+                          '/run/omegaflow/session/split/op1.stderr' if shape == 'split' else '', source]
                 fault = case.get('fault')
                 if fault == 'trailing-reply':
                     reply(connection, fields)
@@ -248,6 +260,15 @@ def readline(case, directory):
                 raise AssertionError('missing or duplicate release signal')
             drain(master, raw)
             output = bytes(raw[before:])
+            if shape == 'split':
+                for stream, descriptor in split_readers.items():
+                    split_output[stream] = os.read(descriptor, 1048576) if select.select([descriptor], [], [], 0)[0] else b''
+                pending = output
+                for control in [b'\x1b[?2004h', b'\x1b[?2004l', b'\x1b[K', b'\r', b'\n']:
+                    pending = pending.replace(control, b'')
+                if pending:
+                    raise AssertionError('split source leaked output into PTY')
+                output = split_output['stdout'] + split_output['stderr']
             for expected in case.get('output', []):
                 if expected.encode() not in output:
                     raise AssertionError(f'missing authored output {expected!r}')
@@ -277,6 +298,11 @@ def readline(case, directory):
         listener.close()
         signal.signal(signal.SIGUSR1, previous_signal)
         SOCKET.unlink(missing_ok=True)
+        for stream, descriptor in split_readers.items():
+            os.close(descriptor)
+            Path('/run/omegaflow/session/split/op1.' + stream).unlink()
+        if split_readers:
+            Path('/run/omegaflow/session/split').rmdir()
         (directory / 'terminal.raw').write_bytes(raw)
         save(directory / 'observations.json', {
             'case_id': case['id'], 'source_sha256': hashlib.sha256(source.encode()).hexdigest(),
@@ -286,6 +312,8 @@ def readline(case, directory):
                 {name: attrs[:6] + [[value[0] if isinstance(value, bytes) else value
                                     for value in attrs[6]]]
                  for name, attrs in state.items()} for state in terminal_states],
+            'execution_shape': shape,
+            'split_output_base64': {name: base64.b64encode(data).decode() for name, data in split_output.items()},
             'error': error, 'qualified': False, 'start_release': 'real PS0 helper and builtin signal; synthetic peer', 'release_signals': len(releases),
             'completion': 'state-bearing final peer; no descendant cleanup proof'})
 

@@ -74,9 +74,11 @@ func TestStartSupervisorProcess(t *testing.T) {
 		fmt.Fprintln(evidence, e)
 		os.Exit(72)
 	}
-	defer s.Close()
 	defer func() {
 		// Test-only controlled-session disposal; never production descendant census.
+		// Stop and reap Bash before enumerating its helpers: a live shell could
+		// otherwise fork a helper after the single test census and retain the PTY.
+		s.Close()
 		entries, _ := os.ReadDir("/proc")
 		for _, entry := range entries {
 			pid, err := strconv.Atoi(entry.Name())
