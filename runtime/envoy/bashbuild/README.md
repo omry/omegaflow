@@ -52,13 +52,29 @@ the measured result digest. They are compatibility records produced by trusted
 qualification work, not security attestations against same-identity authors.
 Do not hand-author passing receipts for real support.
 
-The generator emits one shared Go table, separate Envoy/Awsh lookup functions,
-and the Python host consumer. Lookup hashes the resolved regular executable and
-rejects unknown digests, full target-tuple/path mismatches, a present system rc,
-and changed adapter/trusted-input identities. The caller supplies the current
-manifest-verified target tuple (`os`, `arch`, `os_release_id`, and `version_id`)
-and asset hashes; later host/runtime integration owns verifying those values.
-No consumer can retain support after changing those bytes or target fields
-without matching qualification evidence. Launch, manifest validation and
-runtime assembly belong to later leaves; these functions do not launch a
-partial path.
+The generator emits a separate qualified runtime payload at
+`../etc/bash-builds.json`, data-independent Go schema and Envoy/Awsh lookup
+functions, and the Python host consumer with the same qualified values and
+admission grammar. Runtime Go output contains neither qualification data nor
+its digest, including in generated comments. Regenerating only qualification
+data leaves every runtime Go output unchanged. The generation check verifies
+schema and payload freshness separately.
+
+Runtime lookup opens only `/omegaflow-runtime/etc/bash-builds.json`, rejects
+symlinks and nonregular files without blocking, bounds bytes at 2 MiB and
+verifies the independent manifest digest before strict schema decoding. It
+rejects invalid Unicode, duplicate or unknown fields, trailing data, candidate
+entries without receipts, incomplete case evidence and stale candidate/result
+digests. A qualification receipt cannot list the output table as an adapter
+input. The table is independently manifest-bound instead of qualifying itself.
+
+The existing lookup arguments retain their meaning: the caller supplies the
+manifest-verified full target tuple and current adapter/trusted-input hashes.
+For runtime lookup, that hash map also includes the fixed table path and its
+manifest digest. Lookup removes only that output key before comparing the
+remaining complete map to qualification inputs. Host lookup uses the generated
+qualified values and the adapter input map directly. Both hash the resolved
+regular Bash executable and reject unknown builds, target/path mismatches, a
+present system rc and changed adapter inputs. There is no configurable table
+path or fallback. Later runtime assembly owns manifest verification; this
+correction exposes no production supervisor and advertises no build support.

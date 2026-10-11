@@ -14,8 +14,8 @@ import (
 )
 
 type Candidate struct {
-	Release string `json:"release"`
-	Target  Target `json:"target"`
+	Release          string `json:"release"`
+	Target           Target `json:"target"`
 	ArtifactSHA256   string `json:"artifact_sha256"`
 	ExecutableSHA256 string `json:"executable_sha256"`
 	DefinitionSHA256 string `json:"definition_sha256"`
@@ -33,7 +33,7 @@ type Target struct {
 }
 
 // Qualification retains the complete measured fields and proof identities.
-// Table admission is performed by the generation tool before compilation.
+// The separate manifest-bound table is validated before admission.
 type Entry struct {
 	Candidate     Candidate       `json:"candidate"`
 	Qualification json.RawMessage `json:"qualification"`
@@ -41,6 +41,15 @@ type Entry struct {
 
 // inputs must be current manifest-verified adapter and trusted-input hashes.
 func lookup(path, expected string, target Target, inputs map[string]string) (Entry, error) {
+	data, err := readTable(tablePath, inputs[tablePath])
+	if err != nil {
+		return Entry{}, err
+	}
+	return lookupBytes(path, expected, target, inputs, data)
+}
+
+// Isolated tests exercise the same validated bytes without a production path override.
+func lookupBytes(path, expected string, target Target, inputs map[string]string, data []byte) (Entry, error) {
 	var empty Entry
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -67,15 +76,12 @@ func lookup(path, expected string, target Target, inputs map[string]string) (Ent
 		return empty, err
 	}
 	observed := hex.EncodeToString(h.Sum(nil))
-	var table struct {
-		Version int              `json:"version"`
-		Builds  map[string]Entry `json:"builds"`
-	}
-	if err := json.Unmarshal([]byte(tableJSON), &table); err != nil {
+	table, err := parseTable(data)
+	if err != nil {
 		return empty, err
 	}
 	entry, ok := table.Builds[observed]
-	if table.Version != 1 || !ok || observed != expected || entry.Candidate.ExecutableSHA256 != observed || len(entry.Qualification) == 0 || string(entry.Qualification) == "null" {
+	if !ok || observed != expected || entry.Candidate.ExecutableSHA256 != observed || len(entry.Qualification) == 0 || string(entry.Qualification) == "null" {
 		return empty, fmt.Errorf("unknown or mismatched Bash build")
 	}
 	build := entry.Candidate
@@ -93,7 +99,13 @@ func lookup(path, expected string, target Target, inputs map[string]string) (Ent
 	if err := json.Unmarshal(entry.Qualification, &proof); err != nil {
 		return empty, err
 	}
-	if len(proof.Inputs) == 0 || !reflect.DeepEqual(proof.Inputs, inputs) {
+	adapter := make(map[string]string, len(inputs))
+	for path, digest := range inputs {
+		if path != tablePath {
+			adapter[path] = digest
+		}
+	}
+	if len(proof.Inputs) == 0 || !reflect.DeepEqual(proof.Inputs, adapter) {
 		return empty, fmt.Errorf("adapter or trusted inputs require requalification")
 	}
 	return entry, nil
