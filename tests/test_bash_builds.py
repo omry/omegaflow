@@ -161,7 +161,7 @@ def test_candidate_is_not_support_and_generation_is_checked(tmp_path):
         tool.generate(table(False), tmp_path)
     if tool.TABLE.exists():
         tool.generate(tool.read(tool.TABLE), ROOT, check=True)
-        assert tool.qualified(tool.read(tool.TABLE)) == {}
+        tool.validate_table(tool.read(tool.TABLE))
 
 
 def test_generated_consumers_select_exact_build_and_inputs(tmp_path):
@@ -380,11 +380,12 @@ def test_generation_is_utf8_under_ascii_locale(tmp_path):
 
 def test_qualification_runner_is_bound_repeatable_and_does_not_admit(tmp_path, monkeypatch):
     build, plan = qualification_plan(tmp_path, monkeypatch)
+    shipped_table = tool.TABLE.read_bytes()
     result = tool.qualify(build, plan)
     assert result["repetitions"] == 2
     assert result["adapter_inputs"] == dict.fromkeys(ASSETS, tool.sha(b"synthetic trusted input"))
     tool.receipt(result, build, tool.case_ids())
-    assert tool.qualified(tool.read(tool.TABLE)) == {}
+    assert tool.TABLE.read_bytes() == shipped_table
     bad = copy.deepcopy(build)
     bad["target"]["arch"] = "arm64"
     with pytest.raises(ValueError, match="genuine"):
