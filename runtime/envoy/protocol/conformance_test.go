@@ -1292,8 +1292,11 @@ func buildMatrixContracts() map[string]expectedTrace {
 			add("C024", command+"-"+args, fmt.Sprintf(`{"command":%q,"arguments":%q,"next_command":"trap 'exit 42' INT"}`, command, args), `{"posix":false,"POSIXLY_CORRECT":"readonly-unset","next_mutation":"mediated"}`, generic, nil)
 		}
 	}
-	for _, name := range strings.Fields("minimum-source maximum-source multiline comments quotes heredoc unterminated-heredoc-warning-zero-status trailing-LF aliases extglob posix history interactive-comments reserved-namespace reserved-input adjacent-step-input duplicate-helper crossed-helper wrong-ID no-redisplay pre-public-start-failure post-public-start-failure checker-nonzero checker-stdout checker-stderr") {
+	for _, name := range strings.Fields("minimum-source maximum-source multiline comments quotes heredoc unterminated-heredoc-warning-zero-status trailing-LF aliases extglob posix history interactive-comments reserved-namespace duplicate-helper crossed-helper wrong-ID no-redisplay pre-public-start-failure post-public-start-failure checker-nonzero checker-stdout checker-stderr") {
 		add("C031", name, fmt.Sprintf(`{"scenario":%q}`, name), `{"both_parse_checks_require":{"status":0,"stdout":"","stderr":""},"build_concrete_value":"pending-B2.8"}`, generic, nil)
+	}
+	for _, name := range []string{"reserved-input", "adjacent-step-input"} {
+		add("C031", name, fmt.Sprintf(`{"scenario":%q}`, name), `{"reserved_sequences_hex":["1801","1802"],"reject_before_execute":true,"across_adjacent_input_steps":true,"implementation_owner":"C3.2"}`, generic, nil)
 	}
 	for _, name := range strings.Fields("prefix-every-split payload-every-split short-prefix short-payload zero-length oversized-length trailing-data ancillary-data missing-half-close premature-EOF small-socket-buffer max-request max-reply positive-short-write") {
 		add("C033", name, fmt.Sprintf(`{"scenario":%q}`, name), `{"bounded_transport":true,"existing_phase_deadline":true,"socket_execution":"pending-B2.2"}`, generic, nil)
@@ -1623,6 +1626,12 @@ func checkCaseBinding(c conformanceCase, inv inventory, aux auxiliaryFixtures) e
 			}
 			if strings.HasPrefix(suffix, "canonical-frame-") {
 				closure = "B2.8"
+			}
+		case "C031":
+			if oneOf(suffix, "reserved-input", "adjacent-step-input") {
+				owner, closure = "C3.2", "C3.3"
+			} else if oneOf(suffix, "pre-public-start-failure", "post-public-start-failure") {
+				closure = "B3.4"
 			}
 		case "C027":
 			if suffix == "explicit-builtin-bypass" {
