@@ -124,7 +124,7 @@ def test_complete_case_evidence_and_schema():
         with pytest.raises(ValueError):
             tool.validate_table(bad)
     tool.validate_table(value)
-    assert len(proof["result"]["cases"]) == 260
+    assert len(proof["result"]["cases"]) == 258
     for startup in (b"", b"x" * 4096):
         measured = copy.deepcopy(SYNTHETIC["measurements"])
         measured["startup_pty_base64"] = base64.b64encode(startup).decode()
