@@ -16,8 +16,9 @@
   `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
   partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
   B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
-  corpus successors. A2.11's qualification-output amendment and its owning
-  B2.1.1 correction remain pending. The complete production execution path
+  corpus successors. A2.11/PR58's qualification-output amendment and its owning
+  B2.1.1/PR59 correction are approved. A2.12's ownership amendment and B1.3.2
+  corpus correction remain pending. The complete production execution path
   and Bash-build qualification remain pending.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
@@ -1473,6 +1474,26 @@ return fact, and complete the already-selected lifecycle outcome. A2.7 closed
 the private schemas and is approved and merged. A2.8 and A2.9 are also merged;
 B1 and B2.1–B2.7 have approved partial implementation, including A2.10/PR51,
 B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 codec
-and B1.3.1/PR57 corpus successors. The pending A2.11 amendment and B2.1.1
-correction precede B2.8 qualification. The plan fixes the remaining executable
+and B1.3.1/PR57 corpus successors. A2.11/PR58 and B2.1.1/PR59 are approved;
+the pending A2.12 amendment and B1.3.2 corpus correction precede B2.8
+qualification. The plan fixes the remaining executable
 evidence owners and preserves the complete production conformance gate.
+
+## A2.12 qualification and authored-input ownership correction
+
+B2.8 qualifies the selected Bash adapter against its native B2 responsibilities.
+The reserved loader and submit bindings, echo-off entry, exact source/frame
+consumption and no redisplay remain mandatory native qualification evidence.
+Controller-authored terminal input must still reject either reserved sequence,
+including when its bytes span adjacent input steps, before sending `execute`.
+That compiler/client responsibility is owned by C3.2 and closes with C3.3; it
+cannot be claimed from a Bash qualification probe or moved into an adapter test
+peer. The B1 owning corpus successor retains `B1-C031-reserved-input` and
+`B1-C031-adjacent-step-input` with that owner, requirement and pending real-client
+proof. Neither case is deleted or marked executed by B2.8.
+
+The B2.5/B2.6 adapter-side pre-start and post-start failure assertions remain
+required in native B2 qualification against the deterministic Envoy peer.
+Actual public `operation_started` publication and failure crossings close in
+B3.4. The corresponding B1-C031 pre/post-public-start cases retain that later
+closure and cannot count as actual Envoy public-channel proof in B2.8.

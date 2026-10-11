@@ -17,8 +17,10 @@
   `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
   partial implementation, including A2.10, the B2.3.1/B2.3.2 split and B2.3.3
   correction. B1.2.1 and B1.3.1 are approved owning codec/corpus successors.
-  This A2.11 successor separates qualified table data from runtime binaries
-  before the B2.1.1 generator correction and B2.8 qualification. The complete
+  A2.11/PR58 separates qualified table data from runtime binaries and its
+  B2.1.1/PR59 generator correction is approved. This A2.12 successor clarifies
+  qualification and authored-input evidence ownership before the B1.3.2
+  corpus correction and B2.8 qualification. The complete
   production execution path and supported Bash-build qualification remain pending.
 - A `.review` sidecar attests only the document bytes matching its recorded
   content hash. Changed documents require fresh review and byte-current
@@ -1467,12 +1469,12 @@ proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget
 | B2.3.2 | 450–750 | B2.3.1 | Ordered startup helpers, fixed assets, terminal leases and initial readiness | Real candidate empty prompt, complete termios/readiness transition, terminal drain/slave closure and bounded cleanup; approved PR49; A2.10 handoff correction belongs to B2.3.3 |
 | B2.4 | 450–700 | B2.3 | Readonly namespace, canonical parser state and whole-request trap/builtin mediation | Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior |
 | B2.3.3 | 80–220 | A2.10 approved; B2.3.2/B2.4 | Echo-off Readline preparation, retained complete workload termios reference and exact existing-lease restoration/readback primitive | Real candidate readiness, no retained or inherited lease, exact state restoration and fatal identity/write/readback/context failure; start integration pending B2.6, fresh completion reference pending B2.7, support admission pending B2.8 |
-| B2.5 | 450–700 | B2.3.3, B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection |
+| B2.5 | 450–700 | B2.3.3, B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-binding validation; authored-input rejection remains C3.2 |
 | B2.6 | 350–650 | B2.5 | Awsh active start record, PS0/post-PS0 handshake and split-entry sentinel | Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3 |
 | B2.7 | 450–700 | B2.6 | Completion hook, helper identity, Bash inspection-path resolution and state/Readline handoff | Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5 |
 | A2.11 | 0 | B2.7, B1.3.1 approved | Four-document manifest-bound qualification-output amendment and current attestations | Deep design review, required checks and exact-head approval; no runtime or support claim |
 | B2.1.1 | 150–300 | A2.11 approved; B2.1/B2.7 | Fixed manifest-bound table payload, data-independent schema consumers and exact qualified runtime lookup | Strict fixed-path/manifest/schema/input rejection, stale generation checks, qualified launch in isolated test-only assembly linking the existing launch module, and stable exact Awsh bytes when table data is regenerated; no production entrypoint or B3 implementation prerequisite; B2.8 retains genuine target/all-case qualification |
-| B2.8 | 100–350 | B2.1–B2.7, B1.3.1, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement | Qualification measurements, supported-entry admission and generated consumer integration | Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf |
+| B2.8 | 100–350 | B2.1–B2.7, B1.3.1, B1.3.2, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement | Qualification measurements, supported-entry admission and generated consumer integration | Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf |
 | B3.1 | 350–600 | B1, B2 | Envoy listeners, session handshake, actor-local deadlines and bounded channel writes | Actual transport/IDs; deterministic startup peer; real startup pending B3.2 |
 | B3.2 | 450–700 | B3.1, B2.8 | PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup | Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown |
 | B3.3 | 400–650 | B3.2 | Byte relay, stream marks, input watermark and operation-start sequencing | Fresh drain, setup timer, serialized submit and public/private start barriers; isolated setup/cleanup peers |
@@ -1572,8 +1574,10 @@ browser/publication/host-parity/FIFO-cutover implementation.
 | B1.2.1 | Approved owning correction | PR55 `04b542830225a2e081fed0757379b72435f39009`; private-codec successor; approved PR43 unchanged |
 | B2.7 | Approved partial implementation | PR56 `72d90ec0ea6b426bb508dad48e1e98c1a52cb9af`; completion proofs against cleanup peer; actual descendants/inspection pending later owners |
 | B1.3.1 | Approved owning correction | PR57 `7247feaefbc8ffb351f2655f4034bd8ec5be3b4d`; B1-C022 permits the native `trap -p CHLD INT` query; approved PR45 unchanged |
-| A2.11 | Pending amendment | Separate manifest-bound qualification output; requires deep design review, current attestations, required checks and exact-head approval |
-| B2.1.1 | Pending owning correction | Implements A2.11 schema consumer/table separation; approved PR46 unchanged |
+| A2.11 | Approved amendment | PR58 `f9ba69153a63dfeb945b8f2eba6cb264d240c6c7`; separate manifest-bound qualification output; current document attestations, required checks and exact-head approval |
+| B2.1.1 | Approved owning correction | PR59 `a5aba34d4fb6a46a19530bb5347614ba5016c9fb`; A2.11 schema consumer/table separation; approved PR46 unchanged |
+| A2.12 | Pending amendment | Qualification and authored-input evidence ownership; requires fresh four-document review, current attestations, required checks and exact-head approval |
+| B1.3.2 | Pending owning correction | Retains C3.2/C3.3 reserved-input requirements and B3.4 public-start closure in the corpus and generated consumers; approved PR45 unchanged |
 | B2.8–B8.4 | Pending | Genuine supported-target qualification and real-actor conformance remain delivery requirements |
 | C1.1–C8.2 | Pending | 19 one-PR leaves; raw material only |
 | D1.1–D3.3 | Pending | 10 one-PR leaves; raw material only |
@@ -1582,3 +1586,28 @@ browser/publication/host-parity/FIFO-cutover implementation.
 Update this table only from executed checks and current review state. Historical
 PR labels and tests from superseded commits are context, not completion
 evidence for the rebuilt stack.
+
+## A2.12 qualification and authored-input ownership correction
+
+B2.8 qualifies the selected Bash adapter against its native B2 responsibilities.
+The reserved loader and submit bindings, echo-off entry, exact source/frame
+consumption and no redisplay remain mandatory native qualification evidence.
+Controller-authored terminal input must still reject either reserved sequence,
+including when its bytes span adjacent input steps, before sending `execute`.
+That compiler/client responsibility is owned by C3.2 and closes with C3.3; it
+cannot be claimed from a Bash qualification probe or moved into an adapter test
+peer. The B1 owning corpus successor retains `B1-C031-reserved-input` and
+`B1-C031-adjacent-step-input` with that owner, requirement and pending real-client
+proof. Neither case is deleted or marked executed by B2.8.
+
+The B2.5/B2.6 adapter-side pre-start and post-start failure assertions remain
+required in native B2 qualification against the deterministic Envoy peer.
+Actual public `operation_started` publication and failure crossings close in
+B3.4. The corresponding B1-C031 pre/post-public-start cases retain that later
+closure and cannot count as actual Envoy public-channel proof in B2.8.
+
+A2.12 is a design-only owning successor. Deliver its four-document review and
+byte-current attestations before the B1.3.2 corpus/generated-consumer correction,
+then resume B2.8 and B3.1–B3.4. Preserve all approved predecessors. This changes
+no wire form, actor, timer, runtime entrypoint or user input policy, and authorizes
+no C3 implementation in the selected B2/B3 campaign.
