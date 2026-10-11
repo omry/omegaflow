@@ -46,6 +46,54 @@ and publish no readiness bytes. Failure assertions require no private
 ready, nonzero supervisor outcome, selected-shell reap, no live launch member
 before supervisor exit, and removal of the owned helper directory. A preexisting directory and its
 owner marker remain untouched; the test removes its own fixture afterward.
+
+## B2.1.1 isolated qualified-entry assembly
+
+`qualified-main.go.txt` is a Go overlay fixture that links the actual
+`launch.Start` into the same binary used for every fixed helper command. It
+adds only the isolated `proof-qualified-start` selector; the shipped main is
+unchanged. Build the startup and submission proofs with that same overlay:
+
+```sh
+python3 - <<'PY' > /tmp/omegaflow-qualified-overlay.json
+import json
+from pathlib import Path
+root = Path.cwd()
+print(json.dumps({'Replace': {
+    str(root / 'runtime/envoy/cmd/awsh/main.go'):
+    str(root / 'tests/envoy-bash-startup/qualified-main.go.txt')}}))
+PY
+GOFLAGS=-overlay=/tmp/omegaflow-qualified-overlay.json \
+  python3 tests/envoy-bash-startup/run.py \
+  --acquisition /path/to/acquisition.json --output /path/to/new-startup
+GOFLAGS=-overlay=/tmp/omegaflow-qualified-overlay.json \
+  python3 tests/envoy-bash-submission/run.py \
+  --acquisition /path/to/acquisition.json --output /path/to/new-submission
+python3 tests/envoy-bash-startup/qualified.py \
+  --acquisition /path/to/acquisition.json \
+  --startup /path/to/new-startup --readline /path/to/new-submission \
+  --output /path/to/new-assembly
+```
+
+The assembly runner checks the native proofs' image and executable identities,
+matching actual helper binaries, repeated exact startup bytes/export transform,
+and successful real maximum-line/Unicode/no-redisplay observations. It inventories
+the complete actual runtime asset trees in each isolated image. Two changed
+table payloads produce identical Go schema outputs and identical rebuilt Awsh
+binaries. Both invoke the actual qualified-entry `Start`, validate private ready
+identities, Readline termios, raw startup bytes and exported state, and reap/clean
+the selected shell. Six negative variants reject admission before private-path
+creation or readiness: wrong table manifest, Bash digest, target or adapter
+input, an unqualified candidate, and trailing malformed table bytes.
+
+The test uses a **synthetic receipt envelope** to exercise qualified admission;
+its case flags are schema fixtures, not evidence that every B2 case passed.
+Actual startup, Readline and binary stability observations are real. Output
+explicitly records `synthetic_admission_envelope: true`,
+`all_case_qualification: false`, and `qualified: false`. No fixture is installed
+in the repository's supported-build table. B2.8 retains genuine per-target,
+all-case qualification and supported entry admission. This test adds no
+production supervisor or B3 prerequisite.
 Nominal runs also prove that a rejected terminal lease closes its descriptor. A pending
 helper zombie is reap evidence for the future Envoy/subreaper owner, not a live
 helper or an Awsh operation-cleanup claim. The blocked writer retains exactly

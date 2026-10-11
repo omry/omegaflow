@@ -1,0 +1,73 @@
+// Isolated assembly fixture, selected only by the proof runner's Go overlay.
+// The shipped cmd/awsh entrypoint is unchanged.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/omry/omegaflow/runtime/envoy/awsh/helper"
+	"github.com/omry/omegaflow/runtime/envoy/awsh/launch"
+	"github.com/omry/omegaflow/runtime/envoy/bashbuild"
+)
+
+func main() {
+	if len(os.Args) == 2 && os.Args[1] == "proof-qualified-start" {
+		var manifest struct {
+			Digest string
+			Target bashbuild.Target
+			Inputs map[string]string
+		}
+		data, err := os.ReadFile("/proof/manifest.json")
+		if err == nil {
+			err = json.Unmarshal(data, &manifest)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		session, err := launch.Start(ctx, launch.Handoff{Control: 3, Result: 4, Slave: 5, RuntimeDir: "/run/omegaflow/session"}, manifest.Digest, manifest.Target, manifest.Inputs)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		evidence, _ := json.Marshal(map[string]any{"state": session.State, "active_termios": session.ActiveTermios, "shell_pid": session.ShellPID, "awsh_pid": os.Getpid()})
+		if _, err = os.NewFile(6, "proof-evidence").Write(append(evidence, '\n')); err != nil {
+			session.Close()
+			os.Exit(2)
+		}
+		var done [1]byte
+		_, err = os.NewFile(3, "control").Read(done[:])
+		session.Close()
+		if err != nil {
+			os.Exit(2)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "bash-fail-stop" {
+		helper.FailStop()
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "bash-helper" {
+		if len(os.Args) >= 4 && os.Args[3] == "start-prepared" {
+			if helper.PreparedCommand(os.Args[2:], os.Stdout) == nil {
+				return
+			}
+			os.Exit(2)
+		}
+		if len(os.Args) >= 4 && os.Args[3] == "source" {
+			if helper.SourceCommand(os.Args[2:], os.Stdout) == nil {
+				return
+			}
+			os.Exit(2)
+		}
+		if helper.StartupCommand(os.Args[2:]) == nil {
+			return
+		}
+	}
+	os.Exit(2)
+}
