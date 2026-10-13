@@ -114,6 +114,106 @@ func TestStartupCancellationDisarmedBeforeCommit(t *testing.T) {
 	}
 }
 
+func TestParentControlledControlLifetimeAndReuse(t *testing.T) {
+	t.Run("borrower-close-leaves-owner-open", func(t *testing.T) {
+		var fds [2]int
+		if err := syscall.Pipe(fds[:]); err != nil {
+			t.Fatal(err)
+		}
+		control := os.NewFile(uintptr(fds[0]), "controlled-reader")
+		peer := os.NewFile(uintptr(fds[1]), "controlled-writer")
+		defer peer.Close()
+		fd := int(control.Fd())
+		s := &Session{Handoff: Handoff{Control: fd}, parentControlled: true}
+		readDone := make(chan error, 1)
+		go func() {
+			var b [1]byte
+			_, err := control.Read(b[:])
+			readDone <- err
+		}()
+
+		s.Close()
+		select {
+		case err := <-readDone:
+			t.Fatalf("controlled close invalidated supervisor reader: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+		if _, err := fcntl(fd, syscall.F_GETFD, 0); err != nil {
+			t.Fatalf("controlled Session.Close closed supervisor descriptor: %v", err)
+		}
+		if err := control.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := peer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-readDone:
+		case <-time.After(time.Second):
+			t.Fatal("reader did not terminate after owner and peer close")
+		}
+	})
+
+	t.Run("cancellation-after-reuse-does-not-close-replacement", func(t *testing.T) {
+		var fds [2]int
+		if err := syscall.Pipe(fds[:]); err != nil {
+			t.Fatal(err)
+		}
+		control := os.NewFile(uintptr(fds[0]), "controlled-reader")
+		peer := os.NewFile(uintptr(fds[1]), "controlled-writer")
+		defer peer.Close()
+		fd := int(control.Fd())
+		s := &Session{Handoff: Handoff{Control: fd}, parentControlled: true}
+		readDone := make(chan error, 1)
+		go func() {
+			var b [1]byte
+			_, err := control.Read(b[:])
+			readDone <- err
+		}()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cleanupDone := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			s.Close()
+			close(cleanupDone)
+		})
+		defer stop()
+		source, err := os.OpenFile("/dev/null", os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer source.Close()
+		if err := control.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Dup3(int(source.Fd()), fd, syscall.O_CLOEXEC); err != nil {
+			t.Fatalf("descriptor reuse failed at %d: %v", fd, err)
+		}
+		replacement := os.NewFile(uintptr(fd), "reused-control")
+		defer replacement.Close()
+		cancel()
+		select {
+		case <-cleanupDone:
+		case <-time.After(time.Second):
+			t.Fatal("cancellation cleanup did not complete")
+		}
+		if _, err := fcntl(fd, syscall.F_GETFD, 0); err != nil {
+			t.Fatalf("controlled Session.Close closed reused descriptor: %v", err)
+		}
+		if _, err := replacement.Write([]byte("reuse")); err != nil {
+			t.Fatal(err)
+		}
+		if err := peer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-readDone:
+		case <-time.After(time.Second):
+			t.Fatal("reader did not terminate after owner and peer close")
+		}
+	})
+}
+
 // This process mode is compiled into the test binary only; production has no
 // candidate bypass, fake Envoy switch, or partial supervise command.
 func TestSupervisorProcess(t *testing.T) {
