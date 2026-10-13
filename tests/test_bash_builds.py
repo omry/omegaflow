@@ -183,6 +183,27 @@ def test_generated_consumers_select_exact_build_and_inputs(tmp_path):
     inputs = proof["adapter_inputs"]
     target = copy.deepcopy(build["target"])
     assert lookup(str(binary), identity, target, inputs)["candidate"] == build
+    # Exercise strict admission through the actual generated lookup, including
+    # a malformed sibling that must not be ignored when selecting this build.
+    for fault in ("candidate-digest", "result-digest", "case", "unknown", "sibling", "unqualified"):
+        invalid = copy.deepcopy(value)
+        entry = invalid["builds"][identity]
+        if fault == "candidate-digest":
+            entry["qualification"]["candidate_sha256"] = "0" * 64
+        elif fault == "result-digest":
+            entry["qualification"]["result_sha256"] = "0" * 64
+        elif fault == "case":
+            entry["qualification"]["result"]["cases"][tool.case_ids()[0]] = False
+        elif fault == "unknown":
+            entry["candidate"]["unknown"] = True
+        elif fault == "sibling":
+            invalid["builds"]["f" * 64] = {"candidate": {}, "qualification": None}
+        else:
+            entry["qualification"] = None
+        namespace["_TABLE"] = tool.canonical(invalid).decode()
+        with pytest.raises(ValueError):
+            lookup(str(binary), identity, target, inputs)
+    namespace["_TABLE"] = tool.canonical(value).decode()
     consumer = tmp_path / "bin-bash"
     consumer.symlink_to(binary)
     assert lookup(str(consumer), identity, target, inputs)["candidate"] == build
@@ -201,14 +222,18 @@ def test_generated_consumers_select_exact_build_and_inputs(tmp_path):
     exec(compile(host_path.read_text(), str(host_path), "exec"), namespace)
     assert namespace["lookup"](str(binary), identity, target, inputs)["candidate"] == build
     go_dir = tmp_path / "runtime/envoy/bashbuild"
-    shutil.copy(ROOT / "runtime/envoy/bashbuild/lookup.go", go_dir)
+    for filename in ("lookup.go", "table.go"):
+        shutil.copy(ROOT / "runtime/envoy/bashbuild" / filename, go_dir)
     (go_dir / "go.mod").write_text("module synthetic\n\ngo 1.20\n")
     go_test = '''package bashbuild
 import ("os"; "testing")
 func TestSynthetic(t *testing.T) {
     inputs := map[string]string{INPUTS}
+    data,err:=readTable(TABLE,TABLEHASH);if err!=nil {t.Fatal(err)}
+    inputs[tablePath]=TABLEHASH
+    lookup:=func(path,digest string,target Target,inputs map[string]string)(Entry,error){return lookupBytes(path,digest,target,inputs,data)}
     target := Target{OS:"linux", Arch:"amd64", OSReleaseID:"synthetic", VersionID:"1"}
-    for _, lookup := range []func(string,string,Target,map[string]string)(Entry,error){LookupEnvoy,LookupAwsh} {
+    for range []int{0,1} {
         entry,err:=lookup(PATH,DIGEST,target,inputs)
         if err!=nil {t.Fatal(err)}
         if entry.Candidate.Target.OSReleaseID!="synthetic" || entry.Candidate.Target.VersionID!="1" {t.Fatal("lost distribution metadata")}
@@ -224,10 +249,11 @@ func TestSynthetic(t *testing.T) {
         }
     }
     if err:=os.WriteFile(RC,[]byte("present"),0600);err!=nil {t.Fatal(err)}
-    if _,err:=LookupAwsh(PATH,DIGEST,target,inputs);err==nil {t.Fatal("accepted present rc")}
+    if _,err:=lookup(PATH,DIGEST,target,inputs);err==nil {t.Fatal("accepted present rc")}
 }
 '''
-    for key, val in {"INPUTS": ",".join(json.dumps(k)+":"+json.dumps(v) for k,v in inputs.items()),
+    runtime_table = tmp_path / "runtime/envoy/etc/bash-builds.json"
+    for key, val in {"TABLEHASH": json.dumps(tool.sha(runtime_table.read_bytes())), "TABLE": json.dumps(str(runtime_table)), "INPUTS": ",".join(json.dumps(k)+":"+json.dumps(v) for k,v in inputs.items()),
                      "PATH": json.dumps(str(binary)), "CONSUMER": json.dumps(str(consumer)), "DIGEST": json.dumps(identity), "RC": json.dumps(str(system_rc))}.items():
         go_test = go_test.replace(key, val)
     (go_dir / "lookup_test.go").write_text(go_test)
@@ -472,3 +498,140 @@ def test_cli_generation_and_stale_check(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as error:
         tool.main()
     assert error.value.code == 1
+
+
+def test_runtime_generation_is_independent_of_qualification_data(tmp_path):
+    first = table()
+    second = copy.deepcopy(first)
+    entry = second["builds"]["b" * 64]
+    entry["candidate"]["release"] = "different-qualification-<>&\u2028\u2029"
+    entry["qualification"] = receipt(entry["candidate"])
+    a, b = tool.generated(first), tool.generated(second)
+    for name in a:
+        if name.endswith(".go"):
+            assert a[name] == b[name]
+            assert "synthetic" not in a[name]
+            assert tool.sha(tool.canonical(first)) not in a[name]
+    assert a["runtime/envoy/etc/bash-builds.json"] != b["runtime/envoy/etc/bash-builds.json"]
+    tool.generate(first, tmp_path)
+    for name in ("runtime/envoy/etc/bash-builds.json", "runtime/envoy/bashbuild/table_generated.go"):
+        original = (tmp_path / name).read_bytes()
+        (tmp_path / name).write_bytes(original + b"\n")
+        with pytest.raises(ValueError, match=name):
+            tool.generate(first, tmp_path, check=True)
+        (tmp_path / name).write_bytes(original)
+    tool.generate(first, tmp_path, check=True)
+
+
+def test_output_table_cannot_qualify_itself():
+    value = table()
+    entry = value["builds"]["b" * 64]
+    proof = entry["qualification"]
+    proof["adapter_inputs"][tool.RUNTIME_TABLE] = "e" * 64
+    proof["assets"][tool.RUNTIME_TABLE] = tool.RUNTIME_TABLE
+    proof["inputs"][tool.RUNTIME_TABLE] = "e" * 64
+    with pytest.raises(ValueError, match="output"):
+        tool.validate_table(value)
+
+
+def test_complete_runtime_schema_matches_generated_host(tmp_path):
+    """Shared mutations compare the actual generated host and Go validators."""
+    if not shutil.which("go"):
+        pytest.skip("Go toolchain unavailable")
+    tool.generate(table(), tmp_path)
+    host_path = tmp_path / "src/omegaflow/bash_builds.py"
+    host = {"__file__": str(host_path), "__name__": "schema_host"}
+    exec(compile(host_path.read_text(), str(host_path), "exec"), host)
+    variants = [table(), table(False), {"version": 1, "builds": {}}]
+    own_output = table()
+    proof = own_output["builds"]["b" * 64]["qualification"]
+    proof["adapter_inputs"][tool.RUNTIME_TABLE] = "e" * 64
+    proof["assets"][tool.RUNTIME_TABLE] = tool.RUNTIME_TABLE
+    proof["inputs"][tool.RUNTIME_TABLE] = "e" * 64
+    variants.append(own_output)
+    sibling = table()
+    sibling["builds"]["f" * 64] = {"candidate": {}, "qualification": None}
+    variants.append(sibling)
+    for path, replacement in test_reject_table.pytestmark[0].args[1]:
+        value = table()
+        set_path(value, path, replacement)
+        variants.append(value)
+    for path, replacement in test_reject_measurements.pytestmark[0].args[1]:
+        value = table()
+        set_path(value["builds"]["b" * 64]["qualification"]["result"]["measurements"], path, replacement)
+        variants.append(value)
+    # Sweep the complete schema with wrong types, absent and unknown fields;
+    # dynamic map keys are included, not just selected candidate fields.
+    def paths(value, prefix=()):
+        yield prefix, value
+        if isinstance(value, dict):
+            for key, child in value.items():
+                yield from paths(child, (*prefix, key))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                yield from paths(child, (*prefix, index))
+    original = table()
+    for keys, child in paths(original):
+        if not keys:
+            continue
+        for replacement in (None, [], {}, True, False, "invalid", 1.0):
+            value = copy.deepcopy(original)
+            set_path(value, keys, replacement)
+            variants.append(value)
+        if isinstance(child, dict):
+            value = copy.deepcopy(original)
+            set_path(value, keys, {**child, "unknown": None})
+            variants.append(value)
+            if child:
+                value = copy.deepcopy(original)
+                set_path(value, keys, {k: v for k, v in child.items() if k != next(iter(child))})
+                variants.append(value)
+    # Canonical digests must preserve non-ASCII, HTML and line separators.
+    for release in ("<>&\u2028\u2029🙂\n\t\b", "a" * 4096):
+        value = table()
+        entry = value["builds"]["b" * 64]
+        entry["candidate"]["release"] = release
+        entry["qualification"] = receipt(entry["candidate"])
+        variants.append(value)
+    double_root = table()
+    entry = double_root["builds"]["b" * 64]
+    entry["candidate"]["resolved_path"] = "//synthetic/bash"
+    entry["qualification"] = receipt(entry["candidate"])
+    variants.append(double_root)
+    data = [tool.canonical(v) for v in variants]
+    data.append(json.dumps(table(), ensure_ascii=True).encode())
+    for surrogate in ("\ud800", "\udc00"):
+        invalid_unicode = table()
+        invalid_unicode["builds"]["b" * 64]["qualification"]["probe"].append(surrogate)
+        data.append(json.dumps(invalid_unicode, ensure_ascii=True).encode())
+    data.extend([b'{"version":1,"version":1,"builds":{}}', b'{}{}', b'\xff',
+                 br'{"version":1,"builds":{},"x":"\ud800"}',
+                 br'{"version":1,"builds":{},"x":"\udc00"}', b'{"x":NaN}',
+                 b'{"x":"\\', b'{"x":"\\u00', br'{"x":"\uzzzz"}',
+                 br'{"x":"\ud800\u0041"}', br'{"x":"\ud800\uzzzz"}',
+                 b'[' * 66 + b'0' + b']' * 66, b'{', b'[', b'{"x":'])
+    records = []
+    for raw in data:
+        try:
+            value = host["validate_table"](host["decode"](raw))
+            valid = all(entry["qualification"] is not None for entry in value["builds"].values())
+        except (ValueError, TypeError, KeyError):
+            valid = False
+        records.append({"data": base64.b64encode(raw).decode(), "valid": valid})
+    manifest = tmp_path / "variants.json"
+    manifest.write_text(json.dumps(records))
+    go_dir = tmp_path / "runtime/envoy/bashbuild"
+    for filename in ("lookup.go", "table.go"):
+        shutil.copy(ROOT / "runtime/envoy/bashbuild" / filename, go_dir)
+    (go_dir / "go.mod").write_text("module schema\n\ngo 1.25\n")
+    (go_dir / "schema_test.go").write_text('''package bashbuild
+import ("os";"testing";"encoding/json";"encoding/base64")
+func TestSharedSchema(t *testing.T){
+ data,e:=os.ReadFile(MANIFEST);if e!=nil{t.Fatal(e)}
+ var cases []struct{Data string;Valid bool};if e=json.Unmarshal(data,&cases);e!=nil{t.Fatal(e)}
+ for i,c:=range cases{raw,e:=base64.StdEncoding.DecodeString(c.Data);if e!=nil{t.Fatal(e)}
+ _,e=parseTable(raw);if (e==nil)!=c.Valid{t.Errorf("case %d: host=%v Go error=%v data=%s",i,c.Valid,e,raw)}}
+}
+'''.replace("MANIFEST", json.dumps(str(manifest))))
+    result = subprocess.run(["go", "test", "-count=1", "-coverprofile=coverage.out", "./..."], cwd=go_dir, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
