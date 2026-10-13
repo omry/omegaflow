@@ -696,8 +696,7 @@
     {
       "id": "B1-C022-combined-options",
       "command": "trap -p CHLD INT",
-      "mode": "native",
-      "static_discrepancy": "Static expected whole-request-rejected contradicts the approved query-allowed contract; needs owning B1 correction."
+      "mode": "native"
     },
     {
       "id": "B2.4-canonical-entry",
@@ -1169,7 +1168,6 @@
   "pending": [
     "B2.8 qualification/build-specific expectations",
     "B4.3 gate helper transport",
-    "B2.5/B2.6/B2.7 recurring state/start/completion",
-    "B1-C022-combined-options owning static correction"
+    "B2.5/B2.6/B2.7 recurring state/start/completion"
   ]
 }

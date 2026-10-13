@@ -367,9 +367,6 @@ def worker(args):
                             raise AssertionError(f'{name} is no longer readonly')
                 if case.get('after') == 'posix' and 'POSIX_DISABLED=0' not in observed['stdout']:
                     raise AssertionError('POSIX reservation did not survive native request')
-                if case.get('static_discrepancy'):
-                    result['static_discrepancy'] = case['static_discrepancy']
-                    result['static_expectation_status'] = 'pending-owning-correction'
             result['passed'] = True
             write_json(directory / 'result.json', result)
             print('PASS', case['id'], flush=True)
