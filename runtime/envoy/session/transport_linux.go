@@ -86,6 +86,7 @@ type Channels struct {
 	workers             sync.WaitGroup
 	errMu               sync.Mutex
 	err                 error
+	failedWorkload      *Workload
 	ready               bool
 	readyMu             sync.Mutex
 	writeMu             sync.Mutex
