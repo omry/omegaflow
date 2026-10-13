@@ -44,11 +44,34 @@ type Session struct {
 	active              *startRecord
 	startFailed         bool
 	completion          *completionRecord
+	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
 }
 
 // Start admits only a qualified, exact build. No executable supervise command
 // exposes this partial startup module before the remaining adapter is assembled.
 func Start(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string) (*Session, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		return nil, fmt.Errorf("launch requires the existing phase deadline")
+	}
+	return startQualified(ctx, h, expected, target, inputs, false)
+}
+
+// StartControlled uses cancellation delivered by the existing Envoy control
+// channel. Envoy enforces the launch epoch; Awsh creates no lifecycle clock.
+func StartControlled(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string) (*Session, error) {
+	if ctx.Done() == nil {
+		return nil, fmt.Errorf("controlled launch requires parent cancellation")
+	}
+	return startQualified(ctx, h, expected, target, inputs, true)
+}
+
+func startQualified(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string, controlled bool) (s *Session, err error) {
+	owned := false
+	defer func() {
+		if controlled && err != nil && !owned {
+			ReportLaunchFailure(ctx, h.Result)
+		}
+	}()
 	entry, err := bashbuild.LookupAwsh("/bin/bash", expected, target, inputs)
 	if err != nil {
 		return nil, err
@@ -71,12 +94,45 @@ func Start(ctx context.Context, h Handoff, expected string, target bashbuild.Tar
 			signals = append(signals, n)
 		}
 	}
-	return start(ctx, h, signals)
+	owned = true // startOwned assumes result ownership, including its failures.
+	return startOwned(ctx, h, signals, controlled)
+}
+
+// ReportLaunchFailure consumes a usable inherited result pipe only before a
+// Session owns it. Failure reporting retains the existing sender bound and
+// caller cancellation; it never replaces the original startup error.
+func ReportLaunchFailure(ctx context.Context, fd int) {
+	if fd <= 2 {
+		return
+	}
+	flags, err := fcntl(fd, syscall.F_GETFL, 0)
+	if err != nil || flags&syscall.O_ACCMODE != syscall.O_WRONLY {
+		return
+	}
+	var stat syscall.Stat_t
+	if syscall.Fstat(fd, &stat) != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFIFO {
+		return
+	}
+	if syscall.SetNonblock(fd, true) != nil {
+		return
+	}
+	result := os.NewFile(uintptr(fd), "awsh-pre-session-result")
+	defer result.Close()
+	writeLaunchFailure(ctx, result)
+}
+
+func writeLaunchFailure(ctx context.Context, result helper.DeadlineWriter) {
+	frame, _ := protocol.EncodePrivate(protocol.PrivateProtocolError{Code: "shell-launch", Message: "selected-shell launch failed"}, protocol.AwshToEnvoy)
+	_ = helper.WriteControl(ctx, result, frame)
 }
 
 func start(ctx context.Context, h Handoff, signals []uint64) (s *Session, err error) {
+	return startOwned(ctx, h, signals, false)
+}
+
+func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled bool) (s *Session, err error) {
 	deadline, ok := ctx.Deadline()
-	if !ok {
+	if !ok && !controlled {
 		return nil, fmt.Errorf("launch requires the existing phase deadline")
 	}
 	if err = ctx.Err(); err != nil {
@@ -85,7 +141,7 @@ func start(ctx context.Context, h Handoff, signals []uint64) (s *Session, err er
 	if err = h.intake(); err != nil {
 		return nil, err
 	}
-	s = &Session{Handoff: h}
+	s = &Session{Handoff: h, parentControlled: controlled}
 	// NewFile registers a nonblocking pipe with Go's poller, making the original
 	// deadline and context closure effective even when Envoy stops reading.
 	if err = syscall.SetNonblock(h.Result, true); err != nil {
@@ -100,8 +156,7 @@ func start(ctx context.Context, h Handoff, signals []uint64) (s *Session, err er
 	defer func() {
 		if err != nil {
 			s.stopStartup()
-			frame, _ := protocol.EncodePrivate(protocol.PrivateProtocolError{Code: "shell-launch", Message: "selected-shell launch failed"}, protocol.AwshToEnvoy)
-			_ = helper.WriteAll(s.result, frame) // best effort under the unchanged epoch
+			writeLaunchFailure(ctx, s.result) // best effort under the unchanged epoch
 			s.Close()
 		}
 	}()
@@ -198,11 +253,45 @@ func start(ctx context.Context, h Handoff, signals []uint64) (s *Session, err er
 		err = e
 		return
 	}
-	err = helper.WriteAll(s.result, frame)
+	err = helper.WriteControl(ctx, s.result, frame)
 	if err == nil {
 		err = ctx.Err()
 	}
 	return
+}
+
+// ShutdownIdle disposes the launched shell and helpers before the existing
+// closed result. The dispatcher must keep operation/lifecycle decisions outside
+// this startup-only primitive.
+func (s *Session) ShutdownIdle(ctx context.Context) error {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if !s.ready || s.active != nil || s.completion != nil || ctx.Err() != nil {
+		return fmt.Errorf("shutdown outside idle boundary")
+	}
+	s.stopStartup()
+	r := <-s.Reaped
+	if r.Err != nil {
+		return r.Err
+	}
+	status := r.Status.ExitStatus()
+	if r.Status.Signaled() {
+		status = 128 + int(r.Status.Signal())
+	}
+	frame, err := protocol.EncodePrivate(protocol.PrivateClosed{Reason: "shutdown", Status: int64(status), CWD: s.State.PhysicalCWD}, protocol.AwshToEnvoy)
+	if err == nil {
+		err = helper.WriteControl(ctx, s.result, frame)
+	}
+	return err
+}
+
+// ReportIdleExit reports the already reaped idle shell, not operation results.
+func (s *Session) ReportIdleExit(ctx context.Context, status int64) error {
+	frame, err := protocol.EncodePrivate(protocol.PrivateShellExit{Status: status, CWD: s.State.PhysicalCWD}, protocol.AwshToEnvoy)
+	if err == nil {
+		err = helper.WriteControl(ctx, s.result, frame)
+	}
+	return err
 }
 
 func (s *Session) finishStartup(monitorStop, monitorDone chan struct{}, monitorError <-chan error, err error) error {
@@ -599,7 +688,10 @@ func (s *Session) Close() {
 		} else if s.Handoff.Result > 2 {
 			syscall.Close(s.Handoff.Result)
 		}
-		if s.Handoff.Control > 2 {
+		if s.Handoff.Control > 2 && !s.parentControlled {
+			// Parent-controlled sessions borrow the inherited control os.File
+			// through Session.Close; supervisor cleanup closes it before joining
+			// the reader.
 			syscall.Close(s.Handoff.Control)
 		}
 	})

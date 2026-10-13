@@ -1,0 +1,22 @@
+{
+  "implementation_leaf": "B3.2.1",
+  "parent_leaf": "B3.2",
+  "private_proofs": [
+    "TestNativeRuntimeInputs",
+    "TestNativePreSessionFailure",
+    "TestNativePrivateStartup/shutdown",
+    "TestNativePrivateStartup/control-eof",
+    "TestNativePrivateStartup/early-eof",
+    "TestNativePrivateStartup/invalid-private",
+    "TestNativePrivateStartup/release-idle",
+    "TestNativePrivateStartup/blocked-startup-failure",
+    "TestNativePrivateStartup/cancelled-startup-failure",
+    "TestExactManifestPayload",
+    "TestInvalidManifestIdentities",
+    "TestPayloadTamperingAndUnsafeFiles"
+  ],
+  "pre_session_fault_images": ["manifest", "qualification"],
+  "cumulative_closeout": "B3.2.2",
+  "later_owners": ["B3.3", "B3.4", "B4", "B6", "C4"],
+  "qualification": "Actual changed Awsh bytes require genuine affected-target receipts; no ARM64 claim from compilation."
+}
