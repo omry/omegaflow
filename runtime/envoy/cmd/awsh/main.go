@@ -6,9 +6,16 @@ import (
 	"os"
 
 	"github.com/omry/omegaflow/runtime/envoy/awsh/helper"
+	"github.com/omry/omegaflow/runtime/envoy/awsh/supervise"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "supervise" {
+		if supervise.Run(os.Args[1:]) == nil {
+			return
+		}
+		os.Exit(2)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "bash-fail-stop" {
 		helper.FailStop()
 	}
