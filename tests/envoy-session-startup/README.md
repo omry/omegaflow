@@ -36,9 +36,32 @@ Qualification binds the actual changed Awsh binary and every adapter input.
 Historical receipts cannot admit later bytes. Only targets with genuine fresh
 receipts may remain advertised. ARM64 build checks do not qualify ARM64.
 
-B3.2.2 retains the original complete Envoy/Awsh/Bash startup gate: PTY ownership,
-exact 0–4096-byte startup comparison, complete public ready before startup
-terminal bytes, immediate-response readiness, original Envoy launch epoch and
-bounded partial-launch cleanup. Passing these private proofs does not claim
-public startup or complete B3.2 delivery. Relay, operation start and ordinary
-return remain B3.3/B3.4; no B4 behavior is included.
+B3.2.2 owns the complete Envoy/Awsh/Bash startup transaction. Run
+`public.py --qualification <qualification-directory> --output <new-directory>`
+on the same genuine targets. Both runners use one isolated manifest producer
+in `staging.py`; it verifies the retained receipt/entry/image identities and
+compares the newly built Awsh and fixed startup assets with their measured
+hashes. Changed bound bytes require fresh qualification, never a copied claim.
+The session test binary is an isolated assembly of the actual Envoy module;
+the production Envoy entry and host payload staging remain later owners.
+
+Native public cases verify the exact measured startup string and private/public
+PID/cwd agreement, complete public ready before startup terminal bytes,
+immediate controller response, disposal of the completed launch context,
+public/private descriptor isolation, idle shutdown with the controller reason,
+private EOF and zero-status direct Awsh reap, terminal drain/half-close and
+exact final output offset. Separate fixed-input fault images fail before child
+allocation. A pre-existing session directory is refused without removing foreign state.
+Repeated selected-channel loss exercises owned partial-launch cleanup.
+
+Real PTY host fixtures separately cover 0/4096-byte exact buffers, overflow,
+mismatches, late expected bytes, startup EOF/EIO, the original deadline,
+cancellation callback joins and final partial-output offsets. These boundary
+fixtures are not genuine startup measurements. Envoy filters delegated launch
+values and installs the protocol's fixed terminal/history/locale values before
+Awsh exec. Failure cleanup and idle shutdown each retain their single existing
+final-drain epoch; no phase resets or Awsh lifecycle timer are added.
+
+The original cumulative B3.2 acceptance requires both private and public
+proofs. Relay, operation start and ordinary return remain B3.3/B3.4; no B4
+behavior or B6 descendant census is included.
