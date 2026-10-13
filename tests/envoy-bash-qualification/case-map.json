@@ -1,0 +1,1394 @@
+{
+  "B1-AUX-helper-completion-accepted": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-accepted"
+  ],
+  "B1-AUX-helper-completion-ready": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-ready"
+  ],
+  "B1-AUX-helper-completion-state": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-state"
+  ],
+  "B1-AUX-helper-gate-accepted": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-accepted"
+  ],
+  "B1-AUX-helper-gate-request": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-request"
+  ],
+  "B1-AUX-helper-prepared-accepted": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-accepted"
+  ],
+  "B1-AUX-helper-prepared-request": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-request"
+  ],
+  "B1-AUX-helper-source-pty": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-pty"
+  ],
+  "B1-AUX-helper-source-request": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-request"
+  ],
+  "B1-AUX-helper-source-split": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-split"
+  ],
+  "B1-AUX-helper-startup-accepted": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-accepted"
+  ],
+  "B1-AUX-helper-startup-ready": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-ready"
+  ],
+  "B1-AUX-helper-startup-state": [
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-state"
+  ],
+  "B1-AUX-private-closed": [
+    "helper:TestFrozenPrivateWrites/private-closed"
+  ],
+  "B1-AUX-private-completed": [
+    "helper:TestFrozenPrivateWrites/private-completed"
+  ],
+  "B1-AUX-private-continue": [
+    "helper:TestFrozenPrivateWrites/private-continue"
+  ],
+  "B1-AUX-private-execute-pty": [
+    "helper:TestFrozenPrivateWrites/private-execute-pty"
+  ],
+  "B1-AUX-private-execute-split": [
+    "helper:TestFrozenPrivateWrites/private-execute-split"
+  ],
+  "B1-AUX-private-gate-continued": [
+    "helper:TestFrozenPrivateWrites/private-gate-continued"
+  ],
+  "B1-AUX-private-gate-interrupted": [
+    "helper:TestFrozenPrivateWrites/private-gate-interrupted"
+  ],
+  "B1-AUX-private-gate-ready": [
+    "helper:TestFrozenPrivateWrites/private-gate-ready"
+  ],
+  "B1-AUX-private-input-close": [
+    "helper:TestFrozenPrivateWrites/private-input-close"
+  ],
+  "B1-AUX-private-input-closed": [
+    "helper:TestFrozenPrivateWrites/private-input-closed"
+  ],
+  "B1-AUX-private-protocol-error": [
+    "helper:TestFrozenPrivateWrites/private-protocol-error"
+  ],
+  "B1-AUX-private-ready": [
+    "helper:TestFrozenPrivateWrites/private-ready"
+  ],
+  "B1-AUX-private-rejected": [
+    "helper:TestFrozenPrivateWrites/private-rejected"
+  ],
+  "B1-AUX-private-shell-exit-active": [
+    "helper:TestFrozenPrivateWrites/private-shell-exit-active"
+  ],
+  "B1-AUX-private-shell-exit-idle": [
+    "helper:TestFrozenPrivateWrites/private-shell-exit-idle"
+  ],
+  "B1-AUX-private-shutdown": [
+    "helper:TestFrozenPrivateWrites/private-shutdown"
+  ],
+  "B1-AUX-private-start-prepared": [
+    "helper:TestFrozenPrivateWrites/private-start-prepared"
+  ],
+  "B1-AUX-private-start-release": [
+    "helper:TestFrozenPrivateWrites/private-start-release"
+  ],
+  "B1-AUX-private-start-released": [
+    "helper:TestFrozenPrivateWrites/private-start-released"
+  ],
+  "B1-AUX-private-started": [
+    "helper:TestFrozenPrivateWrites/private-started"
+  ],
+  "B1-AUX-private-started-ack": [
+    "helper:TestFrozenPrivateWrites/private-started-ack"
+  ],
+  "B1-AUX-private-submit": [
+    "helper:TestFrozenPrivateWrites/private-submit"
+  ],
+  "B1-C001-control-write-awsh": [
+    "helper:TestFrozenPrivateWrites",
+    "helper:TestExactWriteLoop"
+  ],
+  "B1-C003-path-example-defined": [
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-defined",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C003-path-example-relative": [
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-relative",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C003-path-example-tilde": [
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C003-path-example-tilde-user": [
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde-user",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C003-path-example-undefined": [
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-undefined",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C007-contract": [
+    "measurement:startup",
+    "measurement:readline",
+    "launch:TestRealCandidateStartup",
+    "raw-startup:TestRealCandidateStartup",
+    "launch:TestTerminalLeaseRestoration"
+  ],
+  "B1-C010-canonical-frame-pty-0": [
+    "submission:TestCanonicalFrozenFrames",
+    "readline:B1-C010-canonical-frame-pty-0"
+  ],
+  "B1-C010-canonical-frame-pty-255": [
+    "submission:TestCanonicalFrozenFrames",
+    "readline:B1-C010-canonical-frame-pty-255"
+  ],
+  "B1-C010-canonical-frame-split-0": [
+    "submission:TestCanonicalFrozenFrames",
+    "readline:B1-C010-canonical-frame-split-0"
+  ],
+  "B1-C010-canonical-frame-split-255": [
+    "submission:TestCanonicalFrozenFrames",
+    "readline:B1-C010-canonical-frame-split-255"
+  ],
+  "B1-C010-contract": [
+    "submission:TestCanonicalFrozenFrames",
+    "submission:TestFrameBoundsAndScalars",
+    "readline:B2.5-multiline-quotes-comments",
+    "readline:B2.5-heredoc",
+    "readline:B2.5-backslash-boundary"
+  ],
+  "B1-C011-contract": [
+    "readline:B2.5-colon-function-zero",
+    "readline:B2.5-colon-function-nonzero",
+    "readline:B2.5-colon-disabled",
+    "readline:B2.5-preceding-status"
+  ],
+  "B1-C011-suffix-colon-disabled-0": [
+    "readline:B1-C011-suffix-colon-disabled-0"
+  ],
+  "B1-C011-suffix-colon-disabled-1": [
+    "readline:B1-C011-suffix-colon-disabled-1"
+  ],
+  "B1-C011-suffix-colon-disabled-255": [
+    "readline:B1-C011-suffix-colon-disabled-255"
+  ],
+  "B1-C011-suffix-colon-function-0": [
+    "readline:B1-C011-suffix-colon-function-0"
+  ],
+  "B1-C011-suffix-colon-function-1": [
+    "readline:B1-C011-suffix-colon-function-1"
+  ],
+  "B1-C011-suffix-colon-function-255": [
+    "readline:B1-C011-suffix-colon-function-255"
+  ],
+  "B1-C012-contract": [
+    "reserved:B1-C012-contract"
+  ],
+  "B1-C013-contract": [
+    "reserved:B1-C013-contract"
+  ],
+  "B1-C014-contract": [
+    "reserved:B1-C014-contract"
+  ],
+  "B1-C015-contract": [
+    "reserved:B1-C015-contract"
+  ],
+  "B1-C016-contract": [
+    "reserved:B1-C016-contract"
+  ],
+  "B1-C017-contract": [
+    "reserved:B1-C017-contract"
+  ],
+  "B1-C018-contract": [
+    "launch:TestRealCandidateCompletion/persistent",
+    "launch:TestRealCandidateCompletion/editing"
+  ],
+  "B1-C019-contract": [
+    "reserved:B1-C019-contract"
+  ],
+  "B1-C020-CHLD-direct": [
+    "reserved:B1-C020-CHLD-direct"
+  ],
+  "B1-C020-CHLD-expanded": [
+    "reserved:B1-C020-CHLD-expanded"
+  ],
+  "B1-C020-CHLD-mixed-targets": [
+    "reserved:B1-C020-CHLD-mixed-targets"
+  ],
+  "B1-C020-CHLD-multiple-targets": [
+    "reserved:B1-C020-CHLD-multiple-targets"
+  ],
+  "B1-C020-DEBUG-direct": [
+    "reserved:B1-C020-DEBUG-direct"
+  ],
+  "B1-C020-DEBUG-expanded": [
+    "reserved:B1-C020-DEBUG-expanded"
+  ],
+  "B1-C020-DEBUG-mixed-targets": [
+    "reserved:B1-C020-DEBUG-mixed-targets"
+  ],
+  "B1-C020-DEBUG-multiple-targets": [
+    "reserved:B1-C020-DEBUG-multiple-targets"
+  ],
+  "B1-C020-ERR-direct": [
+    "reserved:B1-C020-ERR-direct"
+  ],
+  "B1-C020-ERR-expanded": [
+    "reserved:B1-C020-ERR-expanded"
+  ],
+  "B1-C020-ERR-mixed-targets": [
+    "reserved:B1-C020-ERR-mixed-targets"
+  ],
+  "B1-C020-ERR-multiple-targets": [
+    "reserved:B1-C020-ERR-multiple-targets"
+  ],
+  "B1-C020-INT-direct": [
+    "reserved:B1-C020-INT-direct"
+  ],
+  "B1-C020-INT-expanded": [
+    "reserved:B1-C020-INT-expanded"
+  ],
+  "B1-C020-INT-mixed-targets": [
+    "reserved:B1-C020-INT-mixed-targets"
+  ],
+  "B1-C020-INT-multiple-targets": [
+    "reserved:B1-C020-INT-multiple-targets"
+  ],
+  "B1-C020-RETURN-direct": [
+    "reserved:B1-C020-RETURN-direct"
+  ],
+  "B1-C020-RETURN-expanded": [
+    "reserved:B1-C020-RETURN-expanded"
+  ],
+  "B1-C020-RETURN-mixed-targets": [
+    "reserved:B1-C020-RETURN-mixed-targets"
+  ],
+  "B1-C020-RETURN-multiple-targets": [
+    "reserved:B1-C020-RETURN-multiple-targets"
+  ],
+  "B1-C020-SIGCHLD-direct": [
+    "reserved:B1-C020-SIGCHLD-direct"
+  ],
+  "B1-C020-SIGCHLD-expanded": [
+    "reserved:B1-C020-SIGCHLD-expanded"
+  ],
+  "B1-C020-SIGCHLD-mixed-targets": [
+    "reserved:B1-C020-SIGCHLD-mixed-targets"
+  ],
+  "B1-C020-SIGCHLD-multiple-targets": [
+    "reserved:B1-C020-SIGCHLD-multiple-targets"
+  ],
+  "B1-C020-SIGINT-direct": [
+    "reserved:B1-C020-SIGINT-direct"
+  ],
+  "B1-C020-SIGINT-expanded": [
+    "reserved:B1-C020-SIGINT-expanded"
+  ],
+  "B1-C020-SIGINT-mixed-targets": [
+    "reserved:B1-C020-SIGINT-mixed-targets"
+  ],
+  "B1-C020-SIGINT-multiple-targets": [
+    "reserved:B1-C020-SIGINT-multiple-targets"
+  ],
+  "B1-C020-chld-direct": [
+    "reserved:B1-C020-chld-direct"
+  ],
+  "B1-C020-chld-expanded": [
+    "reserved:B1-C020-chld-expanded"
+  ],
+  "B1-C020-chld-mixed-targets": [
+    "reserved:B1-C020-chld-mixed-targets"
+  ],
+  "B1-C020-chld-multiple-targets": [
+    "reserved:B1-C020-chld-multiple-targets"
+  ],
+  "B1-C020-contract": [
+    "reserved:B1-C020-contract"
+  ],
+  "B1-C020-int-direct": [
+    "reserved:B1-C020-int-direct"
+  ],
+  "B1-C020-int-expanded": [
+    "reserved:B1-C020-int-expanded"
+  ],
+  "B1-C020-int-mixed-targets": [
+    "reserved:B1-C020-int-mixed-targets"
+  ],
+  "B1-C020-int-multiple-targets": [
+    "reserved:B1-C020-int-multiple-targets"
+  ],
+  "B1-C020-selected-numeric-CHLD-direct": [
+    "reserved:B1-C020-selected-numeric-CHLD-direct"
+  ],
+  "B1-C020-selected-numeric-CHLD-expanded": [
+    "reserved:B1-C020-selected-numeric-CHLD-expanded"
+  ],
+  "B1-C020-selected-numeric-CHLD-mixed-targets": [
+    "reserved:B1-C020-selected-numeric-CHLD-mixed-targets"
+  ],
+  "B1-C020-selected-numeric-CHLD-multiple-targets": [
+    "reserved:B1-C020-selected-numeric-CHLD-multiple-targets"
+  ],
+  "B1-C020-selected-numeric-INT-direct": [
+    "reserved:B1-C020-selected-numeric-INT-direct"
+  ],
+  "B1-C020-selected-numeric-INT-expanded": [
+    "reserved:B1-C020-selected-numeric-INT-expanded"
+  ],
+  "B1-C020-selected-numeric-INT-mixed-targets": [
+    "reserved:B1-C020-selected-numeric-INT-mixed-targets"
+  ],
+  "B1-C020-selected-numeric-INT-multiple-targets": [
+    "reserved:B1-C020-selected-numeric-INT-multiple-targets"
+  ],
+  "B1-C020-sigchld-direct": [
+    "reserved:B1-C020-sigchld-direct"
+  ],
+  "B1-C020-sigchld-expanded": [
+    "reserved:B1-C020-sigchld-expanded"
+  ],
+  "B1-C020-sigchld-mixed-targets": [
+    "reserved:B1-C020-sigchld-mixed-targets"
+  ],
+  "B1-C020-sigchld-multiple-targets": [
+    "reserved:B1-C020-sigchld-multiple-targets"
+  ],
+  "B1-C020-sigint-direct": [
+    "reserved:B1-C020-sigint-direct"
+  ],
+  "B1-C020-sigint-expanded": [
+    "reserved:B1-C020-sigint-expanded"
+  ],
+  "B1-C020-sigint-mixed-targets": [
+    "reserved:B1-C020-sigint-mixed-targets"
+  ],
+  "B1-C020-sigint-multiple-targets": [
+    "reserved:B1-C020-sigint-multiple-targets"
+  ],
+  "B1-C021-builtin-builtin-disable": [
+    "reserved:B1-C021-builtin-builtin-disable"
+  ],
+  "B1-C021-builtin-builtin-dynamic-load": [
+    "reserved:B1-C021-builtin-builtin-dynamic-load"
+  ],
+  "B1-C021-builtin-builtin-dynamic-unload": [
+    "reserved:B1-C021-builtin-builtin-dynamic-unload"
+  ],
+  "B1-C021-builtin-builtin-replace": [
+    "reserved:B1-C021-builtin-builtin-replace"
+  ],
+  "B1-C021-builtin-enable-disable": [
+    "reserved:B1-C021-builtin-enable-disable"
+  ],
+  "B1-C021-builtin-enable-dynamic-load": [
+    "reserved:B1-C021-builtin-enable-dynamic-load"
+  ],
+  "B1-C021-builtin-enable-dynamic-unload": [
+    "reserved:B1-C021-builtin-enable-dynamic-unload"
+  ],
+  "B1-C021-builtin-enable-replace": [
+    "reserved:B1-C021-builtin-enable-replace"
+  ],
+  "B1-C021-builtin-exec-disable": [
+    "reserved:B1-C021-builtin-exec-disable"
+  ],
+  "B1-C021-builtin-exec-dynamic-load": [
+    "reserved:B1-C021-builtin-exec-dynamic-load"
+  ],
+  "B1-C021-builtin-exec-dynamic-unload": [
+    "reserved:B1-C021-builtin-exec-dynamic-unload"
+  ],
+  "B1-C021-builtin-exec-replace": [
+    "reserved:B1-C021-builtin-exec-replace"
+  ],
+  "B1-C021-builtin-jobs-disable": [
+    "reserved:B1-C021-builtin-jobs-disable"
+  ],
+  "B1-C021-builtin-jobs-dynamic-load": [
+    "reserved:B1-C021-builtin-jobs-dynamic-load"
+  ],
+  "B1-C021-builtin-jobs-dynamic-unload": [
+    "reserved:B1-C021-builtin-jobs-dynamic-unload"
+  ],
+  "B1-C021-builtin-jobs-replace": [
+    "reserved:B1-C021-builtin-jobs-replace"
+  ],
+  "B1-C021-builtin-kill-disable": [
+    "reserved:B1-C021-builtin-kill-disable"
+  ],
+  "B1-C021-builtin-kill-dynamic-load": [
+    "reserved:B1-C021-builtin-kill-dynamic-load"
+  ],
+  "B1-C021-builtin-kill-dynamic-unload": [
+    "reserved:B1-C021-builtin-kill-dynamic-unload"
+  ],
+  "B1-C021-builtin-kill-replace": [
+    "reserved:B1-C021-builtin-kill-replace"
+  ],
+  "B1-C021-builtin-return-disable": [
+    "reserved:B1-C021-builtin-return-disable"
+  ],
+  "B1-C021-builtin-return-dynamic-load": [
+    "reserved:B1-C021-builtin-return-dynamic-load"
+  ],
+  "B1-C021-builtin-return-dynamic-unload": [
+    "reserved:B1-C021-builtin-return-dynamic-unload"
+  ],
+  "B1-C021-builtin-return-replace": [
+    "reserved:B1-C021-builtin-return-replace"
+  ],
+  "B1-C021-builtin-trap-disable": [
+    "reserved:B1-C021-builtin-trap-disable"
+  ],
+  "B1-C021-builtin-trap-dynamic-load": [
+    "reserved:B1-C021-builtin-trap-dynamic-load"
+  ],
+  "B1-C021-builtin-trap-dynamic-unload": [
+    "reserved:B1-C021-builtin-trap-dynamic-unload"
+  ],
+  "B1-C021-builtin-trap-replace": [
+    "reserved:B1-C021-builtin-trap-replace"
+  ],
+  "B1-C021-builtin-wait-disable": [
+    "reserved:B1-C021-builtin-wait-disable"
+  ],
+  "B1-C021-builtin-wait-dynamic-load": [
+    "reserved:B1-C021-builtin-wait-dynamic-load"
+  ],
+  "B1-C021-builtin-wait-dynamic-unload": [
+    "reserved:B1-C021-builtin-wait-dynamic-unload"
+  ],
+  "B1-C021-builtin-wait-replace": [
+    "reserved:B1-C021-builtin-wait-replace"
+  ],
+  "B1-C021-contract": [
+    "reserved:B1-C021-contract"
+  ],
+  "B1-C021-redefine-awsh": [
+    "reserved:B1-C021-redefine-awsh"
+  ],
+  "B1-C021-unset-awsh": [
+    "reserved:B1-C021-unset-awsh"
+  ],
+  "B1-C022-combined-options": [
+    "reserved:B1-C022-combined-options"
+  ],
+  "B1-C022-contract": [
+    "reserved:B1-C022-contract"
+  ],
+  "B1-C022-mixed-reserved-nonreserved": [
+    "reserved:B1-C022-mixed-reserved-nonreserved"
+  ],
+  "B1-C022-multiple-names": [
+    "reserved:B1-C022-multiple-names"
+  ],
+  "B1-C022-nonrequired-builtin-modes": [
+    "reserved:B1-C022-nonrequired-builtin-modes"
+  ],
+  "B1-C022-nonreserved-numeric-trap": [
+    "reserved:B1-C022-nonreserved-numeric-trap"
+  ],
+  "B1-C022-numeric-CHLD-query": [
+    "reserved:B1-C022-numeric-CHLD-query"
+  ],
+  "B1-C022-numeric-INT-query": [
+    "reserved:B1-C022-numeric-INT-query"
+  ],
+  "B1-C022-positive-enable": [
+    "reserved:B1-C022-positive-enable"
+  ],
+  "B1-C022-reserved-query": [
+    "reserved:B1-C022-reserved-query"
+  ],
+  "B1-C023-contract": [
+    "reserved:B1-C023-contract"
+  ],
+  "B1-C024-assignment-combined": [
+    "reserved:B1-C024-assignment-combined"
+  ],
+  "B1-C024-assignment-direct": [
+    "reserved:B1-C024-assignment-direct"
+  ],
+  "B1-C024-assignment-expanded": [
+    "reserved:B1-C024-assignment-expanded"
+  ],
+  "B1-C024-builtin-set-combined": [
+    "reserved:B1-C024-builtin-set-combined"
+  ],
+  "B1-C024-builtin-set-direct": [
+    "reserved:B1-C024-builtin-set-direct"
+  ],
+  "B1-C024-builtin-set-expanded": [
+    "reserved:B1-C024-builtin-set-expanded"
+  ],
+  "B1-C024-builtin-shopt-combined": [
+    "reserved:B1-C024-builtin-shopt-combined"
+  ],
+  "B1-C024-builtin-shopt-direct": [
+    "reserved:B1-C024-builtin-shopt-direct"
+  ],
+  "B1-C024-builtin-shopt-expanded": [
+    "reserved:B1-C024-builtin-shopt-expanded"
+  ],
+  "B1-C024-contract": [
+    "reserved:B1-C024-contract"
+  ],
+  "B1-C024-set-combined": [
+    "reserved:B1-C024-set-combined"
+  ],
+  "B1-C024-set-direct": [
+    "reserved:B1-C024-set-direct"
+  ],
+  "B1-C024-set-expanded": [
+    "reserved:B1-C024-set-expanded"
+  ],
+  "B1-C024-shopt-combined": [
+    "reserved:B1-C024-shopt-combined"
+  ],
+  "B1-C024-shopt-direct": [
+    "reserved:B1-C024-shopt-direct"
+  ],
+  "B1-C024-shopt-expanded": [
+    "reserved:B1-C024-shopt-expanded"
+  ],
+  "B1-C024-unset-combined": [
+    "reserved:B1-C024-unset-combined"
+  ],
+  "B1-C024-unset-direct": [
+    "reserved:B1-C024-unset-direct"
+  ],
+  "B1-C024-unset-expanded": [
+    "reserved:B1-C024-unset-expanded"
+  ],
+  "B1-C025-contract": [
+    "reserved:B1-C025-contract"
+  ],
+  "B1-C026-contract": [
+    "reserved:B1-C026-contract"
+  ],
+  "B1-C027-contract": [
+    "reserved:B1-C027-contract"
+  ],
+  "B1-C027-nested-CHLD": [
+    "reserved:B1-C027-nested-CHLD"
+  ],
+  "B1-C027-nested-INT": [
+    "reserved:B1-C027-nested-INT"
+  ],
+  "B1-C027-ordinary-child-handler": [
+    "reserved:B1-C027-ordinary-child-handler"
+  ],
+  "B1-C027-posix-disabled-request": [
+    "reserved:B1-C027-posix-disabled-request"
+  ],
+  "B1-C027-posix-query": [
+    "reserved:B1-C027-posix-query"
+  ],
+  "B1-C027-set-positional": [
+    "reserved:B1-C027-set-positional"
+  ],
+  "B1-C029-contract": [
+    "launch:TestRealCandidateCompletion/ordinary-disabled",
+    "launch:TestRealCandidateCompletion/persistent"
+  ],
+  "B1-C031-aliases": [
+    "submission:TestCheckerIgnoresInheritedParserEnvironment"
+  ],
+  "B1-C031-checker-nonzero": [
+    "checker-nonzero:TestQualificationCheckerOutput"
+  ],
+  "B1-C031-checker-stderr": [
+    "checker-stderr:TestQualificationCheckerOutput"
+  ],
+  "B1-C031-checker-stdout": [
+    "checker-stdout:TestQualificationCheckerOutput"
+  ],
+  "B1-C031-comments": [
+    "submission:TestSelectedBashChecker/comments"
+  ],
+  "B1-C031-contract": [
+    "submission:TestSelectedBashChecker",
+    "submission:TestCheckerKeepsDeadlineAndIntegrityErrors",
+    "submission:TestCheckerRejectsDescriptorInheritance",
+    "submission:TestFrameBoundsAndScalars",
+    "readline:B2.5-unicode-no-redisplay"
+  ],
+  "B1-C031-crossed-helper": [
+    "launch:TestRealCandidateStart/crossed-source"
+  ],
+  "B1-C031-duplicate-helper": [
+    "launch:TestRealCandidateStart/duplicate-source"
+  ],
+  "B1-C031-extglob": [
+    "submission:TestSelectedBashChecker/extglob"
+  ],
+  "B1-C031-heredoc": [
+    "submission:TestSelectedBashChecker/heredoc"
+  ],
+  "B1-C031-history": [
+    "submission:TestSelectedBashChecker/history-events",
+    "readline:B2.5-history-vi"
+  ],
+  "B1-C031-interactive-comments": [
+    "submission:TestSelectedBashChecker/comments",
+    "readline:B2.5-multiline-quotes-comments"
+  ],
+  "B1-C031-maximum-source": [
+    "submission:TestSelectedBashChecker/maximum"
+  ],
+  "B1-C031-minimum-source": [
+    "submission:TestSelectedBashChecker/minimum"
+  ],
+  "B1-C031-multiline": [
+    "submission:TestSelectedBashChecker/multiline"
+  ],
+  "B1-C031-no-redisplay": [
+    "readline:B2.5-unicode-no-redisplay",
+    "readline:B2.5-maximum",
+    "measurement:startup"
+  ],
+  "B1-C031-posix": [
+    "submission:TestCheckerIgnoresInheritedParserEnvironment"
+  ],
+  "B1-C031-post-public-start-failure": [
+    "launch:TestRealCandidateStart/wrong-ack"
+  ],
+  "B1-C031-pre-public-start-failure": [
+    "launch:TestRealCandidateStart/missing-source"
+  ],
+  "B1-C031-quotes": [
+    "submission:TestSelectedBashChecker/quotes"
+  ],
+  "B1-C031-reserved-namespace": [
+    "submission:TestSelectedBashChecker/reserved",
+    "submission:TestFrameBoundsAndScalars"
+  ],
+  "B1-C031-trailing-LF": [
+    "submission:TestSelectedBashChecker/trailing-LF"
+  ],
+  "B1-C031-unterminated-heredoc-warning-zero-status": [
+    "submission:TestSelectedBashChecker/unterminated-heredoc"
+  ],
+  "B1-C031-wrong-ID": [
+    "launch:TestRealCandidateStart/wrong-release"
+  ],
+  "B1-C032-INNER_ENTERED-zero": [
+    "launch:TestRealCandidateStart/split-stdout-failure",
+    "launch:TestRealCandidateStart/split-stderr-failure"
+  ],
+  "B1-C032-PS0-positive-marker": [
+    "helper:TestPreparedHelperRequiresCompleteAcceptedEOF",
+    "readline:B2.6-PS0-missing",
+    "readline:B2.6-PS0-wrong",
+    "readline:B2.6-PS0-duplicate"
+  ],
+  "B1-C032-authored-status-one": [
+    "launch:TestRealCandidateStart/split-status-one"
+  ],
+  "B1-C032-contract": [
+    "launch:TestRealCandidateStart",
+    "helper:TestPreparedHelperRequiresCompleteAcceptedEOF",
+    "readline:B2.6-PS0-missing"
+  ],
+  "B1-C032-fail-stop-no-arguments": [
+    "helper:TestFailStop",
+    "readline:B2.6-PS0-wrong"
+  ],
+  "B1-C032-first-command-status": [
+    "readline:B1-C032-first-command-status"
+  ],
+  "B1-C032-first-expansion-status": [
+    "readline:B1-C032-first-expansion-status"
+  ],
+  "B1-C032-helper-disconnect": [
+    "readline:B2.6-PS0-wire-empty",
+    "readline:B2.6-PS0-wire-partial"
+  ],
+  "B1-C032-helper-nonzero": [
+    "readline:B2.6-PS0-nonzero"
+  ],
+  "B1-C032-helper-signal": [
+    "readline:B2.6-PS0-signal"
+  ],
+  "B1-C032-malformed-marker": [
+    "readline:B2.6-PS0-wrong"
+  ],
+  "B1-C032-missing-marker": [
+    "readline:B2.6-PS0-missing"
+  ],
+  "B1-C032-partial-output": [
+    "readline:B2.6-PS0-partial"
+  ],
+  "B1-C032-post-PS0-signal": [
+    "launch:TestRealCandidateStart/normal",
+    "launch:TestRealCandidateStart/early-signal",
+    "launch:TestRealCandidateStart/second-signal"
+  ],
+  "B1-C032-source-positive-marker": [
+    "helper:TestSourceHelperEmitsOnlyCompleteFrameAndMarker",
+    "readline:B2.5-missing-marker",
+    "readline:B2.5-malformed-marker",
+    "readline:B2.5-duplicate-marker"
+  ],
+  "B1-C032-start-released": [
+    "launch:TestRealCandidateStart/normal",
+    "launch:TestRealCandidateStart/missing-release",
+    "launch:TestRealCandidateStart/duplicate-release"
+  ],
+  "B1-C032-stderr-open-failure": [
+    "launch:TestRealCandidateStart/split-stderr-failure"
+  ],
+  "B1-C032-stdout-open-failure": [
+    "launch:TestRealCandidateStart/split-stdout-failure"
+  ],
+  "B1-C033-ancillary-data": [
+    "helper:TestAncillaryRightsRejectedWithoutLeak",
+    "helper:TestCredentialsAndTruncationRejected"
+  ],
+  "B1-C033-contract": [
+    "helper:TestFrozenHelperSocketFormsAndFragments",
+    "helper:TestRequestNeedsHalfClose",
+    "helper:TestMaximumPayloadsSmallSocketBuffers"
+  ],
+  "B1-C033-max-reply": [
+    "helper:TestMaximumPayloadsSmallSocketBuffers"
+  ],
+  "B1-C033-max-request": [
+    "helper:TestMaximumPayloadsSmallSocketBuffers"
+  ],
+  "B1-C033-missing-half-close": [
+    "helper:TestRequestNeedsHalfClose",
+    "helper:TestOriginalDeadlineNotExtended/request-eof"
+  ],
+  "B1-C033-oversized-length": [
+    "helper:TestMalformedHelperSocket/oversize"
+  ],
+  "B1-C033-payload-every-split": [
+    "helper:TestFrozenHelperSocketFormsAndFragments"
+  ],
+  "B1-C033-positive-short-write": [
+    "helper:TestExactWriteLoop"
+  ],
+  "B1-C033-prefix-every-split": [
+    "helper:TestFrozenHelperSocketFormsAndFragments"
+  ],
+  "B1-C033-premature-EOF": [
+    "helper:TestMalformedReplyAndInvalidOutgoingClose"
+  ],
+  "B1-C033-short-payload": [
+    "helper:TestMalformedHelperSocket",
+    "helper:TestMalformedReplyAndInvalidOutgoingClose"
+  ],
+  "B1-C033-short-prefix": [
+    "helper:TestMalformedHelperSocket",
+    "helper:TestMalformedReplyAndInvalidOutgoingClose"
+  ],
+  "B1-C033-small-socket-buffer": [
+    "helper:TestMaximumPayloadsSmallSocketBuffers"
+  ],
+  "B1-C033-trailing-data": [
+    "helper:TestMalformedHelperSocket/trailing",
+    "helper:TestMalformedReplyAndInvalidOutgoingClose"
+  ],
+  "B1-C033-zero-length": [
+    "helper:TestMalformedHelperSocket/zero"
+  ],
+  "B1-C034-contract": [
+    "helper:TestFailStop",
+    "helper:TestInheritedINTIgnore"
+  ],
+  "B1-C061-contract": [
+    "launch:TestRealCandidateCompletion/allowed-trap",
+    "launch:TestRealCandidateCompletion/trap-int",
+    "launch:TestRealCandidateCompletion/trap-chld",
+    "launch:TestRealCandidateCompletion/binding",
+    "launch:TestRealCandidateCompletion/jobs"
+  ],
+  "B1-C063-contract": [
+    "helper:TestInheritedINTIgnore",
+    "launch:TestRealCandidateCompletion/wrong-peer",
+    "launch:TestRealCandidateCompletion/identity-damage",
+    "launch:TestRealCandidateCompletion/wrong-control"
+  ],
+  "B1-PACKAGE-B2.1": [
+    "bashbuild:TestManifestTableIntake",
+    "bashbuild:TestStrictTableEncoding",
+    "bashbuild:TestEmptyQualifiedTableRejectsBothActors",
+    "bashbuild:TestSpecialBuildDoesNotBlock"
+  ],
+  "B1-PACKAGE-B2.2": [
+    "helper:TestAncillaryRightsRejectedWithoutLeak",
+    "helper:TestCredentialsAndTruncationRejected",
+    "helper:TestExactWriteLoop",
+    "helper:TestFailStop",
+    "helper:TestFrozenHelperSocketFormsAndFragments",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-ready",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-state",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-pty",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-split",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-ready",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-state",
+    "helper:TestFrozenPrivateWrites",
+    "helper:TestFrozenPrivateWrites/private-closed",
+    "helper:TestFrozenPrivateWrites/private-completed",
+    "helper:TestFrozenPrivateWrites/private-continue",
+    "helper:TestFrozenPrivateWrites/private-execute-pty",
+    "helper:TestFrozenPrivateWrites/private-execute-split",
+    "helper:TestFrozenPrivateWrites/private-gate-continued",
+    "helper:TestFrozenPrivateWrites/private-gate-interrupted",
+    "helper:TestFrozenPrivateWrites/private-gate-ready",
+    "helper:TestFrozenPrivateWrites/private-input-close",
+    "helper:TestFrozenPrivateWrites/private-input-closed",
+    "helper:TestFrozenPrivateWrites/private-protocol-error",
+    "helper:TestFrozenPrivateWrites/private-ready",
+    "helper:TestFrozenPrivateWrites/private-rejected",
+    "helper:TestFrozenPrivateWrites/private-shell-exit-active",
+    "helper:TestFrozenPrivateWrites/private-shell-exit-idle",
+    "helper:TestFrozenPrivateWrites/private-shutdown",
+    "helper:TestFrozenPrivateWrites/private-start-prepared",
+    "helper:TestFrozenPrivateWrites/private-start-release",
+    "helper:TestFrozenPrivateWrites/private-start-released",
+    "helper:TestFrozenPrivateWrites/private-started",
+    "helper:TestFrozenPrivateWrites/private-started-ack",
+    "helper:TestFrozenPrivateWrites/private-submit",
+    "helper:TestInheritedINTIgnore",
+    "helper:TestMalformedHelperSocket",
+    "helper:TestMalformedHelperSocket/oversize",
+    "helper:TestMalformedHelperSocket/trailing",
+    "helper:TestMalformedHelperSocket/zero",
+    "helper:TestMalformedReplyAndInvalidOutgoingClose",
+    "helper:TestMaximumPayloadsSmallSocketBuffers",
+    "helper:TestOriginalDeadlineNotExtended/request-eof",
+    "helper:TestRequestNeedsHalfClose"
+  ],
+  "B1-PACKAGE-B2.3": [
+    "selected:TestHandoffGrammar",
+    "selected:TestRealSelectedLaunch",
+    "selected:TestSelectedReaper",
+    "launch:TestRealCandidateStartup",
+    "raw-startup:TestRealCandidateStartup",
+    "launch:TestTerminalLeaseRestoration",
+    "measurement:startup"
+  ],
+  "B1-PACKAGE-B2.4": [
+    "reserved:B1-C012-contract",
+    "reserved:B1-C013-contract",
+    "reserved:B1-C014-contract",
+    "reserved:B1-C015-contract",
+    "reserved:B1-C016-contract",
+    "reserved:B1-C017-contract",
+    "reserved:B1-C019-contract",
+    "reserved:B1-C020-CHLD-direct",
+    "reserved:B1-C020-CHLD-expanded",
+    "reserved:B1-C020-CHLD-mixed-targets",
+    "reserved:B1-C020-CHLD-multiple-targets",
+    "reserved:B1-C020-DEBUG-direct",
+    "reserved:B1-C020-DEBUG-expanded",
+    "reserved:B1-C020-DEBUG-mixed-targets",
+    "reserved:B1-C020-DEBUG-multiple-targets",
+    "reserved:B1-C020-ERR-direct",
+    "reserved:B1-C020-ERR-expanded",
+    "reserved:B1-C020-ERR-mixed-targets",
+    "reserved:B1-C020-ERR-multiple-targets",
+    "reserved:B1-C020-INT-direct",
+    "reserved:B1-C020-INT-expanded",
+    "reserved:B1-C020-INT-mixed-targets",
+    "reserved:B1-C020-INT-multiple-targets",
+    "reserved:B1-C020-RETURN-direct",
+    "reserved:B1-C020-RETURN-expanded",
+    "reserved:B1-C020-RETURN-mixed-targets",
+    "reserved:B1-C020-RETURN-multiple-targets",
+    "reserved:B1-C020-SIGCHLD-direct",
+    "reserved:B1-C020-SIGCHLD-expanded",
+    "reserved:B1-C020-SIGCHLD-mixed-targets",
+    "reserved:B1-C020-SIGCHLD-multiple-targets",
+    "reserved:B1-C020-SIGINT-direct",
+    "reserved:B1-C020-SIGINT-expanded",
+    "reserved:B1-C020-SIGINT-mixed-targets",
+    "reserved:B1-C020-SIGINT-multiple-targets",
+    "reserved:B1-C020-chld-direct",
+    "reserved:B1-C020-chld-expanded",
+    "reserved:B1-C020-chld-mixed-targets",
+    "reserved:B1-C020-chld-multiple-targets",
+    "reserved:B1-C020-contract",
+    "reserved:B1-C020-int-direct",
+    "reserved:B1-C020-int-expanded",
+    "reserved:B1-C020-int-mixed-targets",
+    "reserved:B1-C020-int-multiple-targets",
+    "reserved:B1-C020-selected-numeric-CHLD-direct",
+    "reserved:B1-C020-selected-numeric-CHLD-expanded",
+    "reserved:B1-C020-selected-numeric-CHLD-mixed-targets",
+    "reserved:B1-C020-selected-numeric-CHLD-multiple-targets",
+    "reserved:B1-C020-selected-numeric-INT-direct",
+    "reserved:B1-C020-selected-numeric-INT-expanded",
+    "reserved:B1-C020-selected-numeric-INT-mixed-targets",
+    "reserved:B1-C020-selected-numeric-INT-multiple-targets",
+    "reserved:B1-C020-sigchld-direct",
+    "reserved:B1-C020-sigchld-expanded",
+    "reserved:B1-C020-sigchld-mixed-targets",
+    "reserved:B1-C020-sigchld-multiple-targets",
+    "reserved:B1-C020-sigint-direct",
+    "reserved:B1-C020-sigint-expanded",
+    "reserved:B1-C020-sigint-mixed-targets",
+    "reserved:B1-C020-sigint-multiple-targets",
+    "reserved:B1-C021-builtin-builtin-disable",
+    "reserved:B1-C021-builtin-builtin-dynamic-load",
+    "reserved:B1-C021-builtin-builtin-dynamic-unload",
+    "reserved:B1-C021-builtin-builtin-replace",
+    "reserved:B1-C021-builtin-enable-disable",
+    "reserved:B1-C021-builtin-enable-dynamic-load",
+    "reserved:B1-C021-builtin-enable-dynamic-unload",
+    "reserved:B1-C021-builtin-enable-replace",
+    "reserved:B1-C021-builtin-exec-disable",
+    "reserved:B1-C021-builtin-exec-dynamic-load",
+    "reserved:B1-C021-builtin-exec-dynamic-unload",
+    "reserved:B1-C021-builtin-exec-replace",
+    "reserved:B1-C021-builtin-jobs-disable",
+    "reserved:B1-C021-builtin-jobs-dynamic-load",
+    "reserved:B1-C021-builtin-jobs-dynamic-unload",
+    "reserved:B1-C021-builtin-jobs-replace",
+    "reserved:B1-C021-builtin-kill-disable",
+    "reserved:B1-C021-builtin-kill-dynamic-load",
+    "reserved:B1-C021-builtin-kill-dynamic-unload",
+    "reserved:B1-C021-builtin-kill-replace",
+    "reserved:B1-C021-builtin-return-disable",
+    "reserved:B1-C021-builtin-return-dynamic-load",
+    "reserved:B1-C021-builtin-return-dynamic-unload",
+    "reserved:B1-C021-builtin-return-replace",
+    "reserved:B1-C021-builtin-trap-disable",
+    "reserved:B1-C021-builtin-trap-dynamic-load",
+    "reserved:B1-C021-builtin-trap-dynamic-unload",
+    "reserved:B1-C021-builtin-trap-replace",
+    "reserved:B1-C021-builtin-wait-disable",
+    "reserved:B1-C021-builtin-wait-dynamic-load",
+    "reserved:B1-C021-builtin-wait-dynamic-unload",
+    "reserved:B1-C021-builtin-wait-replace",
+    "reserved:B1-C021-contract",
+    "reserved:B1-C021-redefine-awsh",
+    "reserved:B1-C021-unset-awsh",
+    "reserved:B1-C022-combined-options",
+    "reserved:B1-C022-contract",
+    "reserved:B1-C022-mixed-reserved-nonreserved",
+    "reserved:B1-C022-multiple-names",
+    "reserved:B1-C022-nonrequired-builtin-modes",
+    "reserved:B1-C022-nonreserved-numeric-trap",
+    "reserved:B1-C022-numeric-CHLD-query",
+    "reserved:B1-C022-numeric-INT-query",
+    "reserved:B1-C022-positive-enable",
+    "reserved:B1-C022-reserved-query",
+    "reserved:B1-C023-contract",
+    "reserved:B1-C024-assignment-combined",
+    "reserved:B1-C024-assignment-direct",
+    "reserved:B1-C024-assignment-expanded",
+    "reserved:B1-C024-builtin-set-combined",
+    "reserved:B1-C024-builtin-set-direct",
+    "reserved:B1-C024-builtin-set-expanded",
+    "reserved:B1-C024-builtin-shopt-combined",
+    "reserved:B1-C024-builtin-shopt-direct",
+    "reserved:B1-C024-builtin-shopt-expanded",
+    "reserved:B1-C024-contract",
+    "reserved:B1-C024-set-combined",
+    "reserved:B1-C024-set-direct",
+    "reserved:B1-C024-set-expanded",
+    "reserved:B1-C024-shopt-combined",
+    "reserved:B1-C024-shopt-direct",
+    "reserved:B1-C024-shopt-expanded",
+    "reserved:B1-C024-unset-combined",
+    "reserved:B1-C024-unset-direct",
+    "reserved:B1-C024-unset-expanded",
+    "reserved:B1-C025-contract",
+    "reserved:B1-C026-contract",
+    "reserved:B1-C027-contract",
+    "reserved:B1-C027-nested-CHLD",
+    "reserved:B1-C027-nested-INT",
+    "reserved:B1-C027-ordinary-child-handler",
+    "reserved:B1-C027-posix-disabled-request",
+    "reserved:B1-C027-posix-query",
+    "reserved:B1-C027-set-positional"
+  ],
+  "B1-PACKAGE-B2.5": [
+    "checker-nonzero:TestQualificationCheckerOutput",
+    "checker-stderr:TestQualificationCheckerOutput",
+    "checker-stdout:TestQualificationCheckerOutput",
+    "launch:TestRealCandidateStart/crossed-source",
+    "launch:TestRealCandidateStart/duplicate-source",
+    "launch:TestRealCandidateStart/missing-source",
+    "launch:TestRealCandidateStart/wrong-ack",
+    "launch:TestRealCandidateStart/wrong-release",
+    "measurement:startup",
+    "readline:B1-C010-canonical-frame-pty-0",
+    "readline:B1-C010-canonical-frame-pty-255",
+    "readline:B1-C010-canonical-frame-split-0",
+    "readline:B1-C010-canonical-frame-split-255",
+    "readline:B1-C011-suffix-colon-disabled-0",
+    "readline:B1-C011-suffix-colon-disabled-1",
+    "readline:B1-C011-suffix-colon-disabled-255",
+    "readline:B1-C011-suffix-colon-function-0",
+    "readline:B1-C011-suffix-colon-function-1",
+    "readline:B1-C011-suffix-colon-function-255",
+    "readline:B2.5-backslash-boundary",
+    "readline:B2.5-colon-disabled",
+    "readline:B2.5-colon-function-nonzero",
+    "readline:B2.5-colon-function-zero",
+    "readline:B2.5-heredoc",
+    "readline:B2.5-history-vi",
+    "readline:B2.5-maximum",
+    "readline:B2.5-multiline-quotes-comments",
+    "readline:B2.5-preceding-status",
+    "readline:B2.5-unicode-no-redisplay",
+    "submission:TestCanonicalFrozenFrames",
+    "submission:TestCheckerIgnoresInheritedParserEnvironment",
+    "submission:TestCheckerKeepsDeadlineAndIntegrityErrors",
+    "submission:TestCheckerRejectsDescriptorInheritance",
+    "submission:TestFrameBoundsAndScalars",
+    "submission:TestSelectedBashChecker",
+    "submission:TestSelectedBashChecker/comments",
+    "submission:TestSelectedBashChecker/extglob",
+    "submission:TestSelectedBashChecker/heredoc",
+    "submission:TestSelectedBashChecker/history-events",
+    "submission:TestSelectedBashChecker/maximum",
+    "submission:TestSelectedBashChecker/minimum",
+    "submission:TestSelectedBashChecker/multiline",
+    "submission:TestSelectedBashChecker/quotes",
+    "submission:TestSelectedBashChecker/reserved",
+    "submission:TestSelectedBashChecker/trailing-LF",
+    "submission:TestSelectedBashChecker/unterminated-heredoc"
+  ],
+  "B1-PACKAGE-B2.6": [
+    "helper:TestFailStop",
+    "helper:TestPreparedHelperRequiresCompleteAcceptedEOF",
+    "helper:TestSourceHelperEmitsOnlyCompleteFrameAndMarker",
+    "launch:TestRealCandidateStart",
+    "launch:TestRealCandidateStart/duplicate-release",
+    "launch:TestRealCandidateStart/early-signal",
+    "launch:TestRealCandidateStart/missing-release",
+    "launch:TestRealCandidateStart/normal",
+    "launch:TestRealCandidateStart/second-signal",
+    "launch:TestRealCandidateStart/split-status-one",
+    "launch:TestRealCandidateStart/split-stderr-failure",
+    "launch:TestRealCandidateStart/split-stdout-failure",
+    "readline:B1-C032-first-command-status",
+    "readline:B1-C032-first-expansion-status",
+    "readline:B2.5-duplicate-marker",
+    "readline:B2.5-malformed-marker",
+    "readline:B2.5-missing-marker",
+    "readline:B2.6-PS0-duplicate",
+    "readline:B2.6-PS0-missing",
+    "readline:B2.6-PS0-nonzero",
+    "readline:B2.6-PS0-partial",
+    "readline:B2.6-PS0-signal",
+    "readline:B2.6-PS0-wire-empty",
+    "readline:B2.6-PS0-wire-partial",
+    "readline:B2.6-PS0-wrong"
+  ],
+  "B1-PACKAGE-B2.7": [
+    "helper:TestInheritedINTIgnore",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-defined",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-relative",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde-user",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-undefined",
+    "launch:TestRealCandidateCompletion/allowed-trap",
+    "launch:TestRealCandidateCompletion/binding",
+    "launch:TestRealCandidateCompletion/editing",
+    "launch:TestRealCandidateCompletion/identity-damage",
+    "launch:TestRealCandidateCompletion/jobs",
+    "launch:TestRealCandidateCompletion/ordinary-disabled",
+    "launch:TestRealCandidateCompletion/persistent",
+    "launch:TestRealCandidateCompletion/trap-chld",
+    "launch:TestRealCandidateCompletion/trap-int",
+    "launch:TestRealCandidateCompletion/wrong-control",
+    "launch:TestRealCandidateCompletion/wrong-peer"
+  ],
+  "B1-PACKAGE-B2.8": [
+    "bashbuild:TestEmptyQualifiedTableRejectsBothActors",
+    "bashbuild:TestManifestTableIntake",
+    "bashbuild:TestSpecialBuildDoesNotBlock",
+    "bashbuild:TestStrictTableEncoding",
+    "checker-nonzero:TestQualificationCheckerOutput",
+    "checker-stderr:TestQualificationCheckerOutput",
+    "checker-stdout:TestQualificationCheckerOutput",
+    "helper:TestAncillaryRightsRejectedWithoutLeak",
+    "helper:TestCredentialsAndTruncationRejected",
+    "helper:TestExactWriteLoop",
+    "helper:TestFailStop",
+    "helper:TestFrozenHelperSocketFormsAndFragments",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-ready",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-completion-state",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-gate-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-prepared-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-pty",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-request",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-source-split",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-accepted",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-ready",
+    "helper:TestFrozenHelperSocketFormsAndFragments/helper-startup-state",
+    "helper:TestFrozenPrivateWrites",
+    "helper:TestFrozenPrivateWrites/private-closed",
+    "helper:TestFrozenPrivateWrites/private-completed",
+    "helper:TestFrozenPrivateWrites/private-continue",
+    "helper:TestFrozenPrivateWrites/private-execute-pty",
+    "helper:TestFrozenPrivateWrites/private-execute-split",
+    "helper:TestFrozenPrivateWrites/private-gate-continued",
+    "helper:TestFrozenPrivateWrites/private-gate-interrupted",
+    "helper:TestFrozenPrivateWrites/private-gate-ready",
+    "helper:TestFrozenPrivateWrites/private-input-close",
+    "helper:TestFrozenPrivateWrites/private-input-closed",
+    "helper:TestFrozenPrivateWrites/private-protocol-error",
+    "helper:TestFrozenPrivateWrites/private-ready",
+    "helper:TestFrozenPrivateWrites/private-rejected",
+    "helper:TestFrozenPrivateWrites/private-shell-exit-active",
+    "helper:TestFrozenPrivateWrites/private-shell-exit-idle",
+    "helper:TestFrozenPrivateWrites/private-shutdown",
+    "helper:TestFrozenPrivateWrites/private-start-prepared",
+    "helper:TestFrozenPrivateWrites/private-start-release",
+    "helper:TestFrozenPrivateWrites/private-start-released",
+    "helper:TestFrozenPrivateWrites/private-started",
+    "helper:TestFrozenPrivateWrites/private-started-ack",
+    "helper:TestFrozenPrivateWrites/private-submit",
+    "helper:TestInheritedINTIgnore",
+    "helper:TestMalformedHelperSocket",
+    "helper:TestMalformedHelperSocket/oversize",
+    "helper:TestMalformedHelperSocket/trailing",
+    "helper:TestMalformedHelperSocket/zero",
+    "helper:TestMalformedReplyAndInvalidOutgoingClose",
+    "helper:TestMaximumPayloadsSmallSocketBuffers",
+    "helper:TestOriginalDeadlineNotExtended/request-eof",
+    "helper:TestPreparedHelperRequiresCompleteAcceptedEOF",
+    "helper:TestRequestNeedsHalfClose",
+    "helper:TestSourceHelperEmitsOnlyCompleteFrameAndMarker",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-defined",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-relative",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-tilde-user",
+    "launch:TestQualificationInspectionExamples/B1-C003-path-example-undefined",
+    "launch:TestRealCandidateCompletion/allowed-trap",
+    "launch:TestRealCandidateCompletion/binding",
+    "launch:TestRealCandidateCompletion/editing",
+    "launch:TestRealCandidateCompletion/identity-damage",
+    "launch:TestRealCandidateCompletion/jobs",
+    "launch:TestRealCandidateCompletion/ordinary-disabled",
+    "launch:TestRealCandidateCompletion/persistent",
+    "launch:TestRealCandidateCompletion/trap-chld",
+    "launch:TestRealCandidateCompletion/trap-int",
+    "launch:TestRealCandidateCompletion/wrong-control",
+    "launch:TestRealCandidateCompletion/wrong-peer",
+    "launch:TestRealCandidateStart",
+    "launch:TestRealCandidateStart/crossed-source",
+    "launch:TestRealCandidateStart/duplicate-release",
+    "launch:TestRealCandidateStart/duplicate-source",
+    "launch:TestRealCandidateStart/early-signal",
+    "launch:TestRealCandidateStart/missing-release",
+    "launch:TestRealCandidateStart/missing-source",
+    "launch:TestRealCandidateStart/normal",
+    "launch:TestRealCandidateStart/second-signal",
+    "launch:TestRealCandidateStart/split-status-one",
+    "launch:TestRealCandidateStart/split-stderr-failure",
+    "launch:TestRealCandidateStart/split-stdout-failure",
+    "launch:TestRealCandidateStart/wrong-ack",
+    "launch:TestRealCandidateStart/wrong-release",
+    "launch:TestRealCandidateStartup",
+    "launch:TestTerminalLeaseRestoration",
+    "measurement:readline",
+    "measurement:startup",
+    "raw-startup:TestRealCandidateStartup",
+    "readline:B1-C010-canonical-frame-pty-0",
+    "readline:B1-C010-canonical-frame-pty-255",
+    "readline:B1-C010-canonical-frame-split-0",
+    "readline:B1-C010-canonical-frame-split-255",
+    "readline:B1-C011-suffix-colon-disabled-0",
+    "readline:B1-C011-suffix-colon-disabled-1",
+    "readline:B1-C011-suffix-colon-disabled-255",
+    "readline:B1-C011-suffix-colon-function-0",
+    "readline:B1-C011-suffix-colon-function-1",
+    "readline:B1-C011-suffix-colon-function-255",
+    "readline:B1-C032-first-command-status",
+    "readline:B1-C032-first-expansion-status",
+    "readline:B2.5-backslash-boundary",
+    "readline:B2.5-colon-disabled",
+    "readline:B2.5-colon-function-nonzero",
+    "readline:B2.5-colon-function-zero",
+    "readline:B2.5-duplicate-marker",
+    "readline:B2.5-heredoc",
+    "readline:B2.5-history-vi",
+    "readline:B2.5-malformed-marker",
+    "readline:B2.5-maximum",
+    "readline:B2.5-missing-marker",
+    "readline:B2.5-multiline-quotes-comments",
+    "readline:B2.5-preceding-status",
+    "readline:B2.5-unicode-no-redisplay",
+    "readline:B2.6-PS0-duplicate",
+    "readline:B2.6-PS0-missing",
+    "readline:B2.6-PS0-nonzero",
+    "readline:B2.6-PS0-partial",
+    "readline:B2.6-PS0-signal",
+    "readline:B2.6-PS0-wire-empty",
+    "readline:B2.6-PS0-wire-partial",
+    "readline:B2.6-PS0-wrong",
+    "reserved:B1-C012-contract",
+    "reserved:B1-C013-contract",
+    "reserved:B1-C014-contract",
+    "reserved:B1-C015-contract",
+    "reserved:B1-C016-contract",
+    "reserved:B1-C017-contract",
+    "reserved:B1-C019-contract",
+    "reserved:B1-C020-CHLD-direct",
+    "reserved:B1-C020-CHLD-expanded",
+    "reserved:B1-C020-CHLD-mixed-targets",
+    "reserved:B1-C020-CHLD-multiple-targets",
+    "reserved:B1-C020-DEBUG-direct",
+    "reserved:B1-C020-DEBUG-expanded",
+    "reserved:B1-C020-DEBUG-mixed-targets",
+    "reserved:B1-C020-DEBUG-multiple-targets",
+    "reserved:B1-C020-ERR-direct",
+    "reserved:B1-C020-ERR-expanded",
+    "reserved:B1-C020-ERR-mixed-targets",
+    "reserved:B1-C020-ERR-multiple-targets",
+    "reserved:B1-C020-INT-direct",
+    "reserved:B1-C020-INT-expanded",
+    "reserved:B1-C020-INT-mixed-targets",
+    "reserved:B1-C020-INT-multiple-targets",
+    "reserved:B1-C020-RETURN-direct",
+    "reserved:B1-C020-RETURN-expanded",
+    "reserved:B1-C020-RETURN-mixed-targets",
+    "reserved:B1-C020-RETURN-multiple-targets",
+    "reserved:B1-C020-SIGCHLD-direct",
+    "reserved:B1-C020-SIGCHLD-expanded",
+    "reserved:B1-C020-SIGCHLD-mixed-targets",
+    "reserved:B1-C020-SIGCHLD-multiple-targets",
+    "reserved:B1-C020-SIGINT-direct",
+    "reserved:B1-C020-SIGINT-expanded",
+    "reserved:B1-C020-SIGINT-mixed-targets",
+    "reserved:B1-C020-SIGINT-multiple-targets",
+    "reserved:B1-C020-chld-direct",
+    "reserved:B1-C020-chld-expanded",
+    "reserved:B1-C020-chld-mixed-targets",
+    "reserved:B1-C020-chld-multiple-targets",
+    "reserved:B1-C020-contract",
+    "reserved:B1-C020-int-direct",
+    "reserved:B1-C020-int-expanded",
+    "reserved:B1-C020-int-mixed-targets",
+    "reserved:B1-C020-int-multiple-targets",
+    "reserved:B1-C020-selected-numeric-CHLD-direct",
+    "reserved:B1-C020-selected-numeric-CHLD-expanded",
+    "reserved:B1-C020-selected-numeric-CHLD-mixed-targets",
+    "reserved:B1-C020-selected-numeric-CHLD-multiple-targets",
+    "reserved:B1-C020-selected-numeric-INT-direct",
+    "reserved:B1-C020-selected-numeric-INT-expanded",
+    "reserved:B1-C020-selected-numeric-INT-mixed-targets",
+    "reserved:B1-C020-selected-numeric-INT-multiple-targets",
+    "reserved:B1-C020-sigchld-direct",
+    "reserved:B1-C020-sigchld-expanded",
+    "reserved:B1-C020-sigchld-mixed-targets",
+    "reserved:B1-C020-sigchld-multiple-targets",
+    "reserved:B1-C020-sigint-direct",
+    "reserved:B1-C020-sigint-expanded",
+    "reserved:B1-C020-sigint-mixed-targets",
+    "reserved:B1-C020-sigint-multiple-targets",
+    "reserved:B1-C021-builtin-builtin-disable",
+    "reserved:B1-C021-builtin-builtin-dynamic-load",
+    "reserved:B1-C021-builtin-builtin-dynamic-unload",
+    "reserved:B1-C021-builtin-builtin-replace",
+    "reserved:B1-C021-builtin-enable-disable",
+    "reserved:B1-C021-builtin-enable-dynamic-load",
+    "reserved:B1-C021-builtin-enable-dynamic-unload",
+    "reserved:B1-C021-builtin-enable-replace",
+    "reserved:B1-C021-builtin-exec-disable",
+    "reserved:B1-C021-builtin-exec-dynamic-load",
+    "reserved:B1-C021-builtin-exec-dynamic-unload",
+    "reserved:B1-C021-builtin-exec-replace",
+    "reserved:B1-C021-builtin-jobs-disable",
+    "reserved:B1-C021-builtin-jobs-dynamic-load",
+    "reserved:B1-C021-builtin-jobs-dynamic-unload",
+    "reserved:B1-C021-builtin-jobs-replace",
+    "reserved:B1-C021-builtin-kill-disable",
+    "reserved:B1-C021-builtin-kill-dynamic-load",
+    "reserved:B1-C021-builtin-kill-dynamic-unload",
+    "reserved:B1-C021-builtin-kill-replace",
+    "reserved:B1-C021-builtin-return-disable",
+    "reserved:B1-C021-builtin-return-dynamic-load",
+    "reserved:B1-C021-builtin-return-dynamic-unload",
+    "reserved:B1-C021-builtin-return-replace",
+    "reserved:B1-C021-builtin-trap-disable",
+    "reserved:B1-C021-builtin-trap-dynamic-load",
+    "reserved:B1-C021-builtin-trap-dynamic-unload",
+    "reserved:B1-C021-builtin-trap-replace",
+    "reserved:B1-C021-builtin-wait-disable",
+    "reserved:B1-C021-builtin-wait-dynamic-load",
+    "reserved:B1-C021-builtin-wait-dynamic-unload",
+    "reserved:B1-C021-builtin-wait-replace",
+    "reserved:B1-C021-contract",
+    "reserved:B1-C021-redefine-awsh",
+    "reserved:B1-C021-unset-awsh",
+    "reserved:B1-C022-combined-options",
+    "reserved:B1-C022-contract",
+    "reserved:B1-C022-mixed-reserved-nonreserved",
+    "reserved:B1-C022-multiple-names",
+    "reserved:B1-C022-nonrequired-builtin-modes",
+    "reserved:B1-C022-nonreserved-numeric-trap",
+    "reserved:B1-C022-numeric-CHLD-query",
+    "reserved:B1-C022-numeric-INT-query",
+    "reserved:B1-C022-positive-enable",
+    "reserved:B1-C022-reserved-query",
+    "reserved:B1-C023-contract",
+    "reserved:B1-C024-assignment-combined",
+    "reserved:B1-C024-assignment-direct",
+    "reserved:B1-C024-assignment-expanded",
+    "reserved:B1-C024-builtin-set-combined",
+    "reserved:B1-C024-builtin-set-direct",
+    "reserved:B1-C024-builtin-set-expanded",
+    "reserved:B1-C024-builtin-shopt-combined",
+    "reserved:B1-C024-builtin-shopt-direct",
+    "reserved:B1-C024-builtin-shopt-expanded",
+    "reserved:B1-C024-contract",
+    "reserved:B1-C024-set-combined",
+    "reserved:B1-C024-set-direct",
+    "reserved:B1-C024-set-expanded",
+    "reserved:B1-C024-shopt-combined",
+    "reserved:B1-C024-shopt-direct",
+    "reserved:B1-C024-shopt-expanded",
+    "reserved:B1-C024-unset-combined",
+    "reserved:B1-C024-unset-direct",
+    "reserved:B1-C024-unset-expanded",
+    "reserved:B1-C025-contract",
+    "reserved:B1-C026-contract",
+    "reserved:B1-C027-contract",
+    "reserved:B1-C027-nested-CHLD",
+    "reserved:B1-C027-nested-INT",
+    "reserved:B1-C027-ordinary-child-handler",
+    "reserved:B1-C027-posix-disabled-request",
+    "reserved:B1-C027-posix-query",
+    "reserved:B1-C027-set-positional",
+    "selected:TestHandoffGrammar",
+    "selected:TestRealSelectedLaunch",
+    "selected:TestSelectedReaper",
+    "submission:TestCanonicalFrozenFrames",
+    "submission:TestCheckerIgnoresInheritedParserEnvironment",
+    "submission:TestCheckerKeepsDeadlineAndIntegrityErrors",
+    "submission:TestCheckerRejectsDescriptorInheritance",
+    "submission:TestFrameBoundsAndScalars",
+    "submission:TestSelectedBashChecker",
+    "submission:TestSelectedBashChecker/comments",
+    "submission:TestSelectedBashChecker/extglob",
+    "submission:TestSelectedBashChecker/heredoc",
+    "submission:TestSelectedBashChecker/history-events",
+    "submission:TestSelectedBashChecker/maximum",
+    "submission:TestSelectedBashChecker/minimum",
+    "submission:TestSelectedBashChecker/multiline",
+    "submission:TestSelectedBashChecker/quotes",
+    "submission:TestSelectedBashChecker/reserved",
+    "submission:TestSelectedBashChecker/trailing-LF",
+    "submission:TestSelectedBashChecker/unterminated-heredoc"
+  ]
+}
