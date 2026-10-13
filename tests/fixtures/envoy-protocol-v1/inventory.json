@@ -1,23 +1,23 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "82f8115ad5f0cc45dbe3fdfda0386be3f01839542b52a11fb568f5d0ff9c6f57",
+  "source_sha256": "3f7bea1ee179cbb04071016117b0f7ecb94493598502ad46112a3656b2181849",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
-      "sha256": "49e7ca536c72a012de1a89f1a29833b891cf940775eadec0371bea17ca37ae68"
+      "sha256": "516b6dc051eeb981615a594a27be57b3767e852704700e34e1ecfa1b511f257d"
     },
     {
       "path": "docs/design/omegaflow-envoy-design.md",
-      "sha256": "f915bab4e0925687b929ad1b9116ccdefc07792eb4fcc87e82390340ec01fedd"
+      "sha256": "64b1ca9d9320776d76359bdbcb3c056e12338a872f1cb4073e7781207c1e7df6"
     },
     {
       "path": "docs/design/reploy-environments-design.md",
-      "sha256": "bd571dc7e55c05997cde51f6f4ff2f193b9023293fbaa41eea7a929a136b5a16"
+      "sha256": "44da9d18ccdb3e3775a7b51aac18269f4b341d1bf1d6573c1cccdff9b2cc7f6d"
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "82f8115ad5f0cc45dbe3fdfda0386be3f01839542b52a11fb568f5d0ff9c6f57"
+      "sha256": "3f7bea1ee179cbb04071016117b0f7ecb94493598502ad46112a3656b2181849"
     }
   ],
   "begin": "The cumulative suite covers inspection",
@@ -335,7 +335,7 @@
     "B2.5": {
       "prerequisites": "B2.3.3, B2.4",
       "implementation": "Source checker, canonical source frame, loader/submit Readline bindings and status restoration",
-      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection"
+      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-binding validation; authored-input rejection remains C3.2"
     },
     "B2.6": {
       "prerequisites": "B2.5",
@@ -348,7 +348,7 @@
       "acceptance": "Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5"
     },
     "B2.8": {
-      "prerequisites": "B2.1–B2.7, B1.3.1, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement",
+      "prerequisites": "B2.1–B2.7, B1.3.1, B1.3.2, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement",
       "implementation": "Qualification measurements, supported-entry admission and generated consumer integration",
       "acceptance": "Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf"
     },
@@ -657,7 +657,7 @@
     {
       "id": "PACKAGE-B2.5",
       "leaf": "B2.5",
-      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection"
+      "acceptance": "Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-binding validation; authored-input rejection remains C3.2"
     },
     {
       "id": "PACKAGE-B2.6",
