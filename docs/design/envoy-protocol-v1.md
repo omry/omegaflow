@@ -2,6 +2,8 @@
 
 ## Status and scope
 
+Updated: 2026-10-13.
+
 This document defines the first controller/workload contract for the
 [OmegaFlow Workload Envoy](omegaflow-envoy-design.md). The current pre-release
 inspection and external-Awsh amendments are approved through A2.7, merged as
@@ -14,10 +16,19 @@ runtime requirement. B1 and B2.1–B2.7 have approved partial implementation,
 including A2.10/PR51, B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56,
 and the B1.2.1/PR55 private-codec and B1.3.1/PR57 corpus successors.
 A2.11/PR58's manifest-bound qualification-output amendment and its owning
-B2.1.1/PR59 correction are approved. A2.12's ownership amendment and B1.3.2
-corpus correction remain pending. The complete production execution path and
-selected-Bash qualification remain pending. It is an internal OmegaFlow
-release contract. Reploy provides the private network, endpoint coordinates, bootstrap attachment, and
+B2.1.1/PR59 correction are approved. A2.12/PR60's ownership amendment is
+approved at exact mapped head `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`,
+B1.3.2/PR61's corpus correction is approved at exact mapped head
+`9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62's qualification is
+approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311`.
+The qualified support scope is limited to the three exact Linux/amd64 manifest
+target/build tuples Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu
+26.04/Bash 5.3.9, bound to `runtime/envoy/bash-builds.json`. ARM64 remains
+unqualified and the complete Envoy/controller production path remains pending.
+A2.13 is a pending design-only fixed-pair successor; B3.1.1 implementation
+remains pending until A2.13 receives exact-head approval. This contract makes
+no production claim. It is an internal OmegaFlow release contract. Reploy
+provides the private network, endpoint coordinates, bootstrap attachment, and
 authoritative lifecycle; it does not transport or interpret these messages.
 
 Version 1 covers:
@@ -102,9 +113,18 @@ two application channels to the exact Envoy invocation and gives retained
 diagnostics a correlation key; it is not an authentication credential and
 cannot authorize a Reploy operation or override Reploy lifecycle truth.
 
-The channels have no application reconnect. EOF, reset, timeout, a second
-connection completed while a listener is still open, or traffic before the
-required handshake fails the capture.
+The channels have no application reconnect. Envoy selects one terminal
+connection and one telemetry connection, validates the required handshake, and
+keeps that selected pair fixed for the session. It closes both listeners after
+selecting the pair. Additional connections are refused or closed without
+processing their application data, replacing either selected connection,
+resetting an actor deadline, or failing an otherwise valid capture. Envoy does
+not need to count peer-side connection completions during listener closure.
+
+EOF, reset, timeout, an invalid required handshake, or forbidden traffic on a
+selected connection fails the capture. If the selected pair cannot satisfy the
+required handshake, Envoy fails that session; it does not search for replacement
+connections or accept another hello.
 
 ## Global limits and timeouts
 
