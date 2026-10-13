@@ -1,5 +1,5 @@
 {
-  "implementation_leaf": "B3.2.1",
+  "implementation_leaf": "B3.2.1 and B3.2.2",
   "parent_leaf": "B3.2",
   "private_proofs": [
     "TestNativeRuntimeInputs",
@@ -15,8 +15,38 @@
     "TestInvalidManifestIdentities",
     "TestPayloadTamperingAndUnsafeFiles"
   ],
-  "pre_session_fault_images": ["manifest", "qualification"],
+  "pre_session_fault_images": [
+    "manifest",
+    "qualification"
+  ],
   "cumulative_closeout": "B3.2.2",
-  "later_owners": ["B3.3", "B3.4", "B4", "B6", "C4"],
-  "qualification": "Actual changed Awsh bytes require genuine affected-target receipts; no ARM64 claim from compilation."
+  "later_owners": [
+    "B3.3",
+    "B3.4",
+    "B4",
+    "B6",
+    "C4"
+  ],
+  "qualification": "Actual changed Awsh bytes require genuine affected-target receipts; no ARM64 claim from compilation.",
+  "public_proofs": [
+    "TestNativePublicStartup/idle-shutdown",
+    "TestNativePublicStartup/dispose-launch-context",
+    "TestNativePublicStartup/immediate-controller-response",
+    "TestNativePublicStartupExpiredEpoch",
+    "TestNativePublicStartupForeignDirectory",
+    "TestNativePublicStartupSelectedLoss",
+    "TestNativePublicStartupRefusal",
+    "TestNativePublicShutdownSelectedLoss",
+    "TestNativePublicCleanupTimeout"
+  ],
+  "pty_boundary_proofs": [
+    "TestStartupPTYBoundsAndExactBytes",
+    "TestStartupEOFAndOriginalDeadline",
+    "TestExpectedStartupBytesCanArriveAfterPrivateReady",
+    "TestJoinedCancellationCannotOutlivePhase",
+    "TestLaunchEnvironmentReservationsAndDelegation",
+    "TestLaunchRefusalClosesSelectedPublicPair",
+    "TestFinalPTYDrainPreservesBytesAndOffset",
+    "TestCleanupTimeoutRetainsReapJoin"
+  ]
 }
