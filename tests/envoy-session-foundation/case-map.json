@@ -1,0 +1,50 @@
+{
+  "implementation_leaf": "B3.1.1",
+  "cases": [
+    {
+      "id": "B1-C001-envoy-accept",
+      "tests": [
+        "TestBothChannelsAndFragmentedHelloBeforeLaunch",
+        "TestEarlyTerminalFailures",
+        "TestIndependentAcceptAndHelloEpochs",
+        "TestPartialBindReleasesFirstListener",
+        "TestMissingTrustedCoordinates",
+        "TestUnusedExtrasPreserveSelectedPair",
+        "TestConcurrentExtraClosurePreservesSelectedPair"
+      ],
+      "closure_leaf": "B3.4"
+    },
+    {
+      "id": "B1-C001-envoy-hello",
+      "tests": [
+        "TestHelloStrictFailures",
+        "TestHelloProgressDoesNotResetTenSecondEpoch",
+        "TestPostHandshakeFailuresAndSequences"
+      ],
+      "closure_leaf": "B3.4"
+    },
+    {
+      "id": "B1-C001-individual-control-write",
+      "tests": [
+        "TestCompleteControlWrites",
+        "TestIncompleteControlIsFailure",
+        "TestBlockedWriteOriginalEpochAndCancellation",
+        "TestControlWriteFiveSecondLimit",
+        "TestPublicSequenceAdvancesOnlyOnFullWrite"
+      ],
+      "closure_leaf": "B3.4"
+    },
+    {
+      "id": "B1-PACKAGE-B3.1",
+      "tests": [
+        "TestBothChannelsAndFragmentedHelloBeforeLaunch",
+        "TestReadLineBoundaryAndCoalescedFrames",
+        "TestBindFailureAndCallerCancellation",
+        "TestConformingImmediateReadyResponse",
+        "TestReadinessGroupFailureAndOriginalEpoch"
+      ],
+      "closure_leaf": "B3.1.1"
+    }
+  ],
+  "historical_leaf": "B3.1"
+}
