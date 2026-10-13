@@ -10,7 +10,7 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-10-11
+- Updated: 2026-10-13
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
   predecessors. A2.8 is merged as PR 39 at
@@ -19,9 +19,18 @@
   partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
   B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
   corpus successors. A2.11/PR58's qualification-output amendment and its owning
-  B2.1.1/PR59 correction are approved. A2.12's ownership amendment and B1.3.2
-  corpus correction remain pending. The complete production execution path
-  and Bash-build qualification remain pending.
+  B2.1.1/PR59 correction are approved. A2.12/PR60's ownership amendment is
+  approved at exact mapped head `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`,
+  B1.3.2/PR61's corpus correction is approved at exact mapped head
+  `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62's qualification is
+  approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311`.
+  The qualified support scope is limited to the three exact Linux/amd64 manifest
+  target/build tuples Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu
+  26.04/Bash 5.3.9, bound to `runtime/envoy/bash-builds.json`. ARM64 remains
+  unqualified and the complete Envoy/controller production path remains pending.
+  A2.13 is a pending design-only fixed-pair successor; B3.1.1 implementation
+  remains pending until A2.13 receives exact-head approval. This design makes no
+  production claim.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -979,6 +988,13 @@ exact `/omegaflow-runtime/bin/envoy` `exec` invocation over the attachment,
 including its fixed listen arguments, controller-generated handshake
 `session_id`, and initial dimensions. That invocation is an OmegaFlow bootstrap
 contract, not a Reploy blueprint command.
+
+Envoy owns selection of the fixed terminal/telemetry pair and closes its
+listeners after selection. Additional connections are refused or closed without
+application-data processing and do not by themselves fail a valid capture.
+Reploy supplies endpoint coordinates; it does not count connection attempts
+during listener closure. No unused connection can replace a selected channel
+or authorize a reconnect.
 
 The application config may override normal Reploy fields, including identity,
 command, ports, mounts, packages, and endpoints — every one of them except the

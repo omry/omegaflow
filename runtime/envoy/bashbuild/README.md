@@ -1,10 +1,12 @@
 # Bash build evidence and consumers
 
-B2.1 adds qualification infrastructure. The canonical `../bash-builds.json`
-ships no supported build. Synthetic fixtures exercise admission and consumers;
-they are not measurements of any Bash executable. Actual adapter execution and
-verified Reploy candidates arrive in B2.3–B2.7; B2.8 owns complete qualification
-and support admission.
+B2.1 added qualification infrastructure. B2.8 admitted three exact
+Linux/amd64 tuples to the canonical `../bash-builds.json`: Debian 12/Bash
+5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9. Each entry is
+bound to its executable identity and genuine target qualification evidence.
+ARM64 qualification and the complete Envoy/controller production path remain
+pending. Synthetic fixtures exercise admission and consumers; they are not
+measurements of any Bash executable.
 
 From the repository root:
 
@@ -76,5 +78,6 @@ remaining complete map to qualification inputs. Host lookup uses the generated
 qualified values and the adapter input map directly. Both hash the resolved
 regular Bash executable and reject unknown builds, target/path mismatches, a
 present system rc and changed adapter inputs. There is no configurable table
-path or fallback. Later runtime assembly owns manifest verification; this
-correction exposes no production supervisor and advertises no build support.
+path or fallback. Later runtime assembly owns manifest verification. The table-generator
+correction did not expose a production supervisor or admit builds; B2.8 owns
+the three qualified entries described above.

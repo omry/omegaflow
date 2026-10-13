@@ -8,7 +8,7 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-10-11
+- Updated: 2026-10-13
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
   predecessors. A2.8 is merged as PR 39 at
@@ -17,9 +17,18 @@
   partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
   B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
   corpus successors. A2.11/PR58's qualification-output amendment and its owning
-  B2.1.1/PR59 correction are approved. A2.12's ownership amendment and B1.3.2
-  corpus correction remain pending. The complete production execution path
-  and Bash-build qualification remain pending.
+  B2.1.1/PR59 correction are approved. A2.12/PR60's ownership amendment is
+  approved at exact mapped head `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`,
+  B1.3.2/PR61's corpus correction is approved at exact mapped head
+  `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62's qualification is
+  approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311`.
+  The qualified support scope is limited to the three exact Linux/amd64 manifest
+  target/build tuples Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu
+  26.04/Bash 5.3.9, bound to `runtime/envoy/bash-builds.json`. ARM64 remains
+  unqualified and the complete Envoy/controller production path remains pending.
+  A2.13 is a pending design-only fixed-pair successor; B3.1.1 implementation
+  remains pending until A2.13 receives exact-head approval. This design makes no
+  production claim.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -110,6 +119,13 @@ two lease-private TCP channels to controller OmegaFlow:
 Terminal bytes are never parsed as telemetry. Reploy transports neither
 OmegaFlow protocol and does not interpret shell operations. It supplies the
 controller/workload network and the declared endpoint coordinates.
+
+Envoy selects one terminal connection and one telemetry connection and keeps
+that pair fixed. It closes the listeners after selection, refusing or closing
+unused extra connections without processing their application data. An unused
+extra connection alone does not fail a valid session. Invalid handshake or
+failure of a selected channel remains fatal; no replacement pair, reconnect,
+new hello, or deadline reset is permitted.
 
 ```mermaid
 flowchart LR
@@ -1474,10 +1490,16 @@ return fact, and complete the already-selected lifecycle outcome. A2.7 closed
 the private schemas and is approved and merged. A2.8 and A2.9 are also merged;
 B1 and B2.1–B2.7 have approved partial implementation, including A2.10/PR51,
 B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 codec
-and B1.3.1/PR57 corpus successors. A2.11/PR58 and B2.1.1/PR59 are approved;
-the pending A2.12 amendment and B1.3.2 corpus correction precede B2.8
-qualification. The plan fixes the remaining executable
-evidence owners and preserves the complete production conformance gate.
+and B1.3.1/PR57 corpus successors. A2.11/PR58 and B2.1.1/PR59 are approved.
+A2.12/PR60 and B1.3.2/PR61 are approved at exact mapped heads
+`d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86` and
+`9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`; B2.8/PR62 qualification is
+approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311` and
+is limited to the three exact Linux/amd64 manifest target/build tuples Debian
+12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9, bound to
+`runtime/envoy/bash-builds.json`. ARM64 remains unqualified and the complete
+Envoy/controller production path remains pending. The plan fixes the remaining
+executable evidence owners and preserves the complete production conformance gate.
 
 ## A2.12 qualification and authored-input ownership correction
 
