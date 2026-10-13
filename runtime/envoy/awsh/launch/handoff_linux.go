@@ -14,6 +14,10 @@ type Handoff struct {
 	RuntimeDir             string
 }
 
+// Validate restores inheritance protection and checks the fixed intake before
+// the controlled entry starts any helper or selected-shell fork.
+func (h Handoff) Validate() error { return h.intake() }
+
 func ParseHandoff(args []string) (Handoff, error) {
 	h := Handoff{RuntimeDir: "/run/omegaflow/session"}
 	if len(args) != 5 || args[0] != "supervise" {
