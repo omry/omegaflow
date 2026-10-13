@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/omry/omegaflow/runtime/envoy/awsh/helper"
 	"github.com/omry/omegaflow/runtime/envoy/protocol"
 )
 
@@ -364,7 +365,7 @@ func (l *Listeners) Handshake(ctx context.Context, sessionID string) (_ *Channel
 	if !interrupt() {
 		<-interrupted
 	}
-	e = withContextCause(helloCtx, e)
+	e = helper.WithContextCause(helloCtx, e)
 	var message protocol.Message
 	if e == nil {
 		message, e = protocol.DecodeController(frame)
@@ -373,7 +374,7 @@ func (l *Listeners) Handshake(ctx context.Context, sessionID string) (_ *Channel
 	if e == nil && (!ok || hello.Seq != 1 || hello.SessionID != sessionID) {
 		e = fmt.Errorf("invalid session hello")
 	}
-	e = withContextCause(helloCtx, e)
+	e = helper.WithContextCause(helloCtx, e)
 	if e != nil {
 		return nil, nil, nil, e
 	}
