@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/omry/omegaflow/runtime/envoy/awsh/helper"
 	"github.com/omry/omegaflow/runtime/envoy/protocol"
 )
 
@@ -159,13 +160,21 @@ func (s *Channels) HoldInput(ctx context.Context, through int64) error {
 // discard for an empty ID. Cancelling the old eligibility context lets the
 // relay join an old blocked PTY write before its next writer acquires the fd.
 func (s *Channels) ResumeInput(operation string) error {
+	return s.ResumeInputContext(context.Background(), operation)
+}
+func (s *Channels) ResumeInputContext(ctx context.Context, operation string) error {
 	if operation != "" {
 		if _, err := protocol.EncodePrivate(protocol.PrivateInputClosed{OperationID: operation}, protocol.EnvoyToAwsh); err != nil {
 			return err
 		}
 	}
 	g := s.inputState()
-	g.mu.Lock()
+	for !g.mu.TryLock() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		time.Sleep(time.Millisecond)
+	}
 	defer g.mu.Unlock()
 	if operation != "" && (!g.held || !g.paused) {
 		return fmt.Errorf("input release without a held watermark")
@@ -176,5 +185,5 @@ func (s *Channels) ResumeInput(operation string) error {
 	g.epoch, g.cancel = context.WithCancel(s.ctx)
 	g.enabled, g.held, g.paused, g.operation = true, false, false, operation
 	g.changed()
-	return nil
+	return helper.WithContextCause(ctx, nil)
 }

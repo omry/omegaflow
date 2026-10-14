@@ -1,23 +1,23 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "a8b07db4c2c1134d3ea2aafbd717c86c1a317b2d15f0c9ce7028fd4d8c60c1b4",
+  "source_sha256": "98b4fdc917f0807c30de93d32cf1f4b0cc32a8bb68d1c1b3d8bf1cdb267af525",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
-      "sha256": "caff7e7fe9458f7e497f7548dc7965c6ff55ba64d38ddd11958e0f1ec353b631"
+      "sha256": "9fc71791194e4e7e20cadb4c71d4900309bb4b40863759fb6de5bb6f8996a8f8"
     },
     {
       "path": "docs/design/omegaflow-envoy-design.md",
-      "sha256": "9e11e59a0c6979e68ba6e82f49b783baf4bf6ed25e2c1dad359d8826d6550416"
+      "sha256": "9089495c887132f510fc0e55d960cf0395b1ea56d135de694095f98466716833"
     },
     {
       "path": "docs/design/reploy-environments-design.md",
-      "sha256": "2ea343e1725538a33fef5e923650bca405ea075937b5fe7384f9d62b9ba80f0a"
+      "sha256": "f064097e51591052bd1ae470bcb5cd8e8a8265df4089651fecba2a32159b0c24"
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "a8b07db4c2c1134d3ea2aafbd717c86c1a317b2d15f0c9ce7028fd4d8c60c1b4"
+      "sha256": "98b4fdc917f0807c30de93d32cf1f4b0cc32a8bb68d1c1b3d8bf1cdb267af525"
     }
   ],
   "begin": "The cumulative suite covers inspection",
@@ -281,7 +281,7 @@
     },
     {
       "id": "INV-065",
-      "text": "Leave cancellation, finalization, gates, and crossed lifecycle runtime proofs to B4–B8."
+      "text": "Leave cancellation, finalization, gates, and crossed lifecycle runtime proofs to B4\u2013B8."
     },
     {
       "id": "INV-066",
@@ -298,7 +298,7 @@
   ],
   "leaves": {
     "B1.1": {
-      "prerequisites": "A2.7–A2.9 merged",
+      "prerequisites": "A2.7\u2013A2.9 merged",
       "implementation": "Go public wire models, encoders/decoders, public bounds and validation",
       "acceptance": "Public nominal/malformed/maximum corpus; no runtime actors"
     },
@@ -308,7 +308,7 @@
       "acceptance": "Every private/helper form, direction, fragmentation and concatenation; no Bash execution"
     },
     "B1.3": {
-      "prerequisites": "B1.1–B1.2",
+      "prerequisites": "B1.1\u2013B1.2",
       "implementation": "Static trace/case indexing and corpus completeness tooling",
       "acceptance": "Complete B1 inventory, synthetic startup bounds, ordering/deadline traces and leaf/closure mapping; concrete build values pending B2.8"
     },
@@ -323,7 +323,7 @@
       "acceptance": "Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior"
     },
     "B2.3": {
-      "prerequisites": "B2.1–B2.2; verified candidate inputs and /bin/bash placement",
+      "prerequisites": "B2.1\u2013B2.2; verified candidate inputs and /bin/bash placement",
       "implementation": "Selected-shell launch, fixed startup assets, topology, descriptor intake/lease and readiness",
       "acceptance": "Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry"
     },
@@ -348,7 +348,7 @@
       "acceptance": "Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5"
     },
     "B2.8": {
-      "prerequisites": "B2.1–B2.7, B1.3.1, B1.3.2, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement",
+      "prerequisites": "B2.1\u2013B2.7, B1.3.1, B1.3.2, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement",
       "implementation": "Qualification measurements, supported-entry admission and generated consumer integration",
       "acceptance": "Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf"
     },
@@ -360,7 +360,7 @@
     "B3.2": {
       "prerequisites": "B3.1.1, B2.8",
       "implementation": "PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup",
-      "acceptance": "Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown"
+      "acceptance": "Real qualified Bash/Awsh; exact 0\u20134096 startup bytes, complete ready before terminal release and idle shutdown"
     },
     "B3.3": {
       "prerequisites": "B3.2",
@@ -388,7 +388,7 @@
       "acceptance": "Hostile PATH, short writes, one reply deadline, gate-ready/continue/interrupted and input-barrier failure; requalify affected adapter/trusted bytes before retaining support"
     },
     "B4.4": {
-      "prerequisites": "B4.1–B4.3",
+      "prerequisites": "B4.1\u2013B4.3",
       "implementation": "Integrated control dispatch and crossed outcome handling",
       "acceptance": "B4 isolated suite including completion-helper window and queued frames/timer selection; real split/cleanup/inspection crossings pending B5.3/B6.5/B7.3"
     },
@@ -408,7 +408,7 @@
       "acceptance": "Complete B5 isolated suite; cleanup peer before keepalive close; actual writer-retaining descendants pending B6.3"
     },
     "B6.1": {
-      "prerequisites": "B2–B5",
+      "prerequisites": "B2\u2013B5",
       "implementation": "Envoy subreaper, pidfd lifetime identity and repeated /proc census",
       "acceptance": "Real controlled-tree identity, rapid fork/adoption and foreground classification; no independent Awsh lifecycle"
     },
@@ -428,17 +428,17 @@
       "acceptance": "Closed runtime ranges, real status versus finalization outcome and invalidation; Python compile-time rejection belongs only to B6.6"
     },
     "B6.5": {
-      "prerequisites": "B6.1–B6.4, B4.4",
+      "prerequisites": "B6.1\u2013B6.4, B4.4",
       "implementation": "Actual census/cleanup wiring into lifecycle controls and race handling",
       "acceptance": "Complete B6 runtime suite; real foreground switches, helper survival, timeout reap, post-result cancel/finalize and split crossings; inspection pending B7.3"
     },
     "B6.6": {
-      "prerequisites": "B6.4–B6.5; existing Python plan compiler",
+      "prerequisites": "B6.4\u2013B6.5; existing Python plan compiler",
       "implementation": "Python compiler validation of interactive output assertions and continuation input",
       "acceptance": "Reject output_contains/output_regex when any operation or continuation sends text/key/control; preserve wait_for synchronization; complete B6 cumulative gate; later runner wiring belongs to D1.3"
     },
     "B7.1": {
-      "prerequisites": "B2–B6",
+      "prerequisites": "B2\u2013B6",
       "implementation": "Envoy bounded file/directory inspection algorithms and live resolution conformance",
       "acceptance": "Exercise B2.7 Awsh path resolution with live state; native file compatibility, separately tagged directory digests, special entries, mutation races and limits"
     },
@@ -453,7 +453,7 @@
       "acceptance": "Both inspection winners, finalize status preservation, blocked-worker fatal timeout; complete B7 suite"
     },
     "B8.1": {
-      "prerequisites": "B2–B7",
+      "prerequisites": "B2\u2013B7",
       "implementation": "Descriptor/socket isolation and malformed/channel-loss teardown hardening",
       "acceptance": "Isolation, malformed/unknown-code traffic and channel-loss injection with actual local actors"
     },
@@ -468,9 +468,9 @@
       "acceptance": "Every start/barrier/grace/cleanup/inspection/drain epoch, same-turn expiry priority, queued cancel/resize; no new timer"
     },
     "B8.4": {
-      "prerequisites": "B8.1–B8.3",
+      "prerequisites": "B8.1\u2013B8.3",
       "implementation": "Local conformance runner/report assembly",
-      "acceptance": "Entire B1–B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
+      "acceptance": "Entire B1\u2013B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
     },
     "C1.1": {
       "prerequisites": "B8.4",
@@ -558,7 +558,7 @@
       "acceptance": "Exact /omegaflow-input isolation and validated invocation; complete C7 gate"
     },
     "C8.1": {
-      "prerequisites": "C1–C7",
+      "prerequisites": "C1\u2013C7",
       "implementation": "Controlled-session capability preflight and separate deployment invocation",
       "acceptance": "Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints"
     },
@@ -568,7 +568,7 @@
       "acceptance": "Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates"
     },
     "D1.1": {
-      "prerequisites": "C1–C8",
+      "prerequisites": "C1\u2013C8",
       "implementation": "Envoy-backed runner/session adapter and pre-cutover routing",
       "acceptance": "Status/cwd/session behavior; omitted FIFO host versus explicit reploy/host matrix and no default cutover"
     },
@@ -598,7 +598,7 @@
       "acceptance": "Prompt/typing/Starting seams, delayed acknowledgements/watermarks and covered split prefixes"
     },
     "D2.4": {
-      "prerequisites": "D2.1–D2.3",
+      "prerequisites": "D2.1\u2013D2.3",
       "implementation": "Artifact writer integration and ordering conformance tooling",
       "acceptance": "Complete D2 queue-tie/zero-duration/continuous-output/authored-order matrix and raw writer frontier gate"
     },
@@ -682,7 +682,7 @@
     {
       "id": "PACKAGE-B3.2",
       "leaf": "B3.2",
-      "acceptance": "Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown"
+      "acceptance": "Real qualified Bash/Awsh; exact 0\u20134096 startup bytes, complete ready before terminal release and idle shutdown"
     },
     {
       "id": "PACKAGE-B3.3",
@@ -792,7 +792,7 @@
     {
       "id": "PACKAGE-B8.4",
       "leaf": "B8.4",
-      "acceptance": "Entire B1–B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
+      "acceptance": "Entire B1\u2013B8 case map green with actual Envoy/Awsh and qualified Bash; no peers satisfy final gate; subsystem fixes require owning correction leaves"
     },
     {
       "id": "PACKAGE-C1.1",
