@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item": "B3.3.1",
+  "static_inventory": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+  "parent_package_case": "B1-PACKAGE-B3.3",
+  "parent_acceptance": "pending B3.3.2 cumulative acceptance",
+  "evidence_boundary": "Actual host Linux PTY/TCP and deterministic startup peer; not real Awsh/Bash start or completion",
+  "test_source": "runtime/envoy/session/relay_linux_test.go",
+  "tests": [
+    "TestRelayExactBinaryDrainAndMarks",
+    "TestRelayFreshDrainCannotLoseReaderAdmittedPrefix",
+    "TestRelayBudgetAndOverflowFailBeforeOutput",
+    "TestRelayInputHoldUsesSocketBackpressure",
+    "TestRelayWatermarkInputReleaseAndStaleEventDiscard",
+    "TestRelayInputHoldCancellationDoesNotResetEpoch",
+    "TestRelayTriggerAndControllerInputAreSerialized",
+    "TestRelayConcurrentMarksAndPublicEventsHaveOneSequence",
+    "TestRelayEOFAndCloseRetainDescriptorOwnership",
+    "TestRelayDrainCapsAlreadyBlockedWriterWithOriginalEpoch",
+    "TestRelayPTYSerializationDoesNotReplaceEarlierWriterDeadline",
+    "TestRelayInputAPIsRejectInvalidBoundaries"
+  ],
+  "remaining": [
+    "B3.3.2 original-epoch complete start transaction and deterministic setup/rollback proof",
+    "B3.4 real qualified Awsh/Bash input release and ordinary completion assembly",
+    "B4 lifecycle controls and operation/final output barriers",
+    "B5 split setup, keepalive, independent EOF and resource removal",
+    "B6 actual descendant cleanup and its final boundaries",
+    "B7 actual inspection",
+    "B8 cumulative terminal failure crossings"
+  ]
+}
