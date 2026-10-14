@@ -47,6 +47,7 @@ type Workload struct {
 	closeOnce            sync.Once
 	closeMu              sync.Mutex
 	closeErr             error
+	relayOwned           atomic.Bool
 }
 
 // stop joins a started callback, so a completed phase cannot affect reused I/O.

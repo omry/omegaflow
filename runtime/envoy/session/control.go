@@ -21,6 +21,18 @@ func WriteControl(ctx context.Context, w helper.DeadlineWriter, frame []byte) er
 func (s *Channels) Send(ctx context.Context, m protocol.Message) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	return s.sendLocked(ctx, m)
+}
+
+// sendEvent constructs an owner-generated event under the same lock as its
+// sequence commit. Relay marks cannot race another public event's header.
+func (s *Channels) sendEvent(ctx context.Context, kind string, build func(protocol.Header) protocol.Message) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.sendLocked(ctx, build(s.header(kind)))
+}
+
+func (s *Channels) sendLocked(ctx context.Context, m protocol.Message) error {
 	frame, err := protocol.EncodeEnvoy(m)
 	if err == nil {
 		var h protocol.Header
