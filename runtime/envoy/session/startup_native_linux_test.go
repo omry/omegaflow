@@ -237,8 +237,12 @@ func TestNativePublicStartup(t *testing.T) {
 			}
 			finished := make(chan error, 1)
 			go func() { finished <- w.ShutdownIdle(shutdown.Reason) }()
+			mark, ok := nativeFrame(t, reader).(*protocol.OutputMark)
+			if !ok || mark.Seq != 2 || mark.Stream != "pty" {
+				t.Fatal("missing final covering mark", mark)
+			}
 			draining, ok := nativeFrame(t, reader).(*protocol.Draining)
-			if !ok || draining.Seq != 2 || draining.Reason != shutdown.Reason {
+			if !ok || draining.Seq != 3 || draining.Reason != shutdown.Reason || mark.Offset != draining.OutputThrough {
 				t.Fatal("invalid draining", draining)
 			}
 			tail, err := io.ReadAll(terminal)
@@ -246,7 +250,7 @@ func TestNativePublicStartup(t *testing.T) {
 				t.Fatal("terminal EOF", err)
 			}
 			closed, ok := nativeFrame(t, reader).(*protocol.Closed)
-			if !ok || closed.Seq != 3 || closed.Reason != shutdown.Reason || closed.OutputThrough != int64(len(expected)+len(tail)) || draining.OutputThrough != closed.OutputThrough {
+			if !ok || closed.Seq != 4 || closed.Reason != shutdown.Reason || closed.OutputThrough != int64(len(expected)+len(tail)) || draining.OutputThrough != closed.OutputThrough {
 				t.Fatal("invalid closure boundary", closed)
 			}
 			if err := <-finished; err != nil {

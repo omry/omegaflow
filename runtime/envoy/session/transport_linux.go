@@ -74,6 +74,9 @@ func (l *Listeners) Close() {
 type Event struct {
 	Message protocol.Message
 	Input   []byte
+	// Empty means the read was not eligible for an operation. The relay must
+	// never reclassify queued idle or closed-operation bytes as new input.
+	InputOperation string
 }
 
 type Channels struct {
@@ -91,6 +94,8 @@ type Channels struct {
 	readyMu             sync.Mutex
 	writeMu             sync.Mutex
 	sendSeq             int64
+	inputOnce           sync.Once
+	input               *terminalInput
 }
 
 func (s *Channels) Events() <-chan Event  { return s.events }
@@ -134,17 +139,29 @@ func (s *Channels) readTerminal() {
 	defer s.workers.Done()
 	var buffer [32768]byte
 	for {
-		n, err := s.terminal.Read(buffer[:])
+		limit, operation, err := s.inputReadPermit()
+		if err != nil {
+			return
+		}
+		n, err := s.terminal.Read(buffer[:limit])
+		operation, emit, countErr := s.recordInput(n, operation)
+		if countErr != nil {
+			s.fail(countErr)
+			return
+		}
 		if n > 0 {
 			if !s.inputReady() {
 				s.fail(fmt.Errorf("terminal traffic before public readiness"))
 				return
 			}
-			if !s.emit(Event{Input: append([]byte(nil), buffer[:n]...)}) {
+			if emit && !s.emit(Event{Input: append([]byte(nil), buffer[:n]...), InputOperation: operation}) {
 				return
 			}
 		}
 		if err != nil {
+			if s.inputReadInterrupted(err) {
+				continue
+			}
 			s.fail(fmt.Errorf("terminal channel: %w", err))
 			return
 		}
