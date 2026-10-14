@@ -809,6 +809,13 @@ internal `0x18 0x02` PTY write, the fresh pre-start drain and mark,
 `start_release`/`started` ordering, complete public `operation_started` before
 `started_ack`, acceptance of private `start_released`, and the operation-start
 deadline and teardown coordination with the same setup/cleanup boundaries.
+Before operation-start begins, selecting an input-barrier timeout or cancellation
+starts one five-second pre-start result-delivery epoch. B3.3 owns the finite
+held-prefix delivery and complete empty-range result under that epoch, with
+fatal `prestart-output-timeout` and existing final-drain teardown on expiry.
+Prove blocked terminal output and recovery after normal prefix delivery without
+resetting source-rejection or operation-start bounds. This is an explicit new
+Envoy publication timing policy; Awsh and Reploy gain no timer or wire form.
 In B3's isolated foundation harness, use shared-PTY operations without authored
 background descendants. Exercise the real Awsh/Bash `input_close` ->
 `input_closed` -> state-bearing `prompt_ready` -> `completed` coordination with
