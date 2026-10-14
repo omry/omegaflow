@@ -57,3 +57,40 @@ adds ordinary completion coordination. Clearing workload line-discipline input
 and actual descendant/split/inspection implementations retain their governing
 cleanup and later-slice owners. The static corpus remains declarative and its
 full B3.3 package acceptance is pending until the start successor passes.
+
+## B3.3.2 complete start transaction
+
+Run `go test -buildvcs=false -count=1 -race -run '^TestStart' ./session`.
+The tests use the same real PTY/TCP relay plus actual private pipes. A bounded
+persistent decoder keeps concatenated completion facts after matching release.
+The serialized coordinator holds controller reads until that release, publishes
+a stable output start before ack, and retains cancellation after the first
+attempted private byte. A zero-byte failed write still crosses that boundary.
+
+Setup and rollback are explicit deterministic peers. Their context exposes the
+same original start deadline used by all private/public phases; progress cannot
+renew it. A pre-attempt cancel or source rejection rolls back before an empty
+terminal range, then resumes idle discard. A private error, malformed frame,
+EOF, wrong ID/order or post-attempt shell exit is fatal and produces no ordinary
+operation result. Watermark expiry alone is recoverable. Source rejection wins
+over a cancellation that became queued after the private attempt.
+
+`TestStartEveryPhaseRejectsCrossedPrivateFacts` checks all four result phases;
+`TestStartEpochIncludesSetupAndAllProgress` checks the actual five-second epoch;
+`TestStartShellExitHandoffRetainsOriginalEpoch` checks both empty-ID shell-exit
+handoffs preserve the exact absolute deadline and terminal-input-barrier versus
+operation-start classification while EOF/reap remains withheld;
+`TestStartShellExitRollbackAcceptsImmediateEOF` checks normal between-frame EOF
+during split rollback is retained as closure evidence under that same epoch;
+`TestStartPublicWriteFailurePreventsPrivateAck` proves the public barrier;
+`TestStartResultReaderContinuesIntoCompletion` proves reader continuity;
+`TestStartUnstartedBoundaryDoesNotFreshDrainKernelBytes` distinguishes the
+admitted-prefix terminal boundary from the required fresh prepared drain.
+The other start tests cover input hold, both cancellation boundaries, repeat
+source rejection and idle recovery, idle exit before private commitment,
+private-reader uniqueness and joined teardown. The case map names every test.
+
+These deterministic peers establish B3.3's cumulative start boundaries. B3.4
+still owns real qualified Bash/Awsh start and ordinary-return assembly; B4–B7
+retain controls, actual split resources, descendants and inspection. This leaf
+adds no production execution entrypoint and changes no Awsh qualification input.

@@ -277,6 +277,12 @@ func (r *Relay) run() {
 // the currently available kernel prefix, and emits a covering boundary mark.
 // The supplied original phase deadline also caps an already-blocked writer.
 func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
+	return r.boundary(ctx, true, nil)
+}
+
+// boundary keeps the delivered offset stable through publication. A pre-start
+// terminal event consumes only the admitted prefix; prepared uses a fresh drain.
+func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) error) (offset int64, err error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -284,7 +290,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		return 0, err
 	}
 	deadline, ok := ctx.Deadline()
-	if !ok {
+	if fresh && !ok {
 		return 0, fmt.Errorf("drain requires an active original deadline")
 	}
 	select {
@@ -350,7 +356,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		}
 	}
 	var buffer [32768]byte
-	for !r.ended {
+	for fresh && !r.ended {
 		if err = ctx.Err(); err != nil {
 			return r.w.OutputThrough, err
 		}
@@ -388,6 +394,11 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	if err = r.w.mark(ctx, true); err != nil {
 		return r.w.OutputThrough, err
+	}
+	if publish != nil {
+		if err = publish(r.w.OutputThrough); err != nil {
+			return r.w.OutputThrough, err
+		}
 	}
 	if !r.ended {
 		if err = r.ctx.Err(); err != nil {
