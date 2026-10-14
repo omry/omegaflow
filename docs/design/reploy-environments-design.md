@@ -944,6 +944,12 @@ defaults are:
   restoration and start-helper completion are proved. The original start
   deadline, private control and output relay remain active, and fatal start
   failure forwards none of the held input;
+- when Envoy selects an input-barrier timeout or cancellation before operation-start,
+  one five-second pre-start result-delivery epoch covers the pump-held terminal
+  prefix, its mark and complete empty-range result. Expiry is fatal
+  `prestart-output-timeout` followed by existing final-drain teardown. Awsh and
+  Reploy gain no timer or wire responsibility; ordinary terminal backpressure
+  outside this step is unchanged;
 - the fixed helper stream framing: each mode-0600 Unix stream connection carries
   one bounded four-byte big-endian length-prefixed request, request half-close,
   one length-prefixed reply, and reply EOF; exact read/write loops tolerate

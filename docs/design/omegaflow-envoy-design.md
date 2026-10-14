@@ -577,7 +577,12 @@ completion recaptures the full post-cleanup state before preparing the next
 echo-off Readline entry. After the `PS0` marker is
 validated, the first adapter-owned Bash command signals its direct Awsh parent;
 Awsh's shell-neutral `start_released` result gives Envoy the exact safe release
-boundary. Cancellation remains pre-start
+boundary. If an input-barrier timeout or cancellation is selected before operation-start
+begins, Envoy bounds delivery of the held terminal prefix and empty-range result
+with one five-second pre-start result-delivery epoch. Expiry fails the session
+with `prestart-output-timeout` and enters existing final-drain teardown; it never
+claims that the shell is reusable. Source rejection and later pre-start
+cancellation retain the original operation-start epoch. Cancellation remains pre-start
 only until Envoy begins the private `execute` write. A later cancellation is
 retained: `rejected` may resolve it as pre-start failure, while `submit` commits
 the start and orders public `operation_started`, `started_ack`, and

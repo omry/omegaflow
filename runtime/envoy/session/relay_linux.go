@@ -137,7 +137,7 @@ func (r *Relay) writeOutput(ctx context.Context, data []byte) (err error) {
 	}
 	original, before := data, r.w.OutputThrough
 	defer func() {
-		if r.closeInterrupted(err) {
+		if r.closeInterrupted(err) || (err != nil && errors.Is(context.Cause(ctx), errWorkInterrupted)) {
 			r.w.pendingPTY = append(r.w.pendingPTY, original[r.w.OutputThrough-before:]...)
 		}
 	}()
@@ -277,6 +277,12 @@ func (r *Relay) run() {
 // the currently available kernel prefix, and emits a covering boundary mark.
 // The supplied original phase deadline also caps an already-blocked writer.
 func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
+	return r.boundary(ctx, true, nil)
+}
+
+// boundary keeps the delivered offset stable through publication. A pre-start
+// terminal event consumes only the admitted prefix; prepared uses a fresh drain.
+func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) error) (offset int64, err error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -285,7 +291,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		return 0, fmt.Errorf("drain requires an active original deadline")
+		return 0, fmt.Errorf("output boundary requires an active deadline")
 	}
 	select {
 	case <-r.barrier:
@@ -303,7 +309,11 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	stop := joinedAfterFunc(ctx, func() { r.w.channels.fail(ctx.Err()); _ = r.w.PTY.SetReadDeadline(time.Now()) })
+	stop := joinedAfterFunc(ctx, func() {
+		if !errors.Is(context.Cause(ctx), errWorkInterrupted) {
+			r.w.channels.fail(ctx.Err())
+		}
+	})
 	r.mu.Lock()
 	defer func() {
 		stop()
@@ -317,7 +327,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		if err == nil {
 			err = ctx.Err()
 		}
-		if err != nil && !r.closeInterrupted(err) {
+		if err != nil && !r.closeInterrupted(err) && !errors.Is(context.Cause(ctx), errWorkInterrupted) {
 			err = helper.WithContextCause(ctx, err)
 			r.err = err
 			r.w.channels.fail(err)
@@ -350,7 +360,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		}
 	}
 	var buffer [32768]byte
-	for !r.ended {
+	for fresh && !r.ended {
 		if err = ctx.Err(); err != nil {
 			return r.w.OutputThrough, err
 		}
@@ -388,6 +398,11 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	if err = r.w.mark(ctx, true); err != nil {
 		return r.w.OutputThrough, err
+	}
+	if publish != nil {
+		if err = publish(r.w.OutputThrough); err != nil {
+			return r.w.OutputThrough, err
+		}
 	}
 	if !r.ended {
 		if err = r.ctx.Err(); err != nil {
