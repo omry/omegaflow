@@ -47,6 +47,10 @@ type Workload struct {
 	closeOnce            sync.Once
 	closeMu              sync.Mutex
 	closeErr             error
+	relayOwned           atomic.Bool
+	pendingPTY           []byte // at most one relay chunk, transferred after join
+	marks                int
+	lastMark             time.Duration
 }
 
 // stop joins a started callback, so a completed phase cannot affect reused I/O.
@@ -480,7 +484,38 @@ func (w *Workload) verifyIdentity() error {
 	return nil
 }
 
+func (w *Workload) mark(ctx context.Context, force bool) error {
+	elapsed := time.Since(w.ReadyAt)
+	if elapsed < w.lastMark {
+		return fmt.Errorf("output mark time regressed")
+	}
+	if !force && elapsed-w.lastMark < markCadence {
+		return nil
+	}
+	if w.marks >= markLimit {
+		return fmt.Errorf("output mark budget exhausted")
+	}
+	if err := w.channels.sendEvent(ctx, "output_mark", func(h protocol.Header) protocol.Message {
+		return protocol.OutputMark{Header: h, Offset: w.OutputThrough, Stream: "pty", ElapsedUS: elapsed.Microseconds()}
+	}); err != nil {
+		return err
+	}
+	w.marks++
+	w.lastMark = elapsed
+	return nil
+}
+
+func (w *Workload) checkOutput(data []byte) error {
+	if w.OutputThrough > outputLimit || int64(len(data)) > outputLimit-w.OutputThrough {
+		return fmt.Errorf("session output budget exhausted")
+	}
+	return nil
+}
+
 func (w *Workload) writeTerminal(ctx context.Context, data []byte, advance bool) error {
+	if err := w.checkOutput(data); err != nil {
+		return err
+	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return fmt.Errorf("missing terminal phase deadline")
@@ -568,6 +603,12 @@ func (w *Workload) ShutdownIdle(reason string) (err error) {
 
 // Called only after the selected shell and direct Awsh child have been reaped.
 func (w *Workload) drainTerminal(ctx context.Context) error {
+	before := w.OutputThrough
+	err := w.writeTerminal(ctx, w.pendingPTY, true)
+	w.pendingPTY = w.pendingPTY[w.OutputThrough-before:]
+	if err != nil {
+		return err
+	}
 	var buffer [32768]byte
 	for {
 		n, e := w.PTY.Read(buffer[:])
@@ -585,7 +626,7 @@ func (w *Workload) drainTerminal(ctx context.Context) error {
 			return helper.WithContextCause(ctx, e)
 		}
 	}
-	return nil
+	return w.mark(ctx, true)
 }
 
 // Close uses the caller's existing cleanup epoch. Closing control requests
