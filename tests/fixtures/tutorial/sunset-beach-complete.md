@@ -42,6 +42,10 @@ config:
     - example.svg
     produces:
       artwork: recordings/.omegaflow/tutorial/sunset-beach/sunset-study.svg
+  - name: verify the example artwork
+    run: python recordings/sunset-beach/scripts/inspect_artwork.py
+    inputs:
+    - {output: prepare-example.artwork}
   - name: start Tiny Canvas
     run: >-
       export TINY_CANVAS_URL=http://127.0.0.1:18476;
@@ -63,38 +67,6 @@ config:
 
 ```yaml studio-directive
 beat:
-  id: inspect-draft
-  medium: terminal
-  heading: Inspect The Draft
-  caption: Confirm the Tiny Canvas draft before editing it.
-  actions:
-  - commands:
-    - run: python recordings/sunset-beach/scripts/inspect_artwork.py
-      display: python scripts/inspect_artwork.py
-      inputs:
-      - {output: prepare-example.artwork}
-      expect:
-        output_contains:
-        - "Title: Sunset Study"
-        - "Objects: sun, coconut-tree"
-        - "Status: ready"
-    - id: open-editor
-      run: python recordings/sunset-beach/scripts/tiny_canvas.py sunset-study.svg
-      display: python scripts/tiny_canvas.py sunset-study.svg
-      browser_handoff: true
-      timing: realtime
-      show_prompt_after: false
-  guide:
-    summary: The Tiny Canvas workflow is ready to validate and publish.
-    commands:
-    - omegaflow recording=sunset-beach action=check
-    - omegaflow recording=sunset-beach action=build
-    - omegaflow recording=sunset-beach action=watch
-    success_hint: Run the commands to review the finished video.
-```
-
-```yaml studio-directive
-beat:
   id: edit-artwork
   medium: browser
   heading: Edit And Save A Copy
@@ -106,11 +78,13 @@ beat:
   actions:
   - id: open-editor
     open_page:
-      handoff: open-editor
+      url: /
       ready:
         visible: {text: Ready, exact: true}
   - id: rename-artwork
     after: "@rename@"
+    hold_before_ms: 700
+    hold_after_ms: 900
     type_text:
       target: {test_id: artwork-title}
       text: Coconut Sunset
@@ -118,12 +92,14 @@ beat:
   - id: move-sun
     after: "@sun@"
     timing: realtime
+    hold_after_ms: 900
     drag:
       from: {target: {test_id: sun}}
       to: {target: {test_id: sunset-target}}
   - id: move-tree
     after: "@tree@"
     timing: realtime
+    hold_after_ms: 900
     drag:
       from: {target: {test_id: coconut-tree}}
       to: {target: {test_id: tree-target}}
