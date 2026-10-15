@@ -57,3 +57,94 @@ adds ordinary completion coordination. Clearing workload line-discipline input
 and actual descendant/split/inspection implementations retain their governing
 cleanup and later-slice owners. The static corpus remains declarative and its
 full B3.3 package acceptance is pending until the start successor passes.
+
+## B3.3.2 complete start transaction
+
+Run `go test -buildvcs=false -count=1 -race -run '^TestStart' ./session`.
+The tests use the same real PTY/TCP relay plus actual private pipes. A bounded
+persistent decoder keeps concatenated completion facts after matching release.
+The serialized coordinator holds controller reads until that release, publishes
+a stable output start before ack, and retains cancellation after the first
+attempted private byte. A zero-byte failed write still crosses that boundary.
+
+Setup and rollback are explicit deterministic peers. Their context exposes the
+same original start deadline used by all private/public phases; progress cannot
+renew it. A pre-attempt cancel or source rejection rolls back before an empty
+terminal range, then resumes idle discard. A private error, malformed frame,
+EOF, wrong ID/order or post-attempt shell exit is fatal and produces no ordinary
+operation result. Watermark expiry alone is recoverable when the held-prefix result is delivered. Before operation-start, timeout or cancellation starts one non-resetting five-second publication allowance covering the finite admitted prefix, covering mark, complete empty-range result and idle input restoration. Blocked publication fails the session with `prestart-output-timeout`; source rejection and cancellation after operation-start retain the original start deadline. Source rejection wins
+over a cancellation that became queued after the private attempt.
+
+`TestStartEveryPhaseRejectsCrossedPrivateFacts` checks all four result phases;
+`TestStartEpochIncludesSetupAndAllProgress` checks the actual five-second epoch;
+`TestStartShellExitHandoffRetainsOriginalEpoch` checks both empty-ID shell-exit
+handoffs preserve the exact absolute deadline and terminal-input-barrier versus
+operation-start classification while EOF/reap remains withheld;
+`TestStartShellExitRollbackAcceptsImmediateEOF` checks normal between-frame EOF
+during split rollback is retained as closure evidence under that same epoch;
+`TestStartCancelShellExitAfterRollbackEntryCannotHandoff` checks that a shell
+exit crossing an already-started cancellation rollback cannot discard unfinished
+cleanup or become a successful handoff, including an immediate private EOF;
+`TestStartCompletedRollbackShellExitHandoff` checks that a later shell exit
+crossing blocked result publication remains a successful handoff after rollback
+completion, with the captured original deadline and no operation result;
+`TestStartCancelRollbackExpiresAtOriginalDeadline` checks that a withheld
+cancellation rollback fails at the captured original deadline without an
+operation result;
+`TestStartPublicWriteFailurePreventsPrivateAck` proves the public barrier;
+`TestStartResultReaderContinuesIntoCompletion` proves reader continuity;
+`TestStartUnstartedBoundaryDoesNotFreshDrainKernelBytes` distinguishes the
+admitted-prefix terminal boundary from the required fresh prepared drain.
+The other start tests cover input hold, both cancellation boundaries, repeat
+source rejection and idle recovery, idle exit before private commitment,
+private-reader uniqueness and joined teardown. The case map names every test.
+
+These deterministic peers establish B3.3's cumulative start boundaries. B3.4
+still owns real qualified Bash/Awsh start and ordinary-return assembly; B4–B7
+retain controls, actual split resources, descendants and inspection. This leaf
+adds no production execution entrypoint and changes no Awsh qualification input.
+
+`TestStartPrestartDeliveryCapsBlockedTerminalOutput` uses real TCP backpressure for both watermark expiry and cancellation, proving the five-second fatal bound and no private execute or successful result. `TestStartPrestartDeliveryPublishesHeldPrefixAndRestoresIdle` proves exact binary prefix/mark/result ordering and idle reuse after either selection. `TestStartOutputBoundaryRequiresDeadline` rejects an unbounded publication without damaging the idle session.
+
+The fact-owner regressions hold the coordinator unscheduled while the actual private decoder queues a fatal report or normal empty-ID shell exit. The result writer must wait for coordinator selection after acquiring telemetry. A queued fatal also wins over completed or expired work. Internal cancellation after telemetry acquisition but before any frame-write attempt leaves the session and public sequence intact; transport failures remain fatal. A frame already selected for publication cannot be retracted by a later cross-channel fact.
+
+Normal internal interruption retains every unwritten byte of the admitted terminal chunk in the existing pending-output buffer. The bounded-chunk test covers interruption before output and during real TCP backpressure, then checks exact binary bytes and absolute offset after the retained suffix is flushed.
+
+The private reader accounts for both unread pipe data and bytes already read
+into its decoder before recoverable result selection. The queued-fatal cases
+run with a single scheduler processor as well as the race detector; partial
+frames and startup-buffered prefixes must complete without losing bytes or
+leaving stale pending state. These checks use the existing sole decoder.
+
+Internal-write interruption is tested against a persistently full TCP socket
+with ten seconds left in the writer epoch. Cancellation must join that writer
+within 250 milliseconds and preserve its exact admitted suffix. A separate
+shell-exit test starts the relay writer before the pre-start boundary and
+requires handoff within 500 milliseconds, with at least three seconds left in
+the original delivery allowance. It checks that healthy channels and pending
+output survive that handoff.
+`TestStartRelayCloseRetainsWriterAdmittedAfterShutdownWake` also proves an
+already-admitted writer cannot start sending after relay shutdown; its bytes
+remain available to the existing final drain with the cancellation cause intact.
+
+When an already-admitted relay writer is blocked before its output mark can
+acquire telemetry ownership, pre-start interruption joins that mark under the
+same delivery boundary. An empty-ID shell exit then retains its original
+deadline and is handed off promptly without losing the admitted prefix.
+
+Completed relay output writers release their per-write cancellation state. A
+graceful relay close lets an already-attempted telemetry mark finish or reach
+its existing transport bound, while phase interruption still joins an
+unattempted mark and preserves admitted output.
+
+The sole private decoder reports protocol errors through a bounded fatal path
+while ordinary completion frames remain in their existing event queue. An
+early valid start reply therefore remains ordered with a following
+`input_close`, while a queued fatal retains its code, message, and original
+start deadline.
+
+The fatal queue is also included in recoverable-publication observation and is
+checked before a retained matching `start_released` result can be accepted.
+The permanent regressions synchronize the early reply into `c.pending` before
+injecting the fatal frame, then verify the actual decoder preserves the fatal
+cause.

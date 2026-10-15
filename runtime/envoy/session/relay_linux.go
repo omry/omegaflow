@@ -89,6 +89,7 @@ type Relay struct {
 	cancel                         context.CancelFunc
 	mu, phaseMu                    sync.Mutex
 	phase                          context.Context
+	writerCancel                   context.CancelCauseFunc
 	reader                         *relayReader
 	wake, done, readEnded, closing chan struct{}
 	barrier, inputWriter           chan struct{}
@@ -136,8 +137,37 @@ func (r *Relay) writeOutput(ctx context.Context, data []byte) (err error) {
 		return err
 	}
 	original, before := data, r.w.OutputThrough
+	r.phaseMu.Lock()
+	baseCtx := ctx
+	if r.phase != nil {
+		baseCtx = r.phase
+	}
+	workCtx, cancel := context.WithCancelCause(baseCtx)
+	r.writerCancel = cancel
+	r.phaseMu.Unlock()
+	ctx = workCtx
+	stopRelay := joinedAfterFunc(r.ctx, func() {
+		select {
+		case <-r.closing:
+		default:
+			cancel(context.Cause(r.ctx))
+		}
+	})
+	defer stopRelay()
+	defer cancel(nil)
 	defer func() {
-		if r.closeInterrupted(err) {
+		// A boundary can take ownership while this writer already holds mu.
+		// Its interruption still belongs to that phase, not to the session.
+		r.phaseMu.Lock()
+		r.writerCancel = nil
+		if r.phase != nil && errors.Is(context.Cause(r.phase), errWorkInterrupted) {
+			ctx = r.phase
+		}
+		r.phaseMu.Unlock()
+		if err != nil && errors.Is(context.Cause(ctx), errWorkInterrupted) {
+			err = errors.Join(err, ctx.Err(), errWorkInterrupted)
+		}
+		if r.closeInterrupted(err) || (err != nil && errors.Is(context.Cause(ctx), errWorkInterrupted)) {
 			r.w.pendingPTY = append(r.w.pendingPTY, original[r.w.OutputThrough-before:]...)
 		}
 	}()
@@ -154,10 +184,19 @@ func (r *Relay) writeOutput(ctx context.Context, data []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	stop := joinedAfterFunc(r.ctx, func() { _ = r.w.channels.terminal.SetWriteDeadline(time.Now()) })
+	stop := joinedAfterFunc(ctx, func() {
+		r.phaseMu.Lock()
+		_ = r.w.channels.terminal.SetWriteDeadline(time.Now())
+		r.phaseMu.Unlock()
+	})
 	defer stop()
+	stopTerminal := joinedAfterFunc(r.ctx, func() { _ = r.w.channels.terminal.SetWriteDeadline(time.Now()) })
+	defer stopTerminal()
 	for len(data) > 0 {
 		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := r.ctx.Err(); err != nil {
 			return err
 		}
 		n, err := r.w.channels.terminal.Write(data)
@@ -252,7 +291,7 @@ func (r *Relay) run() {
 				data, err := p.take()
 				// Public frame writes belong to Channels. Graceful relay close
 				// joins an in-flight mark instead of cancelling a partial frame.
-				if e := r.writeOutput(r.w.channels.ctx, data); e != nil && !r.closeInterrupted(e) {
+				if e := r.writeOutput(r.w.channels.ctx, data); e != nil && !r.closeInterrupted(e) && !errors.Is(e, errWorkInterrupted) {
 					r.err = e
 					r.w.channels.fail(e)
 					r.cancel()
@@ -277,6 +316,12 @@ func (r *Relay) run() {
 // the currently available kernel prefix, and emits a covering boundary mark.
 // The supplied original phase deadline also caps an already-blocked writer.
 func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
+	return r.boundary(ctx, true, nil)
+}
+
+// boundary keeps the delivered offset stable through publication. A pre-start
+// terminal event consumes only the admitted prefix; prepared uses a fresh drain.
+func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) error) (offset int64, err error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -285,7 +330,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		return 0, fmt.Errorf("drain requires an active original deadline")
+		return 0, fmt.Errorf("output boundary requires an active deadline")
 	}
 	select {
 	case <-r.barrier:
@@ -298,12 +343,24 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	r.phaseMu.Lock()
 	r.phase = ctx
+	writerCancel := r.writerCancel
 	err = r.w.channels.terminal.SetWriteDeadline(deadline)
 	r.phaseMu.Unlock()
 	if err != nil {
 		return 0, err
 	}
-	stop := joinedAfterFunc(ctx, func() { r.w.channels.fail(ctx.Err()); _ = r.w.PTY.SetReadDeadline(time.Now()) })
+	stop := joinedAfterFunc(ctx, func() {
+		if writerCancel != nil {
+			writerCancel(context.Cause(ctx))
+		}
+		if errors.Is(context.Cause(ctx), errWorkInterrupted) {
+			r.phaseMu.Lock()
+			_ = r.w.channels.terminal.SetWriteDeadline(time.Now())
+			r.phaseMu.Unlock()
+			return
+		}
+		r.w.channels.fail(ctx.Err())
+	})
 	r.mu.Lock()
 	defer func() {
 		stop()
@@ -317,7 +374,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		if err == nil {
 			err = ctx.Err()
 		}
-		if err != nil && !r.closeInterrupted(err) {
+		if err != nil && !r.closeInterrupted(err) && !errors.Is(context.Cause(ctx), errWorkInterrupted) {
 			err = helper.WithContextCause(ctx, err)
 			r.err = err
 			r.w.channels.fail(err)
@@ -350,7 +407,7 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 		}
 	}
 	var buffer [32768]byte
-	for !r.ended {
+	for fresh && !r.ended {
 		if err = ctx.Err(); err != nil {
 			return r.w.OutputThrough, err
 		}
@@ -388,6 +445,11 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 	}
 	if err = r.w.mark(ctx, true); err != nil {
 		return r.w.OutputThrough, err
+	}
+	if publish != nil {
+		if err = publish(r.w.OutputThrough); err != nil {
+			return r.w.OutputThrough, err
+		}
 	}
 	if !r.ended {
 		if err = r.ctx.Err(); err != nil {

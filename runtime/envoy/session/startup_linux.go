@@ -48,6 +48,7 @@ type Workload struct {
 	closeMu              sync.Mutex
 	closeErr             error
 	relayOwned           atomic.Bool
+	privateOwned         atomic.Bool
 	pendingPTY           []byte // at most one relay chunk, transferred after join
 	marks                int
 	lastMark             time.Duration
