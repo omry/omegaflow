@@ -68,6 +68,7 @@ type startingOperation struct {
 	setup          bool
 	rollbackTried  bool
 	started        bool
+	outputStart    int64
 	shellExitPhase StartShellExitPhase
 }
 
@@ -78,25 +79,28 @@ const (
 	awaitPrepared
 	awaitStarted
 	awaitReleased
+	awaitInputClose
+	awaitCompleted
 )
 
 // Coordinator serializes operation facts on the existing channel owners.
 // Its private pump is retained across starts and ordinary completion.
 type Coordinator struct {
-	w              *Workload
-	r              *Relay
-	private        *privateResults
-	setup          SplitSetup
-	active         *startingOperation
-	pending        *privateResult
-	exited         *protocol.PrivateShellExit
-	exitedDeadline time.Time
-	exitedPhase    StartShellExitPhase
-	exitedEOF      bool
-	eofAccepted    chan struct{}
-	busy           atomic.Bool
-	phase          startPhase
-	publication    chan chan error
+	w               *Workload
+	r               *Relay
+	private         *privateResults
+	setup           SplitSetup
+	active          *startingOperation
+	pending         *privateResult
+	exited          *protocol.PrivateShellExit
+	exitedDeadline  time.Time
+	exitedPhase     StartShellExitPhase
+	exitedEOF       bool
+	eofAccepted     chan struct{}
+	busy            atomic.Bool
+	phase           startPhase
+	publication     chan chan error
+	forwardingInput bool
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -138,6 +142,10 @@ func (c *Coordinator) expected(m protocol.PrivateMessage) bool {
 		return c.phase == awaitStarted && v.OperationID == id
 	case *protocol.PrivateStartReleased:
 		return c.phase == awaitReleased && v.OperationID == id
+	case *protocol.PrivateInputClose:
+		return c.phase == awaitInputClose && v.OperationID == id
+	case *protocol.PrivateCompleted:
+		return c.phase == awaitCompleted && v.OperationID == id
 	}
 	return false
 }
@@ -190,6 +198,11 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 	}
 	if report, ok := result.message.(*protocol.PrivateProtocolError); ok {
 		return nil, false, &startFactError{fmt.Errorf("private protocol_error %s: %s", report.Code, report.Message)}
+	}
+	if proposal, ok := result.message.(*protocol.PrivateInputClose); ok && c.expected(proposal) {
+		if err := c.w.channels.ResumeInputContext(ctx, ""); err != nil {
+			return nil, false, &startFactError{err}
+		}
 	}
 	if exited, ok := result.message.(*protocol.PrivateShellExit); ok {
 		c.active.attemptMu.Lock()
@@ -250,6 +263,10 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 			return m, nil
 		}
 		privateEvents := c.private.events
+		publicEvents := c.w.channels.Events()
+		if c.forwardingInput {
+			publicEvents = nil // One admitted input write; private facts stay observable.
+		}
 		if c.pending != nil {
 			privateEvents = nil // Retain one early valid next-phase fact.
 		}
@@ -302,13 +319,19 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 				continue
 			case result = <-privateEvents:
 			case result = <-fatalEvents:
-			case e := <-c.w.channels.Events():
+			case e := <-publicEvents:
 				if len(e.Input) != 0 {
+					if c.active.started && c.phase == awaitInputClose {
+						return nil, &operationInput{e}
+					}
 					continue // Already-read idle/old-operation input is never replayed.
 				}
 				m, ok := e.Message.(*protocol.Cancel)
 				if !ok || m.OperationID != c.active.request.OperationID {
 					return nil, &startFactError{fmt.Errorf("unexpected public request during start")}
+				}
+				if c.active.started {
+					return nil, &startFactError{fmt.Errorf("running cancellation requires the lifecycle owner")}
 				}
 				c.active.attemptMu.Lock()
 				if c.active.cancel != nil {
@@ -364,7 +387,7 @@ func (c *Coordinator) fatal(ctx context.Context, code string, cause error, skipD
 	err := &StartError{Code: code, Deadline: deadline, Cause: helper.WithContextCause(ctx, cause)}
 	if !skipDiagnostic {
 		_ = c.w.channels.sendEvent(ctx, "diagnostic", func(h protocol.Header) protocol.Message {
-			return protocol.Diagnostic{Header: h, Severity: "fatal", Code: code, Message: "Operation start failed"}
+			return protocol.Diagnostic{Header: h, Severity: "fatal", Code: code, Message: "Operation failed"}
 		})
 	}
 	c.w.channels.fail(err)
@@ -547,6 +570,7 @@ func (c *Coordinator) Start(ctx context.Context, request protocol.Execute) (out 
 	err = c.work(phase, false, func(job context.Context) error {
 		_, e := c.r.boundary(job, false, func(offset int64) error {
 			out.OutputStart = offset
+			c.active.outputStart = offset
 			return c.w.channels.sendEvent(job, "operation_started", func(h protocol.Header) protocol.Message {
 				return protocol.OperationStarted{Header: h, OperationID: request.OperationID, OutputStart: offset}
 			})

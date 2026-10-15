@@ -106,5 +106,28 @@ that command with its persistent state intact. The same test must fail when
 the copied pending assignment is changed to discard the command. These fault
 copies add no production hooks and their results are kept separate from the
 current-source coverage profiles and genuine qualification. The original
-source hashes must remain unchanged. Envoy public completion assembly remains
-B3.4.2.
+source hashes must remain unchanged.
+
+B3.4.2 assembles actual public execution and ordinary shared-PTY return. Run
+`ordinary.py --qualification <qualification-directory> --output <new-directory>`
+against all three genuinely qualified amd64 targets. The optional `--release`
+selects a diagnostic subset; a subset does not establish cumulative acceptance.
+The runner uses the existing immutable staging and receipt checks. No new
+production entrypoint or qualification override is supplied.
+
+The native cases preserve variables, physical cwd and preceding status across
+commands, forward actual controller terminal input, and reuse its exact input
+watermark. Each start and completion requires a covering monotonic output
+mark. Logs retain every raw PTY byte with its exact public offset range.
+Only the qualified Readline controls and its pre-start accept-line ending are
+removed when comparing visible output; source/frame text or diagnostics fail.
+The same private reader remains in use through all commands and idle shutdown.
+
+A bounded deterministic cleanup peer holds the actual completion helper while
+checking that no public completion is emitted. Success must precede helper
+release and reap; failure closes the public channels and cannot make the
+operation reusable. Host race tests cover blocked-input joins, caller-deadline
+retention, invalid IDs/phases, duplicate results, private EOF, cleanup failure,
+release/output failure and cancellation during cleanup. Unsupported lifecycle,
+split and inspection paths cannot enter ordinary foundation success. B4, B5,
+B6 and B7 retain those responsibilities; this peer is not descendant cleanup.
