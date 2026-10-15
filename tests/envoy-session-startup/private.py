@@ -58,8 +58,9 @@ def main():
         with (context / 'native.log').open('w') as log:
             result = subprocess.run(['docker', 'run', '--rm', '--network=none',
                                      '-e', 'OMEGAFLOW_NATIVE_PRIVATE_STARTUP=1',
+                                     '-e', 'OMEGAFLOW_NATIVE_PRIVATE_OPERATION=1',
                                      '--entrypoint=/omegaflow-runtime/bin/envoy', iid,
-                                     '-test.run=^TestNative(RuntimeInputs|PrivateStartup)$', '-test.v'],
+                                     '-test.run=^TestNative(RuntimeInputs|PrivateStartup|PrivateOperation)$', '-test.v'],
                                     stdout=log, stderr=subprocess.STDOUT, timeout=45)
         failures = pre_session_failures(output, release, iid)
         results.append({'release': release, 'qualified_awsh_sha256':

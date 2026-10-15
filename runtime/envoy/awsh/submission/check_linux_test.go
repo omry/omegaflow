@@ -38,6 +38,23 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestControlledCheckerRequiresCancellationAndRetainsStandaloneGuard(t *testing.T) {
+	m := example(":")
+	if _, err := CheckControlled(context.Background(), m, "unused", bashbuild.Target{}, nil); err == nil {
+		t.Fatal("controlled checker accepted an uninterruptible context")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := CheckControlled(ctx, m, "unused", bashbuild.Target{}, nil); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancelled controlled checker reached qualification/fork", err)
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := Check(ctx, m, "unused", bashbuild.Target{}, nil); err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatal("controlled entry relaxed standalone deadline guard", err)
+	}
+}
+
 func TestCheckFailsClosedWithoutQualification(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

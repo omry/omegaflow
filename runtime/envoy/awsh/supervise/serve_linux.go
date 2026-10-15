@@ -1,14 +1,16 @@
 //go:build linux
 
-// Package supervise assembles the fixed Awsh startup entry and idle shutdown.
+// Package supervise assembles the fixed Awsh private command and return entry.
 package supervise
 
 import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/omry/omegaflow/runtime/envoy/awsh/launch"
@@ -42,22 +44,15 @@ func Run(args []string) error {
 	defer stop()
 	defer cancel()
 	events := make(chan protocol.PrivateMessage, 1)
+	var session atomic.Pointer[launch.Session]
 	readDone := make(chan struct{})
 	go func() {
 		defer close(readDone)
-		reader := bufio.NewReader(control)
-		for {
-			m, err := protocol.ReadPrivate(reader, protocol.EnvoyToAwsh)
-			if err != nil {
-				cancel()
-				return
-			}
-			select {
-			case events <- m:
-			case <-ctx.Done():
-				return
-			}
-		}
+		_ = readControls(ctx, control, events, func(m protocol.PrivateMessage) bool {
+			s := session.Load()
+			return s != nil && s.AdmitControl(m)
+		})
+		cancel()
 	}()
 	defer func() {
 		cancel()
@@ -71,31 +66,141 @@ func Run(args []string) error {
 		launch.ReportLaunchFailure(ctx, h.Result)
 		return err
 	}
-	s, err := launch.StartControlled(ctx, h, inputs.BashSHA256, inputs.Target, inputs.Adapter)
+	s, err := launch.StartControlled(ctx, h, inputs.BashSHA256, inputs.Target, inputs.Adapter, session.Store)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
+	// One joined job performs existing blocking Session methods. The dispatcher
+	// stays responsive to EOF and invalid controls; it never adds a phase clock.
+	var job chan error
+	controls := make(chan protocol.PrivateMessage, 1)
+	releases := make(chan os.Signal, 1)
+	var pending protocol.PrivateMessage
+	defer func() {
+		cancel()
+		if job != nil {
+			<-job // join before Session.Close or reuse of owned descriptors
+		}
+	}()
+	begin := func(m *protocol.PrivateExecute) {
+		job = make(chan error, 1)
+		go func() {
+			job <- execute(ctx, s, inputs, *m, controls, releases)
+		}()
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case m := <-events:
-			if _, ok := m.(*protocol.PrivateShutdown); !ok {
-				return fmt.Errorf("private request outside implemented idle startup boundary")
+			switch v := m.(type) {
+			case *protocol.PrivateExecute, *protocol.PrivateShutdown:
+				if job != nil {
+					pending = m // preceding completed/rejected write is finishing
+				} else if command, ok := v.(*protocol.PrivateExecute); ok {
+					begin(command)
+				} else {
+					return s.ShutdownIdle(ctx)
+				}
+			default:
+				controls <- m // admission guarantees at most one pending reply
 			}
-			return s.ShutdownIdle(ctx)
+		case err := <-job:
+			job = nil
+			if err != nil {
+				return err
+			}
+			if pending != nil {
+				m := pending
+				pending = nil
+				if command, ok := m.(*protocol.PrivateExecute); ok {
+					begin(command)
+				} else {
+					return s.ShutdownIdle(ctx)
+				}
+			}
 		case r := <-s.Reaped:
 			if r.Err != nil {
 				return r.Err
+			}
+			if job != nil {
+				return fmt.Errorf("selected shell exited during private operation")
 			}
 			status := r.Status.ExitStatus()
 			if r.Status.Signaled() {
 				status = 128 + int(r.Status.Signal())
 			}
 			return s.ReportIdleExit(ctx, int64(status))
-		case <-s.Signals:
-			return fmt.Errorf("unexpected release signal at idle startup boundary")
+		case signal := <-s.Signals:
+			if !s.AdmitSignal(signal) {
+				return fmt.Errorf("unexpected release signal")
+			}
+			releases <- signal
 		}
 	}
+}
+
+// Admit in the sole decoder, before buffering can carry a premature request
+// across a phase boundary. Locked Session methods still own final validation.
+func readControls(ctx context.Context, control io.Reader, events chan<- protocol.PrivateMessage, admit func(protocol.PrivateMessage) bool) error {
+	reader := bufio.NewReader(control)
+	for {
+		m, err := protocol.ReadPrivate(reader, protocol.EnvoyToAwsh)
+		if err != nil {
+			return err
+		}
+		if !admit(m) {
+			return fmt.Errorf("private request outside current phase")
+		}
+		select {
+		case events <- m:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func execute(ctx context.Context, s *launch.Session, inputs runtimebundle.Inputs, m protocol.PrivateExecute, controls <-chan protocol.PrivateMessage, releases <-chan os.Signal) error {
+	if err := s.BeginStart(ctx, m, inputs.BashSHA256, inputs.Target, inputs.Adapter); err != nil {
+		return err
+	}
+	if !s.HasActiveOperation() {
+		return nil // output-empty source rejection left the idle shell intact
+	}
+	for i := 0; i < 2; i++ {
+		if err := s.AcceptStartHelper(); err != nil {
+			return err
+		}
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case control := <-controls:
+			if err := s.HandleStartControl(control); err != nil {
+				return err
+			}
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case signal := <-releases:
+		if err := s.HandleStartSignal(signal); err != nil {
+			return err
+		}
+	}
+	if err := s.BeginCompletion(ctx); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case control := <-controls:
+		if err := s.HandleCompletionControl(control); err != nil {
+			return err
+		}
+	}
+	return s.FinishCompletion()
 }

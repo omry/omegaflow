@@ -74,3 +74,37 @@ final-drain epoch; no phase resets or Awsh lifecycle timer are added.
 The original cumulative B3.2 acceptance requires both private and public
 proofs. Relay, operation start and ordinary return remain B3.3/B3.4; no B4
 behavior or B6 descendant census is included.
+
+B3.4.1 extends `private.py` with the actual Awsh private command/return
+exchange. It sends the fixed trigger through a real PTY, performs the matching
+start release and acknowledgement, holds the completion helper until matching
+`input_closed`, and proves helper reap and persistent status, variables and cwd
+across two commands. The PTY permits only the existing accept-line ending for
+the silent workload; source/frame bytes and diagnostics fail the proof.
+Additional cases reject wrong IDs, premature input closure and duplicate
+acknowledgement, recover after source syntax rejection, and cancel running or
+completion I/O on control EOF, malformed input or termination. Helper death is
+fully reaped before its acknowledgement to make the missing-helper boundary
+deterministic. A separate early helper-death case closes the control channel
+and proves that the Envoy peer can cancel the fail-stop wait.
+Fatal cases require nonzero Awsh exit and selected-shell reap. The test Envoy
+peer disposes failed helper fixtures; this does not claim B6 cleanup behavior.
+The same genuine qualification and manifest checks apply to every target.
+
+Run `python3 tests/envoy-session-startup/coverage.py --qualification
+<qualification-directory> --output <new-directory>` for supplemental component
+coverage and the deferred-reply regression. It executes the same `Run` and
+Session functions in a Go coverage test child on all three genuine targets,
+retains each scenario profile and writes their union to `components.cover`.
+This supplements the separate actual manifested Awsh proof in `private.py`;
+it cannot qualify or replace that entry.
+
+The runner separately compiles test-only source copies with a Go overlay and
+requires a compiled canary. FIFO barriers hold the first completed job until
+the next command is observed in the pending slot. Releasing the job must run
+that command with its persistent state intact. The same test must fail when
+the copied pending assignment is changed to discard the command. These fault
+copies add no production hooks and their results are kept separate from the
+current-source coverage profiles and genuine qualification. The original
+source hashes must remain unchanged. Envoy public completion assembly remains
+B3.4.2.
