@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -45,6 +46,7 @@ type Session struct {
 	startFailed         bool
 	completion          *completionRecord
 	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
+	admission           atomic.Pointer[dispatchAdmission]
 }
 
 // Start admits only a qualified, exact build. No executable supervise command
@@ -53,19 +55,19 @@ func Start(ctx context.Context, h Handoff, expected string, target bashbuild.Tar
 	if _, ok := ctx.Deadline(); !ok {
 		return nil, fmt.Errorf("launch requires the existing phase deadline")
 	}
-	return startQualified(ctx, h, expected, target, inputs, false)
+	return startQualified(ctx, h, expected, target, inputs, false, nil)
 }
 
 // StartControlled uses cancellation delivered by the existing Envoy control
 // channel. Envoy enforces the launch epoch; Awsh creates no lifecycle clock.
-func StartControlled(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string) (*Session, error) {
+func StartControlled(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string, publish func(*Session)) (*Session, error) {
 	if ctx.Done() == nil {
 		return nil, fmt.Errorf("controlled launch requires parent cancellation")
 	}
-	return startQualified(ctx, h, expected, target, inputs, true)
+	return startQualified(ctx, h, expected, target, inputs, true, publish)
 }
 
-func startQualified(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string, controlled bool) (s *Session, err error) {
+func startQualified(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string, controlled bool, publish func(*Session)) (s *Session, err error) {
 	owned := false
 	defer func() {
 		if controlled && err != nil && !owned {
@@ -95,7 +97,7 @@ func startQualified(ctx context.Context, h Handoff, expected string, target bash
 		}
 	}
 	owned = true // startOwned assumes result ownership, including its failures.
-	return startOwned(ctx, h, signals, controlled)
+	return startOwned(ctx, h, signals, controlled, publish)
 }
 
 // ReportLaunchFailure consumes a usable inherited result pipe only before a
@@ -127,10 +129,10 @@ func writeLaunchFailure(ctx context.Context, result helper.DeadlineWriter) {
 }
 
 func start(ctx context.Context, h Handoff, signals []uint64) (s *Session, err error) {
-	return startOwned(ctx, h, signals, false)
+	return startOwned(ctx, h, signals, false, nil)
 }
 
-func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled bool) (s *Session, err error) {
+func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled bool, publish func(*Session)) (s *Session, err error) {
 	deadline, ok := ctx.Deadline()
 	if !ok && !controlled {
 		return nil, fmt.Errorf("launch requires the existing phase deadline")
@@ -142,6 +144,11 @@ func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled boo
 		return nil, err
 	}
 	s = &Session{Handoff: h, parentControlled: controlled}
+	if publish != nil {
+		// The decoder can observe this Session during startup, while its
+		// admission is still empty. Only atomic admission is read there.
+		publish(s)
+	}
 	// NewFile registers a nonblocking pipe with Go's poller, making the original
 	// deadline and context closure effective even when Envoy stops reading.
 	if err = syscall.SetNonblock(h.Result, true); err != nil {
@@ -253,6 +260,7 @@ func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled boo
 		err = e
 		return
 	}
+	s.armAdmission("idle", "")
 	err = helper.WriteControl(ctx, s.result, frame)
 	if err == nil {
 		err = ctx.Err()
@@ -425,7 +433,7 @@ func (s *Session) startup(ctx context.Context) error {
 // active state. The start owner supplies its existing phase deadline and must
 // withhold helper success if restoration fails; that integration is separate.
 func (s *Session) RestoreWorkloadTermios(ctx context.Context) error {
-	if _, ok := ctx.Deadline(); !ok {
+	if _, ok := ctx.Deadline(); !ok && (!s.parentControlled || ctx.Done() == nil) {
 		return fmt.Errorf("restoration requires the existing phase deadline")
 	}
 	s.mu.Lock()

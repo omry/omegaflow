@@ -25,6 +25,18 @@ func Check(ctx context.Context, m protocol.HelperSourceReply, expected string, t
 	})
 }
 
+// CheckControlled uses cancellation from the owning Envoy epoch. It creates no
+// replacement clock and retains fresh qualification verification before forks.
+func CheckControlled(ctx context.Context, m protocol.HelperSourceReply, expected string, target bashbuild.Target, inputs map[string]string) (string, error) {
+	if ctx.Done() == nil {
+		return "", fmt.Errorf("controlled checker requires parent cancellation")
+	}
+	return checkSource(ctx, m, func() error {
+		_, err := bashbuild.LookupAwsh("/bin/bash", expected, target, inputs)
+		return err
+	})
+}
+
 // parseOutput remembers presence, never retains unbounded checker diagnostics.
 // Each command stream has its own writer; Run joins its copying goroutines.
 type parseOutput struct{ present bool }
@@ -38,6 +50,10 @@ func check(ctx context.Context, m protocol.HelperSourceReply, verify func() erro
 	if _, ok := ctx.Deadline(); !ok {
 		return "", fmt.Errorf("source checker requires the existing start deadline")
 	}
+	return checkSource(ctx, m, verify)
+}
+
+func checkSource(ctx context.Context, m protocol.HelperSourceReply, verify func() error) (string, error) {
 	frame, err := checkedFrame(m)
 	if err != nil {
 		return "", err

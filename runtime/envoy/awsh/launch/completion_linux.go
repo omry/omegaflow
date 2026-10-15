@@ -36,7 +36,7 @@ func (s *Session) BeginCompletion(ctx context.Context) error {
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
 	deadline, ok := ctx.Deadline()
-	if !ok || ctx.Err() != nil || s.startFailed || s.active == nil || s.active.phase != startReleased || s.completion != nil {
+	if (!ok && (!s.parentControlled || ctx.Done() == nil)) || ctx.Err() != nil || s.startFailed || s.active == nil || s.active.phase != startReleased || s.completion != nil {
 		return s.failStart(fmt.Errorf("completion outside released operation or cleanup epoch"))
 	}
 	r := &completionRecord{ctx: ctx, pidfd: -1, done: make(chan struct{})}
@@ -79,6 +79,7 @@ func (s *Session) BeginCompletion(ctx context.Context) error {
 	if err = s.completionHealthy(); err != nil {
 		return s.failStart(err)
 	}
+	s.armAdmission("input_closed", s.active.request.OperationID)
 	if err = s.startWrite(protocol.PrivateInputClose{OperationID: s.active.request.OperationID, CompletionHelperPID: int64(r.pid)}); err != nil {
 		return s.failStart(err)
 	}
@@ -215,6 +216,7 @@ func (s *Session) FinishCompletion() error {
 	if err = s.completionHealthy(); err != nil {
 		return s.failStart(err)
 	}
+	s.armAdmission("idle", "")
 	if err = s.startWrite(protocol.PrivateCompleted{OperationID: s.active.request.OperationID, Status: state.Status, PhysicalCWD: state.PhysicalCWD, Inspections: plans}); err != nil {
 		return s.failStart(err)
 	}

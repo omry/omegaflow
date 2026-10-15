@@ -46,6 +46,10 @@ type startRecord struct {
 // Check uses the same exact qualified candidate contract as selected-shell launch.
 func (s *Session) BeginStart(ctx context.Context, m protocol.PrivateExecute, expected string, target bashbuild.Target, inputs map[string]string) error {
 	return s.beginStart(ctx, m, func(ctx context.Context, source protocol.HelperSourceReply) error {
+		if s.parentControlled {
+			_, err := submission.CheckControlled(ctx, source, expected, target, inputs)
+			return err
+		}
 		_, err := submission.Check(ctx, source, expected, target, inputs)
 		return err
 	})
@@ -61,7 +65,7 @@ func (s *Session) beginStart(ctx context.Context, m protocol.PrivateExecute, che
 	ready := s.ready && !s.closing
 	s.mu.Unlock()
 	deadline, ok := ctx.Deadline()
-	if !ready || !ok || ctx.Err() != nil {
+	if !ready || (!ok && (!s.parentControlled || ctx.Done() == nil)) || ctx.Err() != nil {
 		return s.failStart(fmt.Errorf("start requires ready shell and original deadline"))
 	}
 	if _, err := protocol.EncodePrivate(m, protocol.EnvoyToAwsh); err != nil {
@@ -94,6 +98,7 @@ func (s *Session) beginStart(ctx context.Context, m protocol.PrivateExecute, che
 	if err := check(ctx, source); err != nil {
 		var rejection *submission.Rejection
 		if ctx.Err() == nil && errors.As(err, &rejection) {
+			s.armAdmission("idle", "")
 			err = s.startWrite(protocol.PrivateRejected{OperationID: m.OperationID, Code: rejection.Code, Message: rejection.Message})
 			if err = finishCancellation(ctx, stop, done, err); err == nil {
 				return nil // recoverable before any reservation or trigger
@@ -195,6 +200,7 @@ func (s *Session) AcceptStartHelper() error {
 		return nil
 	}
 	r.prepared, r.preparedUnregister, r.phase, keep = c, unregister, startPrepared, true
+	s.armAdmission("start_release", r.request.OperationID)
 	if err = s.startWrite(protocol.PrivateStartPrepared{OperationID: r.request.OperationID}); err != nil {
 		return s.failStart(err)
 	}
@@ -216,6 +222,7 @@ func (s *Session) HandleStartControl(m protocol.PrivateMessage) error {
 		if r.phase != startPrepared || v.OperationID != r.request.OperationID {
 			return s.failStart(fmt.Errorf("unexpected start_release"))
 		}
+		s.armAdmission("started_ack", r.request.OperationID)
 		if err := s.startWrite(protocol.PrivateStarted{OperationID: v.OperationID}); err != nil {
 			return s.failStart(err)
 		}
@@ -231,6 +238,7 @@ func (s *Session) HandleStartControl(m protocol.PrivateMessage) error {
 			return s.failStart(err)
 		}
 		r.phase = startSignal // arm BEFORE the helper success can release Bash
+		s.armAdmission("signal", r.request.OperationID)
 		if err := helper.Reply(r.prepared, protocol.HelperStartPrepared, protocol.HelperAccepted{}); err != nil {
 			if r.preparedUnregister != nil {
 				r.preparedUnregister()
@@ -303,6 +311,7 @@ func (s *Session) startWrite(m protocol.PrivateMessage) error {
 }
 
 func (s *Session) failStart(err error) error {
+	s.admission.Store(nil)
 	s.startFailed = true
 	if s.active != nil && s.active.preparedUnregister != nil {
 		if s.active.prepared != nil {
