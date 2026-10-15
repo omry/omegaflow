@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -45,6 +46,7 @@ type Session struct {
 	startFailed         bool
 	completion          *completionRecord
 	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
+	admission           atomic.Pointer[dispatchAdmission]
 }
 
 // Start admits only a qualified, exact build. No executable supervise command
@@ -62,7 +64,11 @@ func StartControlled(ctx context.Context, h Handoff, expected string, target bas
 	if ctx.Done() == nil {
 		return nil, fmt.Errorf("controlled launch requires parent cancellation")
 	}
-	return startQualified(ctx, h, expected, target, inputs, true)
+	s, err := startQualified(ctx, h, expected, target, inputs, true)
+	if err == nil {
+		s.armAdmission("idle", "")
+	}
+	return s, err
 }
 
 func startQualified(ctx context.Context, h Handoff, expected string, target bashbuild.Target, inputs map[string]string, controlled bool) (s *Session, err error) {
@@ -425,7 +431,7 @@ func (s *Session) startup(ctx context.Context) error {
 // active state. The start owner supplies its existing phase deadline and must
 // withhold helper success if restoration fails; that integration is separate.
 func (s *Session) RestoreWorkloadTermios(ctx context.Context) error {
-	if _, ok := ctx.Deadline(); !ok {
+	if _, ok := ctx.Deadline(); !ok && (!s.parentControlled || ctx.Done() == nil) {
 		return fmt.Errorf("restoration requires the existing phase deadline")
 	}
 	s.mu.Lock()
