@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -167,7 +168,15 @@ func (p *privateResults) close(ctx context.Context) error {
 	select {
 	case <-p.done:
 		p.stop()
-		return p.w.Result.SetReadDeadline(time.Time{})
+		err := p.w.Result.SetReadDeadline(time.Time{})
+		if err != nil {
+			// SetReadDeadline can return the poller's unwrapped closed-file
+			// error. Stat proves the File itself was closed after reader join.
+			if _, stateErr := p.w.Result.Stat(); errors.Is(stateErr, os.ErrClosed) {
+				return nil
+			}
+		}
+		return err
 	case <-ctx.Done():
 		return errors.Join(ctx.Err(), p.ctx.Err())
 	}
