@@ -135,8 +135,9 @@ func (f *startFixture) readPrivate(t *testing.T) protocol.PrivateMessage {
 
 func (f *startFixture) throughStarted(t *testing.T) *protocol.OperationStarted {
 	t.Helper()
+	before := f.r.w.OutputThrough
 	execute, ok := f.readPrivate(t).(*protocol.PrivateExecute)
-	if !ok || execute.OperationID != "operation-1" || execute.Source != ":" {
+	if !ok || execute.OperationID == "" || execute.Source != ":" {
 		t.Fatal("wrong private execute", execute)
 	}
 	f.private(t, protocol.PrivateSubmit{OperationID: execute.OperationID})
@@ -158,7 +159,7 @@ func (f *startFixture) throughStarted(t *testing.T) *protocol.OperationStarted {
 		if !ok {
 			t.Fatal("event before prepared mark")
 		}
-		covered = m.Offset == int64(len("before-start\n"))
+		covered = m.Offset == before+int64(len("before-start\n"))
 	}
 	f.private(t, protocol.PrivateStarted{OperationID: execute.OperationID})
 	var started *protocol.OperationStarted
@@ -171,7 +172,7 @@ func (f *startFixture) throughStarted(t *testing.T) *protocol.OperationStarted {
 			t.Fatal("unexpected start event", m)
 		}
 	}
-	if started.OutputStart != int64(len("before-start\n")) {
+	if started.OutputStart != before+int64(len("before-start\n")) {
 		t.Fatal("wrong output_start", started)
 	}
 	if m, ok := f.readPrivate(t).(*protocol.PrivateStartedAck); !ok || m.OperationID != execute.OperationID {

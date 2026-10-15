@@ -549,8 +549,21 @@ func (w *Workload) writeTerminal(ctx context.Context, data []byte, advance bool)
 // ShutdownIdle starts one final-drain epoch at the accepted idle shutdown. The
 // caller supplies the validated controller reason, not Awsh's fixed constant.
 func (w *Workload) ShutdownIdle(reason string) (err error) {
+	if !w.privateOwned.CompareAndSwap(false, true) {
+		return fmt.Errorf("idle shutdown requires the existing private result owner")
+	}
 	phase, end := context.WithTimeout(context.Background(), finalDrainBudget)
 	defer end()
+	return w.shutdownIdle(phase, reason, func(ctx context.Context) (protocol.PrivateMessage, error) {
+		deadline, _ := ctx.Deadline()
+		if err := w.Result.SetReadDeadline(deadline); err != nil {
+			return nil, err
+		}
+		return protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy)
+	})
+}
+
+func (w *Workload) shutdownIdle(phase context.Context, reason string, next func(context.Context) (protocol.PrivateMessage, error)) (err error) {
 	// Selected-channel loss interrupts work, but cleanup retains the remainder
 	// of the same final-drain epoch so Awsh can reap its owned shell.
 	ctx, cancel := context.WithCancel(phase)
@@ -565,10 +578,7 @@ func (w *Workload) ShutdownIdle(reason string) (err error) {
 		return
 	}
 	deadline, _ := ctx.Deadline()
-	if err = w.Result.SetReadDeadline(deadline); err != nil {
-		return
-	}
-	m, e := protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy)
+	m, e := next(ctx)
 	if e != nil {
 		return helper.WithContextCause(ctx, e)
 	}
@@ -576,7 +586,7 @@ func (w *Workload) ShutdownIdle(reason string) (err error) {
 	if !ok || closed.Reason != "shutdown" || closed.CWD != w.CWD {
 		return fmt.Errorf("invalid idle shutdown result")
 	}
-	if _, e = protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy); e != io.EOF {
+	if _, e = next(ctx); e != io.EOF {
 		return errors.Join(fmt.Errorf("private EOF required after closed"), helper.WithContextCause(ctx, e))
 	}
 	select {
