@@ -33,57 +33,81 @@ type completionRecord struct {
 // supplies the original cleanup epoch; the finished start epoch stays unchanged.
 // No helper success is sent before the matching input_closed control.
 func (s *Session) BeginCompletion(ctx context.Context) error {
+	_, err := s.beginOperationEvent(ctx, false)
+	return err
+}
+
+// BeginOperationEvent accepts the next existing operation-helper form. A gate
+// retains its peer until WaitGate commits one outcome; completion retains its
+// stricter direct-child and ignored-INT requirements.
+func (s *Session) BeginOperationEvent(ctx context.Context) (bool, error) {
+	return s.beginOperationEvent(ctx, true)
+}
+
+func (s *Session) beginOperationEvent(ctx context.Context, allowGate bool) (gated bool, err error) {
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
+	defer func() {
+		if err != nil {
+			err = s.failStart(err)
+		}
+	}()
 	deadline, ok := ctx.Deadline()
 	if (!ok && (!s.parentControlled || ctx.Done() == nil)) || ctx.Err() != nil || s.startFailed || s.active == nil || s.active.phase != startReleased || s.completion != nil {
-		return s.failStart(fmt.Errorf("completion outside released operation or cleanup epoch"))
+		return false, fmt.Errorf("completion outside released operation or cleanup epoch")
 	}
 	r := &completionRecord{ctx: ctx, pidfd: -1, done: make(chan struct{})}
 	s.completion = r
 	if err := s.result.SetWriteDeadline(deadline); err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	r.stop = context.AfterFunc(ctx, func() { defer close(r.done); s.interruptIO(); s.result.Close() })
 	c, unregister, err := s.completionPeer()
 	if err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	r.peer = c
 	r.peerUnregister = unregister
-	group, fd, err := s.helperIdentity(c)
+	group, fd, err := s.operationHelperIdentity(c, !allowGate)
 	if err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	r.pidfd = fd
 	r.pid, err = helperPeerPID(c)
 	if err != nil {
-		return s.failStart(err)
+		return false, err
 	}
-	if err = completionHelperState(r.pid); err != nil {
-		return s.failStart(err)
+	message, err := helper.ReadOperationRequest(c)
+	if gate, ok := message.(*protocol.HelperGateRequest); allowGate && err == nil && ok {
+		return true, s.beginGate(gate.GateID)
 	}
-	message, err := helper.ReadRequest(c, protocol.HelperCompletion)
 	state, ok := message.(*protocol.HelperPromptState)
 	if err != nil || !ok {
-		return s.failStart(fmt.Errorf("expected completion prompt_state: %v", err))
+		return false, fmt.Errorf("expected completion prompt_state: %v", err)
+	}
+	parent, actualGroup, session, err := processIdentity(r.pid)
+	if err != nil || parent != s.ShellPID || session != os.Getpid() || actualGroup != group || (group != s.ShellPID && group != r.pid) {
+		return false, fmt.Errorf("completion helper is not the selected shell's direct child")
+	}
+	if err = completionHelperState(r.pid); err != nil {
+		return false, err
 	}
 	if err = validateLiveState(state.PromptState, s.ShellPID); err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	r.state = state.PromptState
 	s.terminal.foreground = group
 	if r.reference, err = s.terminal.snapshot(ctx); err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	if err = s.completionHealthy(); err != nil {
-		return s.failStart(err)
+		return false, err
 	}
 	s.armAdmission("input_closed", s.active.request.OperationID)
 	if err = s.startWrite(protocol.PrivateInputClose{OperationID: s.active.request.OperationID, CompletionHelperPID: int64(r.pid)}); err != nil {
-		return s.failStart(err)
+		return false, err
 	}
-	return nil
+	return false, nil
 }
 
 // HandleCompletionControl releases only the validated first helper and only
@@ -226,6 +250,7 @@ func (s *Session) FinishCompletion() error {
 	s.State, s.ActiveTermios, s.workloadTermios = state.PromptState, active, workload
 	s.terminal.foreground = s.ShellPID
 	s.active, s.completion = nil, nil
+	s.gateControls.Clear()
 	return nil
 }
 
@@ -269,6 +294,10 @@ func (s *Session) completionHealthy() error {
 }
 
 func (s *Session) stopCompletion(err error) error {
+	if s.gate != nil {
+		s.gate.exit.stop()
+		s.gate = nil
+	}
 	r := s.completion
 	if r.peerUnregister != nil {
 		if r.peer != nil {
