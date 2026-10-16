@@ -1,12 +1,13 @@
 {
   "name": "omegaflow-website",
   "private": true,
-  "packageManager": "pnpm@11.13.1",
+  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "schema-docs": "python3 scripts/update_recording_schema_docs.py",
     "build": "python3 scripts/update_recording_schema_docs.py && docusaurus build",
     "serve": "docusaurus serve --port 6761",
-    "start": "docusaurus start --port 6761 --no-open"
+    "start": "docusaurus start --port 6761 --no-open",
+    "check": "python3 scripts/update_recording_schema_docs.py --check && corepack pnpm run build"
   },
   "dependencies": {
     "@docusaurus/core": "^3.10.2",
@@ -14,5 +15,8 @@
     "@docusaurus/theme-mermaid": "^3.10.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

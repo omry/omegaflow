@@ -28,7 +28,7 @@ jobs:
           package_json_file: website/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: website/.nvmrc
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
       - name: Install dependencies
