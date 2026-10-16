@@ -50,31 +50,31 @@ def main():
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    binary, current_awsh = build_peer(output, './awsh/supervise')
-    results = []
-    for row, entry, actual in verified_rows(args.qualification, current_awsh):
-        release = row['release']
-        iid, context = stage(output, release, entry, actual, binary)
-        with (context / 'native.log').open('w') as log:
-            result = subprocess.run(['docker', 'run', '--rm', '--network=none',
-                                     '-e', 'OMEGAFLOW_NATIVE_PRIVATE_STARTUP=1',
-                                     '-e', 'OMEGAFLOW_NATIVE_PRIVATE_OPERATION=1',
-                                     '--entrypoint=/omegaflow-runtime/bin/envoy', iid,
-                                     '-test.run=^TestNative(RuntimeInputs|PrivateStartup|PrivateOperation)$', '-test.v'],
-                                    stdout=log, stderr=subprocess.STDOUT, timeout=45)
-        failures = pre_session_failures(output, release, iid)
-        results.append({'release': release, 'qualified_awsh_sha256':
-                        entry['qualification']['adapter_inputs']['/omegaflow-runtime/bin/awsh'],
-                        'native_image': iid, 'returncode': result.returncode,
-                        'log_sha256': sha(context / 'native.log'),
-                        'pre_session_failures': failures})
-        save(output / 'results.json', results)
-        if result.returncode or any(row['returncode'] for row in failures):
-            logs = [row['log_path'] for row in failures if row['returncode']]
-            if result.returncode:
-                logs.insert(0, str(context / 'native.log'))
-            raise ValueError('actual private startup failed: ' + ', '.join(logs))
-    print('Actual private startup passed on all three genuinely qualified targets: ' + str(output))
+    with build_peer(output, './awsh/supervise') as (binary, current_awsh):
+        results = []
+        for row, entry, actual in verified_rows(args.qualification, current_awsh):
+            release = row['release']
+            iid, context = stage(output, release, entry, actual, binary)
+            with (context / 'native.log').open('w') as log:
+                result = subprocess.run(['docker', 'run', '--rm', '--network=none',
+                                         '-e', 'OMEGAFLOW_NATIVE_PRIVATE_STARTUP=1',
+                                         '-e', 'OMEGAFLOW_NATIVE_PRIVATE_OPERATION=1',
+                                         '--entrypoint=/omegaflow-runtime/bin/envoy', iid,
+                                         '-test.run=^TestNative(RuntimeInputs|PrivateStartup|PrivateOperation)$', '-test.v'],
+                                        stdout=log, stderr=subprocess.STDOUT, timeout=45)
+            failures = pre_session_failures(output, release, iid)
+            results.append({'release': release, 'qualified_awsh_sha256':
+                            entry['qualification']['adapter_inputs']['/omegaflow-runtime/bin/awsh'],
+                            'native_image': iid, 'returncode': result.returncode,
+                            'log_sha256': sha(context / 'native.log'),
+                            'pre_session_failures': failures})
+            save(output / 'results.json', results)
+            if result.returncode or any(row['returncode'] for row in failures):
+                logs = [row['log_path'] for row in failures if row['returncode']]
+                if result.returncode:
+                    logs.insert(0, str(context / 'native.log'))
+                raise ValueError('actual private startup failed: ' + ', '.join(logs))
+        print('Actual private startup passed on all three genuinely qualified targets: ' + str(output))
 
 
 if __name__ == '__main__':
