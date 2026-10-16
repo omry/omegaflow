@@ -1,0 +1,12 @@
+{
+  "directory": "website",
+  "toolchain": {},
+  "buildScript": "check",
+  "maintenance": {
+    "mode": "security-and-maintenance",
+    "upgradeScope": "major"
+  },
+  "schedule": [
+    "0 2 30 1 *"
+  ]
+}
