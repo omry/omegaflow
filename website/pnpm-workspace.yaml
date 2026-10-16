@@ -1,5 +1,14 @@
+packages:
+  - "."
+
+minimumReleaseAge: 14400
+blockExoticSubdeps: true
+strictDepBuilds: true
+
 allowBuilds:
   core-js: true
+  core-js-pure: false
+  fsevents: false
 
 overrides:
   copy-webpack-plugin>serialize-javascript: 7.0.5

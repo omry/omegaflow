@@ -14,33 +14,59 @@ python -m pip install -e '.[dev]'
 
 ## Website development
 
-Install `pnpm` once per machine if needed:
+Use Node 22, at least 22.13.0, as declared in `website/.nvmrc`.
+The website pins pnpm 11.21.0 in `website/package.json`. Enable Corepack
+with your Node installation:
 
 ```bash
-npm install --global pnpm@10.14.0
+corepack enable
 ```
 
 Install the website dependencies once per checkout, and again when the lockfile
 changes:
 
 ```bash
-pnpm --dir website install
+cd website
+corepack pnpm install --frozen-lockfile
 ```
 
 Start the local development server whenever you work on the website:
 
 ```bash
-pnpm --dir website start
+corepack pnpm start
 ```
 
 ## Validation
 
-Run these common checks before submitting a change:
+From the repository root, run these common checks before submitting a change.
+The website check verifies generated schema docs before the production build:
 
 ```bash
 nox -s tests
-pnpm --dir website build
+cd website
+corepack pnpm run check
 ```
+
+## Website dependency maintenance
+
+[Shared Docusaurus workflows](https://github.com/hydra-ecosystem/github-actions/blob/main/docs/docusaurus.md)
+audit the standalone `website` project and validate proposals with its `check`
+script. This preserves the schema checks and production build. The configuration
+in `.github/docusaurus.json` follows the project's Node and pnpm declarations.
+It enables security fixes and routine upgrades, including major versions.
+
+The audit runs on January 30 at 02:00 UTC. Dispatch **Docusaurus dependency audit**
+from `main` in GitHub Actions for an earlier run. Change a schedule in both the
+JSON configuration and `.github/workflows/dependency-audit.yml`.
+
+Before the first run, enable **Allow GitHub Actions to create and approve pull
+requests** under **Settings → Actions → General → Workflow permissions**.
+A maintainer may need to approve workflows on PRs created with the default
+`GITHUB_TOKEN`. Maintenance does not deploy the website.
+
+The workspace applies a ten-day release delay and explicit dependency build
+script approvals. It retains the existing security overrides and the `core-js`
+build approval. Review any additional approvals a dependency update needs.
 
 ## Release procedure
 
