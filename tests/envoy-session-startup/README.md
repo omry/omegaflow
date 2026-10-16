@@ -175,3 +175,19 @@ selection, and late valid input_close consumption without acknowledgement.
 No lifecycle public result is published by this isolated core. B4.4 owns its
 complete dispatcher, output/result and helper-window integration. Actual pidfd
 census/cleanup remains B6.5; split and inspection crossings remain B5.3/B7.3.
+
+# B4.3 gate proof
+
+Run `python3 tests/envoy-session-startup/gate.py --qualification DIR --output DIR`
+after fresh qualification of the changed Awsh bytes. The runner requires all
+three retained Linux/amd64 qualification receipts and uses their exact images.
+It exercises the fixed helper with hostile PATH, distinct gates, a nested launch
+path, gated terminal input, covering output marks, terminal Ctrl-C, a late
+continue and ordinary return with the persistent shell retained.
+
+Go fault tests cover strict operation-helper intake, malformed/ancillary frames,
+short and failed reply writes, the original reply deadline, one continue
+admission, pinned helper lifetime cancellation, and unsatisfied input watermarks.
+B4.4 owns integrated public/lifecycle dispatch and crossed outcome policy.
+These tests do not establish B5 split, B6 descendant cleanup or ARM64 support.
+
