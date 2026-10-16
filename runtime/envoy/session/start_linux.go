@@ -101,6 +101,8 @@ type Coordinator struct {
 	phase           startPhase
 	publication     chan chan error
 	forwardingInput bool
+	resize          *protocol.Resize
+	resizing        bool
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -255,6 +257,12 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 				}
 			default:
 			}
+			if c.resize != nil && ctx.Err() == nil {
+				if err := c.applyPendingResize(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			m := c.pending.message
 			c.pending = nil
 			if !c.expected(m) {
@@ -264,8 +272,8 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 		}
 		privateEvents := c.private.events
 		publicEvents := c.w.channels.Events()
-		if c.forwardingInput {
-			publicEvents = nil // One admitted input write; private facts stay observable.
+		if c.forwardingInput || c.resizing {
+			publicEvents = nil // One admitted I/O request; private facts stay observable.
 		}
 		if c.pending != nil {
 			privateEvents = nil // Retain one early valid next-phase fact.
@@ -277,6 +285,12 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 		default:
 			// A ready private fact wins over work completion, expiry and a
 			// recoverable result selection. A selected frame cannot be retracted.
+			if c.resize != nil && publication == nil && ctx.Err() == nil {
+				if err := c.applyPendingResize(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			if finished {
 				return nil, finishErr
 			}
@@ -325,6 +339,13 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 						return nil, &operationInput{e}
 					}
 					continue // Already-read idle/old-operation input is never replayed.
+				}
+				if resize, ok := e.Message.(*protocol.Resize); ok {
+					if c.resize != nil {
+						return nil, &startFactError{fmt.Errorf("multiple outstanding resizes")}
+					}
+					c.resize = resize
+					continue
 				}
 				m, ok := e.Message.(*protocol.Cancel)
 				if !ok || m.OperationID != c.active.request.OperationID {
@@ -383,6 +404,10 @@ func (c *Coordinator) send(ctx context.Context, m protocol.PrivateMessage) error
 }
 
 func (c *Coordinator) fatal(ctx context.Context, code string, cause error, skipDiagnostic bool) error {
+	var resize *StartError
+	if errors.As(cause, &resize) && resize.Code == "resize-failed" {
+		return resize // The relay already selected and closed this fatal failure.
+	}
 	deadline, _ := ctx.Deadline()
 	err := &StartError{Code: code, Deadline: deadline, Cause: helper.WithContextCause(ctx, cause)}
 	if !skipDiagnostic {
