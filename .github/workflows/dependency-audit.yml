@@ -1,0 +1,26 @@
+name: Docusaurus dependency audit
+'on':
+  schedule:
+  - cron: 0 2 30 1 *
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    permissions:
+      contents: read
+    uses: hydra-ecosystem/github-actions/.github/workflows/docusaurus-audit.yml@9135994afb455c04c4010b3ee98742dce6e6c9af
+  pull-request:
+    needs: audit
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: hydra-ecosystem/github-actions/.github/workflows/docusaurus-publish.yml@9135994afb455c04c4010b3ee98742dce6e6c9af
+    with:
+      validation-passed: ${{ needs.audit.outputs.validation_passed }}
+      app-client-id: ${{ vars.DOCUSAURUS_APP_CLIENT_ID }}
+    secrets:
+      app-private-key: ${{ secrets.DOCUSAURUS_APP_PRIVATE_KEY }}
