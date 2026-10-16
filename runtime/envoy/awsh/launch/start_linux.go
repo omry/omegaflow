@@ -47,6 +47,8 @@ type Session struct {
 	completion          *completionRecord
 	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
 	admission           atomic.Pointer[dispatchAdmission]
+	gateControls        sync.Map // gateKey -> *gateControl; retained until completion
+	gate                *gateRecord
 }
 
 // Start admits only a qualified, exact build. No executable supervise command
@@ -514,6 +516,10 @@ func (s *Session) verifyShell() error {
 }
 
 func (s *Session) helperIdentity(c *net.UnixConn) (group, fd int, err error) {
+	return s.operationHelperIdentity(c, true)
+}
+
+func (s *Session) operationHelperIdentity(c *net.UnixConn, direct bool) (group, fd int, err error) {
 	pid, err := helperPeerPID(c)
 	if err != nil {
 		return 0, -1, err
@@ -535,7 +541,7 @@ func (s *Session) helperIdentity(c *net.UnixConn) (group, fd int, err error) {
 		return 0, fd, err
 	}
 	exe, e := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
-	if e != nil || parent != s.ShellPID || session != os.Getpid() || (group != s.ShellPID && group != pid) || exe != "/omegaflow-runtime/bin/awsh" {
+	if e != nil || session != os.Getpid() || exe != "/omegaflow-runtime/bin/awsh" || direct && (parent != s.ShellPID || group != s.ShellPID && group != pid) {
 		return 0, fd, fmt.Errorf("helper identity mismatch")
 	}
 	if err = s.verifyShell(); err != nil {
