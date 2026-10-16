@@ -131,3 +131,27 @@ retention, invalid IDs/phases, duplicate results, private EOF, cleanup failure,
 release/output failure and cancellation during cleanup. Unsupported lifecycle,
 split and inspection paths cannot enter ordinary foundation success. B4, B5,
 B6 and B7 retain those responsibilities; this peer is not descendant cleanup.
+
+B4.1 adds `resize.py --qualification <qualification-directory> --output
+<new-directory>`. It reuses the same actual manifested Awsh and qualified Bash
+entries. The actual Bash foreground receives kernel `SIGWINCH`, reports the
+new dimensions through `stty size`, accepts terminal input and completes through
+the existing bounded cleanup peer. Public marks cover the exact raw prefix
+before `resize_applied`; ordinary completion keeps the original operation start
+and never regresses that prefix. Native idle shutdown covers an applied resize
+before `draining`, and a decoded request superseded by the existing drain with
+no resize acknowledgement. All three qualified targets are required for the
+cumulative native proof; `--release` runs only a diagnostic subset.
+
+Host tests separately exercise real PTY size readback, exact binary output,
+continuous producers, same-frontier sequential resizes, delayed input-watermark
+start/rejection/cancellation/timeout crossings, retained private return facts,
+partial private frames during an existing output publication, and private fatal
+input while resize waits for the output owner. A real non-terminal descriptor
+produces `ENOTTY` in the direct ioctl: idle and active failures must emit fatal
+`resize-failed`, close both channels, and publish neither an applied resize nor
+an operation terminal result. These descriptor fault fixtures do not qualify a
+target. B4.2–B4.4 retain lifecycle/gate integration and its complete crossed
+control suite; split frontiers remain B5.3, actual census/cleanup remains B6,
+and inspection remains B7. No production entrypoint or broader support claim
+is supplied by these isolated assemblies.
