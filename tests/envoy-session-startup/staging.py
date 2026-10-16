@@ -1,10 +1,12 @@
 """Shared isolated native payload staging; no production path override."""
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,15 +19,23 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+@contextmanager
+def temporary_binary(output):
+    """Own rebuildable executables separately from retained proof evidence."""
+    with TemporaryDirectory(prefix='.native-build-', dir=output) as scratch:
+        yield Path(scratch) / 'native.test'
+
+
+@contextmanager
 def build_peer(output, package):
-    binary = output / 'native.test'
-    env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
-    subprocess.run(['go', 'test', '-buildvcs=false', '-c', '-o', str(binary), package],
-                   cwd=ROOT / 'runtime/envoy', check=True, env=env)
-    current = output / 'awsh-current'
-    subprocess.run(['go', 'build', '-buildvcs=false', '-o', str(current), './cmd/awsh'],
-                   cwd=ROOT / 'runtime/envoy', check=True, env=env)
-    return binary, sha(current)
+    with temporary_binary(output) as binary:
+        env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
+        subprocess.run(['go', 'test', '-buildvcs=false', '-c', '-o', str(binary), package],
+                       cwd=ROOT / 'runtime/envoy', check=True, env=env)
+        current = binary.with_name('awsh-current')
+        subprocess.run(['go', 'build', '-buildvcs=false', '-o', str(current), './cmd/awsh'],
+                       cwd=ROOT / 'runtime/envoy', check=True, env=env)
+        yield binary, sha(current)
 
 
 def verified_rows(qualification, current_awsh):
@@ -56,7 +66,18 @@ def stage(output, release, entry, actual, binary):
                                       cwd=ROOT, env={**os.environ, 'CHGDISABLE': '1'}, text=True)
     context = output / release
     context.mkdir()
-    shutil.copyfile(binary, context / 'native.test')
+    staged = context / 'native.test'
+    try:
+        save(context / 'test-binary.json', {'sha256': sha(binary),
+                                          'bytes': binary.stat().st_size})
+        shutil.copyfile(binary, staged)
+        return build_image(context, entry, actual, go_version, revision)
+    finally:
+        # Docker has consumed this copy, even when the build fails.
+        staged.unlink(missing_ok=True)
+
+
+def build_image(context, entry, actual, go_version, revision):
     table = {'version': 1, 'builds': {entry['candidate']['executable_sha256']: entry}}
     (context / 'bash-builds.json').write_text(json.dumps(table, sort_keys=True, separators=(',', ':')) + '\n')
     (context / 'manifest.py').write_text('''import hashlib,json,pathlib,os

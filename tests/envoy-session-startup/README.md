@@ -1,3 +1,20 @@
+# Validation artifact lifetime
+
+All startup proof runners compile executables in runner-owned temporary
+directories. A runner reuses its compiled peer across the three qualified
+Bash targets. Each Docker build consumes a staged copy; that copy is removed
+when the build finishes or raises an error. Compiled peers, Awsh comparison
+binaries, and coverage/overlay executables are removed when their owning scope
+exits, including build, qualification, and test failures or timeouts.
+
+Evidence directories retain logs, results, coverage profiles, overlay sources,
+Dockerfiles, image identities, and `test-binary.json` records of staged binary
+hashes and sizes. Rebuilding a retained Dockerfile requires regenerating its
+binary from the corresponding inputs. These directories are evidence, not
+self-contained Docker build contexts after validation. Abrupt termination
+that prevents Python cleanup, such as SIGKILL, can still leave scratch files.
+No historical evidence or shared AWD retention policy is changed by cleanup.
+
 # B3.2 startup proofs
 
 B3.2.1 owns the actual fixed Awsh entry through private readiness and idle

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 
-from staging import ROOT, build_peer, save, sha, stage, verified_rows
+from staging import ROOT, build_peer, save, sha, stage, temporary_binary, verified_rows
 
 
 def replace_once(text, old, new):
@@ -94,62 +94,62 @@ def main():
     sources = [ROOT / 'runtime/envoy/awsh/supervise' / name
                for name in ('serve_linux.go', 'operation_linux_test.go')]
     before = {str(f): sha(f) for f in sources}
-    binary, current_awsh = build_peer(output, './awsh/supervise')
-    rows = list(verified_rows(args.qualification, current_awsh))
-    results = {'qualified_awsh_sha256': current_awsh, 'coverage': [], 'schedule': []}
-    try:
-        build(binary, coverage=True)
-        profiles = []
-        for row, entry, actual in rows:
-            code, context, evidence, image = run_image(output, row, entry, actual, binary)
-            found = sorted(evidence.glob('*.cover'))
-            results['coverage'].append({'release': row['release'], 'returncode': code,
-                                        'image': image, 'log_sha256': sha(context / 'native.log'),
-                                        'profiles': [str(f) for f in found]})
-            if code or not found:
-                raise ValueError('component coverage failed: ' + str(context / 'native.log'))
-            profiles.extend(found)
-        # Each child has the same instrumented packages. Union block counts;
-        # profiles from instrumented fault copies never enter this collection.
-        blocks = {}
-        for profile in profiles:
-            lines = profile.read_text().splitlines()
-            if lines[0] != 'mode: set':
-                raise ValueError('unexpected coverage mode')
-            for line in lines[1:]:
-                block, count = line.rsplit(' ', 1)
-                blocks[block] = max(blocks.get(block, 0), int(count))
-        (output / 'components.cover').write_text(
-            'mode: set\n' + ''.join(f'{k} {v}\n' for k, v in sorted(blocks.items())))
-        # Hold the first completed job until the next execute is actually
-        # pending. Then prove retention, and prove dropping it fails the test.
-        for drop in (False, True):
-            fault = output / ('schedule-drop' if drop else 'schedule-retain')
-            fault.mkdir()
-            overlay = scheduling_overlay(fault, drop)
-            fault_binary = fault / 'native.test'
-            build(fault_binary, overlay=overlay)
-            if b'/evidence/worker-entered' not in fault_binary.read_bytes():
-                raise ValueError('Go did not compile the scheduling overlay')
+    with build_peer(output, './awsh/supervise') as (binary, current_awsh):
+        rows = list(verified_rows(args.qualification, current_awsh))
+        results = {'qualified_awsh_sha256': current_awsh, 'coverage': [], 'schedule': []}
+        try:
+            build(binary, coverage=True)
+            profiles = []
             for row, entry, actual in rows:
-                code, context, evidence, image = run_image(fault, row, entry, actual, fault_binary, fault=True)
-                observed = (evidence / 'deferred-observed').read_bytes() == b'\x01'
-                log = (context / 'native.log').read_text()
-                expected = bool(code) and 'private result' in log and 'i/o timeout' in log if drop else code == 0
-                results['schedule'].append({'release': row['release'], 'drop_pending': drop,
-                                            'returncode': code, 'expected_result': expected,
-                                            'deferred_observed': observed, 'image': image,
-                                            'log_sha256': sha(context / 'native.log')})
-                if not observed or not expected:
-                    raise ValueError('scheduling counterfactual failed: ' + str(context / 'native.log'))
-    finally:
-        after = {str(f): sha(f) for f in sources}
-        results['source_before'] = before
-        results['source_after'] = after
-        save(output / 'results.json', results)
-        if after != before:
-            raise ValueError('candidate source changed during supplemental proof')
-    print('Component coverage and deferred-reply counterfactual passed: ' + str(output))
+                code, context, evidence, image = run_image(output, row, entry, actual, binary)
+                found = sorted(evidence.glob('*.cover'))
+                results['coverage'].append({'release': row['release'], 'returncode': code,
+                                            'image': image, 'log_sha256': sha(context / 'native.log'),
+                                            'profiles': [str(f) for f in found]})
+                if code or not found:
+                    raise ValueError('component coverage failed: ' + str(context / 'native.log'))
+                profiles.extend(found)
+            # Each child has the same instrumented packages. Union block counts;
+            # profiles from instrumented fault copies never enter this collection.
+            blocks = {}
+            for profile in profiles:
+                lines = profile.read_text().splitlines()
+                if lines[0] != 'mode: set':
+                    raise ValueError('unexpected coverage mode')
+                for line in lines[1:]:
+                    block, count = line.rsplit(' ', 1)
+                    blocks[block] = max(blocks.get(block, 0), int(count))
+            (output / 'components.cover').write_text(
+                'mode: set\n' + ''.join(f'{k} {v}\n' for k, v in sorted(blocks.items())))
+            # Hold the first completed job until the next execute is actually
+            # pending. Then prove retention, and prove dropping it fails the test.
+            for drop in (False, True):
+                fault = output / ('schedule-drop' if drop else 'schedule-retain')
+                fault.mkdir()
+                overlay = scheduling_overlay(fault, drop)
+                with temporary_binary(fault) as fault_binary:
+                    build(fault_binary, overlay=overlay)
+                    if b'/evidence/worker-entered' not in fault_binary.read_bytes():
+                        raise ValueError('Go did not compile the scheduling overlay')
+                    for row, entry, actual in rows:
+                        code, context, evidence, image = run_image(fault, row, entry, actual, fault_binary, fault=True)
+                        observed = (evidence / 'deferred-observed').read_bytes() == b'\x01'
+                        log = (context / 'native.log').read_text()
+                        expected = bool(code) and 'private result' in log and 'i/o timeout' in log if drop else code == 0
+                        results['schedule'].append({'release': row['release'], 'drop_pending': drop,
+                                                    'returncode': code, 'expected_result': expected,
+                                                    'deferred_observed': observed, 'image': image,
+                                                    'log_sha256': sha(context / 'native.log')})
+                        if not observed or not expected:
+                            raise ValueError('scheduling counterfactual failed: ' + str(context / 'native.log'))
+        finally:
+            after = {str(f): sha(f) for f in sources}
+            results['source_before'] = before
+            results['source_after'] = after
+            save(output / 'results.json', results)
+            if after != before:
+                raise ValueError('candidate source changed during supplemental proof')
+        print('Component coverage and deferred-reply counterfactual passed: ' + str(output))
 
 
 if __name__ == '__main__':
