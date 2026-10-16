@@ -95,6 +95,9 @@ func Run(args []string) error {
 			return ctx.Err()
 		case m := <-events:
 			switch v := m.(type) {
+			case *protocol.PrivateContinue:
+				// Admission delivered it to its exact gate. A late matching
+				// continue after interruption cannot become another outcome.
 			case *protocol.PrivateExecute, *protocol.PrivateShutdown:
 				if job != nil {
 					pending = m // preceding completed/rejected write is finishing
@@ -191,8 +194,17 @@ func execute(ctx context.Context, s *launch.Session, inputs runtimebundle.Inputs
 			return err
 		}
 	}
-	if err := s.BeginCompletion(ctx); err != nil {
-		return err
+	for {
+		gated, err := s.BeginOperationEvent(ctx)
+		if err != nil {
+			return err
+		}
+		if !gated {
+			break
+		}
+		if err := s.WaitGate(); err != nil {
+			return err
+		}
 	}
 	select {
 	case <-ctx.Done():

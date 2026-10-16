@@ -33,6 +33,17 @@ func (s *Session) AdmitControl(message protocol.PrivateMessage) bool {
 		kind, operation = "started_ack", m.OperationID
 	case *protocol.PrivateInputClosed:
 		kind, operation = "input_closed", m.OperationID
+	case *protocol.PrivateContinue:
+		value, ok := s.gateControls.Load(gateKey{m.OperationID, m.GateID})
+		if !s.parentControlled || !ok {
+			return false
+		}
+		gate := value.(*gateControl)
+		if !gate.admitted.CompareAndSwap(false, true) {
+			return false
+		}
+		gate.continueGate <- struct{}{}
+		return true
 	default:
 		return false
 	}
