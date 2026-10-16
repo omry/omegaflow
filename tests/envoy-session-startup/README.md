@@ -155,3 +155,23 @@ target. B4.2–B4.4 retain lifecycle/gate integration and its complete crossed
 control suite; split frontiers remain B5.3, actual census/cleanup remains B6,
 and inspection remains B7. No production entrypoint or broader support claim
 is supplied by these isolated assemblies.
+
+B4.2 adds `lifecycle.py --qualification <qualification-directory> --output
+<new-directory>`. Its isolated Envoy lifecycle core selects cancellation or
+finalization after the actual start release. It validates the controlled
+foreground through an explicit census peer and sends integer `SIGINT` directly
+through the retained PTY master. Actual Bash returns status130 through the
+existing A2.5 `input_close` and `completed` facts. The bounded cleanup peer runs
+before `input_closed` releases the real helper. All three qualified amd64
+targets are required; an optional `--release` is only a diagnostic subset.
+
+Host race tests separately create a test-owned controlling PTY session and
+observe real SIGINT delivery. They cover exactly-one signal, cancel crossing
+finalize without a new deadline, empty foreground resampling and each winner,
+wrong-session and unproved-member rejection, missing or failed census proofs,
+direct ioctl failure and cancellation during a proof. Decision tests retain
+queued-start ordering, return/cleanup crossings, the original grace and timeout
+selection, and late valid input_close consumption without acknowledgement.
+No lifecycle public result is published by this isolated core. B4.4 owns its
+complete dispatcher, output/result and helper-window integration. Actual pidfd
+census/cleanup remains B6.5; split and inspection crossings remain B5.3/B7.3.
