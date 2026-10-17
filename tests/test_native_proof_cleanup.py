@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 PROOFS = Path(__file__).parent / 'envoy-session-startup'
-RUNNERS = ('private', 'public', 'ordinary', 'resize', 'lifecycle', 'gate')
+RUNNERS = ('private', 'public', 'ordinary', 'resize', 'lifecycle', 'gate', 'controls')
 
 
 def load(name):

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -38,11 +39,25 @@ func (l *operationLifecycle) signalForeground(master *os.File, sessionID int64, 
 	if !l.signalNeeded() {
 		return false, nil
 	}
-	ctx := l.grace
+	live, err := proveForeground(l.grace, master, sessionID, census)
+	if err != nil {
+		var failed *StartError
+		if errors.As(err, &failed) {
+			l.failure = err
+		}
+		return false, err
+	}
+	if !live {
+		return false, nil
+	}
+	err = l.applyForegroundSignal(master)
+	return err == nil, err
+}
+
+func proveForeground(ctx context.Context, master *os.File, sessionID int64, census foregroundCensus) (bool, error) {
 	deadline, _ := ctx.Deadline()
 	fail := func(cause error) (bool, error) {
-		l.failure = &StartError{Code: "lifecycle-signal", Deadline: deadline, Cause: cause}
-		return false, l.failure
+		return false, &StartError{Code: "lifecycle-signal", Deadline: deadline, Cause: cause}
 	}
 	if err := ctx.Err(); err != nil {
 		return false, err // The existing owner selects expiry or session failure.
@@ -85,13 +100,28 @@ func (l *operationLifecycle) signalForeground(master *os.File, sessionID int64, 
 	if len(members) == 0 {
 		return false, nil
 	}
+	return true, nil
+}
+
+func (l *operationLifecycle) applyForegroundSignal(master *os.File) error {
+	if !l.signalNeeded() {
+		return nil
+	}
+	if err := l.grace.Err(); err != nil {
+		return err
+	}
+	if deadline, _ := l.grace.Deadline(); !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
 	// The kernel atomically selects a foreground group in this controlling
 	// session. The complete boundary proof covers eligible switches as well.
 	l.attempted = true // Even an ioctl failure cannot authorize another signal.
 	if err := signalPTY(master); err != nil {
-		return fail(err)
+		deadline, _ := l.grace.Deadline()
+		l.failure = &StartError{Code: "lifecycle-signal", Deadline: deadline, Cause: err}
+		return l.failure
 	}
-	return true, nil
+	return nil
 }
 
 func validateForeground(sessionID, observedSession, pgid int64, members []foregroundMember) error {

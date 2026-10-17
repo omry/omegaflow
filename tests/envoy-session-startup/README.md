@@ -208,3 +208,32 @@ admission, pinned helper lifetime cancellation, and unsatisfied input watermarks
 B4.4 owns integrated public/lifecycle dispatch and crossed outcome policy.
 These tests do not establish B5 split, B6 descendant cleanup or ARM64 support.
 
+
+# B4.4 integrated control proofs
+
+`controls.py --qualification PATH --output NEW_DIRECTORY` runs the integrated
+Coordinator against all three genuinely qualified Linux amd64 Bash/Awsh
+payloads. It exercises public cancel/finalize, actual foreground SIGINT,
+ordinary cleanup and selected terminal results, persistent-shell reuse, gates
+under hostile PATH, input watermarks and distinct gate IDs. The completion
+helper case holds the real decoder's input_close event before Envoy acceptance,
+selects lifecycle control, and proves that the owner signals before its later
+resize acknowledgement. It checks both live Bash and helper retain ignored
+SIGINT, then releases the original unchanged return fact and proves the
+selected result and reusable shell. These tests use explicit isolated census
+and cleanup peers. They do not claim B6 descendant cleanup or qualification for
+ARM64.
+
+The deterministic session suite also covers original grace and cleanup epochs,
+queued/start-released cancellation, control responsiveness while input is
+blocked, cancellation/finalization during cleanup, gate/input/lifecycle
+crossings, exactly one private outcome, malformed/repeated gate requests,
+late continue after interruption, shell-end and timeout result selection,
+cleanup failure, and private EOF/reap/output-drain prerequisites. A crossed
+input_close after timeout is consumed without input_closed. Split, real
+process-tree cleanup and inspection integration remain B5, B6 and B7.
+
+Terminal input and typed control requests use separate bounded transport
+queues. The same Coordinator consumes both serially. No second private reader
+or lifecycle actor is added. Compiled test executables retain the scoped
+cleanup policy above; the controls runner participates in its failure tests.

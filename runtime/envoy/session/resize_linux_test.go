@@ -756,8 +756,8 @@ func TestSelectedPublicationJoinsBeforePendingResize(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := &protocol.Resize{Columns: 129, Rows: 47}
-	f.r.w.channels.events <- Event{Message: request}
-	for len(f.r.w.channels.events) != 0 {
+	f.r.w.channels.controls <- Event{Message: request}
+	for len(f.r.w.channels.controls) != 0 {
 		if ctx.Err() != nil {
 			t.Fatal("resize was not accepted", ctx.Err())
 		}

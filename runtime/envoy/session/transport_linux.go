@@ -69,7 +69,9 @@ func (l *Listeners) Close() {
 }
 
 // Event is one bounded controller read or terminal input chunk. The caller must
-// consume Events serially. A fatal error is retained in Err and Done even when
+// consume Events and Controls with one serialized owner. Separate bounded
+// queues keep lifecycle requests observable while terminal input is blocked.
+// A fatal error is retained in Err and Done even when
 // the bounded event queue is full; EOF never becomes a reconnect opportunity.
 type Event struct {
 	Message protocol.Message
@@ -84,6 +86,7 @@ type Channels struct {
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	events              chan Event
+	controls            chan Event
 	done                chan struct{}
 	once                sync.Once
 	workers             sync.WaitGroup
@@ -98,9 +101,10 @@ type Channels struct {
 	input               *terminalInput
 }
 
-func (s *Channels) Events() <-chan Event  { return s.events }
-func (s *Channels) Done() <-chan struct{} { return s.done }
-func (s *Channels) Err() error            { s.errMu.Lock(); defer s.errMu.Unlock(); return s.err }
+func (s *Channels) Events() <-chan Event   { return s.events }
+func (s *Channels) Controls() <-chan Event { return s.controls }
+func (s *Channels) Done() <-chan struct{}  { return s.done }
+func (s *Channels) Err() error             { s.errMu.Lock(); defer s.errMu.Unlock(); return s.err }
 
 // Terminal is the sole byte-stream writer; readers remain owned by Channels.
 func (s *Channels) Terminal() *net.TCPConn { return s.terminal }
@@ -127,8 +131,12 @@ func (s *Channels) fail(err error) {
 func (s *Channels) Close() { s.fail(net.ErrClosed); s.workers.Wait() }
 
 func (s *Channels) emit(e Event) bool {
+	queue := s.events
+	if e.Message != nil {
+		queue = s.controls
+	}
 	select {
-	case s.events <- e:
+	case queue <- e:
 		return true
 	case <-s.ctx.Done():
 		return false
@@ -288,7 +296,7 @@ func (l *Listeners) Handshake(ctx context.Context, sessionID string) (_ *Channel
 	defer stopAccept()
 	defer l.Close()
 	transportCtx, stop := context.WithCancel(ctx)
-	s := &Channels{ctx: transportCtx, cancel: stop, events: make(chan Event, 1), done: make(chan struct{}), sendSeq: 1}
+	s := &Channels{ctx: transportCtx, cancel: stop, events: make(chan Event, 1), controls: make(chan Event, 1), done: make(chan struct{}), sendSeq: 1}
 	defer func() {
 		if err != nil {
 			s.Close()

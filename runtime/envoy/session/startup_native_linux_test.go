@@ -224,7 +224,7 @@ func TestNativePublicStartup(t *testing.T) {
 			}
 			if outcome == "immediate-controller-response" {
 				select {
-				case event := <-r.s.Events():
+				case event := <-r.s.Controls():
 					m, ok := event.Message.(*protocol.Shutdown)
 					if !ok || m.Reason != shutdown.Reason {
 						t.Fatal("lost immediate response", event)

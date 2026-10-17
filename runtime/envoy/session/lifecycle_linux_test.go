@@ -299,3 +299,22 @@ func TestForegroundProofValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestQueuedLifecycleUsesOriginalStartReleaseEpoch(t *testing.T) {
+	ctx, end := context.WithTimeout(context.Background(), time.Second)
+	defer end()
+	released := time.Now().Add(-lifecycleGrace - time.Second)
+	l := newOperationLifecycle("operation")
+	defer l.close()
+	request := lifecycleRequest("cancel", "operation", "queued").(*protocol.Cancel)
+	if err := l.startReleased(ctx, StartOutcome{Started: true, QueuedCancel: request, ReleasedAt: released}); err != nil {
+		t.Fatal(err)
+	}
+	deadline, _ := l.grace.Deadline()
+	if deadline != released.Add(lifecycleGrace) {
+		t.Fatal("queued request reset grace to completion-owner entry", deadline, released)
+	}
+	if selected, err := l.selectTimeout(time.Now()); err != nil || !selected {
+		t.Fatal("expired queued request received a fresh allowance", selected, err)
+	}
+}
