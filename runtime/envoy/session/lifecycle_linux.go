@@ -55,7 +55,7 @@ func (l *operationLifecycle) startReleased(ctx context.Context, out StartOutcome
 	}
 	l.started = true
 	if out.QueuedCancel != nil {
-		return l.accept(ctx, out.QueuedCancel)
+		return l.acceptAt(ctx, out.QueuedCancel, out.ReleasedAt)
 	}
 	return nil
 }
@@ -69,6 +69,10 @@ func (l *operationLifecycle) close() {
 // accept starts the one original grace before any foreground sampling. A
 // cancellation during return cleanup is local and cannot create a grace.
 func (l *operationLifecycle) accept(ctx context.Context, request protocol.Message) error {
+	return l.acceptAt(ctx, request, time.Time{})
+}
+
+func (l *operationLifecycle) acceptAt(ctx context.Context, request protocol.Message, accepted time.Time) error {
 	if _, err := protocol.EncodeController(request); err != nil {
 		return err
 	}
@@ -104,7 +108,10 @@ func (l *operationLifecycle) accept(ctx context.Context, request protocol.Messag
 	l.kind, l.reason = kind, reason
 	if l.inputClose == nil && l.grace == nil {
 		l.session = ctx
-		l.grace, l.endGrace = context.WithTimeout(lifecycleContext{Context: ctx}, lifecycleGrace)
+		if accepted.IsZero() {
+			accepted = time.Now()
+		}
+		l.grace, l.endGrace = context.WithDeadline(lifecycleContext{Context: ctx}, accepted.Add(lifecycleGrace))
 	}
 	return nil
 }

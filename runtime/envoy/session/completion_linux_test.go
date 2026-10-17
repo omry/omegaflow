@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -286,7 +285,7 @@ func TestCompleteRetainsCallerBoundAndJoinsPeer(t *testing.T) {
 	}
 }
 
-func TestCompleteCancellationDuringCleanupJoinsWithoutPublishingReturn(t *testing.T) {
+func TestCompleteCancellationDuringCleanupCannotSkipRequiredCleanup(t *testing.T) {
 	f := completionFixture(t)
 	entered, joined := make(chan struct{}), make(chan struct{})
 	done := completeFixture(t, f, relayTestContext(t), func(ctx context.Context, _ string, _ int64) error {
@@ -302,8 +301,8 @@ func TestCompleteCancellationDuringCleanupJoinsWithoutPublishingReturn(t *testin
 		t.Fatal("cleanup peer did not start")
 	}
 	f.public(t, &protocol.Cancel{OperationID: "operation-1", Reason: "user"})
-	if err := finishCompletion(t, done); err == nil || !strings.Contains(err.Error(), "requires the lifecycle owner") || f.c.active == nil || f.r.w.channels.Err() == nil {
-		t.Fatal("foundation consumed lifecycle cancellation as ordinary success", err)
+	if err := finishCompletion(t, done); !errors.Is(err, context.DeadlineExceeded) || f.c.active == nil || f.r.w.channels.Err() == nil {
+		t.Fatal("cancel abandoned mandatory cleanup or published ordinary success", err)
 	}
 	select {
 	case <-joined:

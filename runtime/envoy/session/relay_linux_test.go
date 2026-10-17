@@ -154,6 +154,8 @@ func receiveInput(t *testing.T, s *Channels) Event {
 	select {
 	case e := <-s.Events():
 		return e
+	case e := <-s.Controls():
+		return e
 	case <-relayTestContext(t).Done():
 		t.Fatal("missing eligible input")
 		return Event{}
