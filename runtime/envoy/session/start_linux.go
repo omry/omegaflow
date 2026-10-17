@@ -41,6 +41,7 @@ const (
 // cancel is actionable only after Started; it never becomes a private frame.
 type StartOutcome struct {
 	Started           bool
+	ReleasedAt        time.Time
 	OutputStart       int64
 	QueuedCancel      *protocol.Cancel
 	ShellExit         *protocol.PrivateShellExit
@@ -69,6 +70,7 @@ type startingOperation struct {
 	rollbackTried  bool
 	started        bool
 	outputStart    int64
+	releasedAt     time.Time
 	shellExitPhase StartShellExitPhase
 }
 
@@ -103,6 +105,8 @@ type Coordinator struct {
 	forwardingInput bool
 	resize          *protocol.Resize
 	resizing        bool
+	running         *operationDispatch
+	recent          string
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -133,6 +137,18 @@ type startFactError struct{ error }
 
 func (c *Coordinator) expected(m protocol.PrivateMessage) bool {
 	id := c.active.request.OperationID
+	if c.running != nil {
+		switch v := m.(type) {
+		case *protocol.PrivateGateReady:
+			return c.phase == awaitInputClose && v.OperationID == id
+		case *protocol.PrivateGateContinued:
+			return c.phase == awaitInputClose && v.OperationID == id
+		case *protocol.PrivateGateInterrupted:
+			return c.phase == awaitInputClose && v.OperationID == id
+		case *protocol.PrivateShellExit:
+			return v.ActiveOperationID == id
+		}
+	}
 	switch v := m.(type) {
 	case *protocol.PrivateSubmit:
 		return c.phase == awaitSubmit && v.OperationID == id
@@ -201,12 +217,24 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 	if report, ok := result.message.(*protocol.PrivateProtocolError); ok {
 		return nil, false, &startFactError{fmt.Errorf("private protocol_error %s: %s", report.Code, report.Message)}
 	}
+	if c.running != nil {
+		if err := c.running.observe(c, result.message, interrupt); err != nil {
+			return nil, false, &startFactError{err}
+		}
+	}
 	if proposal, ok := result.message.(*protocol.PrivateInputClose); ok && c.expected(proposal) {
 		if err := c.w.channels.ResumeInputContext(ctx, ""); err != nil {
 			return nil, false, &startFactError{err}
 		}
 	}
 	if exited, ok := result.message.(*protocol.PrivateShellExit); ok {
+		if c.running != nil {
+			c.exited = exited
+			if err := c.w.channels.ResumeInputContext(ctx, ""); err != nil {
+				return nil, false, err
+			}
+			return exited, false, nil
+		}
 		c.active.attemptMu.Lock()
 		before := !c.active.attempted
 		if before && interrupt != nil {
@@ -258,7 +286,7 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 				}
 			default:
 			}
-			if c.resize != nil && ctx.Err() == nil {
+			if c.resize != nil && !c.resizing && ctx.Err() == nil {
 				if err := c.applyPendingResize(ctx); err != nil {
 					return nil, err
 				}
@@ -273,6 +301,19 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 		}
 		privateEvents := c.private.events
 		publicEvents := c.w.channels.Events()
+		controlEvents := c.w.channels.Controls()
+		var proofDone, graceDone, cleanupDone <-chan struct{}
+		if d := c.running; d != nil {
+			if d.cleanup != nil {
+				cleanupDone = d.cleanup.Done()
+			}
+			if d.proof != nil {
+				proofDone = d.proof.done
+			}
+			if d.life.grace != nil && d.life.inputClose == nil && !d.ending {
+				graceDone = d.life.grace.Done()
+			}
+		}
 		if c.forwardingInput || c.resizing {
 			publicEvents = nil // One admitted I/O request; private facts stay observable.
 		}
@@ -296,7 +337,20 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 			if finished {
 				return nil, finishErr
 			}
-			if c.resize != nil && publication == nil && !selectedPublication && ctx.Err() == nil {
+			if d := c.running; d != nil {
+				if err := d.step(c); err != nil {
+					return nil, err
+				}
+				if d.proof != nil {
+					proofDone = d.proof.done
+				} else {
+					proofDone = nil
+				}
+				if wantResult && d.gate != nil && d.gate.request != nil && !d.gate.sent && d.life.kind == "" {
+					return nil, &continueOperation{}
+				}
+			}
+			if c.resize != nil && !c.resizing && publication == nil && !selectedPublication && ctx.Err() == nil {
 				if err := c.applyPendingResize(ctx); err != nil {
 					return nil, err
 				}
@@ -317,7 +371,11 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 					return nil, &startFactError{err}
 				}
 				if ready {
-					publication <- nil
+					var selectionErr error
+					if c.running != nil {
+						selectionErr = c.running.selectWrite(c)
+					}
+					publication <- selectionErr
 					publication = nil
 					// Finish the selected write before spending this phase on resize.
 					selectedPublication = true
@@ -350,39 +408,25 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 					}
 					continue // Already-read idle/old-operation input is never replayed.
 				}
-				if resize, ok := e.Message.(*protocol.Resize); ok {
-					if c.resize != nil {
-						return nil, &startFactError{fmt.Errorf("multiple outstanding resizes")}
-					}
-					c.resize = resize
-					continue
-				}
-				m, ok := e.Message.(*protocol.Cancel)
-				if !ok || m.OperationID != c.active.request.OperationID {
-					return nil, &startFactError{fmt.Errorf("unexpected public request during start")}
-				}
-				if c.active.started {
-					return nil, &startFactError{fmt.Errorf("running cancellation requires the lifecycle owner")}
-				}
-				c.active.attemptMu.Lock()
-				if c.active.cancel != nil {
-					c.active.attemptMu.Unlock()
-					return nil, &startFactError{fmt.Errorf("duplicate cancellation during start")}
-				}
-				c.active.cancel = m
-				before := preCancelable && !c.active.attempted
-				if before && interrupt != nil {
-					interrupt()
-				}
-				c.active.attemptMu.Unlock()
-				if before {
-					return nil, errPreStartCancel
+				return nil, &startFactError{fmt.Errorf("typed request in terminal queue")}
+			case e := <-controlEvents:
+				if err := c.publicRequest(ctx, preCancelable, interrupt, e.Message); err != nil {
+					return nil, err
 				}
 				continue
+			case <-proofDone:
+				continue
+			case <-graceDone:
+				continue
+			case <-cleanupDone:
+				return nil, c.running.cleanup.Err()
 			}
 		}
 		m, consumed, err := c.privateFact(ctx, interrupt, result)
 		if consumed {
+			if wantResult && c.running != nil && c.running.ending && c.exitedEOF {
+				return nil, io.EOF
+			}
 			continue
 		}
 		if err != nil {
@@ -415,7 +459,7 @@ func (c *Coordinator) send(ctx context.Context, m protocol.PrivateMessage) error
 
 func (c *Coordinator) fatal(ctx context.Context, code string, cause error, skipDiagnostic bool) error {
 	var resize *StartError
-	if errors.As(cause, &resize) && resize.Code == "resize-failed" {
+	if errors.As(cause, &resize) && (resize.Code == "resize-failed" || resize.Code == "input-barrier-timeout") {
 		return resize // The relay already selected and closed this fatal failure.
 	}
 	deadline, _ := ctx.Deadline()
@@ -463,6 +507,9 @@ func (c *Coordinator) unstarted(ctx context.Context, code, message string) (Star
 		}
 		return c.w.channels.ResumeInputContext(job, "")
 	})
+	if err == nil {
+		c.recent = c.active.request.OperationID
+	}
 	return StartOutcome{}, err
 }
 
@@ -479,6 +526,7 @@ func (c *Coordinator) Start(ctx context.Context, request protocol.Execute) (out 
 	if _, err = protocol.EncodeController(request); err != nil {
 		return out, err
 	}
+	c.recent = "" // A newly accepted execute supersedes the previous result.
 	c.active = &startingOperation{request: request, shellExitPhase: StartShellExitInputBarrier}
 	c.phase = 0
 	defer func() {
@@ -623,12 +671,14 @@ func (c *Coordinator) Start(ctx context.Context, request protocol.Execute) (out 
 	if err != nil {
 		return out, err
 	}
+	c.active.releasedAt = time.Now()
 	if err = phase.Err(); err != nil {
 		return out, err
 	}
 	if err = c.w.channels.ResumeInput(request.OperationID); err != nil {
 		return out, err
 	}
+	out.ReleasedAt = c.active.releasedAt
 	c.active.started, out.Started, out.QueuedCancel = true, true, c.active.cancel
 	c.phase = 0
 	return out, nil

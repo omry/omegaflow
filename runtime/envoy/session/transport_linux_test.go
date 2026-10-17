@@ -156,7 +156,7 @@ func TestBothChannelsAndFragmentedHelloBeforeLaunch(t *testing.T) {
 	request, _ := protocol.EncodeController(protocol.Resize{Header: protocol.Header{Schema: protocol.Schema, Type: "resize", Seq: 2}, Columns: 90, Rows: 30})
 	telemetry.Write(request)
 	select {
-	case e := <-r.s.Events():
+	case e := <-r.s.Controls():
 		if _, ok := e.Message.(*protocol.Resize); !ok {
 			t.Fatal("wrong event")
 		}
@@ -449,8 +449,12 @@ func TestConformingImmediateReadyResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			events := s.Events()
+			if channel == "telemetry" {
+				events = s.Controls()
+			}
 			select {
-			case event := <-s.Events():
+			case event := <-events:
 				if channel == "terminal" && string(event.Input) != "valid" {
 					t.Fatal("input lost")
 				}
