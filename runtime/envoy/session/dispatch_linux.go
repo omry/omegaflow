@@ -403,6 +403,9 @@ func (c *Coordinator) endControlled(ctx context.Context, d *operationDispatch) e
 		}
 	}
 	exited := d.life.shellExit
+	if err := c.work(phase, false, c.finishSplit); err != nil {
+		return err
+	}
 	ended := true
 	if err := c.work(phase, false, func(job context.Context) error {
 		_, err := c.r.boundary(job, true, func(offset int64) error {

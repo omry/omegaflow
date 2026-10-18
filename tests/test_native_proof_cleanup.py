@@ -10,11 +10,11 @@ from types import SimpleNamespace
 import pytest
 
 PROOFS = Path(__file__).parent / 'envoy-session-startup'
-RUNNERS = ('private', 'public', 'ordinary', 'resize', 'lifecycle', 'gate', 'controls', 'split-setup', 'split-streams')
+RUNNERS = ('private', 'public', 'ordinary', 'resize', 'lifecycle', 'gate', 'controls', 'split-setup', 'split-streams', 'split-completion')
 
 
 def load(name):
-    path = PROOFS.parent / ('envoy-' + name + '/run.py') if name in ('split-setup', 'split-streams') else PROOFS / (name + '.py')
+    path = PROOFS.parent / ('envoy-' + name + '/run.py') if name in ('split-setup', 'split-streams', 'split-completion') else PROOFS / (name + '.py')
     spec = importlib.util.spec_from_file_location('proof_' + name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
