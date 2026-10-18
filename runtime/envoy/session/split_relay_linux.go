@@ -132,7 +132,19 @@ func (r *Relay) splitWriteOutcome(err error) bool {
 // the same way as an uninterrupted write. A nonempty suffix remains parked.
 func (r *Relay) resumeSplitIfReady(i int) {
 	s := r.split
-	if s == nil || s.pumps[i] == nil || len(r.w.pendingSplit[i]) != 0 || r.ctx.Err() != nil || r.w.channels.Err() != nil {
+	if s == nil || s.ended[i] || s.files[i] == nil || len(r.w.pendingSplit[i]) != 0 || r.ctx.Err() != nil || r.w.channels.Err() != nil {
+		return
+	}
+	if s.pumps[i] == nil {
+		r.phaseMu.Lock()
+		boundaryOwned := r.phase != nil
+		r.phaseMu.Unlock()
+		if boundaryOwned {
+			return
+		}
+		var err error
+		s.pumps[i], err = readRelay(s.files[i])
+		r.splitWriteOutcome(err)
 		return
 	}
 	select {
@@ -141,13 +153,34 @@ func (r *Relay) resumeSplitIfReady(i int) {
 	}
 }
 
-func (r *Relay) consumeSplit(s *splitRelay, i int) {
+// Pause every reader before delivering any held chunk. Continuous source writes
+// cannot enlarge this boundary beyond one admitted chunk from each reader.
+// Retain all chunks first, including when output is interrupted while flushing.
+func (r *Relay) pauseSplit() error {
+	s := r.split
+	if s == nil {
+		return nil
+	}
+	var result error
+	for i, p := range s.pumps {
+		if p != nil {
+			result = errors.Join(result, p.join(s.files[i]))
+			data, err := p.take()
+			r.w.pendingSplit[i] = append(r.w.pendingSplit[i], data...)
+			r.splitOutcome(s, i, err)
+			s.pumps[i] = nil
+		}
+	}
+	return errors.Join(result, r.err)
+}
+
+func (r *Relay) consumeSplit(s *splitRelay, i int, selected *relayReader) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if s != r.split || r.ctx.Err() != nil || s.pumps[i] == nil {
+	if s != r.split || r.ctx.Err() != nil || s.pumps[i] == nil || s.pumps[i] != selected {
 		return
 	}
-	p := s.pumps[i]
+	p := selected
 	data, err := p.take()
 	writeErr := r.writeOutputStream(r.w.channels.ctx, data, splitStreams[i])
 	written := r.splitWriteOutcome(writeErr)

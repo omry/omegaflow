@@ -303,6 +303,7 @@ func TestStartWatermarkTimeoutRemainsRecoverable(t *testing.T) {
 }
 
 type testSplitSetup struct {
+	resources        *splitTestOwner
 	entered          chan context.Context
 	proceed          chan struct{}
 	rollbackEntered  chan struct{}
@@ -317,6 +318,9 @@ func (s *testSplitSetup) Prepare(ctx context.Context, request protocol.Execute) 
 	s.entered <- ctx
 	select {
 	case <-s.proceed:
+		if s.resources != nil {
+			return s.resources.Prepare(ctx, request)
+		}
 		root := "/run/omegaflow/session/split/" + request.OperationID
 		return root + ".stdout", root + ".stderr", nil
 	case <-ctx.Done():
@@ -324,7 +328,15 @@ func (s *testSplitSetup) Prepare(ctx context.Context, request protocol.Execute) 
 	}
 }
 
-func (s *testSplitSetup) Rollback(ctx context.Context, _ string) error {
+func (s *testSplitSetup) Rollback(ctx context.Context, id string) error {
+	if s.resources != nil {
+		err := s.resources.Rollback(ctx, id)
+		s.mu.Lock()
+		s.rolled = true
+		s.end, _ = ctx.Deadline()
+		s.mu.Unlock()
+		return err
+	}
 	if s.rollbackEntered != nil {
 		close(s.rollbackEntered)
 		select {
@@ -346,6 +358,13 @@ func (s *testSplitSetup) Rollback(ctx context.Context, _ string) error {
 	s.end, _ = ctx.Deadline()
 	s.mu.Unlock()
 	return ctx.Err()
+}
+
+func (s *testSplitSetup) splitResources() *SplitResources {
+	if s == nil || s.resources == nil {
+		return nil
+	}
+	return s.resources.SplitResources
 }
 
 func splitRequest() protocol.Execute {
@@ -571,7 +590,7 @@ func TestStartPublicWriteFailurePreventsPrivateAck(t *testing.T) {
 }
 
 func TestStartEpochIncludesSetupAndAllProgress(t *testing.T) {
-	setup := &testSplitSetup{entered: make(chan context.Context, 1), proceed: make(chan struct{})}
+	setup := &testSplitSetup{resources: splitOwnerFor(t), entered: make(chan context.Context, 1), proceed: make(chan struct{})}
 	f := startFixtureFor(t, setup)
 	begin := time.Now()
 	done := f.start(t, context.Background(), splitRequest())

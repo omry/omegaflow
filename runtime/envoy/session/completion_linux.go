@@ -19,7 +19,7 @@ type operationInput struct{ event Event }
 
 func (*operationInput) Error() string { return "operation terminal input" }
 
-// Complete coordinates ordinary shared-PTY return using the existing owners.
+// Complete coordinates ordinary PTY or split return using the existing owners.
 // The caller retains its bound and cleanup owner. Lifecycle and gate facts
 // share this dispatcher; split cleanup and inspection retain their owners.
 func (c *Coordinator) Complete(ctx context.Context, cleanup ReturnCleanup) error {
@@ -39,7 +39,8 @@ func (c *Coordinator) completeControlled(ctx context.Context, cleanup ReturnClea
 	if _, ok := ctx.Deadline(); !ok {
 		return fmt.Errorf("ordinary completion requires the caller's existing bound")
 	}
-	if len(c.active.request.Inspections) != 0 || c.active.request.ExecutionShape != "pty" {
+	if len(c.active.request.Inspections) != 0 ||
+		(c.active.request.ExecutionShape == "split" && (c.splitResources() == nil || !c.active.splitAttached.Load())) {
 		return fmt.Errorf("operation requires its lifecycle, split or inspection owner")
 	}
 	var dispatch *operationDispatch
@@ -122,7 +123,10 @@ func (c *Coordinator) completeControlled(ctx context.Context, cleanup ReturnClea
 	ctx = d.cleanup
 	c.phase = 0
 	if err = c.work(ctx, false, func(job context.Context) error {
-		return cleanup(job, proposal.OperationID, proposal.CompletionHelperPID)
+		if err := cleanup(job, proposal.OperationID, proposal.CompletionHelperPID); err != nil {
+			return err
+		}
+		return c.finishSplit(job)
 	}); err != nil {
 		return err
 	}
