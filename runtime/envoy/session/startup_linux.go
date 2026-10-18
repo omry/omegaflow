@@ -49,7 +49,9 @@ type Workload struct {
 	closeErr             error
 	relayOwned           atomic.Bool
 	privateOwned         atomic.Bool
-	pendingPTY           []byte // at most one relay chunk, transferred after join
+	pendingPTY           []byte    // at most one relay chunk, transferred after join
+	pendingSplit         [2][]byte // one admitted suffix per split source
+	outputStream         string
 	marks                int
 	lastMark             time.Duration
 }
@@ -486,23 +488,39 @@ func (w *Workload) verifyIdentity() error {
 }
 
 func (w *Workload) mark(ctx context.Context, force bool) error {
+	stream := w.outputStream
+	if stream == "" {
+		stream = "pty"
+	}
+	return w.markStream(ctx, stream, force)
+}
+
+func (w *Workload) markStream(ctx context.Context, stream string, force bool) error {
+	current := w.outputStream
+	if current == "" {
+		current = "pty"
+	}
+	if stream != "pty" && stream != "stdout" && stream != "stderr" {
+		return fmt.Errorf("invalid output stream")
+	}
 	elapsed := time.Since(w.ReadyAt)
 	if elapsed < w.lastMark {
 		return fmt.Errorf("output mark time regressed")
 	}
-	if !force && elapsed-w.lastMark < markCadence {
+	if !force && stream == current && elapsed-w.lastMark < markCadence {
 		return nil
 	}
 	if w.marks >= markLimit {
 		return fmt.Errorf("output mark budget exhausted")
 	}
 	if err := w.channels.sendEvent(ctx, "output_mark", func(h protocol.Header) protocol.Message {
-		return protocol.OutputMark{Header: h, Offset: w.OutputThrough, Stream: "pty", ElapsedUS: elapsed.Microseconds()}
+		return protocol.OutputMark{Header: h, Offset: w.OutputThrough, Stream: stream, ElapsedUS: elapsed.Microseconds()}
 	}); err != nil {
 		return err
 	}
 	w.marks++
 	w.lastMark = elapsed
+	w.outputStream = stream
 	return nil
 }
 
@@ -614,6 +632,24 @@ func (w *Workload) shutdownIdle(phase context.Context, reason string, next func(
 
 // Called only after the selected shell and direct Awsh child have been reaped.
 func (w *Workload) drainTerminal(ctx context.Context) error {
+	for i, stream := range splitStreams {
+		if len(w.pendingSplit[i]) > 0 {
+			if err := w.markStream(ctx, stream, false); err != nil {
+				return err
+			}
+			before := w.OutputThrough
+			err := w.writeTerminal(ctx, w.pendingSplit[i], true)
+			w.pendingSplit[i] = w.pendingSplit[i][w.OutputThrough-before:]
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(w.pendingPTY) > 0 {
+		if err := w.markStream(ctx, "pty", false); err != nil {
+			return err
+		}
+	}
 	before := w.OutputThrough
 	err := w.writeTerminal(ctx, w.pendingPTY, true)
 	w.pendingPTY = w.pendingPTY[w.OutputThrough-before:]
@@ -624,6 +660,9 @@ func (w *Workload) drainTerminal(ctx context.Context) error {
 	for {
 		n, e := w.PTY.Read(buffer[:])
 		if n > 0 {
+			if err := w.markStream(ctx, "pty", false); err != nil {
+				return err
+			}
 			if err := w.writeTerminal(ctx, buffer[:n], true); err != nil {
 				return err
 			}
