@@ -1,0 +1,60 @@
+{
+  "slice": "B5.2",
+  "cases": [
+    {
+      "inventory_id": "B1-C005-pty-start",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C005-pty-repeat-current-stream",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C005-stdout-start",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C005-stdout-repeat-current-stream",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C005-stderr-start",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C005-stderr-repeat-current-stream",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "Real FIFO/PTY source switches at one raw offset; empty boundaries repeat the current source",
+      "cumulative_owner": "B5.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-interleaved-logical-bytes",
+      "test": "TestSplitRelayConcurrentLargeStreams",
+      "proof": "Exact binary and UTF-8 stdout/stderr reconstructed solely from public marks and one raw terminal log",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.2",
+      "test": "TestNativeSplitStreamsExactBytes",
+      "proof": "Actual qualified Bash writes exact independent FIFO streams; stdout-first, stderr-first and zero-byte cases",
+      "qualification": "genuine pinned Linux amd64 targets only"
+    }
+  ]
+}

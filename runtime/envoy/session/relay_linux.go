@@ -91,6 +91,7 @@ type Relay struct {
 	phase                          context.Context
 	writerCancel                   context.CancelCauseFunc
 	reader                         *relayReader
+	split                          *splitRelay
 	wake, done, readEnded, closing chan struct{}
 	barrier, inputWriter           chan struct{}
 	err, readErr                   error
@@ -130,6 +131,10 @@ func (r *Relay) Err() error                 { r.mu.Lock(); defer r.mu.Unlock(); 
 func (r *Relay) ReadError() error           { r.mu.Lock(); defer r.mu.Unlock(); return r.readErr }
 
 func (r *Relay) writeOutput(ctx context.Context, data []byte) (err error) {
+	return r.writeOutputStream(ctx, data, "pty")
+}
+
+func (r *Relay) writeOutputStream(ctx context.Context, data []byte, stream string) (err error) {
 	if len(data) == 0 {
 		return nil
 	}
@@ -168,10 +173,16 @@ func (r *Relay) writeOutput(ctx context.Context, data []byte) (err error) {
 			err = errors.Join(err, ctx.Err(), errWorkInterrupted)
 		}
 		if r.closeInterrupted(err) || (err != nil && errors.Is(context.Cause(ctx), errWorkInterrupted)) {
-			r.w.pendingPTY = append(r.w.pendingPTY, original[r.w.OutputThrough-before:]...)
+			pending := &r.w.pendingPTY
+			for i, name := range splitStreams {
+				if stream == name {
+					pending = &r.w.pendingSplit[i]
+				}
+			}
+			*pending = append(*pending, original[r.w.OutputThrough-before:]...)
 		}
 	}()
-	if err := r.w.mark(ctx, false); err != nil {
+	if err := r.w.markStream(ctx, stream, false); err != nil {
 		return err
 	}
 	r.phaseMu.Lock()
@@ -254,6 +265,16 @@ func (r *Relay) run() {
 	for {
 		r.mu.Lock()
 		p := r.reader
+		s := r.split
+		var stdout, stderr <-chan struct{}
+		if s != nil {
+			if s.pumps[0] != nil {
+				stdout = s.pumps[0].wake
+			}
+			if s.pumps[1] != nil {
+				stderr = s.pumps[1].wake
+			}
+		}
 		r.mu.Unlock()
 		var output <-chan struct{}
 		if p != nil {
@@ -278,9 +299,22 @@ func (r *Relay) run() {
 				r.readOutcome(errors.Join(r.err, r.w.channels.Err(), r.reader.err))
 				r.reader = nil
 			}
+			if e := r.joinSplit(); e != nil {
+				r.err = errors.Join(r.err, e)
+				r.w.channels.fail(e)
+			}
 			r.mu.Unlock()
 			return
 		case <-r.wake:
+			r.mu.Lock()
+			if r.ctx.Err() == nil {
+				r.flushSplitPending(r.w.channels.ctx)
+			}
+			r.mu.Unlock()
+		case <-stdout:
+			r.consumeSplit(s, 0)
+		case <-stderr:
+			r.consumeSplit(s, 1)
 		case <-output:
 			r.mu.Lock()
 			if r.ctx.Err() != nil {
