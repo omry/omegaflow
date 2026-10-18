@@ -17,8 +17,8 @@ import (
 	"github.com/omry/omegaflow/runtime/envoy/protocol"
 )
 
-// Attach the real B5.2 transport to the real B5.1 resources at the test-only
-// assembly boundary. Production start/completion integration belongs to B5.3.
+// Observe the actual setup deadline. Production start now owns attachment;
+// this transport-only proof still does not claim completed-operation cleanup.
 type nativeSplitTransport struct {
 	*SplitResources
 	r        *Relay
@@ -28,9 +28,6 @@ type nativeSplitTransport struct {
 func (s *nativeSplitTransport) Prepare(ctx context.Context, req protocol.Execute) (string, string, error) {
 	s.deadline, _ = ctx.Deadline()
 	out, errout, err := s.SplitResources.Prepare(ctx, req)
-	if err == nil {
-		err = s.r.attachSplit(ctx, s.SplitResources, req.OperationID)
-	}
 	return out, errout, err
 }
 

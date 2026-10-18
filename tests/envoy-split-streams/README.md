@@ -32,7 +32,7 @@ close-on-exec isolation, joined disposal, source failure, bounded admission,
 interrupted writes and exact attributed suffix recovery. An EOF fact alone does
 not constitute an operation result or a cleanup receipt.
 
-The native test uses an explicit test-only attachment of the real setup and
+The native test uses the production start attachment of the real setup and
 relay primitives. It observes actual source return, then closes the test-owned
 writer keepalives and joins the transport. It does not send input_closed or
 claim completed split operation semantics. B5.3 owns production start/resize/

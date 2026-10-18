@@ -26,6 +26,7 @@ type splitOperation struct {
 	unproven   bool
 	id         string
 	deadline   time.Time
+	cleanupEnd time.Time
 	chain      []splitEntry // root, platform /run, private runtime root and session
 	directory  *splitEntry
 	fifos      []splitEntry
@@ -43,6 +44,8 @@ type SplitResources struct {
 }
 
 func NewSplitSetup() *SplitResources { return &SplitResources{} }
+
+func (s *SplitResources) splitResources() *SplitResources { return s }
 
 func splitOpen(parent int, name string, flags int) (splitEntry, error) {
 	fd, err := syscall.Openat(parent, name, flags|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
@@ -230,7 +233,11 @@ func (s *SplitResources) validate() error {
 		if err := splitCheck(op.directory.fd, entry); err != nil {
 			return err
 		}
-		for _, fd := range []int{op.readers[i], op.keepalives[i]} {
+		fds := []int{op.readers[i], op.keepalives[i]}
+		if !op.cleanupEnd.IsZero() && op.keepalives[i] < 0 {
+			fds = fds[:1]
+		}
+		for _, fd := range fds {
 			var st syscall.Stat_t
 			if err := syscall.Fstat(fd, &st); err != nil {
 				return err
@@ -265,6 +272,16 @@ func (s *SplitResources) Rollback(ctx context.Context, operation string) error {
 	deadline, ok := ctx.Deadline()
 	if !ok || !deadline.Equal(op.deadline) {
 		return fmt.Errorf("split rollback epoch mismatch")
+	}
+	return s.dispose(ctx, operation)
+}
+
+// dispose shares close/removal mechanics; its caller proves the owning epoch
+// and, for successful completion, both independent EOFs before reader closure.
+func (s *SplitResources) dispose(ctx context.Context, operation string) error {
+	op := s.operation
+	if op == nil || op.id != operation {
+		return fmt.Errorf("split disposal operation mismatch")
 	}
 	var result error
 	add := func(err error) { result = errors.Join(result, err) }

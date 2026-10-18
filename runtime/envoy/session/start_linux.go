@@ -67,6 +67,7 @@ type startingOperation struct {
 	attempted      bool
 	cancel         *protocol.Cancel
 	setup          bool
+	splitAttached  atomic.Bool
 	rollbackTried  bool
 	started        bool
 	outputStart    int64
@@ -127,7 +128,14 @@ func (c *Coordinator) Close(ctx context.Context) error {
 		return fmt.Errorf("join active coordinator operation before closing private I/O")
 	}
 	defer c.busy.Store(false)
-	return c.private.close(ctx)
+	var disposal error
+	if owner := c.splitResources(); owner != nil && owner.operation != nil {
+		// Teardown is not successful completion or EOF evidence. The caller's
+		// existing bound remains in force even when it has already expired.
+		disposal = c.r.Close(ctx)
+		disposal = errors.Join(disposal, owner.dispose(ctx, owner.operation.id))
+	}
+	return errors.Join(disposal, c.private.close(ctx))
 }
 
 var errPreStartCancel = errors.New("cancel accepted before private execute attempt")
@@ -478,7 +486,14 @@ func (c *Coordinator) rollback(ctx context.Context) error {
 		return nil
 	}
 	c.active.rollbackTried = true
-	err := c.work(ctx, false, func(job context.Context) error { return c.setup.Rollback(job, c.active.request.OperationID) })
+	err := c.work(ctx, false, func(job context.Context) error {
+		var transport error
+		if c.active.splitAttached.Load() {
+			transport = c.r.stopSplit(job)
+			c.active.splitAttached.Store(false)
+		}
+		return errors.Join(transport, c.setup.Rollback(job, c.active.request.OperationID))
+	})
 	if !errors.Is(err, errIdleShellExit) {
 		c.active.setup = false
 	}
@@ -638,6 +653,18 @@ func (c *Coordinator) Start(ctx context.Context, request protocol.Execute) (out 
 		return out, err
 	}
 	c.phase = 0
+	if request.ExecutionShape == "split" {
+		owner := c.splitResources()
+		if owner == nil {
+			return out, fmt.Errorf("split source release requires actual FIFO resources")
+		}
+		if err = c.work(phase, false, func(job context.Context) error {
+			c.active.splitAttached.Store(true)
+			return c.r.attachSplit(job, owner, request.OperationID)
+		}); err != nil {
+			return out, err
+		}
+	}
 	if err = c.work(phase, false, func(job context.Context) error { _, e := c.r.Drain(job); return e }); err != nil {
 		return out, err
 	}

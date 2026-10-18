@@ -267,12 +267,15 @@ func (r *Relay) run() {
 		p := r.reader
 		s := r.split
 		var stdout, stderr <-chan struct{}
+		var stdoutReader, stderrReader *relayReader
 		if s != nil {
 			if s.pumps[0] != nil {
-				stdout = s.pumps[0].wake
+				stdoutReader = s.pumps[0]
+				stdout = stdoutReader.wake
 			}
 			if s.pumps[1] != nil {
-				stderr = s.pumps[1].wake
+				stderrReader = s.pumps[1]
+				stderr = stderrReader.wake
 			}
 		}
 		r.mu.Unlock()
@@ -312,9 +315,9 @@ func (r *Relay) run() {
 			}
 			r.mu.Unlock()
 		case <-stdout:
-			r.consumeSplit(s, 0)
+			r.consumeSplit(s, 0, stdoutReader)
 		case <-stderr:
-			r.consumeSplit(s, 1)
+			r.consumeSplit(s, 1, stderrReader)
 		case <-output:
 			r.mu.Lock()
 			if r.ctx.Err() != nil {
@@ -414,6 +417,13 @@ func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) er
 			r.w.channels.fail(err)
 			r.cancel()
 		}
+		if s := r.split; s != nil {
+			for i := range s.pumps {
+				if s.pumps[i] == nil {
+					r.resumeSplitIfReady(i)
+				}
+			}
+		}
 		r.mu.Unlock()
 		select {
 		case r.wake <- struct{}{}:
@@ -425,6 +435,12 @@ func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) er
 	}
 	if r.err != nil {
 		return r.w.OutputThrough, r.err
+	}
+	if err = r.pauseSplit(); err != nil {
+		return r.w.OutputThrough, err
+	}
+	if err = r.flushSplitPending(ctx); err != nil {
+		return r.w.OutputThrough, err
 	}
 	if p := r.reader; p != nil {
 		if err = p.join(r.w.PTY); err != nil {
