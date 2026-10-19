@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "owner": "B6.4",
+  "native": "TestNativeEvidenceRanges",
+  "runner": "tests/envoy-evidence-ranges/run.py",
+  "cases": {
+    "pty-zero": "Exact exclusive PTY range and genuine zero status",
+    "pty-seven": "Exact exclusive PTY range and genuine nonzero status",
+    "pty-empty": "No authored output; exact retained terminal controls",
+    "split-real": "Complete exact logical stdout/stderr and PTY control attribution",
+    "suppress": "Suppression retains complete raw split evidence",
+    "replace": "Replacement retains complete raw split evidence",
+    "finalize": "Planned finalization is status-free and never natural completion",
+    "cancel": "User cancellation cannot authorize completed assertion evidence",
+    "finalize-after-return": "Accepted input closure retains actual completed status",
+    "cleanup-failure": "Missing cleanup proof exposes no terminal operation result"
+  },
+  "corpus_obligations": [
+    "B1-C062-exclusive-checked",
+    "B1-C062-exclusive-suppress",
+    "B1-C062-exclusive-replace",
+    "B1-C062-planned-end-status",
+    "B1-C062-finalization-failure-invalid-range",
+    "B1-C062-user-cancel-invalid-range",
+    "B1-C062-finalize-after-return"
+  ],
+  "counterproofs": {
+    "wrong-start": "Changed original completion offset must fail",
+    "synthetic-status": "Synthetic completed status for finalization must fail"
+  },
+  "limits": [
+    "Genuine qualification is limited to the three Linux amd64 entries",
+    "Natural return uses the actual census; control outcomes use the existing bounded B4 census peer",
+    "No B6.5 complete lifecycle, B6.6 compiler, controller evaluator or B8 conformance claim"
+  ]
+}
