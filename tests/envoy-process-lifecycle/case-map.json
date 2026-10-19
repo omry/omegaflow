@@ -1,0 +1,64 @@
+{
+  "work_item": "B6.5",
+  "fixture": "TestNativeProcessLifecycle",
+  "actual_actors": [
+    "Envoy session, relay and coordinator",
+    "manifested Awsh",
+    "genuinely qualified Bash",
+    "kernel pidfds, proc census and PTY",
+    "authored escaped writer",
+    "outside-tree sibling"
+  ],
+  "cases": {
+    "foreground_cancellation_and_reclaim": "cancel-foreground",
+    "foreground_finalization_and_reclaim": "finalize-foreground",
+    "cancel_real_split_writers_and_dual_EOF": "cancel-split",
+    "finalize_real_split_writers_and_dual_EOF": "finalize-split",
+    "completion_helper_cancel_survival": "cancel-helper",
+    "completion_helper_finalize_survival": "finalize-helper",
+    "cancel_after_accepted_input_close": "cancel-after-return",
+    "finalize_observed_return_wins": "finalize-after-return",
+    "actual_cancel_timeout_and_reap": "cancel-timeout",
+    "actual_finalize_timeout_and_reap": "finalize-timeout",
+    "natural_active_shell_exit": "natural-exit",
+    "fast_active_shell_exit": "fast-exit",
+    "sample_to_ioctl_foreground_switch": "cancel-foreground-switch",
+    "stale_positive_group_return_wins": "cancel-stale-return",
+    "stale_positive_group_later_live_winner": "cancel-stale-live",
+    "stale_positive_group_grace_timeout": "cancel-stale-timeout",
+    "latest_validated_cwd_on_reap_during_completion_cleanup": "exit-after-return-cwd",
+    "post_result_crossed_controls_and_next_operation": "all reusable cases",
+    "latest_validated_cwd_on_reap_during_input_closed_send": "exit-after-return-send-cwd",
+    "latest_validated_cwd_on_reap_during_final_completed_read": "exit-after-return-read-cwd"
+  },
+  "test_instrumentation": [
+    "Retained Go overlay observes after actual TIOCSIG without replacing the signal.",
+    "Retained Go overlay can block cleanup after actual input_close acceptance.",
+    "Retained Go overlay observes every real processCensus foreground sample and the actual returned member count.",
+    "An authored actor inside the Awsh/Bash terminal session performs tcsetpgrp between the real sample and TIOCSIG.",
+    "Stale cases hold the actual positive foreground PGID while the real census returns empty, then coordinate return or the later live actor.",
+    "Pause only the actual joined input_closed send worker while its owner continues reading real private facts.",
+    "Stop real Bash after input_close, observe final completed-read entry and first-helper actual exit, then kill Bash before it can create the final helper."
+  ],
+  "negative_overlays": [
+    "omit-descendants",
+    "omit-shell-kill",
+    "omit-foreground-switch",
+    "omit-empty-membership",
+    "omit-completion-end-send",
+    "omit-completion-end-read"
+  ],
+  "limits": [
+    "Native CGO0 binaries are not race-instrumented; host race suite is separate.",
+    "ARM64 remains compile-only without genuine target evidence.",
+    "B6.6, B7 and full B8 conformance remain later acceptance owners."
+  ],
+  "host_cases": {
+    "kernel_exit_before_reaper_publication": "TestShellExitJoinsUnpublishedReap",
+    "live_selected_child_identity_failure": "TestShellExitKeepsLiveIdentityFailure",
+    "helper_thread_exit_and_actual_child_rejection": "TestCompletionHelperThreadChurn",
+    "live_child_failure_must_not_wait_for_exit": "TestJoinShellReapDoesNotWaitForLiveChild",
+    "cancel_real_blocked_private_write": "TestCompletionInterruptedActualWrite",
+    "retain_prior_substantive_failure": "TestShellExitPreservesJobFailure"
+  }
+}

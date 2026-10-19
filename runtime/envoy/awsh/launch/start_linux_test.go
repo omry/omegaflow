@@ -186,6 +186,16 @@ func TestParentControlledControlLifetimeAndReuse(t *testing.T) {
 		if err := control.Close(); err != nil {
 			t.Fatal(err)
 		}
+		// Retire the old os.File read before raw numeric reuse. Close can
+		// defer its final syscall until that read releases the file reference.
+		if err := peer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-readDone:
+		case <-time.After(time.Second):
+			t.Fatal("old reader did not retire before descriptor reuse")
+		}
 		if err := syscall.Dup3(int(source.Fd()), fd, syscall.O_CLOEXEC); err != nil {
 			t.Fatalf("descriptor reuse failed at %d: %v", fd, err)
 		}
@@ -202,14 +212,6 @@ func TestParentControlledControlLifetimeAndReuse(t *testing.T) {
 		}
 		if _, err := replacement.Write([]byte("reuse")); err != nil {
 			t.Fatal(err)
-		}
-		if err := peer.Close(); err != nil {
-			t.Fatal(err)
-		}
-		select {
-		case <-readDone:
-		case <-time.After(time.Second):
-			t.Fatal("reader did not terminate after owner and peer close")
 		}
 	})
 }

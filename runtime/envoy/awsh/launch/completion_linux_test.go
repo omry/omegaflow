@@ -159,7 +159,7 @@ func TestCompletionSupervisorProcess(t *testing.T) {
 			if err == nil {
 				syscall.Kill(r.pid, syscall.SIGINT)
 				time.Sleep(5 * time.Millisecond)
-				err = completionHelperState(r.pid)
+				err = completionHelperState(cleanupCtx, r.pid)
 			}
 			if scenario == "identity-damage" {
 				s.terminal.session = -1

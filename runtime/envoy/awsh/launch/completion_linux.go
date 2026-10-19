@@ -44,6 +44,21 @@ func (s *Session) BeginOperationEvent(ctx context.Context) (bool, error) {
 	return s.beginOperationEvent(ctx, true)
 }
 
+func (s *Session) completionEntry(ctx context.Context) (time.Time, error) {
+	deadline, ok := ctx.Deadline()
+	if (!ok && (!s.parentControlled || ctx.Done() == nil)) || s.startFailed || s.active == nil || s.active.phase != startReleased || s.completion != nil {
+		return time.Time{}, fmt.Errorf("completion outside released operation or cleanup epoch")
+	}
+	// A selected-child reap is accepted before the supervisor cancels this
+	// operation context. Preserve that cancellation through entry so the
+	// existing shell-exit fact can be reported. Any other cancellation remains
+	// an invalid completion epoch and is still recorded by failStart.
+	if ctx.Err() != nil && !s.shellExitInterruption(ctx.Err()) {
+		return time.Time{}, fmt.Errorf("completion outside released operation or cleanup epoch")
+	}
+	return deadline, nil
+}
+
 func (s *Session) beginOperationEvent(ctx context.Context, allowGate bool) (gated bool, err error) {
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
@@ -52,16 +67,22 @@ func (s *Session) beginOperationEvent(ctx context.Context, allowGate bool) (gate
 			err = s.failStart(err)
 		}
 	}()
-	deadline, ok := ctx.Deadline()
-	if (!ok && (!s.parentControlled || ctx.Done() == nil)) || ctx.Err() != nil || s.startFailed || s.active == nil || s.active.phase != startReleased || s.completion != nil {
-		return false, fmt.Errorf("completion outside released operation or cleanup epoch")
+	deadline, entryErr := s.completionEntry(ctx)
+	if entryErr != nil {
+		return false, entryErr
 	}
 	r := &completionRecord{ctx: ctx, pidfd: -1, done: make(chan struct{})}
 	s.completion = r
 	if err := s.result.SetWriteDeadline(deadline); err != nil {
 		return false, err
 	}
-	r.stop = context.AfterFunc(ctx, func() { defer close(r.done); s.interruptIO(); s.result.Close() })
+	r.stop = context.AfterFunc(ctx, func() {
+		defer close(r.done)
+		s.interruptIO()
+		if !s.shellEnding.Load() {
+			s.result.Close()
+		}
+	})
 	c, unregister, err := s.completionPeer()
 	if err != nil {
 		return false, err
@@ -82,14 +103,17 @@ func (s *Session) beginOperationEvent(ctx context.Context, allowGate bool) (gate
 		return true, s.beginGate(gate.GateID)
 	}
 	state, ok := message.(*protocol.HelperPromptState)
-	if err != nil || !ok {
-		return false, fmt.Errorf("expected completion prompt_state: %v", err)
+	if err != nil {
+		return false, fmt.Errorf("completion prompt_state: %w", err)
+	}
+	if !ok {
+		return false, fmt.Errorf("expected completion prompt_state")
 	}
 	parent, actualGroup, session, err := processIdentity(r.pid)
 	if err != nil || parent != s.ShellPID || session != os.Getpid() || actualGroup != group || (group != s.ShellPID && group != r.pid) {
 		return false, fmt.Errorf("completion helper is not the selected shell's direct child")
 	}
-	if err = completionHelperState(r.pid); err != nil {
+	if err = completionHelperState(r.ctx, r.pid); err != nil {
 		return false, err
 	}
 	if err = validateLiveState(state.PromptState, s.ShellPID); err != nil {
@@ -130,7 +154,7 @@ func (s *Session) HandleCompletionControl(message protocol.PrivateMessage) error
 	if !ok || closed.OperationID != s.active.request.OperationID || r.released {
 		return s.failStart(fmt.Errorf("unexpected input_closed"))
 	}
-	if err := completionHelperState(r.pid); err != nil {
+	if err := completionHelperState(r.ctx, r.pid); err != nil {
 		return s.failStart(err)
 	}
 	if err := helper.Reply(r.peer, protocol.HelperCompletion, protocol.HelperAccepted{}); err != nil {
@@ -173,9 +197,15 @@ func (s *Session) FinishCompletion() error {
 		return s.failStart(err)
 	}
 	message, err := helper.ReadRequest(c, protocol.HelperCompletion)
+	if err != nil {
+		return s.failStart(fmt.Errorf("invalid final prompt_ready: %w", err))
+	}
 	state, ok := message.(*protocol.HelperCompletionReady)
-	if err != nil || !ok || state.Status != r.state.Status {
-		return s.failStart(fmt.Errorf("invalid final prompt_ready: %v", err))
+	if !ok {
+		return s.failStart(fmt.Errorf("invalid final prompt_ready: expected HelperCompletionReady"))
+	}
+	if state.Status != r.state.Status {
+		return s.failStart(fmt.Errorf("invalid final prompt_ready status: got %d want %d", state.Status, r.state.Status))
 	}
 	if err = validateLiveState(state.PromptState, s.ShellPID); err != nil {
 		return s.failStart(err)
@@ -268,6 +298,9 @@ func (s *Session) completionPeer() (*net.UnixConn, func(), error) {
 	if closing {
 		unregister()
 		_ = c.Close()
+		if err := r.ctx.Err(); err != nil {
+			return nil, nil, fmt.Errorf("completion interrupted: %w", err)
+		}
 		return nil, nil, fmt.Errorf("completion interrupted")
 	}
 	if err = c.SetDeadline(deadline); err != nil {
@@ -318,7 +351,7 @@ func (s *Session) stopCompletion(err error) error {
 	return err
 }
 
-func completionHelperState(pid int) error {
+func completionHelperState(ctx context.Context, pid int) error {
 	base := "/proc/" + strconv.Itoa(pid)
 	b, err := os.ReadFile(base + "/status")
 	if err != nil {
@@ -334,15 +367,35 @@ func completionHelperState(pid int) error {
 	if !ignored {
 		return fmt.Errorf("completion helper does not ignore INT")
 	}
-	children, err := filepath.Glob(base + "/task/*/children")
-	if err != nil || len(children) == 0 {
-		return fmt.Errorf("missing helper task identity")
-	}
-	for _, path := range children {
-		b, err := os.ReadFile(path)
-		if err != nil || len(strings.TrimSpace(string(b))) != 0 {
-			return fmt.Errorf("completion helper has child: %v", err)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
+		children, err := filepath.Glob(base + "/task/*/children")
+		if err != nil || len(children) == 0 {
+			return fmt.Errorf("missing helper task identity")
+		}
+		retry := false
+		for _, path := range children {
+			b, err := os.ReadFile(path)
+			if os.IsNotExist(err) {
+				// Threads may exit independently of this pinned helper. Their
+				// children can move to another thread; rescan the whole set.
+				retry = true
+				break
+			}
+			if err != nil || len(strings.TrimSpace(string(b))) != 0 {
+				return fmt.Errorf("completion helper has child: %v", err)
+			}
+		}
+		current, err := filepath.Glob(base + "/task/*/children")
+		if err != nil {
+			return err
+		}
+		if retry || strings.Join(children, "\n") != strings.Join(current, "\n") {
+			continue
+		}
+		_, _, _, err = processIdentity(pid)
+		return err
 	}
-	return nil
 }
