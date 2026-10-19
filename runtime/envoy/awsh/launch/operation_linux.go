@@ -65,18 +65,34 @@ func (s *Session) beginStart(ctx context.Context, m protocol.PrivateExecute, che
 	ready := s.ready && !s.closing
 	s.mu.Unlock()
 	deadline, ok := ctx.Deadline()
-	if !ready || (!ok && (!s.parentControlled || ctx.Done() == nil)) || ctx.Err() != nil {
+	if !ready || (!ok && (!s.parentControlled || ctx.Done() == nil)) {
 		return s.failStart(fmt.Errorf("start requires ready shell and original deadline"))
 	}
 	if _, err := protocol.EncodePrivate(m, protocol.EnvoyToAwsh); err != nil {
+		return s.failStart(err)
+	}
+	// Verification and the checker precede the active record. Retain their
+	// original epoch so a selected-child reap can explain an interrupted job
+	// without inventing an active operation ID. Failed jobs retain it through
+	// ReportShellExit; successful and recoverably rejected starts release it.
+	s.startContext = ctx
+	defer func() {
+		if !s.startFailed {
+			s.startContext = nil
+		}
+	}()
+	if err := ctx.Err(); err != nil {
 		return s.failStart(err)
 	}
 	if err := s.verifyShell(); err != nil {
 		return s.failStart(err)
 	}
 	active, err := s.terminal.snapshot(ctx)
-	if err != nil || active != s.ActiveTermios {
-		return s.failStart(fmt.Errorf("start is not at the saved Readline terminal boundary: %v", err))
+	if err != nil {
+		return s.failStart(fmt.Errorf("start terminal snapshot: %w", err))
+	}
+	if active != s.ActiveTermios {
+		return s.failStart(fmt.Errorf("start is not at the saved Readline terminal boundary"))
 	}
 	if err := validateSplit(m); err != nil {
 		return s.failStart(err)
@@ -93,7 +109,9 @@ func (s *Session) beginStart(ctx context.Context, m protocol.PrivateExecute, che
 	stop := context.AfterFunc(ctx, func() {
 		defer close(done)
 		s.interruptIO()
-		s.result.Close()
+		if !s.shellEnding.Load() {
+			s.result.Close()
+		}
 	})
 	if err := check(ctx, source); err != nil {
 		var rejection *submission.Rejection
@@ -311,6 +329,9 @@ func (s *Session) startWrite(m protocol.PrivateMessage) error {
 }
 
 func (s *Session) failStart(err error) error {
+	if s.shellFailure == nil && !s.shellExitInterruption(err) {
+		s.shellFailure = err
+	}
 	s.admission.Store(nil)
 	s.startFailed = true
 	if s.active != nil && s.active.preparedUnregister != nil {
@@ -331,7 +352,7 @@ func (s *Session) failStart(err error) error {
 	// Closing helper I/O cannot release a success marker. Bash enters its
 	// manifested non-returning fail-stop. Envoy retains fatal teardown ownership.
 	s.interruptIO()
-	if s.result != nil {
+	if s.result != nil && !s.shellEnding.Load() && !s.ShellReaped() {
 		s.result.Close()
 	}
 	return err

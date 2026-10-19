@@ -89,6 +89,14 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	dispatch = d
 	c.running = d
 	defer func() { d.close(); c.running = nil }()
+	// Keep the dispatcher alive until the selected shell-end transaction joins.
+	// Interrupted worker cancellation is expected; substantive joined errors
+	// still take the fatal path rather than becoming a successful shell end.
+	defer func() {
+		if errors.Is(err, errLifecycleEnd) && completionInterrupted(err) {
+			err = c.endControlled(ctx, d)
+		}
+	}()
 	if err = d.life.startReleased(ctx, StartOutcome{Started: true, QueuedCancel: c.active.cancel, ReleasedAt: c.active.releasedAt}); err != nil {
 		return err
 	}
@@ -96,15 +104,9 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	var m protocol.PrivateMessage
 	for {
 		m, err = c.result(ctx)
-		if errors.Is(err, errLifecycleEnd) {
-			return c.endControlled(ctx, d)
-		}
 		var continuing *continueOperation
 		if errors.As(err, &continuing) {
 			if err = d.continueGate(c, ctx); err != nil {
-				if errors.Is(err, errLifecycleEnd) {
-					return c.endControlled(ctx, d)
-				}
 				return err
 			}
 			continue
@@ -114,9 +116,6 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 			c.forwardingInput = true
 			err = c.work(ctx, false, func(job context.Context) error { return c.r.ForwardInput(job, input.event) })
 			c.forwardingInput = false
-			if errors.Is(err, errLifecycleEnd) {
-				return c.endControlled(ctx, d)
-			}
 			if err != nil {
 				return err
 			}
@@ -130,16 +129,13 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 			if publish {
 				err = c.work(ctx, false, func(job context.Context) error { return c.r.PublishGate(job, m) })
 			}
-			if errors.Is(err, errLifecycleEnd) {
-				return c.endControlled(ctx, d)
-			}
 			if err != nil {
 				return err
 			}
 			continue
 		}
 		if _, ended := m.(*protocol.PrivateShellExit); ended {
-			return c.endControlled(ctx, d)
+			return errLifecycleEnd
 		}
 		break
 	}
@@ -168,7 +164,13 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	if err != nil {
 		return err
 	}
-	completed := m.(*protocol.PrivateCompleted)
+	if _, ended := m.(*protocol.PrivateShellExit); ended {
+		return errLifecycleEnd
+	}
+	completed, ok := m.(*protocol.PrivateCompleted)
+	if !ok {
+		return fmt.Errorf("unexpected final completion result %T", m)
+	}
 	if len(completed.Inspections) != 0 {
 		return fmt.Errorf("unexpected resolved inspections for foundation operation")
 	}
@@ -215,6 +217,26 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	c.w.CWD = completed.PhysicalCWD
 	c.active = nil
 	return nil
+}
+
+// completionInterrupted accepts only the lifecycle marker and cooperative
+// worker cancellation. A joined protocol, cleanup or I/O failure stays fatal.
+func completionInterrupted(err error) bool {
+	cancelled := errors.Is(err, context.Canceled) || errors.Is(err, errWorkInterrupted)
+	var interruption func(error) bool
+	interruption = func(cause error) bool {
+		if joined, ok := cause.(interface{ Unwrap() []error }); ok {
+			for _, child := range joined.Unwrap() {
+				if !interruption(child) {
+					return false
+				}
+			}
+			return true
+		}
+		return cause == errLifecycleEnd || cause == context.Canceled || cause == errWorkInterrupted ||
+			(cancelled && errors.Is(cause, os.ErrDeadlineExceeded))
+	}
+	return interruption(err)
 }
 
 // ShutdownIdle retains the same private pump through closed and EOF. The

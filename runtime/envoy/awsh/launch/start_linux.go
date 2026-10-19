@@ -42,10 +42,13 @@ type Session struct {
 	closing             bool
 	stopOnce, closeOnce sync.Once
 	startMu             sync.Mutex
+	startContext        context.Context // pre-record caller epoch; guarded by startMu
 	active              *startRecord
 	startFailed         bool
+	shellFailure        error // first substantive job error; guarded by startMu
 	completion          *completionRecord
-	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
+	parentControlled    bool        // supervisor owns Handoff.Control's os.File lifetime
+	shellEnding         atomic.Bool // accepted selected-child reap, never a lifecycle decision
 	admission           atomic.Pointer[dispatchAdmission]
 	gateControls        sync.Map // gateKey -> *gateControl; retained until completion
 	gate                *gateRecord
@@ -490,7 +493,7 @@ func processIdentity(pid int) (parent, group, session int, err error) {
 		return 0, 0, 0, fmt.Errorf("short process identity")
 	}
 	if f[0] == "Z" || f[0] == "X" {
-		return 0, 0, 0, fmt.Errorf("process already ended")
+		return 0, 0, 0, errProcessEnded
 	}
 	values := []*int{&parent, &group, &session}
 	for i, v := range values {
@@ -506,9 +509,12 @@ func (s *Session) verifyShell() error {
 	s.child.mu.Lock()
 	defer s.child.mu.Unlock()
 	if s.child.ended {
-		return fmt.Errorf("selected shell ended")
+		return errSelectedShellEnded
 	}
 	parent, group, session, err := processIdentity(s.ShellPID)
+	if err == errProcessEnded {
+		return errSelectedShellEnded
+	}
 	if err != nil || parent != os.Getpid() || group != s.ShellPID || session != os.Getpid() {
 		return fmt.Errorf("selected-shell identity mismatch")
 	}
