@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/omry/omegaflow/runtime/envoy/protocol"
 )
@@ -29,11 +30,27 @@ func (c *Coordinator) Complete(ctx context.Context, cleanup ReturnCleanup) error
 // completeControlled is the isolated B4 assembly boundary. B6 provides the
 // actual lifetime/census/cleanup peers; ordinary completion shares this path.
 func (c *Coordinator) completeControlled(ctx context.Context, cleanup ReturnCleanup, peers *controlPeers) (err error) {
+	return c.completeReturn(ctx, cleanup, peers, nil)
+}
+
+// completeOrdinary assembles real ordinary return with the caller's retained
+// process owner. The dedicated Envoy creates that owner before authored work;
+// it keeps the pins until the coordinator has joined this transaction.
+func (c *Coordinator) completeOrdinary(ctx context.Context, census *processCensus) error {
+	if census == nil {
+		return fmt.Errorf("ordinary return requires its process census")
+	}
+	return c.completeReturn(ctx, nil, nil, census)
+}
+
+// Foundation/control peers and actual ordinary return share one dispatcher,
+// cleanup epoch, split barrier and result publication implementation.
+func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup, peers *controlPeers, census *processCensus) (err error) {
 	if !c.busy.CompareAndSwap(false, true) {
 		return fmt.Errorf("coordinator is already in use")
 	}
 	defer c.busy.Store(false)
-	if c.active == nil || !c.active.started || c.exited != nil || cleanup == nil || ctx.Err() != nil {
+	if c.active == nil || !c.active.started || c.exited != nil || (cleanup == nil && census == nil) || ctx.Err() != nil {
 		return fmt.Errorf("ordinary completion requires an active operation and cleanup owner")
 	}
 	if _, ok := ctx.Deadline(); !ok {
@@ -55,6 +72,19 @@ func (c *Coordinator) completeControlled(ctx context.Context, cleanup ReturnClea
 			dispatch.endCleanup()
 		}
 	}()
+	if census != nil {
+		if cleanup != nil || c.w.command == nil || c.w.command.Process == nil ||
+			census.envoy != os.Getpid() || census.awsh != c.w.command.Process.Pid || int64(census.shell) != c.w.ShellPID {
+			return fmt.Errorf("ordinary return process owner does not match workload")
+		}
+		operationID := c.active.request.OperationID
+		cleanup = func(job context.Context, id string, helperPID int64) error {
+			if id != operationID {
+				return fmt.Errorf("ordinary cleanup operation mismatch")
+			}
+			return census.Cleanup(job, helperPID)
+		}
+	}
 	d := &operationDispatch{ctx: ctx, life: newOperationLifecycle(c.active.request.OperationID), peers: peers, gates: make(map[string]*gateRecord), gateEvents: make(map[protocol.PrivateMessage]bool)}
 	dispatch = d
 	c.running = d
@@ -145,6 +175,11 @@ func (c *Coordinator) completeControlled(ctx context.Context, cleanup ReturnClea
 	c.phase = 0
 	d.completed, d.selection = completed, "result"
 	if err = c.work(ctx, false, func(job context.Context) error {
+		if census != nil {
+			if err := census.ProveIdle(job); err != nil {
+				return err
+			}
+		}
 		_, e := c.r.boundary(job, true, func(offset int64) error {
 			// Owner selection precedes construction, so a cancel accepted during
 			// cleanup/mark delivery cannot race worker reads of lifecycle state.
