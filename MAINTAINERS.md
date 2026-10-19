@@ -14,33 +14,67 @@ python -m pip install -e '.[dev]'
 
 ## Website development
 
-Install `pnpm` once per machine if needed:
+Use Node 24, as declared in `website/.nvmrc`.
+The website pins pnpm 11.21.0 in `website/package.json`. Enable Corepack
+with your Node installation:
 
 ```bash
-npm install --global pnpm@10.14.0
+corepack enable
 ```
 
 Install the website dependencies once per checkout, and again when the lockfile
 changes:
 
 ```bash
-pnpm --dir website install
+cd website
+corepack pnpm install --frozen-lockfile
 ```
 
 Start the local development server whenever you work on the website:
 
 ```bash
-pnpm --dir website start
+corepack pnpm start
 ```
 
 ## Validation
 
-Run these common checks before submitting a change:
+From the repository root, run these common checks before submitting a change.
+The website check verifies generated schema docs before the production build:
 
 ```bash
 nox -s tests
-pnpm --dir website build
+cd website
+corepack pnpm run check
 ```
+
+## Website dependency maintenance
+
+[Shared Node maintenance workflows](https://github.com/hydra-ecosystem/github-actions/blob/main/docs/node-maintenance.md)
+audit the standalone `website` project and validate proposals with its `check`
+script. This runs the schema checks and production build. The configuration in
+`.github/node-maintenance.json` requires Node 24 and pnpm 11.21.0, matching the
+project declarations. Setup changes are reviewed here; the audit reports a
+configuration mismatch in the run and one configuration issue rather than
+silently rewriting declarations.
+
+Security checks run every Monday at 02:00 UTC. Routine upgrades, including major
+versions, run on the first day of January, April, July, and October at 02:00 UTC.
+To run either check sooner, open **Actions → Node dependency audit → Run workflow**
+on `main` and select `security` or `upgrades`. Change a cadence in both the JSON
+configuration and `.github/workflows/dependency-audit.yml`.
+
+Before the first run, enable **Allow GitHub Actions to create and approve pull
+requests** under **Settings → Actions → General → Workflow permissions**.
+The built-in `GITHUB_TOKEN` opens or updates the maintenance PR after candidate
+validation; it does not trigger additional PR workflows. Maintenance does not
+deploy the website.
+
+The workspace applies a ten-day release delay and explicit dependency build
+script approvals. It retains the existing security overrides and the `core-js`
+build approval. Review any additional approvals a dependency update needs.
+After merging setup, dispatch a `security` audit from `main` and inspect the
+configuration result, validation, and dependency report before merging any
+maintenance PR.
 
 ## Release procedure
 
