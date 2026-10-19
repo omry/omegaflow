@@ -1,0 +1,29 @@
+{
+  "work_item": "B6.2",
+  "kernel_fixture": "TestProcessCleanupNative",
+  "qualified_bash_fixture": "TestNativeProcessCleanup",
+  "cases": {
+    "direct_wait_ownership": "direct-wait",
+    "adopted_setsid_reap": "adopted",
+    "exact_helper_exclusion": "helper",
+    "invalid_helper_rejected_before_signal": "invalid-helper",
+    "original_caller_epoch": "epochs",
+    "lost_identity_pin_is_fatal": "lost-pin",
+    "closed_owner_is_fatal": "closed",
+    "direct_parent_wait_ownership": "reap-ownership",
+    "external_awsh_wait_owner": "awsh-wait",
+    "late_adoption_across_signal_census": "signal-late-adoption overlay",
+    "bash_background": "background",
+    "bash_disown": "disown",
+    "bash_nohup": "nohup",
+    "bash_setsid": "setsid",
+    "bash_double_fork_adoption": "double-fork",
+    "bash_helper_executable_identity": "wrong-helper-executable",
+    "bash_sigterm_ignore": "ignores-term"
+  },
+  "limitations": [
+    "Bash-dependent cases require the genuine three-build amd64 qualification matrix.",
+    "Awsh/Envoy parent roles are explicit fixtures; production operation assembly remains B6.3/B6.5.",
+    "Final full B1–B8 actual-actor conformance remains B8.4; ARM64 is compile-only here."
+  ]
+}
