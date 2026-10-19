@@ -93,7 +93,9 @@ func (s *Session) beginStart(ctx context.Context, m protocol.PrivateExecute, che
 	stop := context.AfterFunc(ctx, func() {
 		defer close(done)
 		s.interruptIO()
-		s.result.Close()
+		if !s.shellEnding.Load() {
+			s.result.Close()
+		}
 	})
 	if err := check(ctx, source); err != nil {
 		var rejection *submission.Rejection
@@ -311,6 +313,9 @@ func (s *Session) startWrite(m protocol.PrivateMessage) error {
 }
 
 func (s *Session) failStart(err error) error {
+	if s.shellFailure == nil && !s.shellExitInterruption(err) {
+		s.shellFailure = err
+	}
 	s.admission.Store(nil)
 	s.startFailed = true
 	if s.active != nil && s.active.preparedUnregister != nil {
@@ -331,7 +336,7 @@ func (s *Session) failStart(err error) error {
 	// Closing helper I/O cannot release a success marker. Bash enters its
 	// manifested non-returning fail-stop. Envoy retains fatal teardown ownership.
 	s.interruptIO()
-	if s.result != nil {
+	if s.result != nil && !s.shellEnding.Load() && !s.ShellReaped() {
 		s.result.Close()
 	}
 	return err
