@@ -44,8 +44,10 @@ type Session struct {
 	startMu             sync.Mutex
 	active              *startRecord
 	startFailed         bool
+	shellFailure        error // first substantive job error; guarded by startMu
 	completion          *completionRecord
-	parentControlled    bool // supervisor owns Handoff.Control's os.File lifetime
+	parentControlled    bool        // supervisor owns Handoff.Control's os.File lifetime
+	shellEnding         atomic.Bool // accepted selected-child reap, never a lifecycle decision
 	admission           atomic.Pointer[dispatchAdmission]
 	gateControls        sync.Map // gateKey -> *gateControl; retained until completion
 	gate                *gateRecord
@@ -506,7 +508,7 @@ func (s *Session) verifyShell() error {
 	s.child.mu.Lock()
 	defer s.child.mu.Unlock()
 	if s.child.ended {
-		return fmt.Errorf("selected shell ended")
+		return errSelectedShellEnded
 	}
 	parent, group, session, err := processIdentity(s.ShellPID)
 	if err != nil || parent != os.Getpid() || group != s.ShellPID || session != os.Getpid() {

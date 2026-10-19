@@ -158,6 +158,9 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 		}
 		return c.finishSplit(job)
 	}); err != nil {
+		if errors.Is(err, errLifecycleEnd) {
+			return c.endControlled(ctx, d)
+		}
 		return err
 	}
 	c.phase = awaitCompleted // Arm before input_closed can release the helper.

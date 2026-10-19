@@ -74,6 +74,7 @@ func Run(args []string) error {
 	// One joined job performs existing blocking Session methods. The dispatcher
 	// stays responsive to EOF and invalid controls; it never adds a phase clock.
 	var job chan error
+	var cancelJob context.CancelFunc
 	controls := make(chan protocol.PrivateMessage, 1)
 	releases := make(chan os.Signal, 1)
 	var pending protocol.PrivateMessage
@@ -85,9 +86,29 @@ func Run(args []string) error {
 	}()
 	begin := func(m *protocol.PrivateExecute) {
 		job = make(chan error, 1)
+		operation, end := context.WithCancel(ctx)
+		cancelJob = end
 		go func() {
-			job <- execute(ctx, s, inputs, *m, controls, releases)
+			job <- execute(operation, s, inputs, *m, controls, releases)
 		}()
+	}
+	reportExit := func(status syscall.WaitStatus, reapErr, jobErr error) error {
+		if reapErr != nil {
+			return reapErr
+		}
+		if err := s.AcceptShellExit(); err != nil {
+			return err
+		}
+		if job != nil {
+			cancelJob()
+			jobErr = <-job
+			job, cancelJob = nil, nil
+		}
+		code := status.ExitStatus()
+		if status.Signaled() {
+			code = 128 + int(status.Signal())
+		}
+		return s.ReportShellExit(ctx, int64(code), jobErr)
 	}
 	for {
 		select {
@@ -110,8 +131,14 @@ func Run(args []string) error {
 				controls <- m // admission guarantees at most one pending reply
 			}
 		case err := <-job:
+			cancelJob()
+			cancelJob = nil
 			job = nil
 			if err != nil {
+				if s.ShellReaped() {
+					r := <-s.Reaped
+					return reportExit(r.Status, r.Err, err)
+				}
 				return err
 			}
 			if pending != nil {
@@ -124,17 +151,7 @@ func Run(args []string) error {
 				}
 			}
 		case r := <-s.Reaped:
-			if r.Err != nil {
-				return r.Err
-			}
-			if job != nil {
-				return fmt.Errorf("selected shell exited during private operation")
-			}
-			status := r.Status.ExitStatus()
-			if r.Status.Signaled() {
-				status = 128 + int(r.Status.Signal())
-			}
-			return s.ReportIdleExit(ctx, int64(status))
+			return reportExit(r.Status, r.Err, nil)
 		case signal := <-s.Signals:
 			if !s.AdmitSignal(signal) {
 				return fmt.Errorf("unexpected release signal")
