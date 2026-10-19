@@ -92,7 +92,7 @@ func TestStartSupervisorProcess(t *testing.T) {
 		}
 	}()
 	budget := 3 * time.Second
-	if scenario != "normal" && !strings.HasPrefix(scenario, "split-") && scenario != "raw" && scenario != "reject-retry" {
+	if scenario != "normal" && !strings.HasPrefix(scenario, "split-") && !strings.HasPrefix(scenario, "pre-record-") && scenario != "raw" && scenario != "reject-retry" {
 		budget = 650 * time.Millisecond
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
@@ -109,9 +109,34 @@ func TestStartSupervisorProcess(t *testing.T) {
 		}
 		return m
 	}
+	preRecordExit := strings.HasPrefix(scenario, "pre-record-")
+	endSelected := func() error {
+		if err := syscall.Kill(s.ShellPID, syscall.SIGKILL); err != nil {
+			return err
+		}
+		select {
+		case reap := <-s.Reaped:
+			if reap.Err != nil || !reap.Status.Signaled() || reap.Status.Signal() != syscall.SIGKILL {
+				return fmt.Errorf("missing actual pre-record Bash reap: %+v", reap)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return s.AcceptShellExit()
+	}
 	check := func(c context.Context, source protocol.HelperSourceReply) error {
 		if c != ctx {
 			return fmt.Errorf("checker context replaced")
+		}
+		if scenario == "pre-record-check" || scenario == "pre-record-substantive" {
+			if err := endSelected(); err != nil {
+				return err
+			}
+			cancel() // The supervisor cancels its job only after actual reap.
+			if scenario == "pre-record-substantive" {
+				return fmt.Errorf("pre-record invalid source")
+			}
+			return c.Err()
 		}
 		if source.Source == "reject-me" {
 			return &submission.Rejection{Code: "source-syntax", Message: "isolated rejection"}
@@ -128,7 +153,29 @@ func TestStartSupervisorProcess(t *testing.T) {
 		if scenario == "split-invalid-derivation" {
 			execute.StdoutFIFO = "/run/omegaflow/session/split/other.stdout"
 		}
+		if scenario == "pre-record-verify" || scenario == "pre-record-entry" {
+			if e = endSelected(); e != nil {
+				fmt.Fprintln(evidence, e)
+				return
+			}
+			if scenario == "pre-record-entry" {
+				cancel()
+			}
+		}
 		e = s.beginStart(ctx, *execute, check)
+	}
+	if e == nil && s.startContext != nil {
+		e = fmt.Errorf("successful start retained pre-record context")
+	}
+	if preRecordExit {
+		reportErr := s.ReportShellExit(launchCtx, 137, e)
+		json.NewEncoder(evidence).Encode(map[string]any{
+			"error": fmt.Sprint(e), "fatal": s.startFailed,
+			"pre_record_reported": reportErr == nil,
+			"pre_record_clean":    s.shellFailure == nil,
+			"pre_record_active":   s.active != nil,
+		})
+		return
 	}
 	if e == nil && scenario == "reject-retry" {
 		execute, ok = read().(*protocol.PrivateExecute)
@@ -136,6 +183,9 @@ func TestStartSupervisorProcess(t *testing.T) {
 			e = fmt.Errorf("missing retry")
 		} else {
 			e = s.beginStart(ctx, *execute, check)
+		}
+		if e == nil && s.startContext != nil {
+			e = fmt.Errorf("retry retained pre-record context")
 		}
 	}
 	if e == nil {
@@ -264,7 +314,7 @@ func TestRealCandidateStart(t *testing.T) {
 	if os.Getenv("OMEGAFLOW_CANDIDATE_DIGEST") == "" {
 		t.Skip("explicit pinned candidate required")
 	}
-	cases := []string{"normal", "raw", "reject-retry", "unqualified", "missing-source", "crossed-source", "duplicate-source", "early-signal", "wrong-release", "early-ack", "duplicate-release", "wrong-ack", "restore-identity", "missing-ack", "missing-release", "second-signal", "blocked-submit", "blocked-prepared", "blocked-started", "blocked-released", "split-status-one", "split-stdout-failure", "split-stderr-failure", "split-invalid-mode", "split-symlink", "split-invalid-owner", "split-invalid-type", "split-invalid-directory-mode", "split-invalid-derivation", "split-dir-symlink"}
+	cases := []string{"normal", "raw", "reject-retry", "unqualified", "missing-source", "crossed-source", "duplicate-source", "early-signal", "wrong-release", "early-ack", "duplicate-release", "wrong-ack", "restore-identity", "missing-ack", "missing-release", "second-signal", "blocked-submit", "blocked-prepared", "blocked-started", "blocked-released", "split-status-one", "split-stdout-failure", "split-stderr-failure", "split-invalid-mode", "split-symlink", "split-invalid-owner", "split-invalid-type", "split-invalid-directory-mode", "split-invalid-derivation", "split-dir-symlink", "pre-record-verify", "pre-record-entry", "pre-record-check", "pre-record-substantive"}
 	if single := os.Getenv("OMEGAFLOW_START_ONLY"); single != "" {
 		cases = []string{single}
 	}
@@ -559,12 +609,24 @@ func runStartCase(t *testing.T, scenario string) {
 			Source             string
 			SourceStatus       int64 `json:"source_status"`
 			EntryStopped       bool  `json:"entry_stopped"`
+			PreRecordReported  bool  `json:"pre_record_reported"`
+			PreRecordClean     bool  `json:"pre_record_clean"`
+			PreRecordActive    bool  `json:"pre_record_active"`
 		}
 		if err := json.NewDecoder(evidenceR).Decode(&evidence); err != nil {
 			t.Fatal(err)
 		}
 		if fatal && (!evidence.Fatal || evidence.Error == "<nil>") {
 			t.Fatalf("failure accepted: %+v", evidence)
+		}
+		if strings.HasPrefix(scenario, "pre-record-") {
+			wantReport := scenario != "pre-record-substantive"
+			if evidence.PreRecordReported != wantReport || evidence.PreRecordClean != wantReport || evidence.PreRecordActive {
+				t.Fatalf("pre-record exit proof: %+v", evidence)
+			}
+			if !wantReport && !strings.Contains(evidence.Error, "pre-record invalid source") {
+				t.Fatalf("pre-record substantive failure lost: %+v", evidence)
+			}
 		}
 		if !fatal && (evidence.Fatal || evidence.Error != "<nil>" || evidence.Restored != evidence.Workload || evidence.Source != request.Source) {
 			t.Fatalf("start proof: %+v", evidence)
@@ -587,6 +649,17 @@ func runStartCase(t *testing.T, scenario string) {
 			t.Fatal("frame redisplay")
 		}
 		t.Logf("case=%s phase=%d fatal=%v raw=%q", scenario, evidence.Phase, evidence.Fatal, snapshot())
+	}
+	if strings.HasPrefix(scenario, "pre-record-") {
+		if scenario != "pre-record-substantive" {
+			m, err := protocol.ReadPrivate(reader, protocol.AwshToEnvoy)
+			exit, ok := m.(*protocol.PrivateShellExit)
+			if err != nil || !ok || exit.Status != 137 || exit.ActiveOperationID != "" || exit.CWD == "" {
+				t.Fatalf("missing pre-record shell_exit: %v %v", m, err)
+			}
+		}
+		finish()
+		return
 	}
 	if scenario == "unqualified" || strings.HasPrefix(scenario, "split-invalid-") || scenario == "split-symlink" || scenario == "split-dir-symlink" {
 		finish()
