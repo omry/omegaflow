@@ -180,18 +180,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: website/.nvmrc
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Install website dependencies
         run: pnpm --dir website install --frozen-lockfile
 
-      - name: Check generated schema docs
-        run: python website/scripts/update_recording_schema_docs.py --check
-
-      - name: Build website
-        run: pnpm --dir website build
+      - name: Check generated schema docs and build website
+        run: pnpm --dir website run check
 
       - name: Summary
         if: always()
