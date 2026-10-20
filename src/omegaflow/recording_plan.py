@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields, is_dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -328,6 +328,15 @@ def validate_terminal_input_step(value: object, *, field: str) -> None:
         )
 
 
+def _terminal_input_sends_bytes(steps: Iterable[Mapping[str, Any]]) -> bool:
+    """Inspect validated inputs, including normalized steps with null defaults."""
+    return any(
+        step.get(name) is not None
+        for step in steps
+        for name in ("text", "key", "control")
+    )
+
+
 def validate_terminal_command(value: object, *, field: str) -> None:
     mapping = _mapping(value, field=field)
     has_run = isinstance(mapping.get("run"), str) and bool(mapping["run"])
@@ -508,7 +517,16 @@ def validate_terminal_command(value: object, *, field: str) -> None:
     ):
         _optional_non_negative_number(mapping.get(name), field=f"{field}.{name}")
     validate_terminal_output(mapping.get("output"), field=f"{field}.output")
-    validate_terminal_expectation(mapping.get("expect", {}), field=f"{field}.expect")
+    expect = validate_terminal_expectation(
+        mapping.get("expect", {}), field=f"{field}.expect"
+    )
+    if (expect.output_contains or expect.output_regex) and _terminal_input_sends_bytes(
+        input_steps
+    ):
+        raise RecordingPlanError(
+            f"{field}.expect cannot use output_contains or output_regex "
+            "with text, key, or control input"
+        )
 
 
 def validate_terminal_step(
@@ -542,9 +560,17 @@ def validate_terminal_step(
                     f"{field}.commands.{index}.continue_from is valid only for "
                     "terminal actions"
                 )
-        validate_terminal_expectation(
+        expect = validate_terminal_expectation(
             mapping.get("expect", {}), field=f"{field}.expect"
         )
+        if (expect.output_contains or expect.output_regex) and any(
+            _terminal_input_sends_bytes(command.get("input", ()))
+            for command in commands
+        ):
+            raise RecordingPlanError(
+                f"{field}.expect cannot use output_contains or output_regex "
+                "when a command sends text, key, or control input"
+            )
         validate_terminal_output(mapping.get("output"), field=f"{field}.output")
     name = mapping.get("name")
     if name is not None and (not isinstance(name, str) or not name):
@@ -3671,6 +3697,15 @@ def _annotate_terminal_continuations(
                         "continue_from"
                     )
             root = root_by_location[previous_location]
+            root_expect = root.get("expect", {})
+            if (
+                root_expect.get("output_contains") or root_expect.get("output_regex")
+            ) and _terminal_input_sends_bytes(command.get("input", ())):
+                raise RecordingPlanError(
+                    f"terminal operation {root['id']!r} in pane {pane_id!r} cannot "
+                    "use output_contains or output_regex when a continuation "
+                    "sends text, key, or control input"
+                )
             root_by_location[location] = root
             root_location_by_location[location] = root_location_by_location[
                 previous_location

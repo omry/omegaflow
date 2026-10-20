@@ -803,12 +803,7 @@ def test_realtime_terminal_action_continues_across_pane_beats(
                                             {"text": "a", "interval": 0},
                                             {"wait_for": "first:a", "timeout": 5},
                                         ],
-                                        "expect": {
-                                            "output_contains": [
-                                                "first:a",
-                                                "second:b",
-                                            ]
-                                        },
+                                        "expect": {},
                                     }
                                 ],
                             }
