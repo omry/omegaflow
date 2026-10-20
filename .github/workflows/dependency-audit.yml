@@ -1,4 +1,4 @@
-name: Node dependency audit
+name: Node dependency maintenance
 
 'on':
   schedule:
@@ -13,6 +13,13 @@ name: Node dependency audit
         options:
         - security
         - upgrades
+  push:
+    branches:
+    - main
+    paths:
+    - '**/pnpm-lock.yaml'
+    - '**/package-lock.json'
+    - '.github/node-maintenance.json'
 
 permissions:
   contents: read
@@ -20,24 +27,17 @@ permissions:
 concurrency:
   group: dependency-audit
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  audit:
-    permissions:
-      contents: read
-      issues: write
-    uses: hydra-ecosystem/github-actions/.github/workflows/node-audit.yml@241d646f6b83d17aeee2bb97a8c1e1e788eb6099
-    with:
-      audit-kind: ${{ inputs.audit-kind || 'auto' }}
-
-  pull-request:
-    needs: audit
+  maintenance:
     permissions:
       contents: write
       pull-requests: write
-    uses: hydra-ecosystem/github-actions/.github/workflows/node-publish.yml@241d646f6b83d17aeee2bb97a8c1e1e788eb6099
+      issues: write
+    uses: hydra-ecosystem/github-actions/.github/workflows/node-maintenance.yml@v1
     with:
-      validation-passed: ${{ needs.audit.outputs.validation_passed }}
+      audit-kind: ${{ inputs.audit-kind || 'auto' }}
       app-client-id: ${{ vars.NODE_AUDIT_APP_CLIENT_ID }}
     secrets:
       app-private-key: ${{ secrets.NODE_AUDIT_APP_PRIVATE_KEY }}
