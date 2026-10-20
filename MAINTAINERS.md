@@ -59,7 +59,7 @@ silently rewriting declarations.
 
 Security checks run every Monday at 02:00 UTC. Routine upgrades, including major
 versions, run on the first day of January, April, July, and October at 02:00 UTC.
-To run either check sooner, open **Actions → Node dependency audit → Run workflow**
+To run either check sooner, open **Actions → Node dependency maintenance → Run workflow**
 on `main` and select `security` or `upgrades`. Change a cadence in both the JSON
 configuration and `.github/workflows/dependency-audit.yml`.
 
