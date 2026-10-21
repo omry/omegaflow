@@ -312,7 +312,7 @@ func TestCompleteCancellationDuringCleanupCannotSkipRequiredCleanup(t *testing.T
 }
 
 func TestCompleteRequiresItsBoundedOwner(t *testing.T) {
-	for _, name := range []string{"unbounded", "expired", "no-cleanup", "concurrent", "split", "inspection", "queued-cancel"} {
+	for _, name := range []string{"unbounded", "expired", "no-cleanup", "concurrent", "split", "queued-cancel"} {
 		t.Run(name, func(t *testing.T) {
 			f := completionFixture(t)
 			ctx := relayTestContext(t)
@@ -334,8 +334,6 @@ func TestCompleteRequiresItsBoundedOwner(t *testing.T) {
 				defer f.c.busy.Store(false)
 			case "split":
 				f.c.active.request.ExecutionShape = "split"
-			case "inspection":
-				f.c.active.request.Inspections = []protocol.Inspection{{InspectionID: "later", Kind: "file_exists", Path: "/tmp"}}
 			case "queued-cancel":
 				f.c.active.cancel = &protocol.Cancel{OperationID: "operation-1", Reason: "user"}
 			}

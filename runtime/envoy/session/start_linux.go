@@ -108,6 +108,7 @@ type Coordinator struct {
 	resizing        bool
 	running         *operationDispatch
 	recent          string
+	startInspection func([]protocol.ResolvedInspection) (inspectionWorker, error)
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -428,6 +429,10 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 				continue
 			case <-cleanupDone:
 				return nil, c.running.cleanup.Err()
+			case <-c.inspectionDone():
+				continue
+			case <-c.inspectionDeadline():
+				return nil, errInspectionCancelTimeout
 			}
 		}
 		m, consumed, err := c.privateFact(ctx, interrupt, result)

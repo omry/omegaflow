@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "owner": "B7.3",
+  "corpus_obligations": {
+    "B1-PACKAGE-B7.3": "TestInspectionActualWorkerCompletionFailureAndPlanCorrelation;TestInspectionCancelAcceptedFirstDiscardsResultAndJoinsReap;TestInspectionJoinedResultCommitsWhileTelemetryBlocked;TestInspectionCleanupCancelSkipsWorkerAndLateFinalizeLoses;TestInspectionRunsBeyondRetiredCleanupEpoch;TestInspectionWorkerErrorsAndExceptionalDisposal;TestInspectionBlockedReapIsFatalWithinOriginalFiveSeconds;TestNativeInspectionLifecycle;TestInspectionReapRetiresCancelDeadlineDuringBlockedResize"
+  },
+  "runtime_tests": "runtime/envoy/session/inspection*_linux_test.go",
+  "fault_runner": "tests/envoy-inspection-lifecycle/run.py",
+  "boundary_evidence": {
+    "B1-C003-worker-result-first": "Complete dispatcher, blocked telemetry and FIFO cancel/resize proof, for completion and finalization.",
+    "B1-C003-worker-cancel-first": "Controlled joined worker plus actual qualified worker reply held before acceptance; returned Awsh status retained and no result accepted.",
+    "B1-C003-blocked-worker-cancel-timeout": "Actual five-second dispatcher epoch with controlled unreapable handle; fatal diagnostic on writable telemetry, original deadline/cause, no terminal result or next operation. Busy telemetry serialization cannot delay failure.",
+    "cleanup-to-inspection": "Fresh final census/output barrier under original cleanup deadline; inspection runs after that epoch retires.",
+    "worker-reap-to-result-delivery": "Joined completion remains observable during nested resize I/O;retire worker cancellation epoch before blocked publication."
+  },
+  "limits": [
+    "Controlled unreapable handle is not a claimed unkillable kernel process.",
+    "B8.4 retains the complete B1-B8 conformance gate with actual local actors.",
+    "No new supported Bash entry; ARM64 remains compile-only."
+  ]
+}
