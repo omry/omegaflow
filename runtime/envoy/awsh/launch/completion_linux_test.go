@@ -225,7 +225,7 @@ func TestCompletionSupervisorProcess(t *testing.T) {
 		}
 		snapshots = append(snapshots, map[string]any{"state": s.State, "workload": s.workloadTermios, "active": s.ActiveTermios})
 		cancelCleanup()
-		if scenario != "persistent" && scenario != "status-one" && scenario != "editing" && scenario != "ordinary-disabled" && scenario != "raw" && scenario != "jobs" && scenario != "allowed-trap" {
+		if scenario != "persistent" && scenario != "status-one" && scenario != "editing" && scenario != "ordinary-disabled" && scenario != "raw" && scenario != "jobs" && scenario != "allowed-trap" && scenario != "live-inspection" {
 			break
 		}
 	}
@@ -257,7 +257,7 @@ func TestRealCandidateCompletion(t *testing.T) {
 	if os.Getenv("OMEGAFLOW_CANDIDATE_DIGEST") == "" {
 		t.Skip("explicit pinned candidate required")
 	}
-	cases := []string{"persistent", "status-one", "editing", "ordinary-disabled", "raw", "jobs", "allowed-trap", "wrong-peer", "invalid-environment", "terminal-write-failure", "terminal-read-failure", "terminal-drain-failure", "trap-int", "trap-chld", "disable-kill", "disable-trap", "shadow-builtin", "shadow-command", "binding", "prompt", "wrong-id", "wrong-control", "missing-control", "duplicate-control", "expired-cleanup", "identity-damage", "final-helper-failure", "close-held", "early-finish", "release-signal"}
+	cases := []string{"live-inspection", "persistent", "status-one", "editing", "ordinary-disabled", "raw", "jobs", "allowed-trap", "wrong-peer", "invalid-environment", "terminal-write-failure", "terminal-read-failure", "terminal-drain-failure", "trap-int", "trap-chld", "disable-kill", "disable-trap", "shadow-builtin", "shadow-command", "binding", "prompt", "wrong-id", "wrong-control", "missing-control", "duplicate-control", "expired-cleanup", "identity-damage", "final-helper-failure", "close-held", "early-finish", "release-signal"}
 	if single := os.Getenv("OMEGAFLOW_COMPLETION_ONLY"); single != "" {
 		cases = []string{single}
 	}
@@ -356,6 +356,8 @@ func runCompletionCase(t *testing.T, scenario string) {
 	source := "secret=live; f() { builtin printf '%s' \"$secret\"; }; alias persisted='true'; set -- one two; set -o pipefail; shopt -s nullglob nocasematch; export OUT='link/../artifact'; cd /tmp; builtin printf 'FIRST_WORKLOAD\\n'"
 	fatal := false
 	switch scenario {
+	case "live-inspection":
+		source = liveInspectionSource()
 	case "status-one":
 		source = "false"
 	case "editing":
@@ -409,6 +411,9 @@ func runCompletionCase(t *testing.T, scenario string) {
 		id := fmt.Sprintf("op%d", n+1)
 		request := protocol.PrivateExecute{OperationID: id, ExecutionShape: "pty", Timing: "realtime", Publication: "real", Observation: "exclusive", Inspections: []protocol.Inspection{{InspectionID: "i", Kind: "file_exists", Path: "$OUT"}}, Source: source}
 		request.Inspections = append(request.Inspections, protocol.Inspection{InspectionID: "home", Kind: "file_exists", Path: "~/artifact"}, protocol.Inspection{InspectionID: "user", Kind: "file_exists", Path: "~root/../artifact"}, protocol.Inspection{InspectionID: "literal", Kind: "file_exists", Path: "${UNDEFINED}/../literal"})
+		if scenario == "live-inspection" {
+			request.Inspections = liveInspectionPlans()
+		}
 		if n == 1 {
 			request.Source = "builtin printf 'NEXT_STATUS=%s\\n' \"$?\"; f; builtin alias persisted; [[ -o pipefail ]] && shopt -q nullglob nocasematch && builtin printf 'OPTIONS_LIVE\\n'; builtin printf ' PERSIST=%s,%s\\n' \"$1\" \"$2\"; false"
 			if scenario != "persistent" {
@@ -499,7 +504,7 @@ func runCompletionCase(t *testing.T, scenario string) {
 			send(protocol.PrivateStartedAck{OperationID: id})
 			break
 		}
-		if scenario == "allowed-trap" {
+		if scenario == "allowed-trap" || scenario == "live-inspection" {
 			shell, _, _, e := processIdentity(int(closed.CompletionHelperPID))
 			if e != nil {
 				t.Fatal(e)
@@ -523,7 +528,9 @@ func runCompletionCase(t *testing.T, scenario string) {
 		if n == 1 || scenario == "status-one" || scenario == "editing" {
 			wantStatus = 1
 		}
-		if completed.Inspections[1].ResolvedPath != "/hostile/artifact" || completed.Inspections[2].ResolvedPath != "/root/../artifact" || scenario != "allowed-trap" && completed.Inspections[3].ResolvedPath != completed.PhysicalCWD+"/${UNDEFINED}/../literal" {
+		if scenario == "live-inspection" {
+			verifyLiveInspections(t, completed, n)
+		} else if completed.Inspections[1].ResolvedPath != "/hostile/artifact" || completed.Inspections[2].ResolvedPath != "/root/../artifact" || scenario != "allowed-trap" && completed.Inspections[3].ResolvedPath != completed.PhysicalCWD+"/${UNDEFINED}/../literal" {
 			t.Fatalf("home/literal path semantics: %#v", completed)
 		}
 		if completed.Status != wantStatus {
