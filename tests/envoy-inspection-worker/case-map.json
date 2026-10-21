@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "owner": "B7.2",
+  "corpus_obligations": {
+    "B1-PACKAGE-B7.2": "TestWorkerActualInspection;TestWorkerMaximumAndTypedFailure;TestWorkerSessionDescriptorIsolation;TestWorkerRejectsMalformedReplies;TestWorkerFixture;TestWorkerMalformedChildInput;TestWorkerInvalidHandoff;TestWorkerInheritedTestParentDescriptor"
+  },
+  "runtime_tests": "runtime/envoy/inspection/worker*_linux_test.go",
+  "fault_runner": "tests/envoy-inspection-worker/run.py",
+  "pending_integration": {
+    "B1-C003-worker-channel-isolation": "B7.3: replace isolated entry assembly with the actual session owner",
+    "B1-C003-worker-result-first": "B7.3",
+    "B1-C003-worker-cancel-first": "B7.3",
+    "B1-C003-blocked-worker-cancel-timeout": "B7.3"
+  },
+  "limits": [
+    "Isolated B7.2 worker only; no complete session lifecycle claim.",
+    "B8.4 retains full B1-B8 actual-actor conformance.",
+    "No new Bash support claims; ARM64 remains compile-only."
+  ]
+}
