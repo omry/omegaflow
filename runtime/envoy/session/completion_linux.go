@@ -56,17 +56,26 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	if _, ok := ctx.Deadline(); !ok {
 		return fmt.Errorf("ordinary completion requires the caller's existing bound")
 	}
-	if len(c.active.request.Inspections) != 0 ||
-		(c.active.request.ExecutionShape == "split" && (c.splitResources() == nil || !c.active.splitAttached.Load())) {
-		return fmt.Errorf("operation requires its lifecycle, split or inspection owner")
+	if c.active.request.ExecutionShape == "split" && (c.splitResources() == nil || !c.active.splitAttached.Load()) {
+		return fmt.Errorf("operation requires its attached split owner")
 	}
 	var dispatch *operationDispatch
 	defer func() {
+		if dispatch != nil {
+			err = errors.Join(err, dispatch.disposeInspection())
+		}
 		if err != nil {
+			code := "operation-cleanup"
+			if errors.Is(err, errInspectionCancelTimeout) {
+				code = "inspection-cancel-timeout"
+				if dispatch != nil && dispatch.inspection != nil && dispatch.inspection.stop != nil {
+					ctx = dispatch.inspection.stop
+				}
+			}
 			if dispatch != nil && dispatch.cleanup != nil {
 				ctx = dispatch.cleanup
 			}
-			err = c.fatal(ctx, "operation-cleanup", err, false)
+			err = c.fatal(ctx, code, err, false)
 		}
 		if dispatch != nil && dispatch.endCleanup != nil {
 			dispatch.endCleanup()
@@ -171,11 +180,12 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	if !ok {
 		return fmt.Errorf("unexpected final completion result %T", m)
 	}
-	if len(completed.Inspections) != 0 {
-		return fmt.Errorf("unexpected resolved inspections for foundation operation")
+	if err = validateInspectionPlan(c.active.request.Inspections, completed.Inspections); err != nil {
+		return err
 	}
 	c.phase = 0
 	d.completed, d.selection = completed, "result"
+	var closingOffset int64
 	if err = c.work(ctx, false, func(job context.Context) error {
 		if census != nil {
 			if err := census.ProveIdle(job); err != nil {
@@ -183,33 +193,49 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 			}
 		}
 		_, e := c.r.boundary(job, true, func(offset int64) error {
-			// Owner selection precedes construction, so a cancel accepted during
-			// cleanup/mark delivery cannot race worker reads of lifecycle state.
-			return c.w.channels.sendEvent(job, "operation-result", func(h protocol.Header) protocol.Message {
-				switch result := d.result.(type) {
-				case protocol.OperationCompleted:
-					result.Header = h
-					result.Type = "operation_completed"
-					result.OutputStart = c.active.outputStart
-					result.OutputThrough = offset
-					return result
-				case protocol.OperationCancelled:
-					result.Header = h
-					result.Type = "operation_cancelled"
-					result.OutputStart = c.active.outputStart
-					result.OutputThrough = offset
-					return result
-				case protocol.OperationFinalized:
-					result.Header = h
-					result.Type = "operation_finalized"
-					result.OutputStart = c.active.outputStart
-					result.OutputThrough = offset
-					return result
-				}
-				return nil
-			}, func() error { return c.selectPublication(job) })
+			closingOffset = offset
+			return nil
 		})
 		return e
+	}); err != nil {
+		return err
+	}
+	if len(completed.Inspections) != 0 {
+		// The final census and fresh output-through barrier finished the one
+		// cleanup epoch. Inspection cannot inherit or restart that deadline.
+		d.endCleanup()
+		d.cleanup, d.endCleanup = nil, nil
+		ctx = d.ctx
+		if err = c.inspectCompleted(ctx, d); err != nil {
+			return err
+		}
+	}
+	if err = c.work(ctx, false, func(job context.Context) error {
+		return c.w.channels.sendEvent(job, "operation-result", func(h protocol.Header) protocol.Message {
+			switch result := d.result.(type) {
+			case protocol.OperationCompleted:
+				result.Header = h
+				result.Type = "operation_completed"
+				result.OutputStart, result.OutputThrough = c.active.outputStart, closingOffset
+				return result
+			case protocol.OperationCancelled:
+				result.Header = h
+				result.Type = "operation_cancelled"
+				result.OutputStart, result.OutputThrough = c.active.outputStart, closingOffset
+				return result
+			case protocol.OperationFinalized:
+				result.Header = h
+				result.Type = "operation_finalized"
+				result.OutputStart, result.OutputThrough = c.active.outputStart, closingOffset
+				return result
+			case protocol.OperationFailed:
+				result.Header = h
+				result.Type = "operation_failed"
+				result.OutputStart, result.OutputThrough = c.active.outputStart, closingOffset
+				return result
+			}
+			return nil
+		}, func() error { return c.selectPublication(job) })
 	}); err != nil {
 		return err
 	}

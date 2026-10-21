@@ -1,0 +1,1 @@
+Envoy session assembly now accepts bounded inspection results or cancellation through its existing dispatcher, preserves the closing output range and returned shell status, and stops cancelled workers under the existing five-second reap bound.
