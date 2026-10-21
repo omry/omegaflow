@@ -91,13 +91,13 @@ def main():
             measure(output, rows, binary, awsh)
             counterproof(output / 'counterproofs' / 'wrong-start', binary, rows, awsh,
                          'wrong-start', completion,
-                         'result.OutputStart = c.active.outputStart',
-                         'result.OutputStart = c.active.outputStart + 1',
+                         'result.OutputStart, result.OutputThrough = c.active.outputStart, closingOffset',
+                         'result.OutputStart, result.OutputThrough = c.active.outputStart + 1, closingOffset',
                          'pty-seven', 'evidence range start mismatch')
             counterproof(output / 'counterproofs' / 'synthetic-status', binary, rows, awsh,
                          'synthetic-status', dispatch,
-                         'd.result = protocol.OperationFinalized{OperationID: m.OperationID, Cwd: m.PhysicalCWD, Reason: reason, InspectionResults: []protocol.InspectionResult{}}',
-                         'd.result = protocol.OperationCompleted{OperationID: m.OperationID, Status: m.Status, Cwd: m.PhysicalCWD, InspectionResults: []protocol.InspectionResult{}}',
+                         'd.result = protocol.OperationFinalized{OperationID: m.OperationID, Cwd: m.PhysicalCWD, Reason: reason, InspectionResults: d.inspectionResults()}',
+                         'd.result = protocol.OperationCompleted{OperationID: m.OperationID, Status: m.Status, Cwd: m.PhysicalCWD, InspectionResults: d.inspectionResults()}',
                          'finalize', 'planned finalization or cancellation claimed natural exit')
             counterproof(output / 'counterproofs' / 'finalized-bytes', binary, rows, awsh,
                          'finalized-bytes',

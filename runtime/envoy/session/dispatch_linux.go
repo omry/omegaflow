@@ -50,6 +50,7 @@ type operationDispatch struct {
 	crossedExecute string
 	cleanup        context.Context
 	endCleanup     context.CancelFunc
+	inspection     *inspectionRun
 }
 
 type continueOperation struct{}
@@ -70,6 +71,9 @@ func (d *operationDispatch) close() {
 // Only the existing serialized owner reads/mutates life. A proof worker holds
 // an immutable grace/session/census input and cannot select a result or signal.
 func (d *operationDispatch) step(c *Coordinator) error {
+	if err := d.acceptInspection(c); err != nil {
+		return err
+	}
 	if d.ending {
 		return nil
 	}
@@ -134,6 +138,9 @@ func (d *operationDispatch) accept(c *Coordinator, request protocol.Message, int
 	case *protocol.Cancel, *protocol.Finalize:
 		if err := d.life.accept(d.ctx, request); err != nil {
 			return err
+		}
+		if d.life.kind == "cancel" && !d.life.committed {
+			d.stopInspection()
 		}
 		if d.continuation && d.life.kind != "" && interrupt != nil {
 			interrupt()
@@ -267,6 +274,9 @@ func (d *operationDispatch) selectWrite(c *Coordinator) error {
 	if d.selection != "result" {
 		return nil
 	}
+	if d.life.committed {
+		return nil // An accepted inspection result already fixed this outcome.
+	}
 	kind, reason := d.life.outcome()
 	m := d.completed
 	if m == nil {
@@ -274,14 +284,19 @@ func (d *operationDispatch) selectWrite(c *Coordinator) error {
 	}
 	switch kind {
 	case "completed":
-		d.result = protocol.OperationCompleted{OperationID: m.OperationID, Status: m.Status, Cwd: m.PhysicalCWD, InspectionResults: []protocol.InspectionResult{}}
+		d.result = protocol.OperationCompleted{OperationID: m.OperationID, Status: m.Status, Cwd: m.PhysicalCWD, InspectionResults: d.inspectionResults()}
 	case "cancelled":
 		status := m.Status
 		d.result = protocol.OperationCancelled{OperationID: m.OperationID, Status: &status, Cwd: m.PhysicalCWD, Reason: reason}
 	case "finalized":
-		d.result = protocol.OperationFinalized{OperationID: m.OperationID, Cwd: m.PhysicalCWD, Reason: reason, InspectionResults: []protocol.InspectionResult{}}
+		d.result = protocol.OperationFinalized{OperationID: m.OperationID, Cwd: m.PhysicalCWD, Reason: reason, InspectionResults: d.inspectionResults()}
 	default:
 		return fmt.Errorf("unresolved operation outcome %q", kind)
+	}
+	if kind != "cancelled" {
+		if failure := d.inspectionOutcome(m); failure != nil {
+			d.result = failure
+		}
 	}
 	d.life.committed = true
 	return nil
