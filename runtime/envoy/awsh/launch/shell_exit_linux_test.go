@@ -496,9 +496,12 @@ func TestCompletionHelperThreadFixture(t *testing.T) {
 func TestCompletionHelperThreadChurn(t *testing.T) {
 	for _, mode := range []string{"churn", "child"} {
 		t.Run(mode, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Fixture lifetime includes scan work and joined race-detector shutdown.
+			fixtureCtx, stopFixture := context.WithTimeout(context.Background(), 10*time.Second)
+			defer stopFixture()
+			ctx, cancel := context.WithTimeout(fixtureCtx, 5*time.Second)
 			defer cancel()
-			command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestCompletionHelperThreadFixture$")
+			command := exec.CommandContext(fixtureCtx, os.Args[0], "-test.run=^TestCompletionHelperThreadFixture$")
 			command.Env = append(os.Environ(), "OMEGAFLOW_HELPER_THREAD_FIXTURE="+mode)
 			input, err := command.StdinPipe()
 			if err != nil {
@@ -537,6 +540,8 @@ func TestCompletionHelperThreadChurn(t *testing.T) {
 			if err := completionHelperState(expired, pid); err != context.Canceled {
 				t.Fatal("helper scan lost the existing caller epoch", err)
 			}
+			// Completing the scan must not kill its fixture before the joined exit.
+			cancel()
 		})
 	}
 }
