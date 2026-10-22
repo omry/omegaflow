@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "owner": "B8.1",
+  "runtime_tests": [
+    "runtime/envoy/session/failure_linux_test.go",
+    "runtime/envoy/session/failure_native_linux_test.go"
+  ],
+  "fault_runner": "tests/envoy-failure-isolation/run.py",
+  "corpus_obligations": {
+    "B1-PACKAGE-B8.1": "TestFailedDisposalRequiresExactOwnerAndEpoch;TestFatalRetainsSelectedChannelCauseAndCallerEpoch;TestNativeFailureIsolation"
+  },
+  "native_cases": {
+    "descriptor-inheritance": [
+      "isolation"
+    ],
+    "public-traffic": [
+      "public-malformed",
+      "public-partial-eof",
+      "split-public-malformed"
+    ],
+    "channel-loss": [
+      "terminal-eof",
+      "telemetry-eof",
+      "telemetry-reset",
+      "control-loss",
+      "result-loss"
+    ],
+    "private-traffic": [
+      "private-malformed",
+      "private-unknown-code"
+    ]
+  },
+  "boundaries": [
+    "Real direct/nested exec inheritance and actual Awsh bootstrap isolation.",
+    "Original fatal cause survives joined I/O cancellation; no operation result or successful closed follows failure.",
+    "Actual escaped descendants, private readers, relay and Awsh wait are joined under caller-owned disposal; repeat preserves failure."
+  ],
+  "remaining_owners": [
+    "B8.2 terminal-result ordering",
+    "B8.3 complete captured-epoch/protocol-error crossings",
+    "B8.4 full actual-actor B1\u2013B8 gate"
+  ],
+  "limits": [
+    "Linux amd64 qualification only; ARM64 compile-only.",
+    "Same-identity deliberate interference is outside inheritance isolation.",
+    "Trusted harness injects private faults into actual actor stream."
+  ],
+  "omission_controls": [
+    "socket-handoff",
+    "descendant-cleanup",
+    "original-cause",
+    "split-resources"
+  ]
+}
