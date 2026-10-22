@@ -250,8 +250,17 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 		return nil, false, &startFactError{fmt.Errorf("private protocol_error %s: %s", report.Code, report.Message)}
 	}
 	if c.running != nil {
+		gate := c.running.gate
+		captureContinue := !c.running.continueDeadline.IsZero() && gate != nil && gate.request != nil &&
+			c.w.channels.InputThrough() < gate.request.InputThrough
 		if err := c.running.observe(c, result.message, interrupt); err != nil {
 			return nil, false, &startFactError{err}
+		}
+		if _, ended := result.message.(*protocol.PrivateShellExit); ended && captureContinue {
+			// The continue watermark has not completed. Later cleanup cannot
+			// replace its original bound on private EOF, reap and split close.
+			c.exitedDeadline = c.running.continueDeadline
+			c.exitedPhase = StartShellExitInputBarrier
 		}
 	}
 	if proposal, ok := result.message.(*protocol.PrivateInputClose); ok && c.expected(proposal) {
