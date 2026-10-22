@@ -697,7 +697,7 @@ func TestStartShellExitHandoffRetainsOriginalEpoch(t *testing.T) {
 				}
 				_ = f.control.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
 				var b [1]byte
-				if n, err := f.control.Read(b[:]); n != 0 || !os.IsTimeout(err) {
+				if n, err := f.control.Read(b[:]); n != 0 || (!os.IsTimeout(err) && err != io.EOF) {
 					t.Fatal("private execute escaped outstanding input barrier", n, err)
 				}
 			}

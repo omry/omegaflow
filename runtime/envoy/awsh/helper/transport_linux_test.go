@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +18,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -600,5 +602,137 @@ func TestInheritedINTIgnore(t *testing.T) {
 	}
 	if output.Len() != 0 {
 		t.Fatalf("helper output %q", output.Bytes())
+	}
+}
+
+type terminalRaceWriter struct {
+	cancel   context.CancelCauseFunc
+	cause    error
+	writeErr error
+	short    bool
+	written  int
+}
+
+func (w *terminalRaceWriter) SetWriteDeadline(time.Time) error { return nil }
+func (w *terminalRaceWriter) Write(b []byte) (int, error) {
+	n := len(b)
+	if w.short {
+		n = 1
+	}
+	w.written += n
+	w.cancel(w.cause)
+	if w.short {
+		return n, io.ErrShortWrite
+	}
+	return n, w.writeErr
+}
+func TestTerminalWriteRetainsCompletedDeliveryOnlyForControlEOF(t *testing.T) {
+	for _, kind := range []string{"shell_exit", "closed"} {
+		var m protocol.PrivateMessage = protocol.PrivateShellExit{Status: 23, CWD: "/tmp"}
+		if kind == "closed" {
+			m = protocol.PrivateClosed{Reason: "shutdown", Status: 137, CWD: "/tmp"}
+		}
+		frame, e := protocol.EncodePrivate(m, protocol.AwshToEnvoy)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, scenario := range []string{"complete-EOF", "partial-EOF", "write-error-EOF", "signal-cancel", "invalid-control", "early-EOF", "ordinary-write"} {
+			t.Run(kind+"/"+scenario, func(t *testing.T) {
+				ctx, cancel := context.WithCancelCause(context.Background())
+				defer cancel(nil)
+				w := &terminalRaceWriter{cancel: cancel, cause: io.EOF}
+				switch scenario {
+				case "partial-EOF":
+					w.short = true
+				case "write-error-EOF":
+					w.writeErr = errors.New("independent write failure")
+				case "signal-cancel":
+					w.cause = context.Canceled
+				case "invalid-control":
+					w.cause = errors.New("invalid private control")
+				case "early-EOF":
+					cancel(io.EOF)
+				}
+				var err error
+				if scenario == "ordinary-write" {
+					err = WriteControl(ctx, w, frame)
+				} else {
+					err = WriteTerminalControl(ctx, w, frame)
+				}
+				if (err == nil) != (scenario == "complete-EOF") {
+					t.Fatalf("terminal commit/cancellation mismatch: written=%d err=%v", w.written, err)
+				}
+				if scenario == "early-EOF" && w.written != 0 {
+					t.Fatal("cancelled request wrote terminal bytes")
+				}
+				if scenario == "write-error-EOF" && !errors.Is(err, w.writeErr) {
+					t.Fatal("substantive write failure lost", err)
+				}
+			})
+		}
+	}
+}
+func TestTerminalWriteRejectsOtherFrames(t *testing.T) {
+	frame, err := protocol.EncodePrivate(protocol.PrivateSubmit{OperationID: "op"}, protocol.AwshToEnvoy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	w := &terminalRaceWriter{cancel: cancel, cause: io.EOF}
+	if err := WriteTerminalControl(ctx, w, frame); err == nil || w.written != 0 {
+		t.Fatal("nonterminal got terminal cancellation rule", err)
+	}
+}
+
+type terminalPostWriteContext struct {
+	context.Context
+	cancel    context.CancelCauseFunc
+	written   atomic.Bool
+	triggered atomic.Bool
+}
+
+func (c *terminalPostWriteContext) Err() error {
+	err := c.Context.Err()
+	// Observe the current result before EOF arrives. A second observation must
+	// not turn this completed terminal delivery into a cancellation failure.
+	if c.written.Load() && c.triggered.CompareAndSwap(false, true) {
+		c.cancel(io.EOF)
+	}
+	return err
+}
+
+type terminalPostWriteWriter struct {
+	ctx     *terminalPostWriteContext
+	written int
+}
+
+func (w *terminalPostWriteWriter) SetWriteDeadline(time.Time) error { return nil }
+func (w *terminalPostWriteWriter) Write(p []byte) (int, error) {
+	w.written += len(p)
+	w.ctx.written.Store(true)
+	return len(p), nil
+}
+
+func TestTerminalWriteHandlesEOFAfterPostWriteObservation(t *testing.T) {
+	for _, m := range []protocol.PrivateMessage{
+		protocol.PrivateShellExit{Status: 23, CWD: "/tmp"},
+		protocol.PrivateClosed{Reason: "shutdown", Status: 137, CWD: "/tmp"},
+	} {
+		frame, err := protocol.EncodePrivate(m, protocol.AwshToEnvoy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parent, cancel := context.WithCancelCause(context.Background())
+		ctx := &terminalPostWriteContext{Context: parent, cancel: cancel}
+		w := &terminalPostWriteWriter{ctx: ctx}
+		err = WriteTerminalControl(ctx, w, frame)
+		cancel(nil)
+		if !ctx.triggered.Load() || context.Cause(ctx) != io.EOF || w.written != len(frame) {
+			t.Fatal("post-write EOF crossing was not exercised")
+		}
+		if err != nil {
+			t.Fatalf("complete terminal delivery lost to post-write EOF: %v", err)
+		}
 	}
 }

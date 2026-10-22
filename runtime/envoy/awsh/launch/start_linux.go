@@ -293,7 +293,7 @@ func (s *Session) ShutdownIdle(ctx context.Context) error {
 	}
 	frame, err := protocol.EncodePrivate(protocol.PrivateClosed{Reason: "shutdown", Status: int64(status), CWD: s.State.PhysicalCWD}, protocol.AwshToEnvoy)
 	if err == nil {
-		err = helper.WriteControl(ctx, s.result, frame)
+		err = helper.WriteTerminalControl(ctx, s.result, frame)
 	}
 	return err
 }
@@ -302,7 +302,7 @@ func (s *Session) ShutdownIdle(ctx context.Context) error {
 func (s *Session) ReportIdleExit(ctx context.Context, status int64) error {
 	frame, err := protocol.EncodePrivate(protocol.PrivateShellExit{Status: status, CWD: s.State.PhysicalCWD}, protocol.AwshToEnvoy)
 	if err == nil {
-		err = helper.WriteControl(ctx, s.result, frame)
+		err = helper.WriteTerminalControl(ctx, s.result, frame)
 	}
 	return err
 }

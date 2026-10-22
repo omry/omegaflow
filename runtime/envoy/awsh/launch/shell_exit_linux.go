@@ -176,5 +176,5 @@ func (s *Session) ReportShellExit(ctx context.Context, status int64, jobErr erro
 	if err != nil {
 		return err
 	}
-	return helper.WriteControl(ctx, s.result, frame)
+	return helper.WriteTerminalControl(ctx, s.result, frame)
 }
