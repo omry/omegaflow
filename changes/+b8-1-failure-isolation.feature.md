@@ -1,0 +1,1 @@
+Preserve original Envoy channel failures through joined I/O cancellation, and add bounded failed-session disposal with actual process cleanup and reap. Verify descriptor isolation and malformed/channel-loss handling against all three qualified Linux amd64 Bash targets.
