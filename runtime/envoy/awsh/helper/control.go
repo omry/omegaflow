@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -23,6 +24,26 @@ type DeadlineWriter interface {
 // short writes retain that deadline; any incomplete delivery is an error.
 // The caller must close its session on error, including after partial delivery.
 func WriteControl(ctx context.Context, w DeadlineWriter, frame []byte) error {
+	return writeControl(ctx, w, frame, false)
+}
+
+// WriteTerminalControl preserves a complete terminal delivery when Envoy's
+// subsequent control EOF cancels the supervisor. Partial writes, deadlines,
+// invalid control and signals remain failures. No other frame gets this rule.
+func WriteTerminalControl(ctx context.Context, w DeadlineWriter, frame []byte) error {
+	m, err := protocol.DecodePrivate(frame, protocol.AwshToEnvoy)
+	if err != nil {
+		return err
+	}
+	switch m.(type) {
+	case *protocol.PrivateShellExit, *protocol.PrivateClosed:
+	default:
+		return fmt.Errorf("terminal control requires shell_exit or closed")
+	}
+	return writeControl(ctx, w, frame, true)
+}
+
+func writeControl(ctx context.Context, w DeadlineWriter, frame []byte, terminal bool) error {
 	if len(frame) == 0 || len(frame) > protocol.MaxFrameBytes {
 		return fmt.Errorf("invalid control frame size")
 	}
@@ -51,6 +72,9 @@ func WriteControl(ctx context.Context, w DeadlineWriter, frame []byte) error {
 	finished = true
 	stop()
 	mu.Unlock()
+	if terminal && err == nil && ctx.Err() == context.Canceled && context.Cause(ctx) == io.EOF {
+		return nil
+	}
 	return WithContextCause(ctx, err)
 }
 

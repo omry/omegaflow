@@ -47,6 +47,7 @@ func (c *Coordinator) disposeFailure(ctx context.Context, census *processCensus,
 	disposal = errors.Join(disposal, census.Cleanup(ctx, 0))
 	disposal = errors.Join(disposal, census.terminateShell(ctx))
 	disposal = errors.Join(disposal, c.w.Close(ctx))
+	disposal = errors.Join(disposal, census.reapAdoptedShell(ctx))
 	disposal = errors.Join(disposal, census.Cleanup(ctx, 0))
 	disposal = errors.Join(disposal, census.proveEnded(ctx))
 	// Relay.Close also returns the already selected transport failure after a

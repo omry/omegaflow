@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -221,7 +222,14 @@ func (c *Coordinator) work(ctx context.Context, preCancelable bool, run func(con
 	_, err := c.wait(ctx, preCancelable, cancel, done, false)
 	cancel()
 	<-done
-	return errors.Join(err, helper.WithContextCause(ctx, workErr))
+	var terminalClose error
+	if c.exited != nil {
+		terminalClose = c.w.Control.Close()
+		if errors.Is(terminalClose, os.ErrClosed) {
+			terminalClose = nil
+		}
+	}
+	return errors.Join(err, helper.WithContextCause(ctx, workErr), terminalClose)
 }
 
 func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelFunc, result privateResult) (protocol.PrivateMessage, bool, error) {
@@ -254,6 +262,11 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 	if exited, ok := result.message.(*protocol.PrivateShellExit); ok {
 		if c.running != nil {
 			c.exited = exited
+			if interrupt == nil {
+				if err := c.w.Control.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+					return nil, false, err
+				}
+			}
 			if err := c.w.channels.ResumeInputContext(ctx, ""); err != nil {
 				return nil, false, err
 			}
@@ -267,6 +280,11 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 		c.active.attemptMu.Unlock()
 		if before && exited.ActiveOperationID == "" {
 			c.exited = exited
+			if interrupt == nil {
+				if err := c.w.Control.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+					return nil, false, err
+				}
+			}
 			c.exitedDeadline, _ = ctx.Deadline()
 			c.exitedPhase = c.active.shellExitPhase
 			return nil, false, errIdleShellExit

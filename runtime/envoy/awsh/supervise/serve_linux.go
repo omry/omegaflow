@@ -41,22 +41,22 @@ func Run(args []string) error {
 	// validation or reuse the descriptor number.
 	control := os.NewFile(uintptr(h.Control), "awsh-control")
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	defer stop()
-	defer cancel()
+	defer cancel(context.Canceled)
 	events := make(chan protocol.PrivateMessage, 1)
 	var session atomic.Pointer[launch.Session]
 	readDone := make(chan struct{})
 	go func() {
 		defer close(readDone)
-		_ = readControls(ctx, control, events, func(m protocol.PrivateMessage) bool {
+		readErr := readControls(ctx, control, events, func(m protocol.PrivateMessage) bool {
 			s := session.Load()
 			return s != nil && s.AdmitControl(m)
 		})
-		cancel()
+		cancel(readErr)
 	}()
 	defer func() {
-		cancel()
+		cancel(context.Canceled)
 		// Keep the owner alive through Session.Close; then wake and join the
 		// reader before returning from the supervisor.
 		control.Close()
@@ -80,7 +80,7 @@ func Run(args []string) error {
 	releases := make(chan os.Signal, 1)
 	var pending protocol.PrivateMessage
 	defer func() {
-		cancel()
+		cancel(context.Canceled)
 		if job != nil {
 			<-job // join before Session.Close or reuse of owned descriptors
 		}
