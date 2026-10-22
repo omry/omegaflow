@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -600,5 +601,85 @@ func TestInheritedINTIgnore(t *testing.T) {
 	}
 	if output.Len() != 0 {
 		t.Fatalf("helper output %q", output.Bytes())
+	}
+}
+
+type terminalRaceWriter struct {
+	cancel   context.CancelCauseFunc
+	cause    error
+	writeErr error
+	short    bool
+	written  int
+}
+
+func (w *terminalRaceWriter) SetWriteDeadline(time.Time) error { return nil }
+func (w *terminalRaceWriter) Write(b []byte) (int, error) {
+	n := len(b)
+	if w.short {
+		n = 1
+	}
+	w.written += n
+	w.cancel(w.cause)
+	if w.short {
+		return n, io.ErrShortWrite
+	}
+	return n, w.writeErr
+}
+func TestTerminalWriteRetainsCompletedDeliveryOnlyForControlEOF(t *testing.T) {
+	for _, kind := range []string{"shell_exit", "closed"} {
+		var m protocol.PrivateMessage = protocol.PrivateShellExit{Status: 23, CWD: "/tmp"}
+		if kind == "closed" {
+			m = protocol.PrivateClosed{Reason: "shutdown", Status: 137, CWD: "/tmp"}
+		}
+		frame, e := protocol.EncodePrivate(m, protocol.AwshToEnvoy)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, scenario := range []string{"complete-EOF", "partial-EOF", "write-error-EOF", "signal-cancel", "invalid-control", "early-EOF", "ordinary-write"} {
+			t.Run(kind+"/"+scenario, func(t *testing.T) {
+				ctx, cancel := context.WithCancelCause(context.Background())
+				defer cancel(nil)
+				w := &terminalRaceWriter{cancel: cancel, cause: io.EOF}
+				switch scenario {
+				case "partial-EOF":
+					w.short = true
+				case "write-error-EOF":
+					w.writeErr = errors.New("independent write failure")
+				case "signal-cancel":
+					w.cause = context.Canceled
+				case "invalid-control":
+					w.cause = errors.New("invalid private control")
+				case "early-EOF":
+					cancel(io.EOF)
+				}
+				var err error
+				if scenario == "ordinary-write" {
+					err = WriteControl(ctx, w, frame)
+				} else {
+					err = WriteTerminalControl(ctx, w, frame)
+				}
+				if (err == nil) != (scenario == "complete-EOF") {
+					t.Fatalf("terminal commit/cancellation mismatch: written=%d err=%v", w.written, err)
+				}
+				if scenario == "early-EOF" && w.written != 0 {
+					t.Fatal("cancelled request wrote terminal bytes")
+				}
+				if scenario == "write-error-EOF" && !errors.Is(err, w.writeErr) {
+					t.Fatal("substantive write failure lost", err)
+				}
+			})
+		}
+	}
+}
+func TestTerminalWriteRejectsOtherFrames(t *testing.T) {
+	frame, err := protocol.EncodePrivate(protocol.PrivateSubmit{OperationID: "op"}, protocol.AwshToEnvoy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	w := &terminalRaceWriter{cancel: cancel, cause: io.EOF}
+	if err := WriteTerminalControl(ctx, w, frame); err == nil || w.written != 0 {
+		t.Fatal("nonterminal got terminal cancellation rule", err)
 	}
 }

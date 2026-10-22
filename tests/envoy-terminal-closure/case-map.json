@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "owner": "B8.2",
+  "runtime_tests": [
+    "runtime/envoy/session/idle_terminal_linux_test.go",
+    "runtime/envoy/session/idle_terminal_native_linux_test.go"
+  ],
+  "fault_runner": "tests/envoy-terminal-closure/run.py",
+  "corpus_obligations": {
+    "B1-C037-shell-exit-first": "TestNativeTerminalClosure/idle-exit",
+    "B1-C037-shutdown-first": "TestNativeTerminalClosure/shutdown-cross-exit;TestNativeTerminalClosure/shutdown",
+    "B1-C048-closed-missing-EOF": "TestNativeTerminalClosure/matrix-closed-missing-eof",
+    "B1-C048-closed-missing-reap": "TestNativeTerminalClosure/matrix-closed-missing-reap",
+    "B1-C048-closed-nonzero-reap": "TestNativeTerminalClosure/matrix-closed-nonzero-reap",
+    "B1-C048-closed-orderly": "TestNativeTerminalClosure/shutdown",
+    "B1-C048-closed-premature-EOF": "TestNativeTerminalClosure/matrix-closed-premature-eof",
+    "B1-C048-closed-reset": "TestNativeTerminalClosure/matrix-closed-reset",
+    "B1-C048-closed-signal": "TestNativeTerminalClosure/matrix-closed-signal",
+    "B1-C048-closed-trailing-frame": "TestNativeTerminalClosure/matrix-closed-trailing-frame",
+    "B1-C048-shell_exit-missing-EOF": "TestNativeTerminalClosure/matrix-shell-exit-missing-eof",
+    "B1-C048-shell_exit-missing-reap": "TestNativeTerminalClosure/matrix-shell-exit-missing-reap",
+    "B1-C048-shell_exit-nonzero-reap": "TestNativeTerminalClosure/matrix-shell-exit-nonzero-reap",
+    "B1-C048-shell_exit-orderly": "TestNativeTerminalClosure/idle-exit",
+    "B1-C048-shell_exit-premature-EOF": "TestNativeTerminalClosure/matrix-shell-exit-premature-eof",
+    "B1-C048-shell_exit-reset": "TestNativeTerminalClosure/matrix-shell-exit-reset",
+    "B1-C048-shell_exit-signal": "TestNativeTerminalClosure/matrix-shell-exit-signal",
+    "B1-C048-shell_exit-trailing-frame": "TestNativeTerminalClosure/matrix-shell-exit-trailing-frame",
+    "B1-PACKAGE-B8.2": "TestNativeTerminalClosure;TestIdleTerminalClosureFormsAndReap;TestIdleTerminalRejectsInvalidClosure;TestIdleTerminalKeepsCallerDeadline"
+  },
+  "native_cases": {
+    "idle-winners": [
+      "shutdown",
+      "idle-exit",
+      "shutdown-cross-exit"
+    ],
+    "selected-shell-status": [
+      "active-zero",
+      "active-nonzero",
+      "active-signal"
+    ],
+    "actual-cleanup": [
+      "active-descendant"
+    ],
+    "actual-supervisor-failures": [
+      "fault-nonzero-awsh",
+      "fault-signalled-awsh",
+      "fault-adopted-live",
+      "fault-duplicate",
+      "fault-idle-result"
+    ],
+    "terminal-write-order": [
+      "output-order"
+    ],
+    "terminal-closure-matrix": [
+      "matrix-closed-premature-eof",
+      "matrix-closed-trailing-frame",
+      "matrix-closed-reset",
+      "matrix-closed-signal",
+      "matrix-closed-nonzero-reap",
+      "matrix-closed-missing-eof",
+      "matrix-closed-missing-reap",
+      "matrix-shell-exit-premature-eof",
+      "matrix-shell-exit-trailing-frame",
+      "matrix-shell-exit-reset",
+      "matrix-shell-exit-signal",
+      "matrix-shell-exit-nonzero-reap",
+      "matrix-shell-exit-missing-eof",
+      "matrix-shell-exit-missing-reap"
+    ]
+  },
+  "boundaries": [
+    "A complete valid shell_exit or closed precedes private EOF and actual zero-status Awsh reap;selected-shell status remains distinct.",
+    "Both idle acceptance winners retain the correct public reason with no later operation or private request.",
+    "Actual controlled-tree cleanup and covering PTY marks precede public closed;terminal half-close cannot be replaced by later whole-socket disposal.",
+    "Only after actual original Awsh lifetime reap may Envoy reap the adopted selected-shell lifetime through its pidfd.",
+    "Missing-reap cases delay publication only after actual kernel Wait;late publication never turns the original fatal expiry into success.Harness cleanup after a proved failure is separate resource accounting."
+  ],
+  "omission_controls": [
+    "crossed-shell-exit",
+    "terminal-eof",
+    "awsh-reap",
+    "reap-receipt",
+    "adopted-shell-reap",
+    "terminal-output-eof"
+  ],
+  "remaining_owners": [
+    "B8.3 exhaustive captured epochs and protocol_error crossings",
+    "B8.4 full actual-actor B1\u2013B8 conformance"
+  ],
+  "limits": [
+    "Genuine Linux amd64 Bash5.2.15/5.2.37/5.3.9 only;ARM64 compile-only.",
+    "Positive terminal frames come from actual Awsh.Negative supervisor-failure tests explicitly inject bytes through the actual result pipe while Awsh is stopped.",
+    "Unit fixtures isolate withheld EOF/reap/deadline cases;they do not replace native final-gate evidence.",
+    "Private descriptors are pipes;the abstract reset cases use actual non-EOF descriptor I/O revocation,not a nonexistent private TCP reset."
+  ]
+}

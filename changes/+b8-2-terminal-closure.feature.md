@@ -1,0 +1,1 @@
+Envoy now preserves both idle shutdown winners and requires exact terminal-frame, private EOF and Awsh-reap evidence before orderly closure. Failed-supervisor cleanup also reaps the selected shell only after its adoption by Envoy is proven. Complete terminal writes also retain success when the following control EOF cancels Awsh; partial writes and other failures remain errors.

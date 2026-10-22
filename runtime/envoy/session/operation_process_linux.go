@@ -64,8 +64,38 @@ func (c *processCensus) terminateShell(ctx context.Context) error {
 		return fmt.Errorf("selected shell lost its lifetime pin")
 	}
 	if p, exists := all[c.shell]; exists && p.Live {
-		if err := c.validateRoots(all, int64(c.awsh)); err != nil {
-			return err
+		if awsh, exists := all[c.awsh]; exists && awsh.Live {
+			if err := c.validateRoots(all, int64(c.awsh)); err != nil {
+				return err
+			}
+		} else {
+			// An adopted selected shell is terminated by reapAdoptedShell after
+			// the existing Awsh wait owner has joined. Keep the live-Awsh root
+			// validation above strict and defer this branch until that proof.
+			awshRef := c.refs[c.awsh]
+			if awshRef == nil {
+				return fmt.Errorf("adopted shell lost its Awsh lifetime pin")
+			}
+			awshState, err := awshRef.observe(ctx)
+			if processGone(err) {
+				// The adopted wait helper will prove the exact reap after the
+				// original Awsh wait owner has joined.
+			} else if err != nil {
+				return fmt.Errorf("adopted shell requires original Awsh reap: %w", err)
+			} else if awshState.Live {
+				return fmt.Errorf("adopted shell requires original Awsh reap")
+			}
+			selected, err := ref.observe(ctx)
+			if processGone(err) {
+				return processContext(ctx)
+			}
+			if err != nil {
+				return err
+			}
+			if !selected.Live || selected.Parent != c.envoy {
+				return fmt.Errorf("adopted selected shell is not Envoy-owned")
+			}
+			return processContext(ctx)
 		}
 	}
 	return ref.signal(ctx, syscall.SIGKILL)
