@@ -1,0 +1,17 @@
+# Envoy terminal closure (B8.2)
+
+Run `python3 tests/envoy-terminal-closure/run.py --qualification QUALIFICATION --output NEW_OUTPUT` from the repository root. The qualification directory must retain all three genuine amd64 entries. The runner rejects changed Awsh or fixed startup asset bytes and stages actual owners on the exact qualified image identities. It retains binary/image/source/log hashes. Development flags report subsets.
+
+Twenty-seven scenarios per target exercise the real non-root Envoy coordinator, actual Awsh and selected Bash. They prove both idle acceptance winners, crossed shell_exit after shutdown, selected-shell exit0/23/SIGKILL, authored-descendant cleanup, and real nonzero/signalled Awsh wait results and unsolicited idle terminal rejection. Positive terminal frames come from the actual supervisor. Negative cases stop actual Awsh, inject labelled corrupt terminal evidence through its real result pipe, and cause actual process failure. The adopted-live case authors a HUP-ignoring loop, observes its readiness before Awsh death, and proves disposal through the actual census. They retain the original cause and prove disposal through the actual census; no fake cleanup or reap peer satisfies acceptance.
+
+Six Go-overlay omission controls must fail at their named diagnostics. The output-order scenario holds only final Workload disposal at its existing mutex. It requires actual terminal EOF while that release remains held, after public closed arrives. This prevents the later full socket close from hiding an omitted earlier half-close. The real process, private decoder, cleanup, terminal bytes and network remain in use. The hold is always released and the actual owner joined.
+
+Focused `TestIdleTerminal*` unit cases cover closed/shell_exit statuses0/23/137, wrong IDs/cwd/reason, nonterminal and duplicate/trailing/partial frames, premature EOF, nonzero/signalled supervisor outcomes and withheld EOF/reap under the caller deadline. These isolated tests supplement the native scenarios.
+
+A selected-shell status is not the Awsh process exit status. A valid terminal frame still requires immediate private EOF and actual zero-status Awsh reap. An orphaned Bash wait may be reaped by Envoy only after the pinned Awsh lifetime has been reaped and Bash is its actual adopted child. Public marks cover exact raw bytes; no prompt, operation result or status is synthesized for failure.
+
+B8.3 owns exhaustive captured deadline/protocol_error crossings. B8.4 owns full B1–B8 actual-actor conformance. ARM64 is compile-only here. This leaf does not add a production entrypoint or claim deployment.
+
+All19 static corpus obligations assigned to B8.2 map to named actual scenarios in `case-map.json`. Both terminal forms have separate premature EOF, trailing-frame, interruption, nonzero/signalled Awsh, withheld EOF and withheld reap-publication cases. For missing reap, a retained Go overlay pauses only publication after the real `command.Wait` has returned; it never supplies a fake process, wait or status. The exact qualified Awsh bytes remain unchanged. Late publication does not repair the fatal deadline outcome. Test resource cleanup after that outcome is recorded separately and does not reset the product deadline.
+
+The private transport uses descriptor pipes. Its abstract reset cases revoke the actual read descriptor after terminal acceptance to produce a real non-EOF I/O interruption. They do not claim a TCP RST on a private pipe.

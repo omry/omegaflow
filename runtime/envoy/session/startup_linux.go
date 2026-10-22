@@ -572,62 +572,41 @@ func (w *Workload) ShutdownIdle(reason string) (err error) {
 	}
 	phase, end := context.WithTimeout(context.Background(), finalDrainBudget)
 	defer end()
+	defer func() { err = errors.Join(err, w.Close(phase)); w.channels.Close() }()
 	return w.shutdownIdle(phase, reason, func(ctx context.Context) (protocol.PrivateMessage, error) {
 		deadline, _ := ctx.Deadline()
 		if err := w.Result.SetReadDeadline(deadline); err != nil {
 			return nil, err
 		}
 		return protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy)
-	})
+	}, nil)
 }
 
-func (w *Workload) shutdownIdle(phase context.Context, reason string, next func(context.Context) (protocol.PrivateMessage, error)) (err error) {
+func (w *Workload) shutdownIdle(phase context.Context, reason string, next func(context.Context) (protocol.PrivateMessage, error), census *processCensus) (err error) {
 	// Selected-channel loss interrupts work, but cleanup retains the remainder
 	// of the same final-drain epoch so Awsh can reap its owned shell.
 	ctx, cancel := context.WithCancel(phase)
 	stopSelected := joinedAfterFunc(w.channels.ctx, cancel)
-	defer func() { stopSelected(); cancel(); err = errors.Join(err, w.Close(phase)); w.channels.Close() }()
+	defer func() { stopSelected(); cancel() }()
 	if _, err = protocol.EncodeEnvoy(protocol.Draining{Header: w.channels.header("draining"), Reason: reason, OutputThrough: w.OutputThrough}); err != nil {
 		return
 	}
 	stop := joinedAfterFunc(ctx, func() { w.Result.Close(); w.PTY.Close(); w.Control.Close() })
 	defer stop()
-	if err = SendPrivate(ctx, w.Control, protocol.PrivateShutdown{}); err != nil {
-		return
+	writeErr := SendPrivate(ctx, w.Control, protocol.PrivateShutdown{})
+	if writeErr != nil && !errors.Is(writeErr, syscall.EPIPE) {
+		return writeErr
 	}
-	deadline, _ := ctx.Deadline()
 	m, e := next(ctx)
 	if e != nil {
-		return helper.WithContextCause(ctx, e)
+		return errors.Join(writeErr, helper.WithContextCause(ctx, e))
 	}
-	closed, ok := m.(*protocol.PrivateClosed)
-	if !ok || closed.Reason != "shutdown" || closed.CWD != w.CWD {
-		return fmt.Errorf("invalid idle shutdown result")
-	}
-	if _, e = next(ctx); e != io.EOF {
-		return errors.Join(fmt.Errorf("private EOF required after closed"), helper.WithContextCause(ctx, e))
-	}
-	select {
-	case <-w.reaped:
-		if w.waitErr != nil {
-			return w.waitErr
+	if writeErr != nil {
+		if _, crossed := m.(*protocol.PrivateShellExit); !crossed {
+			return errors.Join(writeErr, fmt.Errorf("shutdown write failed without crossed shell_exit"))
 		}
-	case <-ctx.Done():
-		return ctx.Err()
 	}
-	if err = w.PTY.SetReadDeadline(deadline); err != nil {
-		return
-	}
-	if err = w.drainTerminal(ctx); err != nil {
-		return
-	}
-	if err = w.channels.Send(ctx, protocol.Draining{Header: w.channels.header("draining"), Reason: reason, OutputThrough: w.OutputThrough}); err != nil {
-		return
-	}
-	if err = w.channels.terminal.CloseWrite(); err != nil {
-		return
-	}
-	return w.channels.Send(ctx, protocol.Closed{Header: w.channels.header("closed"), Reason: reason, OutputThrough: w.OutputThrough})
+	return w.finishIdleTerminal(ctx, reason, m, next, census)
 }
 
 // Called only after the selected shell and direct Awsh child have been reaped.

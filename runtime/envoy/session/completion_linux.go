@@ -272,6 +272,17 @@ func completionInterrupted(err error) bool {
 // ShutdownIdle retains the same private pump through closed and EOF. The
 // existing final-drain epoch includes relay join, shell reap and final output.
 func (c *Coordinator) ShutdownIdle(reason string) (err error) {
+	return c.shutdownIdle(reason, nil)
+}
+
+// Actual local assembly supplies its existing process owner. Isolated callers
+// retain the older primitive, which cannot establish actual-tree acceptance.
+func (c *Coordinator) shutdownIdle(reason string, census *processCensus) (err error) {
+	if census != nil {
+		if err := c.idleProcessOwner(census); err != nil {
+			return err
+		}
+	}
 	if !c.busy.CompareAndSwap(false, true) {
 		return fmt.Errorf("coordinator is already in use")
 	}
@@ -281,34 +292,17 @@ func (c *Coordinator) ShutdownIdle(reason string) (err error) {
 	}
 	phase, end := context.WithTimeout(context.Background(), finalDrainBudget)
 	defer end()
-	entered := false
 	defer func() {
-		if !entered {
-			c.w.channels.Close()
-			err = errors.Join(err, c.w.Close(phase))
-		}
 		if joinErr := c.private.close(phase); joinErr != nil {
 			err = errors.Join(err, fmt.Errorf("private pump join: %w", joinErr))
 		}
+		err = errors.Join(err, c.w.Close(phase))
+		c.w.channels.Close()
 	}()
 	if err = c.r.Close(phase); err != nil {
 		return fmt.Errorf("relay shutdown join: %w", err)
 	}
-	entered = true
-	err = c.w.shutdownIdle(phase, reason, func(ctx context.Context) (protocol.PrivateMessage, error) {
-		var result privateResult
-		select {
-		case result = <-c.private.fatal:
-		default:
-			select {
-			case result = <-c.private.events:
-			case result = <-c.private.fatal:
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
-		return result.message, result.err
-	})
+	err = c.w.shutdownIdle(phase, reason, c.nextIdleResult, census)
 	if err != nil {
 		return fmt.Errorf("idle shutdown: %w", err)
 	}

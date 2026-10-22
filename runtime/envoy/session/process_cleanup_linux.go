@@ -185,3 +185,51 @@ func (r *processRef) reapAdopted(ctx context.Context, envoy int) error {
 		return processContext(ctx)
 	}
 }
+
+// Only after the original Awsh lifetime has been reaped can Envoy own an
+// adopted selected-shell wait. Ordinary live-Awsh cleanup never takes it.
+func (c *processCensus) reapAdoptedShell(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := processContext(ctx); err != nil {
+		return err
+	}
+	if c.closed || c.envoy != os.Getpid() || c.refs[c.awsh] == nil || c.refs[c.shell] == nil {
+		return fmt.Errorf("adopted shell requires its live census owner")
+	}
+	if _, err := c.refs[c.awsh].observe(ctx); !processGone(err) {
+		if err != nil {
+			return fmt.Errorf("adopted shell wait requires original Awsh reap: %w", err)
+		}
+		return fmt.Errorf("adopted shell wait requires original Awsh reap")
+	}
+	ref := c.refs[c.shell]
+	for {
+		p, err := ref.observe(ctx)
+		if processGone(err) {
+			return processContext(ctx)
+		}
+		if err != nil {
+			return err
+		}
+		if p.Parent != c.envoy {
+			return fmt.Errorf("selected shell is not Envoy's adopted child")
+		}
+		if !p.Live {
+			if err := ref.reapAdopted(ctx, c.envoy); err != nil {
+				return err
+			}
+			continue // Require the exact pidfd to prove the wait completed.
+		}
+		if err := ref.signal(ctx, syscall.SIGKILL); err != nil {
+			return fmt.Errorf("terminate adopted selected shell: %w", err)
+		}
+		pause := time.NewTimer(time.Millisecond)
+		select {
+		case <-ctx.Done():
+			pause.Stop()
+			return ctx.Err()
+		case <-pause.C:
+		}
+	}
+}
