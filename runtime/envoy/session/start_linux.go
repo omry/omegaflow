@@ -109,6 +109,8 @@ type Coordinator struct {
 	running         *operationDispatch
 	recent          string
 	startInspection func([]protocol.ResolvedInspection) (inspectionWorker, error)
+	failure         error
+	failureDisposed bool
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -129,12 +131,25 @@ func (c *Coordinator) Close(ctx context.Context) error {
 		return fmt.Errorf("join active coordinator operation before closing private I/O")
 	}
 	defer c.busy.Store(false)
+	return c.closeResources(ctx)
+}
+
+func (c *Coordinator) closeResources(ctx context.Context) error {
+	var relayErr error
+	if owner := c.splitResources(); owner != nil && owner.operation != nil {
+		relayErr = c.r.Close(ctx)
+	}
+	return errors.Join(relayErr, c.releaseResources(ctx))
+}
+
+// releaseResources follows the relay join. It does not repeat a transport
+// failure as if it were a failure to dispose of the retained split resources.
+func (c *Coordinator) releaseResources(ctx context.Context) error {
 	var disposal error
 	if owner := c.splitResources(); owner != nil && owner.operation != nil {
 		// Teardown is not successful completion or EOF evidence. The caller's
 		// existing bound remains in force even when it has already expired.
-		disposal = c.r.Close(ctx)
-		disposal = errors.Join(disposal, owner.dispose(ctx, owner.operation.id))
+		disposal = owner.dispose(ctx, owner.operation.id)
 	}
 	return errors.Join(disposal, c.private.close(ctx))
 }
@@ -471,6 +486,9 @@ func (c *Coordinator) send(ctx context.Context, m protocol.PrivateMessage) error
 }
 
 func (c *Coordinator) fatal(ctx context.Context, code string, cause error, skipDiagnostic bool) error {
+	// Cancelling joined I/O may report context cancellation first. Preserve the
+	// selected channel error so malformed input, EOF and reset remain distinct.
+	cause = errors.Join(cause, c.w.channels.Err())
 	var resize *StartError
 	if errors.As(cause, &resize) && (resize.Code == "resize-failed" || resize.Code == "input-barrier-timeout") {
 		return resize // The relay already selected and closed this fatal failure.
