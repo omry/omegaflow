@@ -29,6 +29,10 @@ func (s *Channels) WaitGateInput(ctx context.Context, operation string, through 
 	}()
 	g := s.inputState()
 	g.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		g.mu.Unlock()
+		return err
+	}
 	if operation == "" || g.operation != operation || g.held || through < 0 || through < g.watermark {
 		g.mu.Unlock()
 		return fmt.Errorf("invalid gate input watermark or operation")

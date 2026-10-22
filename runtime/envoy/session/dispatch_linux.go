@@ -35,22 +35,23 @@ type signalProof struct {
 }
 
 type operationDispatch struct {
-	ctx            context.Context
-	life           *operationLifecycle
-	peers          *controlPeers
-	proof          *signalProof
-	gate           *gateRecord
-	gates          map[string]*gateRecord
-	gateEvents     map[protocol.PrivateMessage]bool
-	continuation   bool
-	selection      string
-	completed      *protocol.PrivateCompleted
-	result         protocol.Message
-	ending         bool
-	crossedExecute string
-	cleanup        context.Context
-	endCleanup     context.CancelFunc
-	inspection     *inspectionRun
+	ctx              context.Context
+	life             *operationLifecycle
+	peers            *controlPeers
+	proof            *signalProof
+	gate             *gateRecord
+	gates            map[string]*gateRecord
+	gateEvents       map[protocol.PrivateMessage]bool
+	continuation     bool
+	continueDeadline time.Time
+	selection        string
+	completed        *protocol.PrivateCompleted
+	result           protocol.Message
+	ending           bool
+	crossedExecute   string
+	cleanup          context.Context
+	endCleanup       context.CancelFunc
+	inspection       *inspectionRun
 }
 
 type continueOperation struct{}
@@ -58,6 +59,16 @@ type continueOperation struct{}
 func (*continueOperation) Error() string { return "continue operation gate" }
 
 var errLifecycleEnd = errors.New("selected shell end or lifecycle timeout")
+
+func (d *operationDispatch) continueGateError(c *Coordinator, g *gateRecord, err error) error {
+	if d.life.shellExit != nil && c.w.channels.Err() == nil && completionInterrupted(err) {
+		return errLifecycleEnd
+	}
+	if completionInterrupted(err) && (d.life.kind != "" || d.gate != g) && c.w.channels.Err() == nil {
+		return nil
+	}
+	return err
+}
 
 func (d *operationDispatch) close() {
 	d.life.close()
@@ -202,6 +213,7 @@ func (d *operationDispatch) gateOutcome(op, id string, m protocol.PrivateMessage
 	}
 	d.gate.interrupted = interrupted
 	d.gate = nil
+	d.continueDeadline = time.Time{} // A gate outcome retires its continuation epoch.
 	d.gateEvents[m] = d.life.kind == "" && d.life.timeout == ""
 	if d.continuation && interrupt != nil {
 		interrupt()
@@ -216,6 +228,7 @@ func (d *operationDispatch) continueGate(c *Coordinator, ctx context.Context) er
 	}
 	barrier, end := context.WithTimeout(ctx, inputBarrierBudget)
 	defer end()
+	d.continueDeadline, _ = barrier.Deadline()
 	d.continuation = true
 	var err error
 	for {
@@ -234,6 +247,9 @@ func (d *operationDispatch) continueGate(c *Coordinator, ctx context.Context) er
 		}
 	}
 	d.continuation = false
+	if err == nil {
+		d.continueDeadline = time.Time{} // The original watermark was satisfied.
+	}
 	if err != nil && errors.Is(err, context.DeadlineExceeded) {
 		deadline, _ := barrier.Deadline()
 		fatal := &StartError{Code: "input-barrier-timeout", Deadline: deadline, Cause: err}
@@ -241,10 +257,7 @@ func (d *operationDispatch) continueGate(c *Coordinator, ctx context.Context) er
 		return fatal
 	}
 	if err != nil {
-		if errors.Is(err, context.Canceled) && (d.life.kind != "" || d.gate != g) && c.w.channels.Err() == nil {
-			return nil
-		}
-		return err
+		return d.continueGateError(c, g, err)
 	}
 	// The same owner authorizes the first private write. A lifecycle accepted
 	// before this selection suppresses it; a selected write finishes exactly.
@@ -370,13 +383,28 @@ func (c *Coordinator) publicRequest(ctx context.Context, preCancelable bool, int
 
 // endControlled requires the explicit owning termination/reap boundary. A
 // timeout has already been selected; late input_close is consumed without ack.
-func (c *Coordinator) endControlled(ctx context.Context, d *operationDispatch) error {
+func (c *Coordinator) endControlled(ctx context.Context, d *operationDispatch) (err error) {
 	d.ending = true
 	if d.proof != nil {
 		d.proof.cancel()
 	}
 	d.beginCleanup()
 	phase := d.cleanup
+	captured := c.exitedPhase == StartShellExitInputBarrier && !c.exitedDeadline.IsZero()
+	closureComplete := false
+	if captured {
+		var endClosure context.CancelFunc
+		phase, endClosure = context.WithDeadline(phase, c.exitedDeadline)
+		defer endClosure()
+		defer func() {
+			if !closureComplete {
+				err = capturedClosureFailure(time.Now(), c.exitedDeadline, d.cleanup, "input-barrier-timeout", err)
+				if err != nil {
+					c.w.channels.fail(err)
+				}
+			}
+		}()
+	}
 	if d.peers == nil || d.peers.endShell == nil {
 		return fmt.Errorf("missing shell-end cleanup/reap owner")
 	}
@@ -420,6 +448,13 @@ func (c *Coordinator) endControlled(ctx context.Context, d *operationDispatch) e
 	exited := d.life.shellExit
 	if err := c.work(phase, false, c.finishSplit); err != nil {
 		return err
+	}
+	if captured {
+		if !time.Now().Before(c.exitedDeadline) {
+			return context.DeadlineExceeded
+		}
+		closureComplete = true
+		phase = d.cleanup // Retire only the completed original barrier epoch.
 	}
 	ended := true
 	if err := c.work(phase, false, func(job context.Context) error {

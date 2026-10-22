@@ -16,6 +16,15 @@ import (
 // Both idle winners share closure. The selected shell's reported status is
 // distinct from the required zero-status reap of its Awsh supervisor.
 func (w *Workload) finishIdleTerminal(ctx context.Context, reason string, terminal protocol.PrivateMessage, next func(context.Context) (protocol.PrivateMessage, error), census *processCensus) error {
+	if err := w.finishTerminalClosure(ctx, terminal, next, census); err != nil {
+		return err
+	}
+	return w.finishTerminalDrain(ctx, reason)
+}
+
+// Closure and output drain share a bound for idle shutdown. A pre-write
+// shell-exit handoff instead retains its earlier closure epoch separately.
+func (w *Workload) finishTerminalClosure(ctx context.Context, terminal protocol.PrivateMessage, next func(context.Context) (protocol.PrivateMessage, error), census *processCensus) error {
 	switch m := terminal.(type) {
 	case *protocol.PrivateClosed:
 		if m.Reason != "shutdown" || m.CWD != w.CWD {
@@ -50,6 +59,10 @@ func (w *Workload) finishIdleTerminal(ctx context.Context, reason string, termin
 			return err
 		}
 	}
+	return nil
+}
+
+func (w *Workload) finishTerminalDrain(ctx context.Context, reason string) error {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return fmt.Errorf("idle terminal requires its final-drain deadline")
