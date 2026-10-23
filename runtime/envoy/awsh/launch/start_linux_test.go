@@ -224,6 +224,7 @@ func TestSupervisorProcess(t *testing.T) {
 	}
 	digest := os.Getenv("OMEGAFLOW_TEST_DIGEST")
 	scenario := os.Getenv("OMEGAFLOW_STARTUP_SCENARIO")
+	readyPublicationTestScenario = scenario
 	os.Unsetenv("OMEGAFLOW_STARTUP_SCENARIO")
 	var signals []uint64
 	if json.Unmarshal([]byte(os.Getenv("OMEGAFLOW_TEST_SIGNALS")), &signals) != nil {
@@ -241,7 +242,7 @@ func TestSupervisorProcess(t *testing.T) {
 		os.Exit(31)
 	}
 	budget := 10 * time.Second
-	if scenario != "" {
+	if scenario != "" && scenario != "post-ready-exit" {
 		budget = 500 * time.Millisecond
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
@@ -313,6 +314,18 @@ func TestSupervisorProcess(t *testing.T) {
 			os.Exit(32)
 		}
 		os.Exit(32)
+	}
+	if scenario == "post-ready-exit" {
+		reaped := <-s.Reaped
+		status := reaped.Status.ExitStatus()
+		if reaped.Status.Signaled() {
+			status = 128 + int(reaped.Status.Signal())
+		}
+		if reaped.Err != nil || s.ReportIdleExit(ctx, int64(status)) != nil {
+			os.Exit(46)
+		}
+		s.Close()
+		os.Exit(0)
 	}
 	if scenario != "" {
 		s.Close()
@@ -610,6 +623,43 @@ func TestRealCandidateStartup(t *testing.T) {
 			}
 			resultR.SetReadDeadline(time.Now().Add(12 * time.Second))
 			m, e := protocol.ReadPrivate(bufio.NewReader(resultR), protocol.AwshToEnvoy)
+			if scenario == "post-ready-exit" {
+				ready, ok := m.(*protocol.PrivateReady)
+				if e != nil || !ok {
+					t.Fatal("missing complete private ready", m, e)
+				}
+				if e = syscall.Kill(int(ready.ShellPID), syscall.SIGKILL); e != nil {
+					t.Fatal(e)
+				}
+				// This process can disappear only after the original launch reaper's Wait.
+				until := time.Now().Add(time.Second)
+				for {
+					_, e = os.Stat("/proc/" + strconv.FormatInt(ready.ShellPID, 10))
+					if os.IsNotExist(e) {
+						break
+					}
+					if e != nil || time.Now().After(until) {
+						t.Fatal("selected child not actually reaped", e)
+					}
+					time.Sleep(time.Millisecond)
+				}
+				if _, e = controlW.Write([]byte{1}); e != nil {
+					t.Fatal(e)
+				}
+				next, e := protocol.ReadPrivate(bufio.NewReader(resultR), protocol.AwshToEnvoy)
+				exit, ok := next.(*protocol.PrivateShellExit)
+				if e != nil || !ok || exit.Status != 137 {
+					t.Fatal("post-ready exit became startup failure", next, e)
+				}
+				if _, e = protocol.ReadPrivate(bufio.NewReader(resultR), protocol.AwshToEnvoy); e != io.EOF {
+					t.Fatal("actual private EOF missing", e)
+				}
+				if e = cmd.Wait(); e != nil {
+					t.Fatal("actual startup supervisor reap", e)
+				}
+				t.Log("ACTUAL POST-READY EXIT PROVED status=137 privateEOF=true supervisorReap=0")
+				return
+			}
 			if scenario != "" {
 				if e == nil {
 					if diagnostic, ok := m.(*protocol.PrivateProtocolError); !ok || diagnostic.Code != "shell-launch" {

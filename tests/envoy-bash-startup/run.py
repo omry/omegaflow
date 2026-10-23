@@ -37,6 +37,61 @@ FAULTS = {
     "fail-stop": _HELPER + "prompt-state +1 off emacs || /omegaflow-runtime/bin/awsh bash-fail-stop\n",
 }
 
+def publication_tests(root, output, context, env):
+    """Instrument only the test binary; the actual Awsh has no scheduling hook."""
+    launch = root / "runtime/envoy/awsh/launch"
+    source = (launch / "ready_publication_linux.go").read_text()
+    original = "return &readyPublication{file: file, raw: raw}, nil"
+    if source.count(original) != 1:
+        raise ValueError("readiness test overlay no longer matches its exact source")
+    instrumented = output / "ready-publication-test.go"
+    instrumented.write_text(source.replace(original,
+        "return readyPublicationForTest(&readyPublication{file: file, raw: raw}), nil"))
+    replacements = {str(launch / "ready_publication_linux.go"): str(instrumented)}
+    start = (launch / "start_linux.go").read_text()
+    guard = ("\tif s.publication != nil && s.publication.published() {\n"
+             "\t\treturn err // The supervisor owns the retained actual child reap after publication.\n\t}\n")
+    if start.count(guard) != 1:
+        raise ValueError("readiness omission no longer matches its exact source")
+    omitted = output / "ready-publication-negative-start.go"
+    omitted.write_text(start.replace(guard, ""))
+    for name, replace in (
+        ("startup-publication.test", replacements),
+        ("startup-publication-negative.test", replacements | {str(launch / "start_linux.go"): str(omitted)}),
+    ):
+        overlay = output / (name + ".overlay.json")
+        overlay.write_text(json.dumps({"Replace": replace}, indent=2) + "\n")
+        subprocess.run(["go", "test", "-c", "-buildvcs=false", "-overlay=" + str(overlay),
+                        "-o", str(context / "bin" / name), "./awsh/launch"],
+                       cwd=root / "runtime/envoy", env=env, check=True)
+
+
+def publication_proof(output, release, image, candidate, signals):
+    proofs = {}
+    for negative in (False, True):
+        name = "post-ready-exit-negative" if negative else "post-ready-exit"
+        binary = "startup-publication-negative.test" if negative else "startup-publication.test"
+        log_path = output / f"{release}-{name}.log"
+        argv = ["docker", "run", "--rm", "--network=none", "-e",
+                f"OMEGAFLOW_CANDIDATE_DIGEST={candidate['observed']['executable_sha256']}",
+                "-e", f"OMEGAFLOW_CANDIDATE_SIGNALS={json.dumps(signals)}",
+                "-e", "OMEGAFLOW_STARTUP_SCENARIO=post-ready-exit",
+                "--entrypoint=/omegaflow-runtime/bin/" + binary, image,
+                "-test.v", "-test.failfast", "-test.timeout=20s", "-test.run=^TestRealCandidateStartup$"]
+        with log_path.open("w") as log:
+            result = subprocess.run(argv, stdout=log, stderr=subprocess.STDOUT, timeout=30)
+        text = log_path.read_text()
+        marker = "post-ready exit became startup failure" if negative else "ACTUAL POST-READY EXIT PROVED status=137 privateEOF=true supervisorReap=0"
+        passed = (result.returncode != 0 and marker in text and "--- FAIL: TestRealCandidateStartup" in text
+                  if negative else result.returncode == 0 and text.count(marker) == 3)
+        proofs[name] = {"argv": argv, "returncode": result.returncode, "passed": passed,
+                        "required_diagnostic": marker, "log": str(log_path),
+                        "log_sha256": hashlib.sha256(log_path.read_bytes()).hexdigest()}
+        if not passed:
+            raise RuntimeError(f"candidate {release} readiness proof {name} failed: {log_path}")
+    return proofs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--acquisition", required=True, type=Path)
@@ -61,6 +116,7 @@ def main():
     subprocess.run(["go", "test", "-c", "-cover", "-covermode=atomic", "-o",
                     str(context / "bin/startup.test"), "./awsh/launch"],
                    cwd=root / "runtime/envoy", env=env, check=True)
+    publication_tests(root, output, context, env)
     (context / "Dockerfile").write_text(
         "ARG CANDIDATE\nFROM ${CANDIDATE}\n"
         "COPY bin /omegaflow-runtime/bin\nCOPY etc /omegaflow-runtime/etc\n"
@@ -150,6 +206,7 @@ def main():
                 results[-1]["faults"] = faults
                 if fault.returncode:
                     raise RuntimeError(f"candidate {release} fault {name} failed; see {fault_log}")
+            results[-1]["ready_publication"] = publication_proof(output, release, iid, candidate, signals)
     finally:
         (output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
     print(f"All {len(results)} pinned candidates passed isolated startup: {output}")

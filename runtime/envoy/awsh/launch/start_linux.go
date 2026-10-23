@@ -3,6 +3,7 @@ package launch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -38,6 +39,7 @@ type Session struct {
 	mu                  sync.Mutex
 	peers               map[*net.UnixConn]struct{}
 	helperFDs           []int
+	publication         *readyPublication
 	ready               bool
 	closing             bool
 	stopOnce, closeOnce sync.Once
@@ -165,16 +167,24 @@ func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled boo
 		s.Close()
 		return nil, err
 	}
+	s.publication, err = newReadyPublication(s.result)
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
 	defer func() {
 		if err != nil {
 			s.stopStartup()
-			writeLaunchFailure(ctx, s.result) // best effort under the unchanged epoch
+			if !s.publication.published() {
+				writeLaunchFailure(ctx, s.result)
+			} // no launch diagnostic after ready
 			s.Close()
 		}
 	}()
 	cancelDone := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() {
 		defer close(cancelDone)
+		s.publication.interrupt()
 		s.interruptIO()
 		s.result.Close()
 	})
@@ -231,8 +241,12 @@ func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled boo
 		case <-monitorStop:
 			return
 		case <-s.child.done:
+			if !s.publication.interrupt() {
+				return
+			}
 			e = fmt.Errorf("shell exited during startup")
 		case <-s.Signals:
+			s.publication.interrupt()
 			e = fmt.Errorf("unexpected startup release signal")
 		}
 		monitorError <- e
@@ -266,7 +280,7 @@ func startOwned(ctx context.Context, h Handoff, signals []uint64, controlled boo
 		return
 	}
 	s.armAdmission("idle", "")
-	err = helper.WriteControl(ctx, s.result, frame)
+	err = s.publication.write(ctx, frame)
 	if err == nil {
 		err = ctx.Err()
 	}
@@ -312,19 +326,24 @@ func (s *Session) finishStartup(monitorStop, monitorDone chan struct{}, monitorE
 	<-monitorDone
 	select {
 	case e := <-monitorError:
-		err = e
+		err = errors.Join(err, e)
 	default:
-		// A monitor-stop tie must not discard either queued fatal observation.
-		select {
-		case <-s.child.done:
-			err = fmt.Errorf("shell exited during startup")
-		case <-s.Signals:
-			err = fmt.Errorf("unexpected startup release signal")
-		default:
-		}
+	}
+	// Unexpected release is fatal on either side of ready; never consume it silently.
+	select {
+	case <-s.Signals:
+		err = errors.Join(err, fmt.Errorf("unexpected startup release signal"))
+	default:
+	}
+	if s.publication != nil && s.publication.published() {
+		return err // The supervisor owns the retained actual child reap after publication.
+	}
+	select {
+	case <-s.child.done:
+		err = errors.Join(err, fmt.Errorf("shell exited during startup"))
+	default:
 	}
 	if err == nil {
-		// Reaper publication can lag kernel exit even after the monitor joins.
 		err = s.verifyShell()
 	}
 	return err
