@@ -434,6 +434,7 @@ func TestStartPrivateProtocolErrorSupersedesWatermarkTimeout(t *testing.T) {
 	req.InputThrough = 1
 	done := f.start(t, context.Background(), req)
 	f.private(t, protocol.PrivateProtocolError{Code: "source-error", Message: "not a shell exit"})
+	f.result.Close() // Actual EOF is required before fatal disposal returns.
 	r := finishStart(t, done)
 	if r.err == nil || !strings.Contains(r.err.Error(), "source-error") || r.out.Started {
 		t.Fatal("fatal private report became an ordinary timeout", r)
@@ -1551,6 +1552,7 @@ func TestStartPrestartDeliveryRetainsQueuedPrivateFatal(t *testing.T) {
 			name: "timeout-protocol-error",
 			write: func(f *startFixture, t *testing.T) {
 				f.private(t, protocol.PrivateProtocolError{Code: "delivery-fatal", Message: "queued private cause"})
+				f.result.Close()
 			},
 			cause: "delivery-fatal",
 		},
@@ -1559,6 +1561,7 @@ func TestStartPrestartDeliveryRetainsQueuedPrivateFatal(t *testing.T) {
 			cancel: true,
 			write: func(f *startFixture, t *testing.T) {
 				f.private(t, protocol.PrivateProtocolError{Code: "delivery-fatal", Message: "queued private cause"})
+				f.result.Close()
 			},
 			cause: "delivery-fatal",
 		},
@@ -1756,6 +1759,7 @@ func TestStartPublicationWaitsForFactOwner(t *testing.T) {
 				f.private(t, protocol.PrivateShellExit{Status: 7, CWD: "/tmp"})
 			} else {
 				f.private(t, protocol.PrivateProtocolError{Code: "owner-paused", Message: "fatal before selection"})
+				f.result.Close()
 			}
 			queued := func() int {
 				if shellExit {
@@ -1800,18 +1804,21 @@ func TestStartPublicationWaitsForFactOwner(t *testing.T) {
 }
 
 func TestStartQueuedFatalWinsCompletedAndExpiredWork(t *testing.T) {
-	f := startFixtureFor(t, nil)
-	f.c.active = &startingOperation{request: startRequest()}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	done := make(chan struct{})
-	close(done)
 	for i := 0; i < 100; i++ {
-		f.c.private.events <- privateResult{message: &protocol.PrivateProtocolError{Code: "queued-first", Message: "retain this cause"}}
-		_, err := f.c.wait(ctx, false, nil, done, false)
-		if err == nil || !strings.Contains(err.Error(), "queued-first") {
-			t.Fatal("completion or expiry displaced the queued private cause", err)
-		}
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			f := startFixtureFor(t, nil)
+			f.c.active = &startingOperation{request: startRequest(), shellExitPhase: StartShellExitInputBarrier}
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now())
+			defer cancel()
+			done := make(chan struct{})
+			close(done)
+			f.c.private.fatal <- privateResult{message: &protocol.PrivateProtocolError{Code: "queued-first", Message: "retain this cause"}}
+			f.result.Close()
+			_, err := f.c.wait(ctx, false, nil, done, false)
+			if err == nil || !strings.Contains(err.Error(), "queued-first") {
+				t.Fatal("completion or expiry displaced the queued private cause", err)
+			}
+		}) // Fatal sessions cannot be reused to inject another independent fault.
 	}
 }
 
@@ -1835,6 +1842,7 @@ func TestStartPendingReplyRetainsQueuedFatal(t *testing.T) {
 	early.message = m
 	f.c.pending = &early
 	f.private(t, protocol.PrivateProtocolError{Code: "pending-fatal", Message: "fatal after early submit"})
+	f.result.Close()
 	deadline, _ := ctx.Deadline()
 	err = f.c.work(ctx, false, func(job context.Context) error {
 		<-job.Done()
@@ -1885,6 +1893,7 @@ func TestStartPendingResultRetainsQueuedFatal(t *testing.T) {
 	f.c.pending = &privateResult{message: &protocol.PrivateStartReleased{OperationID: "operation-1"}}
 	f.private(t, protocol.PrivateProtocolError{Code: "queued-pending", Message: "must survive pending result selection"})
 	waitForDecodedFatal(t, f)
+	f.result.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	m, err := f.c.result(ctx)
@@ -2237,12 +2246,30 @@ func TestStartInternalInterruptionRetainsAdmittedPrefix(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !prewrite {
-				_ = f.r.w.channels.terminal.SetWriteDeadline(time.Now().Add(150 * time.Millisecond))
-				n, err := f.r.w.channels.terminal.Write(bytes.Repeat([]byte("p"), 1<<20))
-				if err == nil || n == 1<<20 {
-					t.Fatal("backpressure not established", n, err)
+				// A partial write can still leave room after delayed TCP ACKs.
+				// Fill until a whole bounded write accepts no further bytes.
+				padding := bytes.Repeat([]byte("p"), 1<<20)
+				setupDeadline := time.Now().Add(2 * time.Second)
+				for {
+					deadline := time.Now().Add(100 * time.Millisecond)
+					if deadline.After(setupDeadline) {
+						deadline = setupDeadline
+					}
+					if !time.Now().Before(deadline) {
+						t.Fatal("persistent backpressure not established")
+					}
+					if err := f.r.w.channels.terminal.SetWriteDeadline(deadline); err != nil {
+						t.Fatal(err)
+					}
+					n, err := f.r.w.channels.terminal.Write(padding)
+					f.r.w.OutputThrough += int64(n)
+					if err != nil && !os.IsTimeout(err) {
+						t.Fatal("backpressure fill failed", n, err)
+					}
+					if n == 0 && os.IsTimeout(err) {
+						break
+					}
 				}
-				f.r.w.OutputThrough += int64(n)
 			}
 			before := f.r.w.OutputThrough
 			bounded, expire := context.WithTimeout(context.Background(), 10*time.Second)

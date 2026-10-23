@@ -82,8 +82,8 @@ def observe_boundaries(output):
          'm, consumed, err := c.privateFact(ctx, interrupt, result)\n\t\tnativeCapturedFactObserved(m)'),
     ])
     retain('private_linux.go', [
-        ('result := privateResult{m, err}',
-         'result := privateResult{m, err}\n\t\t\tnativeCapturedPrivate(m, err)'),
+        ('result := privateResult{message: m, err: err}',
+         'result := privateResult{message: m, err: err}\n\t\t\tnativeCapturedPrivate(m, err)'),
         ('\t\t\t}\n\t\t\tp.mu.Lock()',
          '\t\t\t}\n\t\t\tnativeCapturedPrivatePublished(m)\n\t\t\tp.mu.Lock()'),
     ])
@@ -102,8 +102,8 @@ def observe_boundaries(output):
          'outcome := d.continueGateError(c, g, err)\n\t\tif errors.Is(outcome, errLifecycleEnd) { nativeCapturedOwnerStep() }\n\t\treturn outcome'),
     ])
     retain('startup_linux.go', [
-        ('w.waitErr = w.command.Wait(); close(w.reaped)',
-         'w.waitErr = w.command.Wait(); nativeCapturedWaitPublication(); close(w.reaped)'),
+        ('launched.waitErr = launched.command.Wait(); close(launched.reaped)',
+         'launched.waitErr = launched.command.Wait(); nativeCapturedWaitPublication(); close(launched.reaped)'),
     ])
     retain('captured_closure_linux.go', [
         ('\tif failure := capturedClosureFailure(time.Now(),',

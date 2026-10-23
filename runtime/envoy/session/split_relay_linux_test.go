@@ -539,10 +539,16 @@ func TestSplitRelayInterruptedWriterRetainsExactSourceSuffix(t *testing.T) {
 				f.r.mu.Unlock()
 				done <- err
 			}()
-			// The source mark proves the writer entered its actual write phase.
+			// Receiving a mark can precede its sender's final context check.
+			// Observe an actual terminal byte before interrupting terminal I/O.
 			m := nextRelayFrame(t, f).(*protocol.OutputMark)
 			if m.Stream != stream || m.Offset != 0 {
 				t.Fatal(m)
+			}
+			prefix := make([]byte, 1)
+			_ = f.terminal.SetReadDeadline(time.Now().Add(3 * time.Second))
+			if _, err := io.ReadFull(f.terminal, prefix); err != nil {
+				t.Fatal("terminal writer did not begin", err)
 			}
 			cancel(errWorkInterrupted)
 			if err := <-done; !errors.Is(err, errWorkInterrupted) {
@@ -562,8 +568,9 @@ func TestSplitRelayInterruptedWriterRetainsExactSourceSuffix(t *testing.T) {
 			read := make(chan error, 1)
 			go func() {
 				got := make([]byte, len(payload))
+				copy(got, prefix)
 				_ = f.terminal.SetReadDeadline(time.Now().Add(3 * time.Second))
-				_, err := io.ReadFull(f.terminal, got)
+				_, err := io.ReadFull(f.terminal, got[len(prefix):])
 				if err == nil && !bytes.Equal(got, payload) {
 					err = fmt.Errorf("interrupted bytes changed")
 				}

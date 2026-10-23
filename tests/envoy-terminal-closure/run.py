@@ -49,14 +49,14 @@ def observe_wait_publication(output):
         raise ValueError('terminal Wait observation conflicts with existing overlay')
     text = source.read_text()
     source_before = sha(source)
-    old = 'w.waitErr = w.command.Wait(); close(w.reaped)'
+    old = 'launched.waitErr = launched.command.Wait(); close(launched.reaped)'
     if text.count(old) != 1:
         raise ValueError('actual Wait observation site changed')
     folder = output / 'wait-publication-observation'
     folder.mkdir()
     observed = folder / source.name
     observed.write_text(text.replace(old,
-        'w.waitErr = w.command.Wait(); nativeTerminalWaitPublication(); close(w.reaped)'))
+        'launched.waitErr = launched.command.Wait(); nativeTerminalWaitPublication(); close(launched.reaped)'))
     replacements[str(source)] = str(observed)
     overlay = folder / 'overlay.json'
     save(overlay, {'Replace': replacements})
