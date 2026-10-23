@@ -3,11 +3,13 @@
 package session
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -182,33 +184,7 @@ func TestNativeCapturedClosureFixture(t *testing.T) {
 	} else if err != nil || !n.c.exitedEOF {
 		t.Fatal("actual captured terminal closure failed", err)
 	}
-	n.telemetry.SetReadDeadline(time.Now().Add(time.Second))
-	closed := false
-	for {
-		line, err := readLine(n.reader)
-		if err != nil {
-			if err != io.EOF {
-				t.Fatal("public terminal transcript did not close", err)
-			}
-			break
-		}
-		var frame struct{ Type, Reason string }
-		if err := json.Unmarshal(line, &frame); err != nil {
-			t.Fatal(err)
-		}
-		if strings.HasPrefix(frame.Type, "operation_") {
-			t.Fatal("discarded execute emitted an operation result", string(line))
-		}
-		if frame.Type == "closed" {
-			if heldWriter != nil || frame.Reason != "shell_ended" {
-				t.Fatal("failed closure emitted successful closed", string(line))
-			}
-			closed = true
-		}
-	}
-	if closed != (heldWriter == nil) {
-		t.Fatal("wrong public closure outcome", closed)
-	}
+	nativeCapturedPublicEnd(t, n, false, heldWriter == nil, false)
 	if out, err := n.c.Start(ctx, startRequest()); err == nil || out.Started {
 		t.Fatal("late input restarted a discarded execute", out, err)
 	}
@@ -610,7 +586,8 @@ func nativeCapturedStart(t *testing.T, scenario, caseID string) {
 	if terminal.ActiveOperationID != wantID {
 		t.Fatal("wrong actual active operation ID", terminal.ActiveOperationID, wantID)
 	}
-	nativeCapturedPublicEnd(t, n, phase == "start-released", phase == "before-first-byte" || phase == "start-released")
+	nativeCapturedPublicEnd(t, n, phase == "start-released", phase == "before-first-byte" || phase == "start-released",
+		phase == "public-operation-started" || phase == "started-ack" || phase == "start-released")
 	if lateInputCase {
 		select {
 		case <-h.submit:
@@ -629,28 +606,41 @@ func nativeCapturedStart(t *testing.T, scenario, caseID string) {
 	}
 }
 
-func nativeCapturedPublicEnd(t *testing.T, n *nativeOrdinary, started, wantClosed bool) {
+func nativeCapturedPublicEnd(t *testing.T, n *nativeOrdinary, started, wantClosed, allowStartEvent bool) {
 	t.Helper()
 	n.telemetry.SetReadDeadline(time.Now().Add(time.Second))
 	closed, result := false, false
+	var closedThrough int64
 	for {
 		line, err := readLine(n.reader)
 		if err == io.EOF {
 			break
 		}
-		if !wantClosed && errors.Is(err, syscall.ECONNRESET) {
-			break // Fatal teardown may reset a socket with crossed unread input.
+		if (!wantClosed || closed) && errors.Is(err, syscall.ECONNRESET) {
+			// Crossed unread controls can reset telemetry after valid closed.
+			// Public terminal EOF is proved independently below.
+			if closed {
+				t.Logf("TELEMETRY RESET AFTER VALID CLOSED through=%d", closedThrough)
+			}
+			break
 		}
 		if err != nil {
-			t.Fatal("public terminal transcript did not close", err)
+			t.Fatal("telemetry transcript did not close", err)
 		}
 		var frame struct {
 			Type, Reason, Code string
 			Status             *int64
-			ShellEnded         *bool `json:"shell_ended"`
+			ShellEnded         *bool  `json:"shell_ended"`
+			OutputThrough      *int64 `json:"output_through"`
 		}
 		if err := json.Unmarshal(line, &frame); err != nil {
 			t.Fatal(err)
+		}
+		if closed {
+			t.Fatal("telemetry followed accepted closed", string(line))
+		}
+		if !started && strings.HasPrefix(frame.Type, "operation_") && !(allowStartEvent && frame.Type == "operation_started") {
+			t.Fatal("discarded execute emitted an operation event", string(line))
 		}
 		if frame.Type == "operation_completed" || frame.Type == "operation_failed" || frame.Type == "operation_cancelled" || frame.Type == "operation_finalized" {
 			if !started {
@@ -672,12 +662,126 @@ func nativeCapturedPublicEnd(t *testing.T, n *nativeOrdinary, started, wantClose
 			if !wantClosed || frame.Reason != "shell_ended" {
 				t.Fatal("invalid successful public closure", string(line))
 			}
+			if frame.OutputThrough == nil || *frame.OutputThrough != n.c.w.OutputThrough {
+				t.Fatal("closed lost its final output barrier", string(line), n.c.w.OutputThrough)
+			}
+			closedThrough = *frame.OutputThrough
 			closed = true
 		}
 	}
 	if closed != wantClosed || result != started {
 		t.Fatal("wrong public terminal outcome", closed, result)
 	}
+	if closed {
+		n.bytesThrough(t, closedThrough)
+		if count, err := n.terminal.Read(make([]byte, 1)); count != 0 || err != io.EOF {
+			t.Fatal("actual public terminal EOF missing after final offset", count, err)
+		}
+	}
+}
+
+// These isolated oracle probes use real TCP reset/EOF boundaries. They do not
+// replace the native Envoy/Awsh/Bash cases that call the same assertion.
+func TestCapturedPublicClosureOracle(t *testing.T) {
+	mode := os.Getenv("OMEGAFLOW_CAPTURED_ORACLE_CHILD")
+	if mode == "" {
+		for _, test := range []struct{ mode, failure string }{
+			{"closed-telemetry-reset", ""},
+			{"before-closed-reset", "telemetry transcript did not close"},
+			{"terminal-reset", "actual public terminal EOF missing"},
+			{"after-closed-frame", "telemetry followed accepted closed"},
+			{"published-start-fatal", ""},
+			{"discarded-start-event", "discarded execute emitted an operation event"},
+		} {
+			t.Run(test.mode, func(t *testing.T) {
+				ctx, end := context.WithTimeout(context.Background(), 10*time.Second)
+				defer end()
+				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestCapturedPublicClosureOracle$", "-test.v", "-test.timeout=5s")
+				cmd.Env = append(os.Environ(), "OMEGAFLOW_CAPTURED_ORACLE_CHILD="+test.mode, "GORACE=atexit_sleep_ms=0")
+				out, err := cmd.CombinedOutput()
+				if test.failure == "" {
+					if err != nil || (test.mode == "closed-telemetry-reset" && !strings.Contains(string(out), "TELEMETRY RESET AFTER VALID CLOSED")) {
+						t.Fatalf("valid closed/reset/terminal-EOF trace refused: %v\n%s", err, out)
+					}
+				} else if err == nil || !strings.Contains(string(out), test.failure) {
+					t.Fatalf("invalid %s trace did not fail at its boundary: %v\n%s", test.mode, err, out)
+				}
+			})
+		}
+		return
+	}
+	pair := func() (*net.TCPConn, *net.TCPConn) {
+		listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		client, err := net.DialTCP("tcp4", nil, listener.Addr().(*net.TCPAddr))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { client.Close() })
+		server, err := listener.AcceptTCP()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { server.Close() })
+		return client, server
+	}
+	terminal, terminalServer := pair()
+	telemetry, telemetryServer := pair()
+	n := &nativeOrdinary{c: &Coordinator{w: &Workload{OutputThrough: 4}}, terminal: terminal, telemetry: telemetry, reader: bufio.NewReader(telemetry)}
+	if _, err := terminalServer.Write([]byte("tail")); err != nil {
+		t.Fatal(err)
+	}
+	n.bytesThrough(t, 4)
+	if mode == "terminal-reset" {
+		if err := terminalServer.SetLinger(0); err != nil {
+			t.Fatal(err)
+		}
+		if err := terminalServer.Close(); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := terminalServer.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	if mode != "before-closed-reset" {
+		frame, err := protocol.EncodeEnvoy(protocol.Closed{Header: protocol.Header{Schema: protocol.Schema, Type: "closed", Seq: 1}, Reason: "shell_ended", OutputThrough: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode == "published-start-fatal" || mode == "discarded-start-event" {
+			start, err := protocol.EncodeEnvoy(protocol.OperationStarted{Header: protocol.Header{Schema: protocol.Schema, Type: "operation_started", Seq: 1}, OperationID: "probe", OutputStart: 4})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "published-start-fatal" {
+				frame = start // Public start already committed; release failed fatally.
+			} else {
+				frame = append(start, frame...) // A discarded request cannot publish start.
+			}
+		}
+		if mode == "after-closed-frame" {
+			frame = append(frame, frame...)
+		}
+		if _, err := telemetryServer.Write(frame); err != nil {
+			t.Fatal(err)
+		}
+		if err := telemetry.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		// Keep the actual complete frame in the reader before the kernel RST.
+		if _, err := n.reader.Peek(len(frame)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := telemetryServer.SetLinger(0); err != nil {
+		t.Fatal(err)
+	}
+	if err := telemetryServer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	nativeCapturedPublicEnd(t, n, false, mode != "published-start-fatal", mode == "published-start-fatal")
 }
 
 type nativeCapturedEpochHold struct {
@@ -828,7 +932,7 @@ func nativeCapturedEpoch(t *testing.T, scenario string) {
 	} else if err != nil || !epoch.closureBeforeExpiry || !n.c.exitedEOF || time.Now().Before(deadline) {
 		t.Fatal("successful closure did not retire only its captured epoch", err, epoch)
 	}
-	nativeCapturedPublicEnd(t, n, false, variant == "success")
+	nativeCapturedPublicEnd(t, n, false, variant == "success", false)
 	select {
 	case <-n.c.w.reaped:
 		if n.c.w.waitErr != nil {
@@ -936,6 +1040,10 @@ func nativeCapturedContinuing(t *testing.T, scenario string) {
 		t.Fatal(ctx.Err())
 	}
 	input := n.c.w.channels.inputState()
+	// WaitGateInput updates metadata without waking the terminal reader.
+	// Sample under its mutex within the original barrier, not only on input I/O.
+	watermarkTick := time.NewTicker(time.Millisecond)
+	defer watermarkTick.Stop()
 	for !h.freezeContinue {
 		input.mu.Lock()
 		watermark, received, wake := input.watermark, input.through, input.wake
@@ -945,8 +1053,9 @@ func nativeCapturedContinuing(t *testing.T, scenario string) {
 		}
 		select {
 		case <-wake:
-		case <-ctx.Done():
-			t.Fatal("actual continue watermark was not outstanding", ctx.Err())
+		case <-watermarkTick.C:
+		case <-h.barrierContext.Done():
+			t.Fatal("actual continue watermark was not outstanding within its original barrier", h.barrierContext.Err())
 		}
 	}
 	if h.holdReap {
@@ -1099,7 +1208,7 @@ func nativeCapturedContinuing(t *testing.T, scenario string) {
 			t.Fatal("probe did not withhold actual reap publication")
 		default:
 		}
-		nativeCapturedPublicEnd(t, n, false, false)
+		nativeCapturedPublicEnd(t, n, false, false, true)
 		// Failure is already proven at its original deadline. Release only
 		// test-owned publication, then account for harness resource disposal
 		// separately; this fresh allowance cannot make product teardown pass.
@@ -1118,7 +1227,7 @@ func nativeCapturedContinuing(t *testing.T, scenario string) {
 	if n.c.exitedDeadline != h.barrier || n.c.exitedPhase != StartShellExitInputBarrier || !n.c.exitedEOF {
 		t.Fatal("continue shell exit did not retain its original barrier through closure", n.c.exitedDeadline, h.barrier, n.c.exitedPhase, n.c.exitedEOF)
 	}
-	nativeCapturedPublicEnd(t, n, true, true)
+	nativeCapturedPublicEnd(t, n, true, true, true)
 	if err := owner.proveEnded(ctx); err != nil {
 		t.Fatal("gated shell left actual controlled actors", err)
 	}

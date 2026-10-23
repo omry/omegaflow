@@ -247,6 +247,9 @@ func (d *operationDispatch) continueGate(c *Coordinator, ctx context.Context) er
 		}
 	}
 	d.continuation = false
+	if c.privateFailure != nil {
+		return err // The fatal private fact retains its own phase and cause.
+	}
 	if err == nil {
 		d.continueDeadline = time.Time{} // The original watermark was satisfied.
 	}

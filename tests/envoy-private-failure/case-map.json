@@ -1,0 +1,1596 @@
+{
+  "schema_version": 1,
+  "owning_leaf": "B8.3.2",
+  "original_owner": "B8.3",
+  "predecessor_map": "tests/envoy-captured-closure/case-map.json",
+  "cases": {
+    "B1-C045-contract": {
+      "native_cases": [
+        "execute-input-barrier/valid"
+      ],
+      "checks": []
+    },
+    "B1-C046-contract": {
+      "native_cases": [
+        "execute-input-barrier/valid",
+        "continuing/sender-timer"
+      ],
+      "checks": []
+    },
+    "B1-C047-contract": {
+      "native_cases": [
+        "execute-input-barrier/late-closure"
+      ],
+      "checks": []
+    },
+    "B1-C048-contract": {
+      "native_cases": [
+        "ready/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C049-contract": {
+      "native_cases": [
+        "launch/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C050-contract": {
+      "native_cases": [
+        "execute-input-barrier/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C051-contract": {
+      "native_cases": [
+        "ready/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C052-continue-malformed-cancel-resize": {
+      "native_cases": [
+        "continue-input-barrier/malformed-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-continue-unknown-code-cancel-resize": {
+      "native_cases": [
+        "continue-input-barrier/unknown-code-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-continue-valid-cancel-resize": {
+      "native_cases": [
+        "continue-input-barrier/valid-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-contract": {
+      "native_cases": [
+        "execute-input-barrier/valid-cancel-resize",
+        "execute-input-barrier/malformed-cancel-resize",
+        "execute-input-barrier/unknown-code-cancel-resize",
+        "continue-input-barrier/valid-cancel-resize",
+        "continue-input-barrier/malformed-cancel-resize",
+        "continue-input-barrier/unknown-code-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-execute-malformed-cancel-resize": {
+      "native_cases": [
+        "execute-input-barrier/malformed-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-execute-unknown-code-cancel-resize": {
+      "native_cases": [
+        "execute-input-barrier/unknown-code-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C052-execute-valid-cancel-resize": {
+      "native_cases": [
+        "execute-input-barrier/valid-cancel-resize"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-expiry": {
+      "native_cases": [
+        "cleanup/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-malformed": {
+      "native_cases": [
+        "cleanup/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-missing-EOF": {
+      "native_cases": [
+        "cleanup/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-nonzero-reap": {
+      "native_cases": [
+        "cleanup/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-reset": {
+      "native_cases": [
+        "cleanup/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-signalled-reap": {
+      "native_cases": [
+        "cleanup/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-stalled-EOF": {
+      "native_cases": [
+        "cleanup/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-unknown-code": {
+      "native_cases": [
+        "cleanup/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-unreaped": {
+      "native_cases": [
+        "cleanup/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-valid": {
+      "native_cases": [
+        "cleanup/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-cleanup-zero-reap": {
+      "native_cases": [
+        "cleanup/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-expiry": {
+      "native_cases": [
+        "complete-execute/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-malformed": {
+      "native_cases": [
+        "complete-execute/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-missing-EOF": {
+      "native_cases": [
+        "complete-execute/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-nonzero-reap": {
+      "native_cases": [
+        "complete-execute/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-reset": {
+      "native_cases": [
+        "complete-execute/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-signalled-reap": {
+      "native_cases": [
+        "complete-execute/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-stalled-EOF": {
+      "native_cases": [
+        "complete-execute/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-unknown-code": {
+      "native_cases": [
+        "complete-execute/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-unreaped": {
+      "native_cases": [
+        "complete-execute/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-valid": {
+      "native_cases": [
+        "complete-execute/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-complete-execute-zero-reap": {
+      "native_cases": [
+        "complete-execute/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-expiry": {
+      "native_cases": [
+        "continue-input-barrier/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-malformed": {
+      "native_cases": [
+        "continue-input-barrier/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-missing-EOF": {
+      "native_cases": [
+        "continue-input-barrier/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-nonzero-reap": {
+      "native_cases": [
+        "continue-input-barrier/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-reset": {
+      "native_cases": [
+        "continue-input-barrier/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-signalled-reap": {
+      "native_cases": [
+        "continue-input-barrier/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-stalled-EOF": {
+      "native_cases": [
+        "continue-input-barrier/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-unknown-code": {
+      "native_cases": [
+        "continue-input-barrier/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-unreaped": {
+      "native_cases": [
+        "continue-input-barrier/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-valid": {
+      "native_cases": [
+        "continue-input-barrier/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-continue-input-barrier-zero-reap": {
+      "native_cases": [
+        "continue-input-barrier/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-expiry": {
+      "native_cases": [
+        "continuing/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-malformed": {
+      "native_cases": [
+        "continuing/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-missing-EOF": {
+      "native_cases": [
+        "continuing/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-nonzero-reap": {
+      "native_cases": [
+        "continuing/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-reset": {
+      "native_cases": [
+        "continuing/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-signalled-reap": {
+      "native_cases": [
+        "continuing/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-stalled-EOF": {
+      "native_cases": [
+        "continuing/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-unknown-code": {
+      "native_cases": [
+        "continuing/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-unreaped": {
+      "native_cases": [
+        "continuing/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-valid": {
+      "native_cases": [
+        "continuing/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-continuing-zero-reap": {
+      "native_cases": [
+        "continuing/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-contract": {
+      "native_cases": [
+        "live-inspection/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-expiry": {
+      "native_cases": [
+        "drain/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-malformed": {
+      "native_cases": [
+        "drain/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-missing-EOF": {
+      "native_cases": [
+        "drain/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-nonzero-reap": {
+      "native_cases": [
+        "drain/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-reset": {
+      "native_cases": [
+        "drain/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-signalled-reap": {
+      "native_cases": [
+        "drain/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-stalled-EOF": {
+      "native_cases": [
+        "drain/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-unknown-code": {
+      "native_cases": [
+        "drain/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-unreaped": {
+      "native_cases": [
+        "drain/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-valid": {
+      "native_cases": [
+        "drain/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-drain-zero-reap": {
+      "native_cases": [
+        "drain/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-expiry": {
+      "native_cases": [
+        "execute-input-barrier/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-malformed": {
+      "native_cases": [
+        "execute-input-barrier/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-missing-EOF": {
+      "native_cases": [
+        "execute-input-barrier/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-nonzero-reap": {
+      "native_cases": [
+        "execute-input-barrier/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-reset": {
+      "native_cases": [
+        "execute-input-barrier/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-signalled-reap": {
+      "native_cases": [
+        "execute-input-barrier/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-stalled-EOF": {
+      "native_cases": [
+        "execute-input-barrier/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-unknown-code": {
+      "native_cases": [
+        "execute-input-barrier/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-unreaped": {
+      "native_cases": [
+        "execute-input-barrier/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-valid": {
+      "native_cases": [
+        "execute-input-barrier/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-execute-input-barrier-zero-reap": {
+      "native_cases": [
+        "execute-input-barrier/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-expiry": {
+      "native_cases": [
+        "gated/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-malformed": {
+      "native_cases": [
+        "gated/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-missing-EOF": {
+      "native_cases": [
+        "gated/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-nonzero-reap": {
+      "native_cases": [
+        "gated/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-reset": {
+      "native_cases": [
+        "gated/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-signalled-reap": {
+      "native_cases": [
+        "gated/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-stalled-EOF": {
+      "native_cases": [
+        "gated/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-unknown-code": {
+      "native_cases": [
+        "gated/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-unreaped": {
+      "native_cases": [
+        "gated/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-valid": {
+      "native_cases": [
+        "gated/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-gated-zero-reap": {
+      "native_cases": [
+        "gated/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-expiry": {
+      "native_cases": [
+        "grace/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-malformed": {
+      "native_cases": [
+        "grace/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-missing-EOF": {
+      "native_cases": [
+        "grace/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-nonzero-reap": {
+      "native_cases": [
+        "grace/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-reset": {
+      "native_cases": [
+        "grace/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-signalled-reap": {
+      "native_cases": [
+        "grace/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-stalled-EOF": {
+      "native_cases": [
+        "grace/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-unknown-code": {
+      "native_cases": [
+        "grace/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-unreaped": {
+      "native_cases": [
+        "grace/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-valid": {
+      "native_cases": [
+        "grace/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-grace-zero-reap": {
+      "native_cases": [
+        "grace/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-expiry": {
+      "native_cases": [
+        "idle/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-malformed": {
+      "native_cases": [
+        "idle/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-missing-EOF": {
+      "native_cases": [
+        "idle/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-nonzero-reap": {
+      "native_cases": [
+        "idle/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-reset": {
+      "native_cases": [
+        "idle/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-signalled-reap": {
+      "native_cases": [
+        "idle/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-stalled-EOF": {
+      "native_cases": [
+        "idle/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-unknown-code": {
+      "native_cases": [
+        "idle/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-unreaped": {
+      "native_cases": [
+        "idle/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-valid": {
+      "native_cases": [
+        "idle/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-idle-zero-reap": {
+      "native_cases": [
+        "idle/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-expiry": {
+      "native_cases": [
+        "inspection-cancellation/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-malformed": {
+      "native_cases": [
+        "inspection-cancellation/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-missing-EOF": {
+      "native_cases": [
+        "inspection-cancellation/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-nonzero-reap": {
+      "native_cases": [
+        "inspection-cancellation/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-reset": {
+      "native_cases": [
+        "inspection-cancellation/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-signalled-reap": {
+      "native_cases": [
+        "inspection-cancellation/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-stalled-EOF": {
+      "native_cases": [
+        "inspection-cancellation/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-unknown-code": {
+      "native_cases": [
+        "inspection-cancellation/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-unreaped": {
+      "native_cases": [
+        "inspection-cancellation/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-valid": {
+      "native_cases": [
+        "inspection-cancellation/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-inspection-cancellation-zero-reap": {
+      "native_cases": [
+        "inspection-cancellation/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-expiry": {
+      "native_cases": [
+        "launch/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-malformed": {
+      "native_cases": [
+        "launch/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-missing-EOF": {
+      "native_cases": [
+        "launch/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-nonzero-reap": {
+      "native_cases": [
+        "launch/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-reset": {
+      "native_cases": [
+        "launch/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-signalled-reap": {
+      "native_cases": [
+        "launch/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-stalled-EOF": {
+      "native_cases": [
+        "launch/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-unknown-code": {
+      "native_cases": [
+        "launch/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-unreaped": {
+      "native_cases": [
+        "launch/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-valid": {
+      "native_cases": [
+        "launch/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-launch-zero-reap": {
+      "native_cases": [
+        "launch/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-expiry": {
+      "native_cases": [
+        "live-inspection/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-malformed": {
+      "native_cases": [
+        "live-inspection/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-missing-EOF": {
+      "native_cases": [
+        "live-inspection/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-nonzero-reap": {
+      "native_cases": [
+        "live-inspection/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-reset": {
+      "native_cases": [
+        "live-inspection/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-signalled-reap": {
+      "native_cases": [
+        "live-inspection/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-stalled-EOF": {
+      "native_cases": [
+        "live-inspection/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-unknown-code": {
+      "native_cases": [
+        "live-inspection/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-unreaped": {
+      "native_cases": [
+        "live-inspection/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-valid": {
+      "native_cases": [
+        "live-inspection/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-live-inspection-zero-reap": {
+      "native_cases": [
+        "live-inspection/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-expiry": {
+      "native_cases": [
+        "partial-execute/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-malformed": {
+      "native_cases": [
+        "partial-execute/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-missing-EOF": {
+      "native_cases": [
+        "partial-execute/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-nonzero-reap": {
+      "native_cases": [
+        "partial-execute/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-reset": {
+      "native_cases": [
+        "partial-execute/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-signalled-reap": {
+      "native_cases": [
+        "partial-execute/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-stalled-EOF": {
+      "native_cases": [
+        "partial-execute/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-unknown-code": {
+      "native_cases": [
+        "partial-execute/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-unreaped": {
+      "native_cases": [
+        "partial-execute/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-valid": {
+      "native_cases": [
+        "partial-execute/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-partial-execute-zero-reap": {
+      "native_cases": [
+        "partial-execute/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-expiry": {
+      "native_cases": [
+        "public-operation-started/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-malformed": {
+      "native_cases": [
+        "public-operation-started/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-missing-EOF": {
+      "native_cases": [
+        "public-operation-started/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-nonzero-reap": {
+      "native_cases": [
+        "public-operation-started/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-reset": {
+      "native_cases": [
+        "public-operation-started/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-signalled-reap": {
+      "native_cases": [
+        "public-operation-started/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-stalled-EOF": {
+      "native_cases": [
+        "public-operation-started/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-unknown-code": {
+      "native_cases": [
+        "public-operation-started/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-unreaped": {
+      "native_cases": [
+        "public-operation-started/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-valid": {
+      "native_cases": [
+        "public-operation-started/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-public-operation-started-zero-reap": {
+      "native_cases": [
+        "public-operation-started/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-expiry": {
+      "native_cases": [
+        "ready/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-malformed": {
+      "native_cases": [
+        "ready/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-missing-EOF": {
+      "native_cases": [
+        "ready/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-nonzero-reap": {
+      "native_cases": [
+        "ready/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-reset": {
+      "native_cases": [
+        "ready/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-signalled-reap": {
+      "native_cases": [
+        "ready/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-stalled-EOF": {
+      "native_cases": [
+        "ready/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-unknown-code": {
+      "native_cases": [
+        "ready/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-unreaped": {
+      "native_cases": [
+        "ready/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-valid": {
+      "native_cases": [
+        "ready/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-ready-zero-reap": {
+      "native_cases": [
+        "ready/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-expiry": {
+      "native_cases": [
+        "running/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-malformed": {
+      "native_cases": [
+        "running/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-missing-EOF": {
+      "native_cases": [
+        "running/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-nonzero-reap": {
+      "native_cases": [
+        "running/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-reset": {
+      "native_cases": [
+        "running/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-signalled-reap": {
+      "native_cases": [
+        "running/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-stalled-EOF": {
+      "native_cases": [
+        "running/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-unknown-code": {
+      "native_cases": [
+        "running/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-unreaped": {
+      "native_cases": [
+        "running/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-valid": {
+      "native_cases": [
+        "running/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-running-zero-reap": {
+      "native_cases": [
+        "running/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-expiry": {
+      "native_cases": [
+        "start-prepared/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-malformed": {
+      "native_cases": [
+        "start-prepared/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-missing-EOF": {
+      "native_cases": [
+        "start-prepared/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-nonzero-reap": {
+      "native_cases": [
+        "start-prepared/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-reset": {
+      "native_cases": [
+        "start-prepared/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-signalled-reap": {
+      "native_cases": [
+        "start-prepared/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-stalled-EOF": {
+      "native_cases": [
+        "start-prepared/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-unknown-code": {
+      "native_cases": [
+        "start-prepared/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-unreaped": {
+      "native_cases": [
+        "start-prepared/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-valid": {
+      "native_cases": [
+        "start-prepared/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-prepared-zero-reap": {
+      "native_cases": [
+        "start-prepared/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-expiry": {
+      "native_cases": [
+        "start-release-written/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-malformed": {
+      "native_cases": [
+        "start-release-written/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-missing-EOF": {
+      "native_cases": [
+        "start-release-written/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-nonzero-reap": {
+      "native_cases": [
+        "start-release-written/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-reset": {
+      "native_cases": [
+        "start-release-written/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-signalled-reap": {
+      "native_cases": [
+        "start-release-written/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-stalled-EOF": {
+      "native_cases": [
+        "start-release-written/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-unknown-code": {
+      "native_cases": [
+        "start-release-written/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-unreaped": {
+      "native_cases": [
+        "start-release-written/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-valid": {
+      "native_cases": [
+        "start-release-written/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-release-written-zero-reap": {
+      "native_cases": [
+        "start-release-written/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-expiry": {
+      "native_cases": [
+        "start-released/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-malformed": {
+      "native_cases": [
+        "start-released/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-missing-EOF": {
+      "native_cases": [
+        "start-released/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-nonzero-reap": {
+      "native_cases": [
+        "start-released/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-reset": {
+      "native_cases": [
+        "start-released/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-signalled-reap": {
+      "native_cases": [
+        "start-released/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-stalled-EOF": {
+      "native_cases": [
+        "start-released/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-unknown-code": {
+      "native_cases": [
+        "start-released/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-unreaped": {
+      "native_cases": [
+        "start-released/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-valid": {
+      "native_cases": [
+        "start-released/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-start-released-zero-reap": {
+      "native_cases": [
+        "start-released/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-expiry": {
+      "native_cases": [
+        "started-ack/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-malformed": {
+      "native_cases": [
+        "started-ack/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-missing-EOF": {
+      "native_cases": [
+        "started-ack/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-nonzero-reap": {
+      "native_cases": [
+        "started-ack/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-reset": {
+      "native_cases": [
+        "started-ack/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-signalled-reap": {
+      "native_cases": [
+        "started-ack/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-stalled-EOF": {
+      "native_cases": [
+        "started-ack/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-unknown-code": {
+      "native_cases": [
+        "started-ack/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-unreaped": {
+      "native_cases": [
+        "started-ack/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-valid": {
+      "native_cases": [
+        "started-ack/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-ack-zero-reap": {
+      "native_cases": [
+        "started-ack/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-expiry": {
+      "native_cases": [
+        "started/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-malformed": {
+      "native_cases": [
+        "started/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-missing-EOF": {
+      "native_cases": [
+        "started/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-nonzero-reap": {
+      "native_cases": [
+        "started/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-reset": {
+      "native_cases": [
+        "started/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-signalled-reap": {
+      "native_cases": [
+        "started/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-stalled-EOF": {
+      "native_cases": [
+        "started/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-unknown-code": {
+      "native_cases": [
+        "started/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-unreaped": {
+      "native_cases": [
+        "started/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-valid": {
+      "native_cases": [
+        "started/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-started-zero-reap": {
+      "native_cases": [
+        "started/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-expiry": {
+      "native_cases": [
+        "submit/expiry"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-malformed": {
+      "native_cases": [
+        "submit/malformed"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-missing-EOF": {
+      "native_cases": [
+        "submit/missing-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-nonzero-reap": {
+      "native_cases": [
+        "submit/nonzero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-reset": {
+      "native_cases": [
+        "submit/reset"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-signalled-reap": {
+      "native_cases": [
+        "submit/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-stalled-EOF": {
+      "native_cases": [
+        "submit/stalled-EOF"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-unknown-code": {
+      "native_cases": [
+        "submit/unknown-code"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-unreaped": {
+      "native_cases": [
+        "submit/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-valid": {
+      "native_cases": [
+        "submit/valid"
+      ],
+      "checks": []
+    },
+    "B1-C055-submit-zero-reap": {
+      "native_cases": [
+        "submit/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C056-contract": {
+      "native_cases": [
+        "running/valid"
+      ],
+      "checks": []
+    },
+    "B1-C057-contract": {
+      "native_cases": [
+        "continuing/sender-timer"
+      ],
+      "checks": []
+    },
+    "B1-C058-contract": {
+      "native_cases": [
+        "running/signalled-reap"
+      ],
+      "checks": []
+    },
+    "B1-C059-contract": {
+      "native_cases": [
+        "ready/zero-reap"
+      ],
+      "checks": []
+    },
+    "B1-C060-contract": {
+      "native_cases": [
+        "launch/unreaped"
+      ],
+      "checks": []
+    },
+    "B1-PACKAGE-B8.3": {
+      "native_cases": [],
+      "checks": [
+        "native-private-failure-full",
+        "native-captured-closure-full",
+        "session-race",
+        "conformance-inventory"
+      ]
+    }
+  },
+  "note": "Case IDs preserve the approved static owner. Native paths refer to causal assertions with original actors; mapping alone grants no runtime acceptance. Package closeout additionally requires all named cumulative checks on the current candidate."
+}

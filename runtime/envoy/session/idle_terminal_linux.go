@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/omry/omegaflow/runtime/envoy/awsh/helper"
 	"github.com/omry/omegaflow/runtime/envoy/protocol"
@@ -83,18 +84,23 @@ func (w *Workload) finishTerminalDrain(ctx context.Context, reason string) error
 }
 
 func (c *Coordinator) nextIdleResult(ctx context.Context) (protocol.PrivateMessage, error) {
-	var result privateResult
-	select {
-	case result = <-c.private.fatal:
-	default:
-		select {
-		case result = <-c.private.events:
-		case result = <-c.private.fatal:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	phase, deadline := c.privateEpoch(ctx)
+	return c.nextPrivateAt(ctx, phase, deadline)
+}
+
+func (c *Coordinator) nextFinalResult(ctx context.Context) (protocol.PrivateMessage, error) {
+	deadline, _ := ctx.Deadline()
+	return c.nextPrivateAt(ctx, "final-drain", deadline)
+}
+
+func (c *Coordinator) nextPrivateAt(ctx context.Context, phase string, deadline time.Time) (protocol.PrivateMessage, error) {
+	m, err := c.readPrivateResult(ctx)
+	result := c.private.preferFatal(privateResult{message: m, err: err})
+	m, err = result.message, result.err
+	if _, report := m.(*protocol.PrivateProtocolError); report || (err != nil && err != io.EOF && !privateIOCancelled(ctx, err) && !privateIOCancelled(c.private.ctx, err)) {
+		return nil, c.failPrivate(ctx, nil, result, phase, deadline)
 	}
-	return result.message, result.err
+	return m, err
 }
 
 func (c *Coordinator) idleProcessOwner(census *processCensus) error {
@@ -120,7 +126,11 @@ func (c *Coordinator) idleShellExit(ctx context.Context, census *processCensus) 
 		return fmt.Errorf("shell-exit entry requires an idle coordinator")
 	}
 	m, readErr := c.nextIdleResult(ctx)
-	phase, end := context.WithTimeout(ctx, finalDrainBudget)
+	deadline := time.Now().Add(finalDrainBudget)
+	if c.privateFailure != nil {
+		deadline = c.privateFailure.deadline
+	}
+	phase, end := context.WithDeadline(context.WithoutCancel(ctx), deadline)
 	defer end()
 	relayJoined := false
 	defer func() {
@@ -145,7 +155,7 @@ func (c *Coordinator) idleShellExit(ctx context.Context, census *processCensus) 
 		return err
 	}
 	relayJoined = true
-	err = c.w.finishIdleTerminal(phase, "shell_ended", terminal, c.nextIdleResult, census)
+	err = c.w.finishIdleTerminal(phase, "shell_ended", terminal, c.nextFinalResult, census)
 	if err == nil {
 		c.exitedEOF = true
 	}

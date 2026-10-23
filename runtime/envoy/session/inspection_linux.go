@@ -102,7 +102,7 @@ func (d *operationDispatch) inspectionResults() []protocol.InspectionResult {
 
 // disposeInspection is also used on transport/private/session failure. It
 // reuses an already-started cancellation bound and never claims reap from Kill.
-func (d *operationDispatch) disposeInspection() error {
+func (d *operationDispatch) disposeInspection(limit context.Context) error {
 	i := d.inspection
 	if i == nil {
 		return nil
@@ -116,7 +116,14 @@ func (d *operationDispatch) disposeInspection() error {
 		return nil
 	}
 	d.stopInspection()
-	if err := i.worker.Reap(i.stop); err != nil {
+	stop := i.stop
+	if limit != nil {
+		deadline, _ := limit.Deadline()
+		var end context.CancelFunc
+		stop, end = context.WithDeadline(stop, deadline)
+		defer end()
+	}
+	if err := i.worker.Reap(stop); err != nil {
 		return errors.Join(errInspectionCancelTimeout, err, i.killErr)
 	}
 	i.worker = nil

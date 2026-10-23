@@ -19,8 +19,22 @@ import (
 )
 
 type privateResult struct {
-	message protocol.PrivateMessage
-	err     error
+	message  protocol.PrivateMessage
+	err      error
+	drainErr error // Already observed raw drain outcome, distinct from framing.
+}
+
+func (p *privateResults) preferFatal(result privateResult) privateResult {
+	if result.err != nil {
+		select {
+		case report := <-p.fatal:
+			report.drainErr = result.err
+			report.err = errors.Join(report.err, result.err)
+			return report
+		default:
+		}
+	}
+	return result
 }
 
 // privateResults is a bounded I/O pump, shared by start and completion. Reader
@@ -71,13 +85,22 @@ func readResults(ctx context.Context, w *Workload) (*privateResults, error) {
 		defer stopChannels()
 		for {
 			m, err := protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy)
-			result := privateResult{m, err}
-			if _, ok := m.(*protocol.PrivateProtocolError); ok {
+			result := privateResult{message: m, err: err}
+			_, report := m.(*protocol.PrivateProtocolError)
+			if report || (err != nil && err != io.EOF) {
+				// Exactly one fatal fact fits the reserved slot. Cancellation
+				// cannot discard a fault that this reader already decoded.
+				p.fatal <- result
+				p.mu.Lock()
+				p.read = w.Reader.Buffered() != 0
+				p.mu.Unlock()
 				select {
-				case p.fatal <- result:
-				case <-p.ctx.Done():
-					return
+				case p.changed <- struct{}{}:
+				default:
 				}
+				// Framing is no longer reusable. The fatal owner joins this
+				// pump before draining the same reader under its retained epoch.
+				return
 			} else {
 				select {
 				case p.events <- result:
@@ -125,6 +148,9 @@ func (p *privateResults) Read(b []byte) (n int, err error) {
 		return true
 	})
 	if pollErr != nil {
+		if _, stateErr := p.w.Result.Stat(); errors.Is(stateErr, os.ErrClosed) {
+			pollErr = fmt.Errorf("private read: %w (%v)", os.ErrClosed, pollErr)
+		}
 		return 0, pollErr
 	}
 	return n, err

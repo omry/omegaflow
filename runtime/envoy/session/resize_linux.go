@@ -78,7 +78,7 @@ func (c *Coordinator) applyPendingResize(ctx context.Context) error {
 	// An expired earlier phase can yield before the output boundary is owned.
 	// Carry the accepted request into its existing next phase; attempted frame
 	// failures already close Channels and can never enter this retry path.
-	if err != nil && !applied && c.w.channels.Err() == nil &&
+	if err != nil && !applied && c.w.channels.Err() == nil && c.privateFailure == nil &&
 		(errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		c.resize = request
 	}

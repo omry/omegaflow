@@ -70,6 +70,77 @@ func TestGateInputWatermarkKeepsInputEligibleAndReadsPastBoundary(t *testing.T) 
 	}
 }
 
+func TestGatePublicationQueuesInputUntilJoinedWrite(t *testing.T) {
+	for _, kind := range []string{"gate-event", "private-continue"} {
+		t.Run(kind, func(t *testing.T) {
+			f := completionFixture(t)
+			ctx := relayTestContext(t)
+			f.c.phase = awaitInputClose
+			f.c.publishingGate = kind == "gate-event"
+			if kind == "private-continue" {
+				d := &operationDispatch{ctx: ctx, life: newOperationLifecycle("operation-1"), selection: "continue"}
+				f.c.running = d
+				defer func() { d.close(); f.c.running = nil }()
+			}
+			if _, err := f.terminal.Write([]byte("queued\n")); err != nil {
+				t.Fatal(err)
+			}
+			for f.c.w.channels.InputThrough() != int64(len("queued\n")) {
+				select {
+				case <-ctx.Done():
+					t.Fatal("actual input was not read into the existing transport queue")
+				default:
+					time.Sleep(time.Millisecond)
+				}
+			}
+			release, entered, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+			go func() {
+				done <- f.c.work(ctx, false, func(job context.Context) error {
+					close(entered)
+					select {
+					case <-release:
+						if kind == "private-continue" {
+							return SendPrivate(job, f.c.w.Control, protocol.PrivateContinue{OperationID: "operation-1", GateID: "gate"})
+						}
+						return nil
+					case <-job.Done():
+						return job.Err()
+					}
+				})
+			}()
+			<-entered
+			select {
+			case err := <-done:
+				t.Fatal("queued input cancelled the active publication worker", err)
+			case <-time.After(20 * time.Millisecond):
+			}
+			close(release)
+			if err := finishCompletion(t, done); err != nil {
+				t.Fatal("terminal input cancelled an in-flight gate publication", err)
+			}
+			f.c.publishingGate = false
+			if kind == "private-continue" {
+				if m, ok := f.readPrivate(t).(*protocol.PrivateContinue); !ok || m.GateID != "gate" {
+					t.Fatal("actual private continue frame missing", m)
+				}
+				f.c.running.selection = ""
+			}
+			_, err := f.c.result(ctx)
+			var input *operationInput
+			if !errors.As(err, &input) || string(input.event.Input) != "queued\n" {
+				t.Fatal("gate publication lost queued terminal input", err)
+			}
+			if err := f.r.ForwardInput(ctx, input.event); err != nil {
+				t.Fatal(err)
+			}
+			_ = f.slave.SetReadDeadline(time.Now().Add(time.Second))
+			var actual [7]byte
+			if _, err := io.ReadFull(f.slave, actual[:]); err != nil || string(actual[:]) != "queued\n" {
+				t.Fatal("queued gate input was lost or changed", string(actual[:]), err)
+			}
+		})
+	}
+}
 func TestGateInputWaitRetainsOriginalDeadlineAndOperation(t *testing.T) {
 	f := completionFixture(t)
 	s := f.c.w.channels
