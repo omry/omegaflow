@@ -1,0 +1,1 @@
+Preserve fatal private-protocol causes, original Envoy phase deadlines and actual private EOF/Awsh reap evidence across startup, operation, inspection and drain. Resolve crossed cancel/resize requests through the same fatal barrier without publishing an operation result.

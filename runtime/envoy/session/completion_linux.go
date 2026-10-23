@@ -62,7 +62,13 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	var dispatch *operationDispatch
 	defer func() {
 		if dispatch != nil {
-			err = errors.Join(err, dispatch.disposeInspection())
+			var limit context.Context
+			if c.privateFailure != nil {
+				var end context.CancelFunc
+				limit, end = context.WithDeadline(context.Background(), c.privateFailure.deadline)
+				defer end()
+			}
+			err = errors.Join(err, dispatch.disposeInspection(limit))
 		}
 		if err != nil {
 			code := "operation-cleanup"
@@ -75,7 +81,7 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 			if dispatch != nil && dispatch.cleanup != nil {
 				ctx = dispatch.cleanup
 			}
-			if code == "inspection-cancel-timeout" {
+			if code == "inspection-cancel-timeout" && c.privateFailure == nil {
 				err = c.fatalInspection(ctx, err)
 			} else {
 				err = c.fatal(ctx, code, err, false)
@@ -140,7 +146,11 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 		if publish, gate := d.gateEvents[m]; gate {
 			delete(d.gateEvents, m)
 			if publish {
+				// Terminal input stays in Channels' existing queue until this
+				// finite gate frame finishes; it cannot cancel a partial frame.
+				c.publishingGate = true
 				err = c.work(ctx, false, func(job context.Context) error { return c.r.PublishGate(job, m) })
+				c.publishingGate = false
 			}
 			if err != nil {
 				return err
@@ -300,10 +310,21 @@ func (c *Coordinator) shutdownIdle(reason string, census *processCensus) (err er
 		c.w.channels.Close()
 	}()
 	if err = c.r.Close(phase); err != nil {
+		deadline, _ := phase.Deadline()
+		if privateErr := c.readyPrivateFailure(phase, "final-drain", deadline); privateErr != nil {
+			err = errors.Join(privateErr, err)
+		}
 		return fmt.Errorf("relay shutdown join: %w", err)
 	}
-	err = c.w.shutdownIdle(phase, reason, c.nextIdleResult, census)
+	deadline, _ := phase.Deadline()
+	if err = c.readyPrivateFailure(phase, "final-drain", deadline); err != nil {
+		return err
+	}
+	err = c.w.shutdownIdle(phase, reason, c.nextFinalResult, census)
 	if err != nil {
+		if privateErr := c.readyPrivateFailure(phase, "final-drain", deadline); privateErr != nil {
+			err = errors.Join(privateErr, err)
+		}
 		return fmt.Errorf("idle shutdown: %w", err)
 	}
 	return nil

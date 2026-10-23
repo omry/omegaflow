@@ -34,6 +34,11 @@ func (c *Coordinator) disposeFailure(ctx context.Context, census *processCensus,
 	if c.failureDisposed {
 		return c.failure
 	}
+	if c.privateFailure != nil {
+		var end context.CancelFunc
+		ctx, end = context.WithDeadline(context.WithoutCancel(ctx), c.privateFailure.deadline)
+		defer end()
+	}
 	c.w.channels.fail(c.failure)
 	c.w.channels.Close()
 	// Close joins the existing relay, including any admitted split I/O. The

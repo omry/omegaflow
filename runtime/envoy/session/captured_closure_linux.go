@@ -39,6 +39,11 @@ func (c *Coordinator) completeStartShellExit(ctx context.Context, census *proces
 	closure, endClosure := context.WithDeadline(drain, out.ShellExitDeadline)
 	defer endClosure()
 	defer func() {
+		if c.privateFailure != nil {
+			var end context.CancelFunc
+			drain, end = context.WithDeadline(context.WithoutCancel(drain), c.privateFailure.deadline)
+			defer end()
+		}
 		if err != nil {
 			c.w.channels.fail(err)
 		}

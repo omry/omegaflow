@@ -105,6 +105,7 @@ type Coordinator struct {
 	phase           startPhase
 	publication     chan chan error
 	forwardingInput bool
+	publishingGate  bool
 	resize          *protocol.Resize
 	resizing        bool
 	running         *operationDispatch
@@ -112,6 +113,7 @@ type Coordinator struct {
 	startInspection func([]protocol.ResolvedInspection) (inspectionWorker, error)
 	failure         error
 	failureDisposed bool
+	privateFailure  *privateFailure
 }
 
 func NewCoordinator(ctx context.Context, w *Workload, r *Relay, setup SplitSetup) (*Coordinator, error) {
@@ -159,6 +161,8 @@ var errPreStartCancel = errors.New("cancel accepted before private execute attem
 var errIdleShellExit = errors.New("shell exited before private execute attempt")
 
 type startFactError struct{ error }
+
+func (e *startFactError) Unwrap() error { return e.error }
 
 func (c *Coordinator) expected(m protocol.PrivateMessage) bool {
 	id := c.active.request.OperationID
@@ -233,6 +237,15 @@ func (c *Coordinator) work(ctx context.Context, preCancelable bool, run func(con
 }
 
 func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelFunc, result privateResult) (protocol.PrivateMessage, bool, error) {
+	result = c.private.preferFatal(result)
+	_, report := result.message.(*protocol.PrivateProtocolError)
+	if !report && privateIOCancelled(c.private.ctx, result.err) {
+		return nil, false, &startFactError{result.err} // Joined cancellation is not new private traffic.
+	}
+	if report || (result.err != nil && !(result.err == io.EOF && c.exited != nil)) {
+		phase, deadline := c.privateEpoch(ctx)
+		return nil, false, c.failPrivate(ctx, interrupt, result, phase, deadline)
+	}
 	if result.err != nil {
 		if errors.Is(result.err, io.EOF) && c.exited != nil {
 			c.exitedEOF = true
@@ -245,9 +258,6 @@ func (c *Coordinator) privateFact(ctx context.Context, interrupt context.CancelF
 	}
 	if c.exited != nil {
 		return nil, false, &startFactError{fmt.Errorf("private result after accepted shell_exit")}
-	}
-	if report, ok := result.message.(*protocol.PrivateProtocolError); ok {
-		return nil, false, &startFactError{fmt.Errorf("private protocol_error %s: %s", report.Code, report.Message)}
 	}
 	if c.running != nil {
 		gate := c.running.gate
@@ -327,6 +337,9 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 	var publication chan error
 	var selectedPublication bool
 	for {
+		if f := c.privateFailure; f != nil {
+			return nil, &startFactError{&StartError{Code: "operation-cleanup", Deadline: f.deadline, Cause: f}}
+		}
 		fatalEvents := c.private.fatal
 		if wantResult && c.pending != nil {
 			select {
@@ -365,7 +378,7 @@ func (c *Coordinator) wait(ctx context.Context, preCancelable bool, interrupt co
 				graceDone = d.life.grace.Done()
 			}
 		}
-		if c.forwardingInput || c.resizing {
+		if c.forwardingInput || c.resizing || c.publishingGate || (c.running != nil && c.running.selection == "continue") {
 			publicEvents = nil // One admitted I/O request; private facts stay observable.
 		}
 		if c.pending != nil {
@@ -513,6 +526,11 @@ func (c *Coordinator) send(ctx context.Context, m protocol.PrivateMessage) error
 }
 
 func (c *Coordinator) fatal(ctx context.Context, code string, cause error, skipDiagnostic bool) error {
+	if c.privateFailure != nil {
+		var end context.CancelFunc
+		ctx, end = context.WithDeadline(context.WithoutCancel(ctx), c.privateFailure.deadline)
+		defer end()
+	}
 	// Cancelling joined I/O may report context cancellation first. Preserve the
 	// selected channel error so malformed input, EOF and reset remain distinct.
 	cause = errors.Join(cause, c.w.channels.Err())
@@ -749,6 +767,10 @@ func (c *Coordinator) Start(ctx context.Context, request protocol.Execute) (out 
 		return out, err
 	}
 	c.active.releasedAt = time.Now()
+	deadline, _ := phase.Deadline()
+	if err = c.readyPrivateFailure(phase, "operation-start", deadline); err != nil {
+		return out, err
+	}
 	if err = phase.Err(); err != nil {
 		return out, err
 	}
