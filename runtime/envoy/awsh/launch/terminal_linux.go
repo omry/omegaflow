@@ -95,15 +95,23 @@ func restoreTermios(fd int, expected syscall.Termios) error {
 
 func (t *Terminal) drain(ctx context.Context) error {
 	return t.lease(ctx, func(fd int) error {
-		return drainTerminal(fd)
+		return drainTerminal(ctx, fd)
 	})
 }
 
-func drainTerminal(fd int) error {
+func drainTerminal(ctx context.Context, fd int) error {
 	// Linux tcdrain is TCSBRK with a nonzero argument, not a pointer.
-	_, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), 0x5409, 1)
-	if e != 0 {
-		return e
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		_, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), 0x5409, 1)
+		if e == syscall.EINTR {
+			continue // Keep the caller's epoch across interrupted drain attempts.
+		}
+		if e != 0 {
+			return e
+		}
+		return ctx.Err()
 	}
-	return nil
 }

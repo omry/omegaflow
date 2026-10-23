@@ -17,12 +17,16 @@ import (
 // The filter exists only in an isolated test process. Production performs real
 // ioctls and has no injection switch or replaceable terminal backend.
 func denyTerminalRequest(request uintptr) error {
+	return denyTerminalRequestErrno(request, syscall.EPERM)
+}
+
+func denyTerminalRequestErrno(request uintptr, errno syscall.Errno) error {
 	filter := []syscall.SockFilter{
 		{Code: 0x20, K: 0}, // seccomp_data.nr
 		{Code: 0x15, Jf: 3, K: uint32(syscall.SYS_IOCTL)},
 		{Code: 0x20, K: 24}, // low word of ioctl's request argument
 		{Code: 0x15, Jf: 1, K: uint32(request)},
-		{Code: 0x06, K: 0x00050000 | uint32(syscall.EPERM)},
+		{Code: 0x06, K: 0x00050000 | uint32(errno)},
 		{Code: 0x06, K: 0x7fff0000},
 	}
 	program := syscall.SockFprog{Len: uint16(len(filter)), Filter: &filter[0]}
@@ -91,6 +95,36 @@ func TestTerminalLeaseProcess(t *testing.T) {
 		}
 	} else {
 		switch mode {
+		case "drain-eintr-expiry", "drain-eintr-cancel", "drain-permanent":
+			errno := syscall.EINTR
+			if mode == "drain-permanent" {
+				errno = syscall.EPERM
+			}
+			if err = denyTerminalRequestErrno(0x5409, errno); err != nil {
+				t.Fatal(err)
+			}
+			drainCtx := ctx
+			expected := error(syscall.EPERM)
+			if mode == "drain-eintr-expiry" {
+				var end context.CancelFunc
+				drainCtx, end = context.WithTimeout(ctx, 20*time.Millisecond)
+				defer end()
+				expected = context.DeadlineExceeded
+			} else if mode == "drain-eintr-cancel" {
+				var end context.CancelFunc
+				drainCtx, end = context.WithCancel(ctx)
+				defer end()
+				timer := time.AfterFunc(10*time.Millisecond, end)
+				defer timer.Stop()
+				expected = context.Canceled
+			}
+			deadline, _ := drainCtx.Deadline()
+			if err = terminal.drain(drainCtx); !errors.Is(err, expected) {
+				t.Fatalf("interrupted drain did not retain original phase/error: got %v want %v", err, expected)
+			}
+			if after, _ := drainCtx.Deadline(); after != deadline {
+				t.Fatal("drain reset its caller deadline")
+			}
 		case "normal", "raw-no-echo":
 			reference.Cc[syscall.VINTR] = 7
 			reference.Cc[syscall.VEOF] = 5
@@ -193,7 +227,7 @@ func TestTerminalLeaseProcess(t *testing.T) {
 }
 
 func TestTerminalLeaseRestoration(t *testing.T) {
-	for _, mode := range []string{"normal", "raw-no-echo", "wrong-session", "wrong-foreground", "write-failure", "read-failure", "readback-mismatch", "cancelled", "expired", "cancel-after-write"} {
+	for _, mode := range []string{"normal", "raw-no-echo", "wrong-session", "wrong-foreground", "write-failure", "read-failure", "readback-mismatch", "cancelled", "expired", "cancel-after-write", "drain-eintr-expiry", "drain-eintr-cancel", "drain-permanent"} {
 		t.Run(mode, func(t *testing.T) {
 			_, slave := openPTY(t)
 			bin, err := os.Executable()
@@ -208,5 +242,22 @@ func TestTerminalLeaseRestoration(t *testing.T) {
 				t.Fatalf("isolated lease case %s: %s: %v", mode, output, err)
 			}
 		})
+	}
+}
+
+// An external one-syscall fault control may interrupt the first TCSBRK.
+// Locking the thread keeps the two PTY setup ioctls and drain on one tracee.
+func TestTerminalDrainSingleInterruption(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	_, slave := openPTY(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	if err := drainTerminal(ctx, int(slave.Fd())); err != nil {
+		t.Fatal("single interrupted drain did not complete", err)
+	}
+	if after, _ := ctx.Deadline(); after != deadline {
+		t.Fatal("successful drain reset its caller deadline")
 	}
 }

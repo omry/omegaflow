@@ -262,7 +262,7 @@ func (s *Session) FinishCompletion() error {
 		if _, err = os.Stat("/proc/" + strconv.Itoa(finalPID)); !os.IsNotExist(err) {
 			return fmt.Errorf("final helper not reaped")
 		}
-		return drainTerminal(terminalFD)
+		return drainTerminal(r.ctx, terminalFD)
 	})
 	if err != nil {
 		return s.failStart(err)

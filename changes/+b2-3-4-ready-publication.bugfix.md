@@ -1,0 +1,1 @@
+Preserve an accepted readiness frame when the selected Bash exits before startup returns. Retry interrupted terminal drains within the original caller deadline. Keep cancellation, unexpected signals and permanent terminal failures fatal.
