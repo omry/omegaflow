@@ -249,12 +249,31 @@ func (p *startupPump) finish(ctx context.Context, master *os.File, expected []by
 // Launch uses the original Handshake deadline, including public publication.
 func (s *Channels) Launch(original context.Context, columns, rows int64) (w *Workload, err error) {
 	code := "shell-launch"
-	privateFailure := false
+	privateReport := false
+	var privateFatal *privateFailure
 	var pump *startupPump
 	ctx, cancel := context.WithCancel(original)
 	stopSelected := joinedAfterFunc(s.ctx, cancel)
 	var stopIO func()
 	defer func() {
+		if stopIO != nil {
+			stopIO()
+			stopIO = nil
+		}
+		if privateFatal != nil && w != nil {
+			w.collectPrivateFailure(privateFatal, func(phase context.Context) (protocol.PrivateMessage, error) {
+				deadline, _ := phase.Deadline()
+				if e := w.Result.SetReadDeadline(deadline); e != nil {
+					return nil, e
+				}
+				_, e := io.Copy(io.Discard, w.Reader)
+				if e == nil {
+					e = io.EOF
+				}
+				return nil, e
+			})
+			err = &StartError{Code: "shell-launch", Deadline: privateFatal.deadline, Cause: privateFatal}
+		}
 		stopSelected()
 		if stopIO != nil {
 			stopIO()
@@ -262,7 +281,7 @@ func (s *Channels) Launch(original context.Context, columns, rows int64) (w *Wor
 		if pump != nil {
 			joinErr := pump.join(w.PTY)
 			err = errors.Join(err, joinErr, helper.WithContextCause(original, pump.err))
-			if pump.err != nil && !privateFailure {
+			if pump.err != nil && !privateReport {
 				code = "shell-launch-output"
 			}
 		}
@@ -271,7 +290,11 @@ func (s *Channels) Launch(original context.Context, columns, rows int64) (w *Wor
 			if errors.Is(err, context.DeadlineExceeded) {
 				code = "shell-launch-timeout"
 			}
-			phase, end := context.WithTimeout(context.Background(), finalDrainBudget)
+			deadline := time.Now().Add(finalDrainBudget)
+			if privateFatal != nil {
+				deadline = privateFatal.deadline
+			}
+			phase, end := context.WithDeadline(context.Background(), deadline)
 			defer end()
 			if w != nil {
 				err = errors.Join(err, s.disposeFailedLaunch(phase, w))
@@ -348,14 +371,20 @@ func (s *Channels) Launch(original context.Context, columns, rows int64) (w *Wor
 	if err = w.command.Start(); err != nil {
 		return
 	}
-	go func() { w.waitErr = w.command.Wait(); close(w.reaped) }()
+	go func(launched *Workload) { launched.waitErr = launched.command.Wait(); close(launched.reaped) }(w)
 	readControl.Close()
 	writeResult.Close()
 	slave.Close()
 	if err = w.Result.SetReadDeadline(deadline); err != nil {
 		return
 	}
-	stopIO = joinedAfterFunc(ctx, func() { w.Result.Close(); w.PTY.Close(); w.Control.Close() })
+	stopIO = joinedAfterFunc(ctx, func() {
+		// Interrupt launch I/O without destroying the original readers. A
+		// decoded fatal report must still collect real EOF under its epoch.
+		_ = w.Result.SetReadDeadline(time.Now())
+		_ = w.PTY.SetReadDeadline(time.Now())
+		_ = w.Control.Close()
+	})
 	pump, err = pumpStartup(ctx, w.PTY, cancel)
 	if err != nil {
 		return
@@ -363,11 +392,16 @@ func (s *Channels) Launch(original context.Context, columns, rows int64) (w *Wor
 	w.Reader = bufio.NewReader(w.Result)
 	m, e := protocol.ReadPrivate(w.Reader, protocol.AwshToEnvoy)
 	if e != nil {
+		if !privateIOCancelled(ctx, e) {
+			privateReport = true
+			privateFatal = newPrivateFailure(privateResult{err: e}, "launch-readiness", deadline)
+		}
 		err = helper.WithContextCause(ctx, e)
 		return
 	}
 	if failure, ok := m.(*protocol.PrivateProtocolError); ok {
-		privateFailure = true
+		privateReport = true
+		privateFatal = newPrivateFailure(privateResult{message: failure}, "launch-readiness", deadline)
 		err = fmt.Errorf("Awsh startup failure %s: %s", failure.Code, failure.Message)
 		return
 	}

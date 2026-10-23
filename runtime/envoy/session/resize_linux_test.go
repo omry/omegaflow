@@ -387,6 +387,11 @@ func TestResizePrivateFailureInterruptsOutputOwnerWait(t *testing.T) {
 		runtime.Gosched()
 	}
 	f.private(t, protocol.PrivateProtocolError{Code: "resize-private-fatal", Message: "retain this original cause"})
+	// The peer closes its actual result writer. Fatal disposal now requires
+	// EOF under the selected epoch before returning to the outer owner.
+	if err := f.result.Close(); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-phase.Done():
 	case <-wait.Done():
@@ -660,6 +665,10 @@ func TestCompletedPhaseRetainsUnattemptedResizeWithoutSpendingDeadline(t *testin
 
 func TestCompletedPhaseStillObservesReadyPrivateFatalBeforeResize(t *testing.T) {
 	f := completionFixture(t)
+	var before [4]uint16
+	if err := ptyIOCTL(f.c.w.PTY, syscall.TIOCGWINSZ, unsafe.Pointer(&before)); err != nil {
+		t.Fatal(err)
+	}
 	request := &protocol.Resize{Columns: 129, Rows: 47}
 	f.c.resize = request
 	f.c.private.fatal <- privateResult{message: &protocol.PrivateProtocolError{
@@ -671,8 +680,12 @@ func TestCompletedPhaseStillObservesReadyPrivateFatalBeforeResize(t *testing.T) 
 		!strings.Contains(err.Error(), "completed-phase-fatal") {
 		t.Fatal("work completion displaced a ready private fatal", err)
 	}
-	if f.c.resize != request {
-		t.Fatal("fatal selection attempted the pending resize")
+	var after [4]uint16
+	if err := ptyIOCTL(f.c.w.PTY, syscall.TIOCGWINSZ, unsafe.Pointer(&after)); err != nil {
+		t.Fatal(err)
+	}
+	if f.c.resize != nil || before != after {
+		t.Fatal("fatal selection retained or applied the pending resize", before, after)
 	}
 }
 
