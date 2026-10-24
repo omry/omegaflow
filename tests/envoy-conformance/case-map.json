@@ -1,0 +1,557 @@
+{
+  "version": 1,
+  "imports": [
+    {
+      "path": "tests/envoy-bash-qualification/case-map.json",
+      "kind": "qualified-component",
+      "format": "flat"
+    },
+    {
+      "path": "tests/envoy-captured-closure/case-map.json",
+      "kind": "native",
+      "format": "cases"
+    },
+    {
+      "path": "tests/envoy-private-failure/case-map.json",
+      "kind": "native",
+      "format": "cases"
+    },
+    {
+      "path": "tests/envoy-session-foundation/case-map.json",
+      "kind": "component",
+      "format": "foundation"
+    },
+    {
+      "path": "tests/envoy-inspection/case-map.json",
+      "kind": "component",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-inspection-worker/case-map.json",
+      "kind": "component",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-inspection-lifecycle/case-map.json",
+      "kind": "component",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-inspection-lifecycle/case-map.json",
+      "kind": "component",
+      "format": "boundaries"
+    },
+    {
+      "path": "tests/envoy-evidence-ranges/case-map.json",
+      "kind": "component",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-failure-isolation/case-map.json",
+      "kind": "native",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-terminal-closure/case-map.json",
+      "kind": "native",
+      "format": "obligations"
+    },
+    {
+      "path": "tests/envoy-split-setup/case-map.json",
+      "kind": "component",
+      "format": "indexed"
+    },
+    {
+      "path": "tests/envoy-split-streams/case-map.json",
+      "kind": "component",
+      "format": "indexed"
+    }
+  ],
+  "groups": [
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/startup_linux_test.go",
+      "tests": [
+        "TestStartupPTYBoundsAndExactBytes",
+        "TestStartupEOFAndOriginalDeadline",
+        "TestExpectedStartupBytesCanArriveAfterPrivateReady"
+      ],
+      "reason": "Synthetic startup bounds remain component evidence. Actual qualified startup measurements require separate native evidence.",
+      "ids": [
+        "B1-AUX-startup-before-ready",
+        "B1-AUX-startup-delayed",
+        "B1-AUX-startup-extra",
+        "B1-AUX-startup-fragmented",
+        "B1-AUX-startup-incomplete-barrier",
+        "B1-AUX-startup-maximum",
+        "B1-AUX-startup-mismatch",
+        "B1-AUX-startup-overflow",
+        "B1-AUX-startup-premature-EOF",
+        "B1-AUX-startup-zero",
+        "B1-C001-envoy-launch",
+        "B1-C008-contract",
+        "B1-C009-contract",
+        "B1-PACKAGE-B3.2"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/start_linux_test.go",
+      "tests": [
+        "TestStartTransactionHoldsInputThroughMatchingRelease",
+        "TestStartResultReaderContinuesIntoCompletion"
+      ],
+      "reason": "Execute/start/public release ordering and retained reader; actual adapter witnesses are separate.",
+      "ids": [
+        "B1-C002-contract",
+        "B1-C010-start-order",
+        "B1-PACKAGE-B3.3"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/startup_linux_test.go",
+      "tests": [
+        "TestLaunchEnvironmentReservationsAndDelegation",
+        "TestFinalPTYDrainPreservesBytesAndOffset"
+      ],
+      "reason": "Cumulative session environment and final-byte boundaries; actual assembly witnesses are separate.",
+      "ids": [
+        "B1-PACKAGE-B3.4"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/lifecycle_linux_test.go",
+      "tests": [
+        "TestLifecycleStartReleaseAndOriginalGrace",
+        "TestQueuedLifecycleUsesOriginalStartReleaseEpoch"
+      ],
+      "reason": "Original lifecycle grace and queued controls.",
+      "ids": [
+        "B1-PACKAGE-B4.1"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/start_linux_test.go",
+      "tests": [
+        "TestStartQueuesCancelAfterPrivateAttempt",
+        "TestStartCancellationBeforePrivateWriteRollsBack",
+        "TestStartPartialPrivateWriteQueuesCancelAndRejectionWins"
+      ],
+      "reason": "Start cancellation admission and rejection ordering. Foreground faults require lifecycle proof tests and actual process assembly separately.",
+      "ids": [
+        "B1-C035-before-first-byte",
+        "B1-C035-complete-execute",
+        "B1-C035-contract",
+        "B1-C035-partial-execute",
+        "B1-C035-public-operation-started",
+        "B1-C035-start-prepared",
+        "B1-C035-start-release-written",
+        "B1-C035-start-released",
+        "B1-C035-started",
+        "B1-C035-started-ack",
+        "B1-C035-submit",
+        "B1-C065-cancel-grace-expiry",
+        "B1-C065-cancel-input-close",
+        "B1-C065-cancel-invalid-foreground",
+        "B1-C065-cancel-ioctl-failure",
+        "B1-C065-cancel-live-foreground",
+        "B1-C065-cancel-shell-exit",
+        "B1-C065-cancel-unclassifiable",
+        "B1-C065-cancel-unexpected-live-member",
+        "B1-C065-cancel-wrong-session",
+        "B1-C065-finalize-grace-expiry",
+        "B1-C065-finalize-input-close",
+        "B1-C065-finalize-invalid-foreground",
+        "B1-C065-finalize-ioctl-failure",
+        "B1-C065-finalize-live-foreground",
+        "B1-C065-finalize-shell-exit",
+        "B1-C065-finalize-unclassifiable",
+        "B1-C065-finalize-unexpected-live-member",
+        "B1-C065-finalize-wrong-session",
+        "B1-PACKAGE-B4.2"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/dispatch_linux_test.go",
+      "tests": [
+        "TestDispatchGateContinueAndInputForwarding",
+        "TestDispatchCancelSuppressesGateAndUnsentContinue",
+        "TestDispatchInterruptedGateConsumesOneLateContinue",
+        "TestDispatchGateBarrierExpiryRetainsFatalCause"
+      ],
+      "reason": "Gate barrier, input, interruption and late-continue oracles; actual gate assembly remains separate.",
+      "ids": [
+        "B1-C028-continue-input-delayed",
+        "B1-C028-continue-input-timeout",
+        "B1-C028-contract",
+        "B1-C028-gate-success-order",
+        "B1-C028-hostile-PATH",
+        "B1-C028-peer-close",
+        "B1-C028-reply-timeout",
+        "B1-C028-success-short-writes",
+        "B1-C028-terminal-write-error",
+        "B1-C065-gate-continued-lifecycle-False-continue-False",
+        "B1-C065-gate-continued-lifecycle-False-continue-True",
+        "B1-C065-gate-continued-lifecycle-True-continue-False",
+        "B1-C065-gate-continued-lifecycle-True-continue-True",
+        "B1-C065-gate-interrupted-lifecycle-False-continue-False",
+        "B1-C065-gate-interrupted-lifecycle-False-continue-True",
+        "B1-C065-gate-interrupted-lifecycle-True-continue-False",
+        "B1-C065-gate-interrupted-lifecycle-True-continue-True",
+        "B1-C065-gate-ready-lifecycle-False-continue-False",
+        "B1-C065-gate-ready-lifecycle-False-continue-True",
+        "B1-C065-gate-ready-lifecycle-True-continue-False",
+        "B1-C065-gate-ready-lifecycle-True-continue-True",
+        "B1-PACKAGE-B4.3"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/dispatch_linux_test.go",
+      "tests": [
+        "TestDispatchCleanupCrossings",
+        "TestDispatchShellEndAndTimeoutRequireCleanupAndEOF",
+        "TestDispatchEmptyForegroundResamplingIsBounded",
+        "TestDispatchCancelCrossesFinalizeWithoutNewGrace"
+      ],
+      "reason": "Lifecycle result arbitration and original cleanup deadline; actual process and EOF witnesses are separate.",
+      "ids": [
+        "B1-C065-cancel-after-input-close",
+        "B1-C065-cancel-cross-finalize",
+        "B1-C065-clean-census",
+        "B1-C065-completion-helper-cancel-window",
+        "B1-C065-completion-helper-finalize-window",
+        "B1-C065-contract",
+        "B1-C065-finalize-after-input-close",
+        "B1-C065-foreground-switch",
+        "B1-C065-nested-foreground",
+        "B1-C065-positive-empty-then-input-close",
+        "B1-C065-positive-empty-then-live",
+        "B1-C065-positive-empty-then-shell-exit",
+        "B1-C065-positive-empty-then-timeout",
+        "B1-C065-queued-input-close-after-timeout",
+        "B1-C065-shell-exit-after-timeout",
+        "B1-C065-shell-exit-before-timeout",
+        "B1-PACKAGE-B4.4"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/split_relay_linux_test.go",
+      "tests": [
+        "TestSplitRelayExactLogicalBytesAndFirstSource",
+        "TestSplitRelayInterruptedWriterRetainsExactSourceSuffix",
+        "TestSplitRelayZeroBytesAndIndependentEOF"
+      ],
+      "reason": "Global logical byte boundaries and exact admitted suffixes; actual split writers required separately.",
+      "ids": [
+        "B1-C005-contract",
+        "B1-C005-pty-cancelled-before-start",
+        "B1-C005-pty-failed-before-start",
+        "B1-C005-stderr-cancelled-before-start",
+        "B1-C005-stderr-failed-before-start",
+        "B1-C005-stdout-cancelled-before-start",
+        "B1-C005-stdout-failed-before-start",
+        "B1-C006-contract"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/split_completion_linux_test.go",
+      "tests": [
+        "TestSplitCompletionCleanupBeforeKeepaliveEOFRemovalAndResult",
+        "TestSplitCompletionRequiresBothIndependentEOFs",
+        "TestSplitResizeBeforeFirstOutputKeepsZeroSourceFrontier",
+        "TestSplitResizeContinuousSourcesPublishFiniteBoundary"
+      ],
+      "reason": "Cleanup/EOF/resize boundaries. No clause-prefix entry is relabelled as an exact corpus ID.",
+      "ids": [
+        "B1-C034-continuous-output-resize",
+        "B1-C034-keepalive-after-cleanup",
+        "B1-C034-no-covered-prefix-resize",
+        "B1-C034-remove-after-dual-EOF",
+        "B1-C034-same-offset-first-stream",
+        "B1-C034-stderr-EOF",
+        "B1-C034-stdout-EOF",
+        "B1-PACKAGE-B5.3"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/process_linux_test.go",
+      "tests": [
+        "TestProcessCensusNative"
+      ],
+      "reason": "Actual kernel census fixture; selected Awsh/Bash integration is a separate obligation.",
+      "ids": [
+        "B1-PACKAGE-B6.1"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/process_cleanup_linux_test.go",
+      "tests": [
+        "TestProcessCleanupNative"
+      ],
+      "reason": "Actual kernel cleanup fixture; qualified descendants and whole-operation assembly are separate obligations.",
+      "ids": [
+        "B1-C062-adopted-child-reap",
+        "B1-C062-background",
+        "B1-C062-cancel-after-finalize",
+        "B1-C062-cancel-during-cleanup",
+        "B1-C062-cleanup-timeout",
+        "B1-C062-disown",
+        "B1-C062-double-fork",
+        "B1-C062-helper-exclusion",
+        "B1-C062-nohup",
+        "B1-C062-outside-tree-service",
+        "B1-C062-setsid",
+        "B1-C062-shell-ended-cancel-race",
+        "B1-PACKAGE-B6.2"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/completion_linux_test.go",
+      "tests": [
+        "TestCompleteWaitsForCleanupThenPublishesExactRangeAndReusesShell",
+        "TestCompleteRejectsInvalidFactsAndNeverReleasesFailedCleanup",
+        "TestCompleteFailedReleaseOrOutputBoundaryCannotPublishSuccess"
+      ],
+      "reason": "Completion oracle; actual descendant disposal, fresh shell state and EOF remain separate obligations.",
+      "ids": [
+        "B1-C062-completion-order",
+        "B1-C062-contract",
+        "B1-C064-PTY-EOF",
+        "B1-C064-allowed-trap-final-state",
+        "B1-C064-canonical-INT-restore",
+        "B1-C064-cleanup-helper-exclusion",
+        "B1-C064-completed",
+        "B1-C064-contract",
+        "B1-C064-duplicate",
+        "B1-C064-early-release",
+        "B1-C064-empty-jobs",
+        "B1-C064-extra-PID",
+        "B1-C064-final-PTY-drain",
+        "B1-C064-fresh-termios",
+        "B1-C064-helper-INT-ignore",
+        "B1-C064-input-close",
+        "B1-C064-input-closed",
+        "B1-C064-live-alias",
+        "B1-C064-live-function",
+        "B1-C064-live-options",
+        "B1-C064-live-positional",
+        "B1-C064-live-unexported",
+        "B1-C064-malformed",
+        "B1-C064-prompt-ready",
+        "B1-C064-prompt-state",
+        "B1-C064-repeat-adapter-validation",
+        "B1-C064-stale-PID",
+        "B1-C064-stale-cwd",
+        "B1-C064-stale-env",
+        "B1-C064-stale-status",
+        "B1-C064-stderr-EOF",
+        "B1-C064-stdout-EOF",
+        "B1-C064-wait-record-removal",
+        "B1-C064-wrong-executable",
+        "B1-C064-wrong-parent",
+        "B1-PACKAGE-B6.3"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/dispatch_linux_test.go",
+      "tests": [
+        "TestDispatchShellEndAndTimeoutRequireCleanupAndEOF",
+        "TestDispatchCleanupFailureRetainsCleanupEpoch"
+      ],
+      "reason": "Selected lifecycle result and retained cleanup epoch; actual process assembly required separately.",
+      "ids": [
+        "B1-PACKAGE-B6.4"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/operation_process_native_linux_test.go",
+      "tests": [
+        "TestNativeProcessLifecycle"
+      ],
+      "reason": "Actual process ownership fixture. A skipped host invocation cannot satisfy native acceptance.",
+      "ids": [
+        "B1-PACKAGE-B6.5"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/inspection_linux_test.go",
+      "tests": [
+        "TestInspectionActualWorkerCompletionFailureAndPlanCorrelation",
+        "TestInspectionCleanupCancelSkipsWorkerAndLateFinalizeLoses",
+        "TestInspectionJoinedResultCommitsWhileTelemetryBlocked"
+      ],
+      "reason": "Result/cancel arbitration, finalized status and channels; live qualified worker assembly is separate.",
+      "ids": [
+        "B1-C003-finalize-preserves-status",
+        "B1-C003-finalized-result-first",
+        "B1-C003-worker-channel-isolation"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/failure_native_linux_test.go",
+      "tests": [
+        "TestNativeFailureIsolation"
+      ],
+      "reason": "Actual failure/isolation fixture; explicit builtin escape retains the cooperative-source limitation.",
+      "ids": [
+        "B1-C027-explicit-builtin-bypass",
+        "B1-C030-contract"
+      ]
+    },
+    {
+      "kind": "compiler",
+      "path": "tests/test_recording_plan_interactive_output.py",
+      "tests": [
+        "test_direct_authored_input_rejects_output_assertions",
+        "test_later_continuation_input_invalidates_root_assertion",
+        "test_wait_pause_only_chains_keep_output_assertions"
+      ],
+      "reason": "Actual compiler boundary before any actor launch. Runtime input handling is not claimed.",
+      "ids": [
+        "B1-C062-compiler-continuation-input",
+        "B1-C062-compiler-operation-input",
+        "B1-C062-wait-for-preserved",
+        "B1-PACKAGE-B6.6"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "tests/test_envoy_conformance.py",
+      "tests": [
+        "test_inventory_is_not_an_execution_pass",
+        "test_checker_requires_exact_native_selection",
+        "test_native_markers_cannot_be_omitted_or_relabelled"
+      ],
+      "reason": "Final report completeness is separate from executed actor acceptance.",
+      "ids": [
+        "B1-PACKAGE-B8.4"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/lifecycle_native_linux_test.go",
+      "tests": [
+        "TestLifecyclePTYSignalExactlyOnce",
+        "TestLifecyclePTYEmptyForegroundWinners",
+        "TestLifecyclePTYProofFailureNeverSignals",
+        "TestLifecyclePTYExpiredProofDoesNotBecomeTopologyFailure",
+        "TestLifecyclePTYIoctlFailure"
+      ],
+      "reason": "Exact foreground proof/signal oracles use real Linux PTYs and explicit census inputs. The final process-lifecycle suite separately supplies the actual Awsh/Bash census crossing.",
+      "ids": [
+        "B1-C065-cancel-input-close",
+        "B1-C065-cancel-shell-exit",
+        "B1-C065-cancel-live-foreground",
+        "B1-C065-cancel-grace-expiry",
+        "B1-C065-cancel-invalid-foreground",
+        "B1-C065-cancel-wrong-session",
+        "B1-C065-cancel-unclassifiable",
+        "B1-C065-cancel-unexpected-live-member",
+        "B1-C065-cancel-ioctl-failure",
+        "B1-C065-finalize-input-close",
+        "B1-C065-finalize-shell-exit",
+        "B1-C065-finalize-live-foreground",
+        "B1-C065-finalize-grace-expiry",
+        "B1-C065-finalize-invalid-foreground",
+        "B1-C065-finalize-wrong-session",
+        "B1-C065-finalize-unclassifiable",
+        "B1-C065-finalize-unexpected-live-member",
+        "B1-C065-finalize-ioctl-failure",
+        "B1-PACKAGE-B4.2"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/start_linux_test.go",
+      "tests": [
+        "TestStartCancellationBeforePrivateWriteRollsBack",
+        "TestStartSourceRejectionRollsBackAndAllowsNextOperation"
+      ],
+      "reason": "Before-start output ranges require the start transaction cancellation/rejection oracle as well as stream relay coverage.",
+      "ids": [
+        "B1-C006-contract",
+        "B1-C005-pty-failed-before-start",
+        "B1-C005-pty-cancelled-before-start",
+        "B1-C005-stdout-failed-before-start",
+        "B1-C005-stdout-cancelled-before-start",
+        "B1-C005-stderr-failed-before-start",
+        "B1-C005-stderr-cancelled-before-start"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/split_completion_linux_test.go",
+      "tests": [
+        "TestSplitCompletionRejectedSourceRollsBackBeforeAttachment"
+      ],
+      "reason": "A rejected split source closes and rolls back its actual resources before stream attachment.",
+      "ids": [
+        "B1-C005-pty-failed-before-start",
+        "B1-C005-stdout-failed-before-start",
+        "B1-C005-stderr-failed-before-start"
+      ]
+    },
+    {
+      "kind": "native",
+      "path": "runtime/envoy/session/conformance_native_linux_test.go",
+      "tests": [
+        "TestNativeConformance"
+      ],
+      "reason": "The exact full assembly selection includes inspection-paths: real exported and undefined variables, HOME/named-user expansion and changed physical cwd through actual Awsh and restricted inspection worker. It replaces the historical isolated TestRealCandidateCompletion/live-inspection locator for these five rows.",
+      "ids": [
+        "B1-C003-undefined-variable",
+        "B1-C003-defined-variable",
+        "B1-C003-tilde",
+        "B1-C003-tilde-user",
+        "B1-C003-relative-after-cd"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/inspection_linux_test.go",
+      "tests": [
+        "TestInspectionBlockedReapIsFatalWithinOriginalFiveSeconds"
+      ],
+      "reason": "The actual session inspection cancellation timeout and fatal diagnostic are owned by this executable lifecycle test; actual actor crossing remains separate.",
+      "ids": [
+        "B1-C003-blocked-worker-cancel-timeout"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/inspection_linux_test.go",
+      "tests": [
+        "TestInspectionCancelAcceptedFirstDiscardsResultAndJoinsReap"
+      ],
+      "reason": "The actual session cancel-first result discard and joined reap are owned by this executable lifecycle test; actual actor crossing remains separate.",
+      "ids": [
+        "B1-C003-worker-cancel-first"
+      ]
+    },
+    {
+      "kind": "component",
+      "path": "runtime/envoy/session/inspection_linux_test.go",
+      "tests": [
+        "TestInspectionJoinedResultCommitsWhileTelemetryBlocked"
+      ],
+      "reason": "The actual session result-first publication under blocked telemetry is owned by this executable lifecycle test; actual actor crossing remains separate.",
+      "ids": [
+        "B1-C003-worker-result-first"
+      ]
+    }
+  ]
+}
