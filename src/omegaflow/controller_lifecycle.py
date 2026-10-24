@@ -73,6 +73,10 @@ class ReployLifecycle:
         self._output_status: dict[str, Any] | None = None
         self._finalization_requested = False
         self._complete_sent = False
+        self._recording_failed = False
+        self._termination_requested = False
+        self._acknowledged = False
+        self._broker_closed = False
 
     @property
     def opened(self) -> dict[str, Any] | None:
@@ -85,7 +89,12 @@ class ReployLifecycle:
 
     @property
     def can_record(self) -> bool:
-        return self.state is ReployState.ACTIVE and self._envoy_ready
+        return (self.state is ReployState.ACTIVE and self._envoy_ready
+                and not self._recording_failed and not self._termination_requested)
+
+    def stop_recording(self) -> None:
+        """Close action admission while retaining public termination processing."""
+        self._recording_failed = True
 
     @property
     def attachment_deadline(self) -> float | None:
@@ -125,7 +134,8 @@ class ReployLifecycle:
         return self._bootstrap()
 
     def _bootstrap(self) -> tuple[ControllerEffect, ...]:
-        if self.state is ReployState.ACTIVE and self._attached and not self._bootstrap_sent:
+        if (self.state is ReployState.ACTIVE and self._attached
+                and not self._bootstrap_sent and not self._recording_failed):
             self._require(self._opened is not None and "input" in self._opened["operations"],
                           "Envoy bootstrap requires the input grant")
             self._bootstrap_sent = True
@@ -241,6 +251,42 @@ class ReployLifecycle:
         self._complete_sent = True
         return (ControllerEffect("send-request", line=line),)
 
+    def attachment_unavailable(self) -> tuple[ControllerEffect, ...]:
+        """A failed attachment launch owns no output reader to drain."""
+        self._live()
+        self._require(not self._attached and not self._attachment_ended
+                      and self.state in {ReployState.TERMINATING, ReployState.OUTPUTS_FINALIZED},
+                      "unexpected unavailable attachment")
+        self._attachment_ended = True
+        return self._finalize_artifacts()
+
+    def request_termination(self) -> tuple[ControllerEffect, ...]:
+        """Request once; only the later public event establishes termination."""
+        self._require(self.state is ReployState.ACTIVE,
+                      "Reploy termination requires public readiness")
+        self._require(self._opened is not None and "terminate" in self._opened["operations"],
+                      "Reploy termination requires the terminate grant")
+        if self._termination_requested:
+            return ()
+        self._termination_requested = True
+        line = encode_request({"schema": CLIENT_SCHEMA, "type": "terminate"})
+        return (ControllerEffect("send-request", line=line),)
+
+    def acknowledge_terminated(self) -> tuple[ControllerEffect, ...]:
+        """The owner must retain the result before requesting acknowledgement."""
+        self._require(self.state is ReployState.RESULT and not self._acknowledged,
+                      "unexpected or duplicate terminated acknowledgement")
+        self._acknowledged = True
+        line = encode_request({"schema": CLIENT_SCHEMA, "type": "acknowledge-terminated"})
+        return (ControllerEffect("send-request", line=line),)
+
+    def broker_closed(self, exit_code: int) -> None:
+        """Observe JSONL EOF and reaped client status, never workload success."""
+        self._require(type(exit_code) is int and exit_code == 0
+                      and self.state is ReployState.RESULT and self._acknowledged
+                      and not self._broker_closed, "unclean or premature broker closure")
+        self._broker_closed = True
+
 
 class OperationState(Enum):
     IDLE = "idle"
@@ -249,6 +295,7 @@ class OperationState(Enum):
     GATED = "gated"
     CONTINUING = "continuing"
     FINALIZING = "finalizing"
+    CANCELLING = "cancelling"
     SHUTDOWN_SENT = "shutdown-sent"
     DRAINING = "draining"
     CLOSED = "closed"
@@ -272,6 +319,7 @@ class OperationLifecycle:
         self._drain_reason: str | None = None
         self._closed_seen = False
         self._terminal_eof = False
+        self._awaiting_started = False
         self._seen_gates: set[str] = set()
 
     def _require(self, condition: bool, message: str) -> None:
@@ -289,13 +337,18 @@ class OperationLifecycle:
         self._require(type(operation_id) is str and bool(operation_id),
                       "invalid operation identity")
         self._seen_gates.clear()
+        self._awaiting_started = True
         self.active_id = operation_id
         self.state = OperationState.STARTING
 
     def started(self, operation_id: str) -> None:
         self._match(operation_id)
-        self._require(self.state is OperationState.STARTING, "unexpected operation_started")
-        self.state = OperationState.RUNNING
+        self._require(self._awaiting_started
+                      and self.state in {OperationState.STARTING, OperationState.CANCELLING},
+                      "unexpected operation_started")
+        self._awaiting_started = False
+        if self.state is OperationState.STARTING:
+            self.state = OperationState.RUNNING
 
     def gate_ready(self, operation_id: str, gate_id: str) -> None:
         self._match(operation_id)
@@ -332,6 +385,14 @@ class OperationLifecycle:
                                          OperationState.CONTINUING}, "invalid finalize request")
         self.state = OperationState.FINALIZING
 
+    def cancel(self, operation_id: str) -> None:
+        self._match(operation_id)
+        self._require(self.session.can_record
+                      and self.state in {OperationState.STARTING, OperationState.RUNNING,
+                                         OperationState.GATED, OperationState.CONTINUING,
+                                         OperationState.FINALIZING}, "invalid cancel request")
+        self.state = OperationState.CANCELLING
+
     def terminal_result(self, operation_id: str, kind: str, *, shell_ended: bool = False) -> None:
         self._match(operation_id)
         self._require(type(shell_ended) is bool and type(kind) is str,
@@ -342,6 +403,7 @@ class OperationLifecycle:
             OperationState.GATED: {"failed"},
             OperationState.CONTINUING: {"failed"},
             OperationState.FINALIZING: {"finalized", "completed", "failed"},
+            OperationState.CANCELLING: {"cancelled", "completed", "finalized", "failed"},
         }
         kinds = allowed.get(self.state, set())
         self._require(kind in kinds and (kind != "completed" or self.gate_id is None),
