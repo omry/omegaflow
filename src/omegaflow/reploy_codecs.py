@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 
 CLIENT_SCHEMA = "reploy-controlled-session-client-v1"
+HOST_RESULT_SCHEMA = "reploy-controlled-session-run-result-v1"
 MAX_LINE_BYTES = 1 << 20
 
 _OPERATIONS = frozenset({"input", "resize", "terminate", "complete"})
@@ -116,6 +117,19 @@ def _output_status(value: Any) -> None:
         _require(not value.get("reason"), "drained output must not contain a reason")
 
 
+def _cleanup_status(cleanup: Any, recovery: Any) -> None:
+    _object(cleanup, {"kind"}, {"message"})
+    kind = _enum(cleanup["kind"], frozenset({"succeeded", "failed"}))
+    _enum(recovery, frozenset({"none", "retry-cleanup", "reconcile-next-operation"}))
+    if "message" in cleanup:
+        _safe_text(cleanup["message"], required=False)
+    if kind == "succeeded":
+        _require(not cleanup.get("message") and recovery == "none", "successful cleanup requires no recovery or error")
+    else:
+        _safe_text(cleanup.get("message"))
+        _require(recovery != "none", "failed cleanup requires recovery")
+
+
 def _session_result(value: Any) -> None:
     _object(value, {
         "cause", "workload_status", "workload_output_finalization_status",
@@ -129,19 +143,7 @@ def _session_result(value: Any) -> None:
     if _reason_status(observation, frozenset({"maintained", "lost"})) == "maintained":
         _require(not observation.get("reason"), "maintained observation must not contain a reason")
     controller = _reason_status(value["controller_finalization_status"], _TERMINAL_CONTROLLER_STATES)
-    cleanup = value["cleanup_status"]
-    _object(cleanup, {"kind"}, {"message"})
-    cleanup_kind = _enum(cleanup["kind"], frozenset({"succeeded", "failed"}))
-    recovery = _enum(value["recovery_action"], frozenset({
-        "none", "retry-cleanup", "reconcile-next-operation",
-    }))
-    if "message" in cleanup:
-        _safe_text(cleanup["message"], required=False)
-    if cleanup_kind == "succeeded":
-        _require(not cleanup.get("message") and recovery == "none", "successful cleanup requires no recovery or error")
-    else:
-        _safe_text(cleanup.get("message"))
-        _require(recovery != "none", "failed cleanup requires recovery")
+    _cleanup_status(value["cleanup_status"], value["recovery_action"])
     if cause == "workload-exit":
         _require(value["workload_status"]["kind"] != "unknown", "workload-exit requires a known status")
     if cause == "runtime-observation-lost":
@@ -226,6 +228,60 @@ def _event(value: Any) -> None:
         _session_result(value["result"])
 
 
+def _host_result(value: Any) -> None:
+    _object(value, {
+        "schema", "ok", "error", "session_result", "result_delivered",
+        "result_acknowledged", "controller_status", "controller_output",
+        "delivery_tail_cleanup_status", "delivery_tail_recovery_action",
+    })
+    _require(value["schema"] == HOST_RESULT_SCHEMA, "unsupported public host-result schema")
+    _require(type(value["ok"]) is bool, "host ok must be a boolean")
+    if value["error"] is not None:
+        _string(value["error"], nonempty=False)
+    result = value["session_result"]
+    delivered, acknowledged = value["result_delivered"], value["result_acknowledged"]
+    if result is None:
+        _require(delivered is None and acknowledged is None, "absent session result requires null delivery flags")
+    else:
+        _session_result(result)
+        _require(type(delivered) is bool and type(acknowledged) is bool, "session delivery flags must be booleans")
+        _require(not acknowledged or delivered, "acknowledgement requires delivery")
+    if value["controller_status"] is not None:
+        _process_status(value["controller_status"], allow_unknown=True)
+    output = value["controller_output"]
+    if output is not None:
+        _object(output, {"kind"}, {"reason"})
+        _enum(output["kind"], frozenset({
+            "not-requested", "directory-retained", "file-published", "file-discarded", "failed",
+        }))
+        if "reason" in output:
+            _string(output["reason"], nonempty=False)
+    cleanup, recovery = value["delivery_tail_cleanup_status"], value["delivery_tail_recovery_action"]
+    if cleanup is None:
+        _require(recovery is None, "absent delivery-tail cleanup requires null recovery")
+    else:
+        _cleanup_status(cleanup, recovery)
+    # Match the public host producer. Controller process exit status is retained
+    # as evidence; the producer does not add it to this success predicate.
+    success = (
+        value["error"] is None and result is not None
+        and (result["cause"] == "controller-terminate" or (
+            result["cause"] == "workload-exit"
+            and result["workload_status"]["kind"] == "exited"
+            and result["workload_status"]["code"] == 0
+        ))
+        and result["workload_output_finalization_status"]["kind"] == "drained"
+        and result["runtime_observation_status"]["kind"] == "maintained"
+        and result["controller_finalization_status"]["kind"] == "completed"
+        and result["cleanup_status"]["kind"] == "succeeded"
+        and result["recovery_action"] == "none"
+        and delivered is True and acknowledged is True
+        and cleanup is not None and cleanup["kind"] == "succeeded" and recovery == "none"
+        and output is not None and output["kind"] in {"not-requested", "directory-retained", "file-published"}
+    )
+    _require(value["ok"] == success, "host ok disagrees with structured outcome")
+
+
 def _pairs(items: list[tuple[str, Any]]) -> JSONObject:
     value: JSONObject = {}
     for key, item in items:
@@ -238,9 +294,11 @@ def _nonfinite(value: str) -> Any:
     raise ReployCodecError("nonfinite JSON number: " + value)
 
 
-def _decode(line: bytes, validate: Callable[[Any], None]) -> JSONObject:
+def _decode(
+    line: bytes, validate: Callable[[Any], None], *, max_line_bytes: int | None = MAX_LINE_BYTES,
+) -> JSONObject:
     _require(type(line) is bytes, "wire input must be bytes")
-    _require(0 < len(line) <= MAX_LINE_BYTES, "public JSON line exceeds wire bounds")
+    _require(bool(line) and (max_line_bytes is None or len(line) <= max_line_bytes), "public JSON line exceeds wire bounds")
     _require(line.endswith(b"\n"), "public JSON line must end with LF")
     payload = line[:-1]
     _require(payload.startswith(b"{") and payload.endswith(b"}"), "expected exactly one object without surrounding whitespace")
@@ -255,13 +313,15 @@ def _decode(line: bytes, validate: Callable[[Any], None]) -> JSONObject:
     return value
 
 
-def _encode(value: JSONObject, validate: Callable[[Any], None]) -> bytes:
+def _encode(
+    value: JSONObject, validate: Callable[[Any], None], *, max_line_bytes: int | None = MAX_LINE_BYTES,
+) -> bytes:
     validate(value)
     try:
         line = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
     except (ValueError, TypeError, UnicodeError, RecursionError) as error:
         raise ReployCodecError("value cannot be encoded as public JSON") from error
-    _require(len(line) <= MAX_LINE_BYTES, "public JSON line exceeds wire bounds")
+    _require(max_line_bytes is None or len(line) <= max_line_bytes, "public JSON line exceeds wire bounds")
     return line
 
 
@@ -283,3 +343,16 @@ def decode_request(line: bytes) -> JSONObject:
 def encode_request(value: JSONObject) -> bytes:
     """Encode one validated public request, including its terminating LF."""
     return _encode(value, _request)
+
+
+def decode_host_result(line: bytes) -> JSONObject:
+    """Decode host stdout's single result line, preserving null phase values.
+
+    The public host contract does not impose the client stream's 1 MiB bound.
+    """
+    return _decode(line, _host_result, max_line_bytes=None)
+
+
+def encode_host_result(value: JSONObject) -> bytes:
+    """Encode one host result without changing its structured failure evidence."""
+    return _encode(value, _host_result, max_line_bytes=None)
