@@ -4871,6 +4871,635 @@ def test_quickstart_demo_uses_one_cross_medium_take_and_finishes_nested_player()
     }
 
 
+def test_guided_tutorial_materializes_and_validates_starter() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "recordings" / "tutorial" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    assert recording_from_script(
+        "tutorial", recording_dir=root / "recordings"
+    )["capture"]["timeout"] == 120
+    beats = [
+        block["beat"]
+        for block in studio_directive_blocks(source)
+        if "beat" in block
+    ]
+    beats_by_id = {beat["id"]: beat for beat in beats}
+
+    expected_ids = [
+        "orientation",
+        "prepare-workspace",
+        "introduce-recording",
+        "validate-starter",
+        "build-browser-baseline",
+        "author-browser-edit",
+        "build-edited-workflow",
+    ]
+    assert [beat["id"] for beat in beats] == expected_ids
+
+    orientation = beats_by_id["orientation"]
+    assert orientation["player"]["highlight"] == {
+        "control": "guided",
+        "start": "@guided_mode_start@",
+    }
+    assert orientation["layout"] == {
+        "areas": [["overview", "desktop"], ["terminal", "terminal"]],
+        "rows": [3, 1],
+    }
+    desktop_action = orientation["panes"]["desktop"][0]["actions"][0]
+    assert desktop_action["id"] == "show-tutorial-desktop"
+    assert desktop_action["open_page"]["url"] == (
+        "http://127.0.0.1:43124/desktop.html"
+    )
+
+    prepare = beats_by_id["prepare-workspace"]
+    assert prepare["narration"].startswith(
+        "This tutorial picks up where Getting Started ends."
+    )
+    prepare_actions = prepare["panes"]["terminal"][0]["actions"]
+    assert [action["id"] for action in prepare_actions] == ["tutorial-bootstrap"]
+    assert prepare["guide"]["commands"] == ["omegaflow bootstrap=tutorial"]
+    assert prepare["layout"] == {
+        "areas": [["source", "desktop"], ["terminal", "terminal"]],
+        "rows": [3, 1],
+    }
+
+    introduction = beats_by_id["introduce-recording"]
+    assert introduction["layout"] == {
+        "areas": [["source", "desktop"], ["terminal", "terminal"]],
+        "rows": [3, 1],
+    }
+    introduction_actions = introduction["panes"]["source"][0]["actions"]
+    assert [action["id"] for action in introduction_actions] == [
+        "open-recording-structure",
+        "reveal-recording-setup",
+        "reveal-recording-beat",
+    ]
+    assert introduction_actions[1]["continue_from"] == "open-recording-structure"
+    assert introduction_actions[1]["input"] == [
+        {"key": "page_down"},
+        {"pause": 1},
+    ]
+    assert introduction_actions[2]["continue_from"] == "reveal-recording-setup"
+    assert introduction_actions[2]["input"] == [
+        {"control": "_"},
+        {"wait_for": "Enter line number", "timeout": 5},
+        {"text": "47", "interval": 0.1},
+        {"key": "enter"},
+        {"wait_for": "Write Out", "timeout": 5},
+        {"pause": 1},
+    ]
+    assert introduction["panes"]["desktop"] == [
+        {"id": "idle-introduction-desktop"}
+    ]
+    assert introduction["panes"]["terminal"] == [
+        {"id": "idle-introduction-terminal"}
+    ]
+    assert introduction["effects"] == [
+        {
+            "highlight": {
+                "pane": "source",
+                "targets": [
+                    {"text": "title: Refine a Sunset Beach Poster"},
+                ],
+                "start": "@show_frontmatter@",
+                "end": "@show_config@",
+            }
+        },
+        {
+            "highlight": {
+                "pane": "source",
+                "targets": [
+                    {"text": "config:"},
+                ],
+                "start": "@show_config@",
+                "end": "@reveal_setup@",
+            }
+        },
+        {
+            "highlight": {
+                "pane": "source",
+                "targets": [
+                    {"text": "setup:"},
+                    {"text": "name: prepare the example artwork"},
+                    {"text": "name: verify the example artwork"},
+                    {"text": "name: start Tiny Canvas"},
+                ],
+                "start": "@show_setup@",
+                "end": "@reveal_beat@",
+            }
+        },
+        {
+            "highlight": {
+                "pane": "source",
+                "targets": [
+                    {"text": "beat:"},
+                    {"text": "medium: browser"},
+                    {"text": "heading: Open Tiny Canvas"},
+                ],
+                "start": "@show_beat@",
+                "end": "@structure_done@",
+            }
+        },
+    ]
+
+    validate = beats_by_id["validate-starter"]
+    assert validate["layout"] == {
+        "areas": [["source", "desktop"], ["terminal", "terminal"]],
+        "rows": [3, 1],
+    }
+    editor_actions = validate["panes"]["source"][0]["actions"]
+    build_actions = validate["panes"]["terminal"][0]["actions"]
+    assert [action["id"] for action in editor_actions] == [
+        "edit-invalid-medium",
+        "restore-valid-medium",
+    ]
+    assert [action["id"] for action in build_actions] == [
+        "build-invalid-starter",
+    ]
+    assert "guide" not in validate
+    assert editor_actions[0]["continue_from"] == "reveal-recording-beat"
+    assert "run" not in editor_actions[0]
+    assert "display" not in editor_actions[0]
+    assert editor_actions[0]["input"][:5] == [
+        {"control": "_"},
+        {"wait_for": "Enter line number", "timeout": 5},
+        {"text": "49", "interval": 0.1},
+        {"key": "enter"},
+        {"wait_for": "Write Out", "timeout": 5},
+    ]
+    assert editor_actions[1]["after"] == "voiceover.restore_medium.started"
+    assert editor_actions[1]["continue_from"] == "edit-invalid-medium"
+    assert editor_actions[1]["input"][:6] == [
+        {"key": "end"},
+        {"key": "backspace"},
+        {"key": "backspace"},
+        {"key": "backspace"},
+        {"key": "backspace"},
+        {"text": "browser", "interval": 0.08},
+    ]
+    assert "restores the draft" not in validate["narration"]
+    assert "reset" not in validate["narration"]
+    assert validate["effects"] == [
+        {
+            "highlight": {
+                "pane": "source",
+                "targets": [{"regex": "medium: [^\\n]*"}],
+                "start": "@open_validation@",
+                "end": "@validation_done@",
+            }
+        },
+        {
+            "highlight": {
+                "pane": "terminal",
+                "targets": [
+                    {"text": "beat.medium"},
+                    {"text": "Invalid value 'term'"},
+                ],
+                "start": "@show_validation@",
+                "end": "@restore_medium@",
+            }
+        },
+    ]
+    assert build_actions[0]["expect"] == {
+        "exit_code": 1,
+        "output_contains": [
+            "Invalid value 'term', expected one of [terminal, browser]"
+        ],
+    }
+    assert build_actions[0]["pre_command_pause"] == 0.4
+    assert build_actions[0]["timing"] == "presentation"
+    assert build_actions[0]["after"] == (
+        "source.validate-starter-source.edit-invalid-medium.ended"
+    )
+    assert "invalid-medium-ready" not in build_actions[0]["run"]
+    assert "validation-done" not in build_actions[0]["run"]
+    assert validate["panes"]["terminal"][0].get("checks", []) == []
+    assert {"control": "x"} not in editor_actions[1]["input"]
+
+    baseline = beats_by_id["build-browser-baseline"]
+    assert baseline["layout"] == {
+        "areas": [["source", "desktop"], ["terminal", "terminal"]],
+        "rows": [3, 1],
+    }
+    baseline_actions = baseline["panes"]["terminal"][0]["actions"]
+    assert [action["id"] for action in baseline_actions] == [
+        "build-browser-baseline-command",
+    ]
+    assert baseline_actions[0]["after"] == "voiceover.build_baseline.started"
+    assert baseline_actions[0]["display"] == (
+        "omegaflow recording=sunset-beach action=build"
+    )
+    assert baseline_actions[0]["inputs"] == [
+        {"output": "tutorial-bootstrap.recording"}
+    ]
+    assert baseline_actions[0]["timing"] == "realtime"
+    assert baseline_actions[0]["expect"] == {"exit_code": 0}
+    assert "action=build force=true" in baseline_actions[0]["run"]
+    assert "force=true" not in baseline_actions[0]["display"]
+    assert "medium:" not in baseline_actions[0]["run"]
+    assert set(baseline["panes"]) == {"source", "desktop", "terminal"}
+    assert baseline["panes"]["source"][0]["actions"] == [
+        {
+            "id": "hold-valid-editor",
+            "continue_from": "restore-valid-medium",
+            "timing": "realtime",
+            "input": [{"control": "l"}, {"pause": 1}],
+        }
+    ]
+    assert baseline["guide"]["commands"] == [
+        "omegaflow recording=sunset-beach action=build"
+    ]
+
+    author_edit = beats_by_id["author-browser-edit"]
+    assert author_edit["layout"]["areas"] == [
+        ["source", "browser"],
+        ["terminal", "terminal"],
+    ]
+    assert author_edit["layout"]["rows"] == [3, 1]
+    assert author_edit["panes"]["source"][0]["after"] == (
+        "browser.play-browser-baseline-pane.play-baseline-video.ended"
+    )
+    author_actions = author_edit["panes"]["source"][0]["actions"]
+    assert [action["id"] for action in author_actions] == [
+        "open-edit-actions",
+        "insert-rename-action",
+        "insert-sun-action",
+        "insert-tree-action",
+        "update-edited-title-check",
+    ]
+    assert author_actions[0]["continue_from"] == "hold-valid-editor"
+    assert "run" not in author_actions[0]
+    assert "display" not in author_actions[0]
+    assert author_actions[0]["input"][:5] == [
+        {"control": "_"},
+        {"wait_for": "Enter line number", "timeout": 5},
+        {"text": "53", "interval": 0.1},
+        {"key": "enter"},
+        {"wait_for": "Write Out", "timeout": 5},
+    ]
+    assert author_actions[1]["continue_from"] == "open-edit-actions"
+    assert author_actions[1]["input"][7]["text"].startswith(
+        "  - id: rename-artwork\n"
+    )
+    assert "hold_before_ms: 700" in author_actions[1]["input"][7]["text"]
+    assert "hold_after_ms: 900" in author_actions[1]["input"][7]["text"]
+    assert author_actions[2]["continue_from"] == "insert-rename-action"
+    assert author_actions[2]["input"][2]["text"].startswith("  - id: move-sun\n")
+    assert "hold_after_ms: 900" in author_actions[2]["input"][2]["text"]
+    assert author_actions[3]["continue_from"] == "insert-sun-action"
+    assert author_actions[3]["input"][2]["text"].startswith("  - id: move-tree\n")
+    assert "hold_after_ms: 900" in author_actions[3]["input"][2]["text"]
+    assert [action["input"][-1] for action in author_actions[1:4]] == [
+        {"pause": 2},
+        {"pause": 2},
+        {"pause": 3},
+    ]
+    assert all(
+        {"control": "o"} not in action["input"] for action in author_actions[1:4]
+    )
+    assert author_actions[4]["continue_from"] == "insert-tree-action"
+    assert "equals: Coconut Sunset" in author_actions[4]["input"][10]["text"]
+    assert {"control": "o"} in author_actions[4]["input"]
+    player_actions = author_edit["panes"]["browser"][0]["actions"]
+    assert [action["id"] for action in player_actions] == [
+        "open-baseline-player",
+        "play-baseline-video",
+    ]
+    assert player_actions[0]["after"] == (
+        "terminal.watch-edited-workflow-pane."
+        "watch-browser-baseline-command.ended"
+    )
+    assert player_actions[0]["open_page"]["url"] == (
+        "http://127.0.0.1:43125/watch/sunset-beach/"
+    )
+    assert player_actions[1]["click"]["target"] == {
+        "role": "button",
+        "name": "Play",
+        "exact": True,
+    }
+    assert player_actions[1]["timing"] == "realtime"
+    assert player_actions[1]["until"] == {
+        "visible": {"css": '#progress-wrap[data-complete="true"]'},
+        "timeout_ms": 10000,
+    }
+    author_watch_actions = author_edit["panes"]["terminal"][0]["actions"]
+    assert [action["id"] for action in author_watch_actions] == [
+        "watch-browser-baseline-command",
+        "watch-edited-recording"
+    ]
+    assert author_watch_actions[0]["run_file"] == "scripts/start-tutorial-watch.sh"
+    assert author_watch_actions[0]["display"] == (
+        "omegaflow recording=sunset-beach action=watch"
+    )
+    assert author_watch_actions[0]["timing"] == "presentation"
+    assert author_watch_actions[0]["show_prompt_after"] is False
+    assert author_watch_actions[1]["run_file"] == (
+        "scripts/follow-tutorial-watch.sh"
+    )
+    assert author_watch_actions[1]["display"] == (
+        "# watch remains active; waiting for source changes"
+    )
+    assert author_watch_actions[1]["timing"] == "realtime"
+    assert author_watch_actions[1]["show_prompt_after"] is False
+    assert "detects that single saved source change" in author_edit["narration"]
+    assert "action=build" not in author_edit["narration"]
+
+    edited_build = beats_by_id["build-edited-workflow"]
+    assert edited_build["layout"]["areas"] == [
+        ["source", "browser"],
+        ["terminal", "terminal"],
+    ]
+    assert edited_build["layout"]["rows"] == [3, 1]
+    edited_source_actions = edited_build["panes"]["source"][0]["actions"]
+    assert edited_source_actions == [
+        {
+            "id": "close-edited-source",
+            "after": "browser.play-edited-workflow-pane.play-edited-video.ended",
+            "continue_from": "update-edited-title-check",
+            "timing": "realtime",
+            "input": [{"control": "x"}],
+        }
+    ]
+    assert edited_build["panes"]["terminal"] == [{"id": "retain-edited-watch"}]
+    edited_player_actions = edited_build["panes"]["browser"][0]["actions"]
+    assert [action["id"] for action in edited_player_actions] == [
+        "refresh-edited-player",
+        "play-edited-video",
+    ]
+    assert edited_player_actions[0]["reload_page"]["ready"]["visible"] == {
+        "role": "button",
+        "name": "Play",
+        "exact": True,
+    }
+    assert "commands" not in edited_build["guide"]
+
+    plan = normalize_recording_plan(
+        recording_from_script("tutorial", recording_dir=root / "recordings")
+    )
+    assert plan.presentation["pane_chrome"]["style"] == "framed"
+    assert [wait.target for wait in plan.beats[3].waits] == [
+        "build-invalid-starter",
+    ]
+    assert [pane.id for pane in plan.panes] == [
+        "overview",
+        "terminal",
+        "source",
+        "desktop",
+        "browser",
+    ]
+    assert [beat.id for beat in plan.beats] == expected_ids
+
+
+@pytest.mark.skipif(shutil.which("nano") is None, reason="nano is unavailable")
+def test_guided_tutorial_editor_input_restores_medium_after_demo(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "recordings" / "tutorial" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    validate = next(
+        block["beat"]
+        for block in studio_directive_blocks(source)
+        if block.get("beat", {}).get("id") == "validate-starter"
+    )
+    authored_actions = validate["panes"]["source"][0]["actions"]
+    actions_by_id = {action["id"]: action for action in authored_actions}
+    introduction = next(
+        block["beat"]
+        for block in studio_directive_blocks(source)
+        if block.get("beat", {}).get("id") == "introduce-recording"
+    )
+    introduction_actions = introduction["panes"]["source"][0]["actions"]
+    open_action = introduction_actions[0]
+    recording_dir = tmp_path / "recordings" / "sunset-beach"
+    recording_dir.mkdir(parents=True)
+    shutil.copy2(
+        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / ".nanorc",
+        recording_dir / ".nanorc",
+    )
+    starter = (
+        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / "index.md"
+    ).read_text(encoding="utf-8")
+    (recording_dir / "index.md").write_text(starter, encoding="utf-8")
+
+    def terminal_command(action_id: str) -> dict[str, object]:
+        action = actions_by_id[action_id]
+        return {
+            key: action[key]
+            for key in (
+                "id",
+                "run",
+                "continue_from",
+                "display",
+                "timing",
+                "input",
+            )
+            if key in action
+        }
+
+    open_editor = {
+        key: open_action[key]
+        for key in ("id", "run", "display", "timing", "input")
+        if key in open_action
+    }
+    open_editor["input"] = [
+        step for step in open_editor["input"] if "pause" not in step
+    ]
+    reveal_editors = []
+    for reveal_action in introduction_actions[1:]:
+        reveal_editor = {
+            key: reveal_action[key]
+            for key in ("id", "continue_from", "timing", "input")
+            if key in reveal_action
+        }
+        reveal_editor["input"] = [
+            step for step in reveal_editor["input"] if "pause" not in step
+        ]
+        reveal_editors.append(reveal_editor)
+    edit_invalid = terminal_command("edit-invalid-medium")
+    edit_invalid["input"] = [
+        step for step in edit_invalid["input"] if "pause" not in step
+    ]
+    restore_valid = terminal_command("restore-valid-medium")
+    restore_valid["input"] = [
+        step for step in restore_valid["input"] if "pause" not in step
+    ]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "tutorial-workspace").write_text(str(tmp_path), encoding="utf-8")
+
+    plan = normalize_recording_plan(
+        {
+            "id": "tutorial-editor-input",
+            "panes": [{"id": "source", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "introduce-recording",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {
+                        "source": [
+                            {
+                                "id": "introduce-recording-source",
+                                "actions": [open_editor, *reveal_editors],
+                            }
+                        ]
+                    },
+                },
+                {
+                    "id": "validate-starter",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {
+                        "source": [
+                            {
+                                "id": "validate-starter-source",
+                                "actions": [edit_invalid, restore_valid],
+                            }
+                        ]
+                    },
+                },
+            ],
+        }
+    )
+
+    CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            timeout_seconds=60,
+            post_enter_pause=0,
+            post_command_pause=0,
+        )
+    ).capture(
+        plan,
+        run_dir,
+        workspace=tmp_path,
+    )
+
+    edited = (recording_dir / "index.md").read_text(encoding="utf-8")
+    assert edited == starter
+    cast_lines = (
+        tmp_path
+        / "run/capture/terminal-beats/"
+        "validate-starter--source--validate-starter-source.cast"
+    ).read_text(encoding="utf-8").splitlines()
+    cast_header = json.loads(cast_lines[0])
+    cast_events = [json.loads(line) for line in cast_lines[1:]]
+    assert str(tmp_path) not in json.dumps(
+        [cast_header["omegaflow_boundary_output"], cast_events]
+    )
+    initial_screen = "".join(cast_header["omegaflow_boundary_output"])
+    assert "title: Refine a Sunset Beach Poster" in initial_screen
+    assert "beat:" in initial_screen
+    assert cast_events[1][2] != "$ "
+
+
+@pytest.mark.skipif(shutil.which("nano") is None, reason="nano is unavailable")
+def test_guided_tutorial_editor_input_adds_actions_and_updates_check(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "recordings" / "tutorial" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    beats = {
+        block["beat"]["id"]: block["beat"]
+        for block in studio_directive_blocks(source)
+        if "beat" in block
+    }
+    recording_dir = tmp_path / "recordings" / "sunset-beach"
+    recording_dir.mkdir(parents=True)
+    shutil.copy2(
+        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / ".nanorc",
+        recording_dir / ".nanorc",
+    )
+    shutil.copy2(
+        root / "src" / "omegaflow" / "tutorial" / "tiny_canvas" / "index.md",
+        recording_dir / "index.md",
+    )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "tutorial-workspace").write_text(str(tmp_path), encoding="utf-8")
+
+    def source_pane(
+        beat_id: str, *, close_after: bool = False
+    ) -> dict[str, object]:
+        pane = json.loads(json.dumps(beats[beat_id]["panes"]["source"][0]))
+        pane.pop("after", None)
+        for action in pane["actions"]:
+            action.pop("after", None)
+            action.pop("inputs", None)
+            action["input"] = [
+                step for step in action.get("input", []) if "pause" not in step
+            ]
+        if close_after:
+            pane["actions"].append(
+                {
+                    "id": "close-editor-for-test",
+                    "continue_from": "update-edited-title-check",
+                    "timing": "realtime",
+                    "input": [{"control": "x"}],
+                }
+            )
+        return pane
+
+    plan = normalize_recording_plan(
+        {
+            "id": "tutorial-browser-actions-input",
+            "panes": [{"id": "source", "kind": "terminal"}],
+            "beats": [
+                {
+                    "id": "introduce-recording",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {
+                        "source": [source_pane("introduce-recording")]
+                    },
+                },
+                {
+                    "id": "validate-starter",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {"source": [source_pane("validate-starter")]},
+                },
+                {
+                    "id": "build-browser-baseline",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {
+                        "source": [source_pane("build-browser-baseline")]
+                    },
+                },
+                {
+                    "id": "author-browser-edit",
+                    "layout": {"areas": [["source"]]},
+                    "panes": {
+                        "source": [
+                            source_pane("author-browser-edit", close_after=True)
+                        ]
+                    },
+                },
+            ],
+        }
+    )
+
+    CaptureCoordinator(
+        terminal_runner_factory=lambda: PersistentTerminalRunner(
+            timeout_seconds=60,
+            post_enter_pause=0,
+            post_command_pause=0,
+        )
+    ).capture(plan, run_dir, workspace=tmp_path)
+
+    edited = normalize_recording_plan(
+        recording_from_script("sunset-beach", recording_dir=tmp_path / "recordings")
+    )
+    (beat,) = edited.beats
+    assert [action.id for action in beat.actions] == [
+        "open-editor",
+        "rename-artwork",
+        "move-sun",
+        "move-tree",
+    ]
+    assert [check.name for check in beat.checks] == ["edited title retained"]
+
+
 def test_quickstart_demo_installs_local_checkout_in_isolated_environment(
     tmp_path,
 ) -> None:
@@ -5708,17 +6337,21 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
         "index.md",
         "scripts/inspect_artwork.py",
         "scripts/reset_artwork.py",
+        "scripts/start_server.sh",
+        "scripts/stop_server.sh",
         "scripts/tiny_canvas.py",
     ]
 
     recording = (tutorial_root / "index.md").read_text(encoding="utf-8")
     assert "\nid:" not in recording
     assert "title: Refine a Sunset Beach Poster" in recording
-    assert "id: inspect-draft" in recording
-    assert "medium: terminal" in recording
+    assert "id: open-canvas" in recording
+    assert "medium: browser" in recording
     assert "name: prepare the example artwork" in recording
-    assert "base_url:" not in recording
-    assert "presentation:" not in recording
+    assert "name: verify the example artwork" in recording
+    assert "name: start Tiny Canvas" in recording
+    assert "base_url: http://127.0.0.1:18476" in recording
+    assert "presentation:" in recording
     assert "publish:" not in recording
     assert "narration:" not in recording
     assert (
@@ -5734,13 +6367,12 @@ def test_tutorial_bootstrap_materializes_packaged_tiny_canvas_workspace(
             recording_dir=tmp_path / "recordings",
         )
     )
-    assert [beat.id for beat in starter_plan.beats] == ["inspect-draft"]
+    assert [beat.id for beat in starter_plan.beats] == ["open-canvas"]
     starter_beat = starter_plan.beats[0]
-    assert starter_beat.medium.value == "terminal"
-    assert (
-        starter_beat.actions[0].config["commands"][0]["run"]
-        == "python recordings/sunset-beach/scripts/inspect_artwork.py"
-    )
+    assert starter_beat.medium.value == "browser"
+    assert starter_beat.viewer_hold_ms == 3000
+    assert starter_beat.actions[0].kind == "open_page"
+    assert starter_beat.actions[0].config["open_page"]["url"] == "/"
     assert starter_plan.narration_stream.segments == ()
     assert starter_plan.narration_takes == ()
 
@@ -5897,7 +6529,7 @@ def test_tutorial_runtime_state_does_not_invalidate_the_recording_source(
     ).is_file()
 
 
-def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
+def test_complete_tiny_canvas_tutorial_is_browser_only(
     tmp_path: Path,
 ) -> None:
     recordings_dir = tmp_path / "recordings"
@@ -5916,19 +6548,14 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     )
 
     assert plan.panes == ()
-    assert [beat.id for beat in plan.beats] == ["inspect-draft", "edit-artwork"]
-    launch, edit = plan.beats
-    assert launch.layout.areas == (("main",),)
+    assert [beat.id for beat in plan.beats] == ["edit-artwork"]
+    (edit,) = plan.beats
     assert edit.layout.areas == (("main",),)
-    launch_tracks = {track.pane_id: track for track in launch.pane_tracks}
     edit_tracks = {track.pane_id: track for track in edit.pane_tracks}
-    assert [item.id for item in launch_tracks["main"].beats] == ["inspect-draft"]
-    assert len(launch_tracks["main"].beats[0].actions) == 1
     assert [item.id for item in edit_tracks["main"].beats] == ["edit-artwork"]
-    assert len(plan.setup) == 2
+    assert len(plan.setup) == 3
     assert (
-        edit_tracks["main"].beats[0].actions[0].config["open_page"]["handoff"]
-        == "open-editor"
+        edit_tracks["main"].beats[0].actions[0].config["open_page"]["url"] == "/"
     )
     browser_actions = edit_tracks["main"].beats[0].actions
     assert [action.kind for action in browser_actions[:2]] == [
@@ -5942,30 +6569,21 @@ def test_complete_tiny_canvas_tutorial_has_linear_terminal_browser_flow(
     )
     assert browser_actions[1].config["type_text"]["text"] == "Coconut Sunset"
     assert browser_actions[1].config["type_text"]["interval_ms"] == 90
+    assert browser_actions[1].config["hold_before_ms"] == 700
+    assert browser_actions[1].config["hold_after_ms"] == 900
     assert browser_actions[2].kind == "drag"
+    assert browser_actions[2].config["hold_after_ms"] == 900
     assert (
         browser_actions[2].config["drag"]["from"]["target"]["test_id"] == "sun"
     )
     assert browser_actions[3].kind == "drag"
+    assert browser_actions[3].config["hold_after_ms"] == 900
     assert (
         browser_actions[3].config["drag"]["from"]["target"]["test_id"]
         == "coconut-tree"
     )
-    assert [handoff.target_pane_id for handoff in plan.browser_handoffs] == [
-        "main",
-    ]
-    assert (
-        launch_tracks["main"]
-        .beats[0]
-        .actions[-1]
-        .config["commands"][-1]["browser_handoff"]
-        is True
-    )
+    assert plan.browser_handoffs == ()
     assert plan.presentation["guided"] is True
-    assert (
-        launch.guide["summary"]
-        == "The Tiny Canvas workflow is ready to validate and publish."
-    )
     assert edit.guide is None
     assert edit.narration_text.startswith("Rename the poster Coconut Sunset.")
     assert [anchor.id for anchor in edit.anchors] == [
