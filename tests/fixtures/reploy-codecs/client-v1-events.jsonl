@@ -1,0 +1,10 @@
+{"schema":"reploy-controlled-session-client-v1","type":"broker-ready","terminal_socket":"/mnt/reploy-home/reploy-controlled-session-0123456789abcdef0123456789abcdef/terminal.sock"}
+{"schema":"reploy-controlled-session-client-v1","type":"opened","operations":["input","resize","terminate","complete"],"endpoints":[{"id":"api","scheme":"http","host":"workload","port":8080}],"columns":120,"rows":40,"output_finalization_timeout_milliseconds":30000}
+{"schema":"reploy-controlled-session-client-v1","type":"ready"}
+{"schema":"reploy-controlled-session-client-v1","type":"workload-exit","status":{"kind":"exited","code":0}}
+{"schema":"reploy-controlled-session-client-v1","type":"terminating","cause":"workload-exit"}
+{"schema":"reploy-controlled-session-client-v1","type":"diagnostic","code":"future_diagnostic","message":"A generic future diagnostic."}
+{"schema":"reploy-controlled-session-client-v1","type":"workload-outputs-finalized","status":"drained"}
+{"schema":"reploy-controlled-session-client-v1","type":"workload-outputs-finalized","status":"failed","reason":"Output drain expired."}
+{"schema":"reploy-controlled-session-client-v1","type":"terminated","result":{"cause":"workload-exit","workload_status":{"kind":"exited","code":0},"workload_output_finalization_status":{"kind":"drained"},"runtime_observation_status":{"kind":"maintained"},"controller_finalization_status":{"kind":"completed"},"cleanup_status":{"kind":"succeeded"},"recovery_action":"none"}}
+{"schema":"reploy-controlled-session-client-v1","type":"client-error","code":"future_client_error","message":"A generic future client error."}

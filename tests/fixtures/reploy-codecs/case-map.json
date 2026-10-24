@@ -1,0 +1,21 @@
+{
+  "slice": "C1.1",
+  "test": "tests/test_reploy_codecs.py",
+  "cases": {
+    "C1-S001": "Every pinned public event/request and invalid-request golden; source byte hashes",
+    "C1-S002": "Exact object fields, recursively duplicate fields, UTF-8 and JSON lexical rejection",
+    "C1-S003": "Exact one-MiB LF-terminated input/output boundaries and byte-based limits",
+    "C1-S004": "Opened operation grants, endpoint identities/URI schemes/host/port, dimensions and timeout",
+    "C1-S005": "Process kind/code/reason bounds and signed 64-bit exit codes",
+    "C1-S006": "Open diagnostic machine codes and safe UTF-8 text bounds",
+    "C1-S007": "All nested terminal-result statuses, causes, recovery rules and consistency",
+    "C1-S008": "Symmetric serialization rejection and no caller mutation",
+    "C1-S009": "Stateless message validation; lifecycle ordering remains C2"
+  },
+  "pending": {
+    "C1.2": "Host-result codec and complete C1 integration/maximum corpus",
+    "C2": "Lifecycle event ordering and request authority",
+    "C3": "Public stream transport, actual client assembly and channel readiness",
+    "C8": "Actual public controlled-session invocation and termination results"
+  }
+}
