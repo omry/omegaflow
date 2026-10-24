@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "leaf": "C2.1",
+  "leaf": "C2.2",
   "requirements": {
     "startup_attachment_ordering": {
       "owner": "C2.1",
@@ -29,7 +29,27 @@
     },
     "cancellation_termination_ack_stderr_failure_retention": {
       "owner": "C2.2",
-      "status": "pending"
+      "status": "implemented",
+      "tests": [
+        "C2_S016",
+        "C2_S017",
+        "C2_S018",
+        "C2_S019",
+        "C2_S020",
+        "C2_S021",
+        "C2_S022",
+        "C2_S023",
+        "C2_S024",
+        "C2_S025",
+        "C2_S026",
+        "C2_S027",
+        "C2_S028",
+        "C2_S029",
+        "C2_S030",
+        "C2_S031",
+        "C2_S032",
+        "C2_S033"
+      ]
     },
     "crossed_observations_and_Cancelling_completion_winner": {
       "owner": "C2.3",
@@ -174,6 +194,132 @@
         "test_C2_S015_optional_empty_status_reason_does_not_replace_authoritative_evidence",
         "test_C2_S015_nonempty_status_reason_change_remains_fatal"
       ]
+    },
+    "C2_S016": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S016_complete_result_acknowledgement_and_clean_close",
+        "test_C2_S016_result_sink_is_flushed_before_acknowledgement_effect"
+      ]
+    },
+    "C2_S017": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S017_startup_failure_acknowledges_without_complete"
+      ]
+    },
+    "C2_S018": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S018_duplicate_terminated_is_retained_but_never_acknowledged_twice",
+        "test_C2_S018_premature_or_duplicate_acknowledgement_is_fatal"
+      ]
+    },
+    "C2_S019": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S019_duplicate_broker_close_preserves_failure",
+        "test_C2_S019_missing_result_or_bad_broker_exit_never_establishes_clean_close",
+        "test_C2_S019_zero_broker_exit_requires_acknowledgement_in_core"
+      ]
+    },
+    "C2_S020": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S020_failed_output_artifacts_or_attachment_still_complete_and_ack"
+      ]
+    },
+    "C2_S021": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S021_capture_failure_requests_Reploy_termination_without_abandoning_result",
+        "test_C2_S021_failed_capture_closes_every_outgoing_operation_request",
+        "test_C2_S021_failure_before_readiness_waits_for_public_authority_to_terminate",
+        "test_C2_S021_termination_requires_grant_and_never_creates_an_acceptance_event"
+      ]
+    },
+    "C2_S022": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S022_early_attachment_end_is_retained_until_public_termination",
+        "test_C2_S022_failed_attachment_launch_retains_no_reader_fact",
+        "test_C2_S022_unavailable_attachment_after_output_finalization_releases_artifact_close"
+      ]
+    },
+    "C2_S023": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S023_cancel_rejects_closed_admission_and_wrong_identity",
+        "test_C2_S023_cancelled_gate_clears_only_the_matching_operation",
+        "test_C2_S023_operation_cancel_has_exact_identity_and_does_not_terminate_Reploy",
+        "test_C2_S023_ordinary_terminal_result_is_representable_after_cancel"
+      ]
+    },
+    "C2_S024": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S024_request_failure_preserves_result_without_false_ack_or_close"
+      ]
+    },
+    "C2_S025": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S025_all_well_formed_diagnostics_and_client_error_are_retained_separately",
+        "test_C2_S025_retained_event_bytes_are_not_reencoded"
+      ]
+    },
+    "C2_S026": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S026_complete_stderr_stream_and_bounded_memory_tail",
+        "test_C2_S026_event_and_stderr_sinks_must_be_distinct",
+        "test_C2_S026_invalid_tail_bound_is_not_an_implicit_default"
+      ]
+    },
+    "C2_S027": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S027_short_sink_writes_preserve_every_byte"
+      ]
+    },
+    "C2_S028": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S028_event_flush_failure_cannot_acknowledge_or_close_cleanly",
+        "test_C2_S028_failed_result_retention_never_acknowledges_unretained_result",
+        "test_C2_S028_invalid_write_counts_are_retained_failures"
+      ]
+    },
+    "C2_S029": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S029_malformed_public_input_latches_failure_without_recording_it_as_valid"
+      ]
+    },
+    "C2_S030": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S030_failure_and_project_context_survive_later_successful_teardown"
+      ]
+    },
+    "C2_S031": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S031_failed_structured_cleanup_cannot_be_overridden_by_zero_client_exit",
+        "test_C2_S031_structured_failure_fields_survive_successful_client_close"
+      ]
+    },
+    "C2_S032": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S032_duplicate_client_start_never_starts_another_process"
+      ]
+    },
+    "C2_S033": {
+      "file": "tests/test_controller_session.py",
+      "functions": [
+        "test_C2_S033_clean_attachment_EOF_before_public_termination_is_not_a_failure"
+      ]
     }
   },
   "retained_static_anchors": [
@@ -223,15 +369,17 @@
       "id": "B1-PACKAGE-C2.1",
       "implementation_leaf": "C2.1",
       "closure_leaf": "C2.1",
-      "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "status": "implemented",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "evidence": "tests/controller-lifecycle/case-map.json"
     },
     {
       "id": "B1-PACKAGE-C2.2",
       "implementation_leaf": "C2.2",
       "closure_leaf": "C2.2",
-      "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "status": "implemented",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "evidence": "tests/controller-lifecycle/case-map.json"
     },
     {
       "id": "B1-PACKAGE-C2.3",
