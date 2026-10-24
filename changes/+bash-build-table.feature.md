@@ -1,0 +1,1 @@
+Add the internal Bash build qualification runner and shared build-table consumers. Three exact Linux/amd64 Bash tuples are qualified: Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9. ARM64 qualification and the complete Envoy/controller production path remain pending.

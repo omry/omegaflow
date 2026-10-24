@@ -1,0 +1,15 @@
+{
+  "slice": "B6.1",
+  "runner": "go -C runtime/envoy test -race -buildvcs=false -run ^TestProcess -count=1 ./session",
+  "native_fixtures": "Dedicated real Linux process tree; explicit session-leader/selected-process fixtures, not actual Awsh/Bash conformance.",
+  "cases": {
+    "lifetime": ["TestProcessPinLifetimeAndOwnership", "TestProcessPinCannotReviveReapedLifetime", "TestProcessPinRejectsUnprovedDescriptor", "TestProcessPinRequiresCallerEpoch", "TestProcessGoneKeepsDisposalFailure"],
+    "topology_and_idle": ["TestProcessCensusNative/topology", "TestProcessCensusNative/descendants", "TestProcessCensusNative/current-sample", "TestProcessCensusNative/root-exit", "TestProcessCensusNative/dead-roots"],
+    "current_membership": ["TestProcessCensusNative/current-sample", "TestProcessCensusNative/rebind-modeled"],
+    "adoption": ["TestProcessCensusNative/adoption", "TestProcessCensusNative/rapid-adoption", "TestProcessCensusNative/concurrent-adoption"],
+    "interrupted_poll": ["TestProcessCensusNative/concurrent-adoption", "TestProcessInterruptedPollOverlay (explicit test-only ppoll overlay)"],
+    "whole_group": ["TestProcessCensusNative/foreign-group", "TestProcessCensusNative/topology", "TestProcessCensusNative/descendants"],
+    "failure_and_disposal": ["TestProcessCensusNative/errors", "TestProcessStatIdentity", "TestProcessCensusEquality"]
+  },
+  "remaining": ["B6.2 termination and adopted reap", "B6.3 ordinary-return cleanup assembly", "B6.5 actual lifecycle census wiring", "B8.4 complete actual-actor conformance"]
+}

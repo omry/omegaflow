@@ -1,0 +1,306 @@
+[
+  {
+    "id": "B2.5-minimum",
+    "source": "#"
+  },
+  {
+    "id": "B2.5-maximum",
+    "maximum": true
+  },
+  {
+    "id": "B2.5-unicode-no-redisplay",
+    "source": "# SOURCE_MUST_NOT_REDISPLAY\nprintf '%s\\n' '\u03b1\u03b2\u00e9\ud83d\ude42'",
+    "output": [
+      "\u03b1\u03b2\u00e9\ud83d\ude42\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-preceding-status",
+    "status": 17,
+    "source": "printf 'PRIOR:%s\\n' \"$?\"",
+    "output": [
+      "PRIOR:17\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-history-vi",
+    "status": 255,
+    "history": "on",
+    "editing": "vi",
+    "setup": "builtin history -s 'printf WRONG_HISTORY_EVENT'",
+    "source": "printf 'PRIOR:%s\\n' \"$?\"; printf 'EVENT:%s\\n' \"!!\"; [[ ${-#*H} != \"$-\" && -o vi ]] && printf 'MODE_OK\\n'",
+    "output": [
+      "PRIOR:255\r\n",
+      "EVENT:!!\r\n",
+      "MODE_OK\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-multiline-quotes-comments",
+    "history": "on",
+    "source": "printf '%s\\n' '} \"quoted\"'\n# SOURCE_MUST_NOT_REDISPLAY\nprintf '%s\\n' \"!OMEGAFLOW_NO_SUCH_EVENT\"\nprintf 'SECOND\\n'\n",
+    "output": [
+      "} \"quoted\"\r\n",
+      "!OMEGAFLOW_NO_SUCH_EVENT\r\n",
+      "SECOND\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-heredoc",
+    "source": "cat <<'EOF'\n} literal\nEOF",
+    "output": [
+      "} literal\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-backslash-boundary",
+    "source": "printf 'BOUNDARY\\n' \\\n",
+    "output": [
+      "BOUNDARY\r\n"
+    ]
+  },
+  {
+    "id": "B2.5-colon-function-zero",
+    "source": ":() { printf 'BAD_COLON\\n'; }; set -e; true",
+    "result": 0,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-colon-function-nonzero",
+    "source": ":() { printf 'BAD_COLON\\n'; }; set -e; false && printf BAD",
+    "result": 1,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-colon-disabled",
+    "source": "enable -n :; set -e; (exit 255) && printf BAD",
+    "result": 255,
+    "absent": [
+      "BAD"
+    ]
+  },
+  {
+    "id": "B2.5-set-disabled",
+    "setup": "builtin enable -n set",
+    "source": "builtin enable -p | /bin/grep '^enable set$' && printf BAD; printf 'SET_STILL_DISABLED\\n'",
+    "output": [
+      "SET_STILL_DISABLED\r\n"
+    ],
+    "absent": [
+      "BAD"
+    ],
+    "variants": [
+      {
+        "id": "printf-disabled",
+        "setup": "builtin enable -n set printf",
+        "source": "builtin enable -p | /bin/grep '^enable printf$' && /bin/printf BAD; /bin/printf 'PRINTF_STILL_DISABLED\\n'",
+        "output": [
+          "PRINTF_STILL_DISABLED\r\n"
+        ],
+        "absent": [
+          "BAD"
+        ]
+      },
+      {
+        "id": "exit-action",
+        "setup": "builtin enable -n set; builtin trap '/bin/printf EXIT_MUST_NOT_RUN' EXIT",
+        "source": "builtin trap -p EXIT; /bin/printf 'EXIT_STILL_INSTALLED\\n'",
+        "output": [
+          "EXIT_STILL_INSTALLED\r\n",
+          "trap -- '/bin/printf EXIT_MUST_NOT_RUN' EXIT"
+        ],
+        "absent": []
+      }
+    ]
+  },
+  {
+    "id": "B2.5-partial-reply",
+    "fault": "partial-reply"
+  },
+  {
+    "id": "B2.5-trailing-reply",
+    "fault": "trailing-reply"
+  },
+  {
+    "id": "B2.5-empty-reply",
+    "fault": "empty-reply"
+  },
+  {
+    "id": "B2.5-readonly-line",
+    "setup": "builtin readonly READLINE_LINE",
+    "fault": "readonly-line",
+    "variants": [
+      {
+        "id": "indexed",
+        "setup": "builtin declare -a READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "associative",
+        "setup": "builtin declare -A READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "lowercase",
+        "setup": "builtin declare -l READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "uppercase",
+        "setup": "builtin declare -u READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "nameref",
+        "setup": "ATTRIBUTE_TARGET=unchanged; builtin declare -n READLINE_LINE=ATTRIBUTE_TARGET",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "integer",
+        "setup": "builtin declare -i READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "export",
+        "setup": "builtin declare -x READLINE_LINE",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": false,
+        "output": [
+          "ATTRIBUTE_OK\r\n"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "B2.5-readonly-point",
+    "setup": "builtin readonly READLINE_POINT",
+    "fault": "readonly-point",
+    "variants": [
+      {
+        "id": "indexed",
+        "setup": "builtin declare -a READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "associative",
+        "setup": "builtin declare -A READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "lowercase",
+        "setup": "builtin declare -l READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "uppercase",
+        "setup": "builtin declare -u READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "nameref",
+        "setup": "ATTRIBUTE_TARGET=unchanged; builtin declare -n READLINE_POINT=ATTRIBUTE_TARGET",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": true,
+        "output": []
+      },
+      {
+        "id": "integer",
+        "setup": "builtin declare -i READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": false,
+        "output": [
+          "ATTRIBUTE_OK\r\n"
+        ]
+      },
+      {
+        "id": "export",
+        "setup": "builtin declare -x READLINE_POINT",
+        "source": "printf 'ATTRIBUTE_OK\\n'",
+        "fault": false,
+        "output": [
+          "ATTRIBUTE_OK\r\n"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "B2.5-missing-marker",
+    "fault": "missing-marker",
+    "helper_fault": {
+      "stdout": "}",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-malformed-marker",
+    "fault": "malformed-marker",
+    "helper_fault": {
+      "stdout": "}y",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-duplicate-marker",
+    "fault": "duplicate-marker",
+    "helper_fault": {
+      "stdout": "}xx",
+      "status": 0
+    },
+    "variants": [
+      {
+        "id": "trailing-LF",
+        "helper_fault": {
+          "stdout": "{\n__OMEGAFLOW_AWSH_START_RELEASED\n__OMEGAFLOW_AWSH_ENTER 0 off emacs\n__OMEGAFLOW_AWSH_INNER_ENTERED=0\n{\n__OMEGAFLOW_AWSH_INNER_ENTERED=1\n__OMEGAFLOW_AWSH_RETURN 0\nprintf 'h\u00e9llo\\n'\n\n\n__OMEGAFLOW_AWSH_RETURN \"$?\" && (( 1 ))\n}\n__OMEGAFLOW_AWSH_STATUS=$?\nif [[ $__OMEGAFLOW_AWSH_INNER_ENTERED != 1 ]]; then\n__OMEGAFLOW_AWSH_FAIL_STOP\nfi\n__OMEGAFLOW_AWSH_RETURN \"$__OMEGAFLOW_AWSH_STATUS\" && (( 1 ))\n}x\n",
+          "status": 0
+        }
+      },
+      {
+        "id": "trailing-LFs",
+        "helper_fault": {
+          "stdout": "{\n__OMEGAFLOW_AWSH_START_RELEASED\n__OMEGAFLOW_AWSH_ENTER 0 off emacs\n__OMEGAFLOW_AWSH_INNER_ENTERED=0\n{\n__OMEGAFLOW_AWSH_INNER_ENTERED=1\n__OMEGAFLOW_AWSH_RETURN 0\nprintf 'h\u00e9llo\\n'\n\n\n__OMEGAFLOW_AWSH_RETURN \"$?\" && (( 1 ))\n}\n__OMEGAFLOW_AWSH_STATUS=$?\nif [[ $__OMEGAFLOW_AWSH_INNER_ENTERED != 1 ]]; then\n__OMEGAFLOW_AWSH_FAIL_STOP\nfi\n__OMEGAFLOW_AWSH_RETURN \"$__OMEGAFLOW_AWSH_STATUS\" && (( 1 ))\n}x\n\n\n",
+          "status": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "B2.5-empty-success",
+    "fault": "empty-success",
+    "helper_fault": {
+      "stdout": "",
+      "status": 0
+    }
+  },
+  {
+    "id": "B2.5-nonzero-helper",
+    "fault": "nonzero-helper",
+    "helper_fault": {
+      "stdout": "}x",
+      "status": 1
+    }
+  }
+]

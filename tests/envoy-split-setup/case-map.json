@@ -1,0 +1,67 @@
+{
+  "slice": "B5.1",
+  "cases": [
+    {
+      "inventory_id": "B1-C034-setup-directory",
+      "test": "TestSplitResourcesRejectsForeignAndInvalidInputs",
+      "proof": "Exclusive private directory; existing directories, files and symlinks preserved",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-setup-stdout-FIFO",
+      "test": "TestSplitResourcesRealFIFOAndOwnership",
+      "proof": "Exact distinct stdout FIFO type, mode, owner and nonblocking reader/keepalive",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-setup-stderr-FIFO",
+      "test": "TestSplitResourcesRealFIFOAndOwnership",
+      "proof": "Exact distinct stderr FIFO; independent stream bytes",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-setup-reader",
+      "test": "TestSplitResourcesEveryPartialBoundary",
+      "proof": "Both reader acquisitions: injected failure, cancellation and expiry",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-setup-keepalive",
+      "test": "TestSplitResourcesEveryPartialBoundary",
+      "proof": "Both keepalive acquisitions: failure/cancel/expiry and descriptor close",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-setup-validation",
+      "test": "TestSplitResourcesRetainsIdentityAfterReplacement",
+      "proof": "Identity, mode, ancestor and directory replacement; reject reused start epoch",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-rollback-close",
+      "test": "TestSplitResourcesValidationAndDisposalFailures",
+      "proof": "All acquired descriptors close; a failed close prevents ordinary success",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-C034-rollback-unlink",
+      "test": "TestSplitResourcesRetainsIdentityAfterReplacement",
+      "proof": "Only matching created entries removed; foreign replacements and nonempty directory survive",
+      "cumulative_owner": "B6.3",
+      "cumulative_closeout": false
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.1",
+      "test": "TestNativeSplitSetupFixedPathsAndRejection",
+      "proof": "Actual nonroot fixed paths, qualified Bash source rejection, pre-write cancellation, partial failure and shell reuse",
+      "qualification": "genuine pinned Linux amd64 targets only"
+    }
+  ]
+}

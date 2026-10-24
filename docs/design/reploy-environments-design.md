@@ -10,14 +10,27 @@
   Runtime, controller, terminal, browser, publication, and packaging changes in
   the former PR 9–13 stack are raw material, not accepted implementation
   evidence.
-- Updated: 2026-10-06
+- Updated: 2026-10-13
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
-  A2.9 successor replans delivery to one PR per numbered implementation leaf;
-  it is not yet approved. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
+  partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
+  B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
+  corpus successors. A2.11/PR58's qualification-output amendment and its owning
+  B2.1.1/PR59 correction are approved. A2.12/PR60's ownership amendment is
+  approved at exact mapped head `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`,
+  B1.3.2/PR61's corpus correction is approved at exact mapped head
+  `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62's qualification is
+  approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311`.
+  The qualified support scope is limited to the three exact Linux/amd64 manifest
+  target/build tuples Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu
+  26.04/Bash 5.3.9, bound to `runtime/envoy/bash-builds.json`. ARM64 remains
+  unqualified and the complete Envoy/controller production path remains pending.
+  A2.13 is a pending design-only fixed-pair successor; B3.1.1 implementation
+  remains pending until A2.13 receives exact-head approval. This design makes no
+  production claim.
 - Scope: Reploy-backed OmegaFlow execution environments, application
   blueprints, and project bootstrap
 
@@ -784,7 +797,9 @@ is empty and read-only. Final validation re-materializes the launch environment
 and requires those exact values, every other exact forbidden name to be absent,
 no name with a `BASH_FUNC_`, `LD_`, or `AWSH_` prefix, and no `LC_` name except
 the reserved `LC_ALL`. Before deployment, host OmegaFlow verifies from the
-trusted runtime manifest the empty Readline file, the fixed regular
+trusted runtime manifest the fixed regular qualified
+`/omegaflow-runtime/etc/bash-builds.json` and its strict schema, the empty
+Readline file, the fixed regular
 `/omegaflow-runtime/etc/awsh-bashrc` that installs the controlled Bash startup
 hooks, leaves the real primary-prompt display empty, installs the readonly
 `__OMEGAFLOW_AWSH_` adapter namespace and output-empty `PS0`, binds private
@@ -801,8 +816,8 @@ a regular, readable file whose digest matches the manifest. The host also
 verifies that the read-only runtime mount cannot be shadowed.
 
 Preparation hashes the resolved regular `/bin/bash` and requires an exact entry
-in OmegaFlow's versioned Bash-build table, generated into host preparation,
-Envoy, and Awsh from one canonical source. Each digest-keyed entry records the
+in OmegaFlow's versioned Bash-build table. Host preparation, Envoy, and Awsh
+use schema consumers generated from one canonical schema. Each digest-keyed entry records the
 compiled system-wide interactive rc path or `none`, deterministic
 startup-export transformation, catchable-signal inventory, Readline behavior
 required by the startup handshake, the loader/submit macro's keymap,
@@ -817,6 +832,27 @@ preparation or launch at the boundary that detects it. Neither shell launch may
 fall through to application-controlled configuration under `HOME`, `/etc`,
 another terminal-database search directory, or an application-selected locale
 database.
+
+The qualified Bash-build table is generated as a separate readable regular
+runtime payload at `/omegaflow-runtime/etc/bash-builds.json`, covered by the
+runtime manifest and the read-only runtime mount. Generated Envoy and Awsh
+consumer code reads only that fixed path, validates its manifest-bound bytes
+and strict qualified-entry schema, and independently selects the exact resolved
+Bash entry. Host preparation consumes the same canonical table. Neither table
+contents nor their digest are compiled into Envoy or Awsh, including generated
+source comments or build identity inputs. Runtime consumer code is generated
+from the table schema; stale schema consumers and stale generated table data
+are rejected separately.
+
+Qualification binds the complete actual Awsh executable, fixed Bash rcfile,
+empty inputrc, terminal entry, and complete selected locale tree. The generated
+qualified table is an output of qualification, not an adapter input to its own
+receipt. Its manifest digest is checked independently; this does not exempt
+any executable or behavioral asset from exact-byte qualification. Any change
+to a bound adapter input requires rerunning the affected qualification before
+support is retained, including changes made by later runtime leaves. No new
+wire message, actor, timer, configurable table path, or Reploy capability is
+introduced by this artifact separation.
 
 The controlled-session bootstrap therefore never opens an application-selected
 history, Readline, terminal-database, locale-database, or mailbox path and never
@@ -884,6 +920,9 @@ defaults are:
   database at `/omegaflow-runtime/share/terminfo` for both shell launches;
 - fixed `INPUTRC=/omegaflow-runtime/etc/inputrc`, naming a
   manifest-validated empty read-only file for both shell launches;
+- the fixed manifest-validated read-only qualified table at
+  `/omegaflow-runtime/etc/bash-builds.json`, accepted only after strict schema
+  and exact selected-build validation;
 - a manifest-validated read-only `/omegaflow-runtime/etc/awsh-bashrc`, selected
   only by Awsh's fixed `--rcfile` launch and never by the Reploy bootstrap shell;
 - fixed helper requests to the mode-0600
@@ -891,6 +930,26 @@ defaults are:
   to the short-lived source helper and assigned to Bash's reserved Readline
   buffer only after complete private capture and positive-marker validation,
   rather than written through the PTY;
+- echo disabled before each adapter-owned Readline entry, with actual entry
+  proved by canonical input becoming disabled while echo stays disabled; Awsh
+  retains the complete fresh workload terminal state separately, restores and
+  verifies that exact state through its existing terminal-control lease after
+  matching `started_ack` and before the start helper's successful reply, and
+  keeps restoration and reply under the original start epoch. Intentional raw
+  or no-echo state persists; terminal bytes are never filtered to hide a frame;
+- Envoy suspends controller-terminal reads after satisfying
+  `execute.input_through` until accepting matching `start_released`. The
+  controller may write after public `operation_started`, but socket
+  backpressure holds ordinary keys and Ctrl-C until workload termios
+  restoration and start-helper completion are proved. The original start
+  deadline, private control and output relay remain active, and fatal start
+  failure forwards none of the held input;
+- when Envoy selects an input-barrier timeout or cancellation before operation-start,
+  one five-second pre-start result-delivery epoch covers the pump-held terminal
+  prefix, its mark and complete empty-range result. Expiry is fatal
+  `prestart-output-timeout` followed by existing final-drain teardown. Awsh and
+  Reploy gain no timer or wire responsibility; ordinary terminal backpressure
+  outside this step is unchanged;
 - the fixed helper stream framing: each mode-0600 Unix stream connection carries
   one bounded four-byte big-endian length-prefixed request, request half-close,
   one length-prefixed reply, and reply EOF; exact read/write loops tolerate
@@ -935,6 +994,13 @@ exact `/omegaflow-runtime/bin/envoy` `exec` invocation over the attachment,
 including its fixed listen arguments, controller-generated handshake
 `session_id`, and initial dimensions. That invocation is an OmegaFlow bootstrap
 contract, not a Reploy blueprint command.
+
+Envoy owns selection of the fixed terminal/telemetry pair and closes its
+listeners after selection. Additional connections are refused or closed without
+application-data processing and do not by themselves fail a valid capture.
+Reploy supplies endpoint coordinates; it does not count connection attempts
+during listener closure. No unused connection can replace a selected channel
+or authorize a reconnect.
 
 The application config may override normal Reploy fields, including identity,
 command, ports, mounts, packages, and endpoints — every one of them except the
@@ -1588,3 +1654,22 @@ later items are not gates for the terminal-only milestone:
 9. Which secret-dependent narration, application, and publishing operations
    remain host-side or deferred until controlled sessions support an approved
    secret-delegation boundary?
+
+## A2.12 qualification and authored-input ownership correction
+
+B2.8 qualifies the selected Bash adapter against its native B2 responsibilities.
+The reserved loader and submit bindings, echo-off entry, exact source/frame
+consumption and no redisplay remain mandatory native qualification evidence.
+Controller-authored terminal input must still reject either reserved sequence,
+including when its bytes span adjacent input steps, before sending `execute`.
+That compiler/client responsibility is owned by C3.2 and closes with C3.3; it
+cannot be claimed from a Bash qualification probe or moved into an adapter test
+peer. The B1 owning corpus successor retains `B1-C031-reserved-input` and
+`B1-C031-adjacent-step-input` with that owner, requirement and pending real-client
+proof. Neither case is deleted or marked executed by B2.8.
+
+The B2.5/B2.6 adapter-side pre-start and post-start failure assertions remain
+required in native B2 qualification against the deterministic Envoy peer.
+Actual public `operation_started` publication and failure crossings close in
+B3.4. The corresponding B1-C031 pre/post-public-start cases retain that later
+closure and cannot count as actual Envoy public-channel proof in B2.8.

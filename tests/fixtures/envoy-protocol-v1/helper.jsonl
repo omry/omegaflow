@@ -1,0 +1,13 @@
+{"id":"helper-startup-state","direction":"helper","phase":"startup","fields":["awsh-helper-v1","prompt_state","0","off","emacs","/work","","{}"]}
+{"id":"helper-startup-ready","direction":"helper","phase":"startup","fields":["awsh-helper-v1","prompt_ready"]}
+{"id":"helper-completion-state","direction":"helper","phase":"completion","fields":["awsh-helper-v1","prompt_state","255","on","vi","/work","/logical","{\"A\":\"quote\\\" slash/ backslash\\\\\",\"_Z\":\"héllo\"}"]}
+{"id":"helper-completion-ready","direction":"helper","phase":"completion","fields":["awsh-helper-v1","prompt_ready","1","off","emacs","/work","","{}"]}
+{"id":"helper-source-request","direction":"helper","phase":"source","fields":["awsh-helper-v1","source"]}
+{"id":"helper-prepared-request","direction":"helper","phase":"prepared","fields":["awsh-helper-v1","start_prepared"]}
+{"id":"helper-gate-request","direction":"helper","phase":"gate","fields":["awsh-helper-v1","gate","gate"]}
+{"id":"helper-startup-accepted","direction":"awsh","phase":"startup","fields":["awsh-helper-v1","accepted"]}
+{"id":"helper-completion-accepted","direction":"awsh","phase":"completion","fields":["awsh-helper-v1","accepted"]}
+{"id":"helper-prepared-accepted","direction":"awsh","phase":"prepared","fields":["awsh-helper-v1","accepted"]}
+{"id":"helper-gate-accepted","direction":"awsh","phase":"gate","fields":["awsh-helper-v1","accepted","gate"]}
+{"id":"helper-source-pty","direction":"awsh","phase":"source","fields":["awsh-helper-v1","source","op","0","off","emacs","pty","","","printf 'héllo\\n'\n"]}
+{"id":"helper-source-split","direction":"awsh","phase":"source","fields":["awsh-helper-v1","source","op","255","on","vi","split","/run/omegaflow/session/split/op.stdout","/run/omegaflow/session/split/op.stderr","printf 'done'\n"]}

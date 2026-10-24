@@ -1,0 +1,56 @@
+{
+  "slice": "B5.3",
+  "cases": [
+    {
+      "inventory_id": "B1-C005",
+      "test": "TestSplitRelayExactLogicalBytesAndFirstSource",
+      "proof": "source switches and empty boundaries, cumulative B5.1/B5.2/B5.3 suites"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-start",
+      "test": "TestStartEpochIncludesSetupAndAllProgress",
+      "proof": "real FIFO setup/attachment under the original start epoch"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-resize",
+      "test": "TestSplitResizeClosesEveryAdmittedSourceAndResumesReaders",
+      "proof": "every admitted source covered before resize, then healthy reader resumption"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-continuous",
+      "test": "TestSplitResizeContinuousSourcesPublishFiniteBoundary",
+      "proof": "finite resize while both FIFO writers remain active"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-completion",
+      "test": "TestSplitCompletionCleanupBeforeKeepaliveEOFRemovalAndResult",
+      "proof": "cleanup before writer closure, independent EOF and path removal before helper release/result"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-epochs",
+      "test": "TestSplitCompletionMissingEOFUsesExistingCleanupBoundAndFailsClosed",
+      "proof": "no helper acknowledgement or ordinary result after the original cleanup deadline"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-gate",
+      "test": "TestSplitCompletionGateResizeAndNextPTYOperation",
+      "proof": "gate input, resize and sequential PTY reuse"
+    },
+    {
+      "inventory_id": "B1-PACKAGE-B5.3-native",
+      "test": "TestNativeSplitCompletionProductionResizeAndExactBytes",
+      "proof": "genuine qualified amd64 Bash output, resize, ordinary/cancel/finalize result"
+    }
+  ],
+  "deferred": [
+    {
+      "inventory_id": "B1-C034-interleaved-logical-bytes",
+      "owner": "B6.3",
+      "remaining": "actual descendants and writer-retaining cleanup; exact FIFO bytes and native adapter barriers are proven here"
+    },
+    {
+      "owner": "B7",
+      "remaining": "resolved inspection integration"
+    }
+  ]
+}

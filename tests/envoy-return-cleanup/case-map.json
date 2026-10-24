@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "owner": "B6.3",
+  "native": "TestNativeReturnCleanup",
+  "actual_actors": [
+    "Envoy session/relay/coordinator",
+    "manifested Awsh",
+    "qualified Bash"
+  ],
+  "positive_cases": [
+    "background",
+    "disown",
+    "nohup",
+    "setsid",
+    "double-fork",
+    "ignores-term",
+    "split"
+  ],
+  "negative_cases": [
+    "closed-owner",
+    "lost-pin",
+    "held-stdout",
+    "held-stderr"
+  ],
+  "overlay_cases": {
+    "helper-identity": "invalid completion helper identity fails before input_closed",
+    "removal": "real FIFO replacement fails before input_closed",
+    "late-census": "new real process fails final idle proof",
+    "blocked-drain": "modeled drain syscall expires in original cleanup epoch"
+  },
+  "unit_cases": [
+    "TestOrdinaryReturnRequiresConcreteOwner",
+    "TestOrdinaryReturnRejectsFoundationOrMixedOwnership"
+  ],
+  "existing_foundation_suites": [
+    "TestComplete",
+    "TestSplitCompletion"
+  ],
+  "runner": "tests/envoy-return-cleanup/run.py",
+  "limits": [
+    "Only genuine Linux amd64 qualification rows are exercised",
+    "Overlay cases are explicit test models",
+    "No B6.5 lifecycle or B8 full conformance claim"
+  ]
+}

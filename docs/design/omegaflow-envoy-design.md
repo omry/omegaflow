@@ -8,14 +8,27 @@
   review cycle. Production Envoy, runtime, controller, terminal-runner, and
   browser changes in the former PR 9–13 stack are raw material, not accepted
   implementation evidence.
-- Updated: 2026-10-06
+- Updated: 2026-10-13
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. The current
-  A2.9 successor replans delivery to one PR per numbered implementation leaf;
-  it is not yet approved. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
+  partial implementation, including A2.10/PR51, B2.3.3/PR52, B2.5/PR53,
+  B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 private-codec and B1.3.1/PR57
+  corpus successors. A2.11/PR58's qualification-output amendment and its owning
+  B2.1.1/PR59 correction are approved. A2.12/PR60's ownership amendment is
+  approved at exact mapped head `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`,
+  B1.3.2/PR61's corpus correction is approved at exact mapped head
+  `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62's qualification is
+  approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311`.
+  The qualified support scope is limited to the three exact Linux/amd64 manifest
+  target/build tuples Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu
+  26.04/Bash 5.3.9, bound to `runtime/envoy/bash-builds.json`. ARM64 remains
+  unqualified and the complete Envoy/controller production path remains pending.
+  A2.13 is a pending design-only fixed-pair successor; B3.1.1 implementation
+  remains pending until A2.13 receives exact-head approval. This design makes no
+  production claim.
 - Initial scope: one persistent selected-shell backend, Bash in v1, for terminal
   execution and structured telemetry in Reploy-backed OmegaFlow recordings
 
@@ -106,6 +119,13 @@ two lease-private TCP channels to controller OmegaFlow:
 Terminal bytes are never parsed as telemetry. Reploy transports neither
 OmegaFlow protocol and does not interpret shell operations. It supplies the
 controller/workload network and the declared endpoint coordinates.
+
+Envoy selects one terminal connection and one telemetry connection and keeps
+that pair fixed. It closes the listeners after selection, refusing or closing
+unused extra connections without processing their application data. An unused
+extra connection alone does not fail a valid session. Invalid handshake or
+failure of a selected channel remains fatal; no replacement pair, reconnect,
+new hello, or deadline reset is permitted.
 
 ```mermaid
 flowchart LR
@@ -464,7 +484,11 @@ foreground.
 Before reporting the selected shell ready, Awsh verifies parentage, session,
 foreground group, fixed-rcfile startup, the startup helper exchange, and actual
 Readline entry. The fixed adapter leaves the real Bash primary-prompt display
-empty. Awsh drains the slave-side terminal output and closes every PTY-slave
+empty. Before Readline entry, Awsh saves the complete fresh workload terminal
+state, sets canonical input on and echo off, and verifies the exact prepared
+state. Actual entry clears canonical input while echo remains off; this keeps
+the privately loaded source frame out of terminal output. Awsh drains the
+slave-side terminal output and closes every PTY-slave
 descriptor it owns before private readiness. Envoy requires the pre-ready
 PTY-master bytes to match the selected Bash-build entry exactly, then commits
 public `ready` with their exclusive raw-log end in `output_through` before
@@ -530,17 +554,35 @@ the source, and uses a short-lived Bash helper to return a canonical brace frame
 to a private loader buffer. The readonly loader assigns `READLINE_LINE` only
 after validating the complete reply and its positive success marker. Envoy writes
 only the fixed two-byte adapter trigger on the PTY. The selected Bash/Readline
-build accepts the private loader and `accept-line` macro without redisplaying
-the frame, and its output-empty `PS0` helper blocks before execution. A helper
+build accepts the private loader and `accept-line` macro with echo disabled
+before Readline entry, without redisplaying the frame, and its output-empty
+`PS0` helper blocks before execution. A helper
 error enters a manifested non-returning fail-stop primitive instead of
 returning to the loader macro or `PS0`; fatal teardown is the only release.
 Awsh's
 `start_prepared`/`started` and Envoy's `start_release`/`started_ack` keep Bash
 blocked until Envoy has drained preceding output, completely published
-`operation_started`, and fixed `output_start`. After the `PS0` marker is
+`operation_started`, and fixed `output_start`. After matching `started_ack`,
+Awsh restores and reads back the exact saved workload terminal state through
+its existing validated close-on-exec lease before sending the start helper a
+successful reply. Restoration and that reply use the original start deadline;
+failure releases no authored command. The saved state may intentionally be raw
+or no-echo, so restoration never means enabling echo unconditionally.
+Controller input sent after public `operation_started`, including Ctrl-C, is
+held by Envoy's suspended terminal reads until matching `start_released`, with
+socket backpressure rather than an unbounded application buffer. The existing
+start deadline and output/private-control processing continue while input is
+held; fatal start failure releases none of it. Ordinary
+completion recaptures the full post-cleanup state before preparing the next
+echo-off Readline entry. After the `PS0` marker is
 validated, the first adapter-owned Bash command signals its direct Awsh parent;
 Awsh's shell-neutral `start_released` result gives Envoy the exact safe release
-boundary. Cancellation remains pre-start
+boundary. If an input-barrier timeout or cancellation is selected before operation-start
+begins, Envoy bounds delivery of the held terminal prefix and empty-range result
+with one five-second pre-start result-delivery epoch. Expiry fails the session
+with `prestart-output-timeout` and enters existing final-drain teardown; it never
+claims that the shell is reusable. Source rejection and later pre-start
+cancellation retain the original operation-start epoch. Cancellation remains pre-start
 only until Envoy begins the private `execute` write. A later cancellation is
 retained: `rejected` may resolve it as pre-start failure, while `submit` commits
 the start and orders public `operation_started`, `started_ack`, and
@@ -826,6 +868,27 @@ input fails startup. Awsh then launches Bash. Terminal, Readline, locale, and
 Bash startup lookup cannot fall through to application-controlled data under
 `HOME`, `/etc`, or another search directory.
 
+The qualified Bash-build table is generated as a separate readable regular
+runtime payload at `/omegaflow-runtime/etc/bash-builds.json`, covered by the
+runtime manifest and the read-only runtime mount. Generated Envoy and Awsh
+consumer code reads only that fixed path, validates its manifest-bound bytes
+and strict qualified-entry schema, and independently selects the exact resolved
+Bash entry. Host preparation consumes the same canonical table. Neither table
+contents nor their digest are compiled into Envoy or Awsh, including generated
+source comments or build identity inputs. Runtime consumer code is generated
+from the table schema; stale schema consumers and stale generated table data
+are rejected separately.
+
+Qualification binds the complete actual Awsh executable, fixed Bash rcfile,
+empty inputrc, terminal entry, and complete selected locale tree. The generated
+qualified table is an output of qualification, not an adapter input to its own
+receipt. Its manifest digest is checked independently; this does not exempt
+any executable or behavioral asset from exact-byte qualification. Any change
+to a bound adapter input requires rerunning the affected qualification before
+support is retained, including changes made by later runtime leaves. No new
+wire message, actor, timer, configurable table path, or Reploy capability is
+introduced by this artifact separation.
+
 Application environment required by planned operations is delegated
 explicitly, then the Envoy installs the trusted terminal, Readline, and locale
 values and an empty `HISTFILE` as the final launch values so neither an
@@ -1089,6 +1152,7 @@ executable at `/omegaflow-runtime` in the workload:
 │   └── awsh
 ├── etc/
 │   ├── awsh-bashrc
+│   ├── bash-builds.json
 │   └── inputrc
 ├── share/terminfo/
 │   └── .../xterm-256color
@@ -1134,7 +1198,8 @@ hashed executable, not optional application configuration.
 
 Paths are unique, normalized relative POSIX paths and may name only the fixed
 `bin`, `etc`, `share/terminfo`, and `lib/locale` roots. The trusted launch data
-consists of `etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
+consists of the generated qualified `etc/bash-builds.json`,
+`etc/awsh-bashrc`, the empty `etc/inputrc`, the exact
 `xterm-256color` entry below `share/terminfo`, and every regular file in the
 complete selected `C.UTF-8` tree below `lib/locale`. The manifest itself is not
 listed as a payload file. Staging rejects missing or additional payload files,
@@ -1153,9 +1218,9 @@ The frozen Hydra blueprint contract provides all of the following:
 - one configured non-root workload identity;
 - the verified runtime directory mounted read-only and executable at
   `/omegaflow-runtime`;
-- the manifest-validated Bash rcfile, empty Readline file, exact trusted
-  terminal entry, and complete trusted locale tree in that non-shadowable
-  runtime mount;
+- the manifest-validated qualified `etc/bash-builds.json`, Bash rcfile, empty
+  Readline file, exact trusted terminal entry, and complete trusted locale tree
+  in that non-shadowable runtime mount;
 - a writable reserved runtime root at `/run/omegaflow`, outside that mount,
   where Envoy can exclusively create `/run/omegaflow/session` mode 0700;
 - two private TCP endpoint declarations reserved for the Envoy terminal and
@@ -1427,6 +1492,35 @@ Envoy's acceptance of `input_close` and matching `input_closed`; cancellation
 and finalization in that interval
 must preserve Bash/helper survival, consume `input_close` as the existing A2.5
 return fact, and complete the already-selected lifecycle outcome. A2.7 closed
-the private schemas and is approved and merged. B implementation remains pending
-behind the current A2.8 delivery-order successor's approval and merge; its
-static and executable evidence owners are fixed by the implementation plan.
+the private schemas and is approved and merged. A2.8 and A2.9 are also merged;
+B1 and B2.1–B2.7 have approved partial implementation, including A2.10/PR51,
+B2.3.3/PR52, B2.5/PR53, B2.6/PR54, B2.7/PR56 and the B1.2.1/PR55 codec
+and B1.3.1/PR57 corpus successors. A2.11/PR58 and B2.1.1/PR59 are approved.
+A2.12/PR60 and B1.3.2/PR61 are approved at exact mapped heads
+`d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86` and
+`9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`; B2.8/PR62 qualification is
+approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311` and
+is limited to the three exact Linux/amd64 manifest target/build tuples Debian
+12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9, bound to
+`runtime/envoy/bash-builds.json`. ARM64 remains unqualified and the complete
+Envoy/controller production path remains pending. The plan fixes the remaining
+executable evidence owners and preserves the complete production conformance gate.
+
+## A2.12 qualification and authored-input ownership correction
+
+B2.8 qualifies the selected Bash adapter against its native B2 responsibilities.
+The reserved loader and submit bindings, echo-off entry, exact source/frame
+consumption and no redisplay remain mandatory native qualification evidence.
+Controller-authored terminal input must still reject either reserved sequence,
+including when its bytes span adjacent input steps, before sending `execute`.
+That compiler/client responsibility is owned by C3.2 and closes with C3.3; it
+cannot be claimed from a Bash qualification probe or moved into an adapter test
+peer. The B1 owning corpus successor retains `B1-C031-reserved-input` and
+`B1-C031-adjacent-step-input` with that owner, requirement and pending real-client
+proof. Neither case is deleted or marked executed by B2.8.
+
+The B2.5/B2.6 adapter-side pre-start and post-start failure assertions remain
+required in native B2 qualification against the deterministic Envoy peer.
+Actual public `operation_started` publication and failure crossings close in
+B3.4. The corresponding B1-C031 pre/post-public-start cases retain that later
+closure and cannot count as actual Envoy public-channel proof in B2.8.

@@ -1,0 +1,294 @@
+# Fixed adapter entry state and ordinary completion handoff.
+builtin unset POSIXLY_CORRECT
+builtin readonly POSIXLY_CORRECT
+# Declaring this special variable resets selected-Bash parser defaults; install
+# the canonical grammar afterward, including disabled interactive alias expansion.
+builtin set +H +e +E +T +o posix +n +v +x
+builtin set -m -o emacs
+builtin shopt -u expand_aliases extdebug extglob
+builtin shopt -s interactive_comments
+builtin trap - CHLD INT DEBUG ERR RETURN
+builtin enable builtin enable exec jobs kill return trap wait
+PS1=''
+PS2=''
+PS0='$(__OMEGAFLOW_AWSH_PREPARE)'
+builtin readonly PS0
+
+# No source-visible return, including a broken or unexpectedly returning helper.
+# Disable job notification so the stopped helper cannot release foreground Bash.
+__OMEGAFLOW_AWSH_FAIL_STOP() {
+    __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin trap - EXIT; builtin enable -p)$'\n'
+    if [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable set\n'* ]]; then
+        builtin set +m +e +v +x
+    else
+        builtin enable set
+        builtin set +m +e +v +x
+        builtin enable -n set
+    fi
+    /omegaflow-runtime/bin/awsh bash-fail-stop >/dev/null 2>&1
+    while ((1)); do ((1)); done
+} 2>/dev/null
+
+# Preflight runs in a subshell: its scratch state never replaces workload state.
+# Only reserved builtins and shell syntax are needed, even after source disables
+# local, shift, getopts, read, printf, or another ordinary builtin. An inherited
+# EXIT action must not run for an adapter-owned preflight/substitution.
+__OMEGAFLOW_AWSH_TRAP_PREFLIGHT() (
+    builtin trap - EXIT
+    __OMEGAFLOW_AWSH_ARGS=("$@")
+    __OMEGAFLOW_AWSH_INDEX=0
+    __OMEGAFLOW_AWSH_QUERY=0
+    while (( __OMEGAFLOW_AWSH_INDEX < $# )); do
+        __OMEGAFLOW_AWSH_OPT=${__OMEGAFLOW_AWSH_ARGS[__OMEGAFLOW_AWSH_INDEX]}
+        [[ $__OMEGAFLOW_AWSH_OPT == -- ]] && { ((++__OMEGAFLOW_AWSH_INDEX)); break; }
+        [[ $__OMEGAFLOW_AWSH_OPT != -?* ]] && break
+        for (( __OMEGAFLOW_AWSH_CHAR=1; __OMEGAFLOW_AWSH_CHAR<${#__OMEGAFLOW_AWSH_OPT}; ++__OMEGAFLOW_AWSH_CHAR )); do
+            __OMEGAFLOW_AWSH_LETTER=${__OMEGAFLOW_AWSH_OPT:__OMEGAFLOW_AWSH_CHAR:1}
+            if [[ -z ${__OMEGAFLOW_AWSH_LETTER#p} || -z ${__OMEGAFLOW_AWSH_LETTER#l} ]]; then
+                __OMEGAFLOW_AWSH_QUERY=1
+            else
+                builtin return 0 # Native option error; no mutation.
+            fi
+        done
+        ((++__OMEGAFLOW_AWSH_INDEX))
+    done
+    (( __OMEGAFLOW_AWSH_QUERY || __OMEGAFLOW_AWSH_INDEX == $# )) && builtin return 0
+    # One remaining argument resets it. An all-digit first argument makes the
+    # complete remaining vector reset targets; otherwise the first is the action.
+    __OMEGAFLOW_AWSH_FIRST=${__OMEGAFLOW_AWSH_ARGS[__OMEGAFLOW_AWSH_INDEX]}
+    if (( $# - __OMEGAFLOW_AWSH_INDEX > 1 )) &&
+       [[ -z $__OMEGAFLOW_AWSH_FIRST || $__OMEGAFLOW_AWSH_FIRST == *[!0-9]* ]]; then
+        ((++__OMEGAFLOW_AWSH_INDEX))
+    fi
+    __OMEGAFLOW_AWSH_CHLD=$(builtin kill -l CHLD)
+    __OMEGAFLOW_AWSH_INT=$(builtin kill -l INT)
+    __OMEGAFLOW_AWSH_DEBUG=$(builtin kill -l DEBUG)
+    __OMEGAFLOW_AWSH_ERR=$(builtin kill -l ERR)
+    __OMEGAFLOW_AWSH_RETURN=$(builtin kill -l RETURN)
+    for (( ; __OMEGAFLOW_AWSH_INDEX<$#; ++__OMEGAFLOW_AWSH_INDEX )); do
+        __OMEGAFLOW_AWSH_SPEC=${__OMEGAFLOW_AWSH_ARGS[__OMEGAFLOW_AWSH_INDEX]}
+        # Validate with trap first: kill -l also accepts encoded exit statuses,
+        # e.g. 130, which trap correctly rejects as a signal specification.
+        if builtin trap -p "$__OMEGAFLOW_AWSH_SPEC" >/dev/null 2>&1; then
+            __OMEGAFLOW_AWSH_SIGNAL=$(builtin kill -l "$__OMEGAFLOW_AWSH_SPEC" 2>/dev/null)
+            if [[ $__OMEGAFLOW_AWSH_SIGNAL == *[!0-9]* ]]; then
+                __OMEGAFLOW_AWSH_SIGNAL=$(builtin kill -l "$__OMEGAFLOW_AWSH_SIGNAL" 2>/dev/null)
+            fi
+            case $__OMEGAFLOW_AWSH_SIGNAL in
+                "$__OMEGAFLOW_AWSH_CHLD"|"$__OMEGAFLOW_AWSH_INT"|"$__OMEGAFLOW_AWSH_DEBUG"|"$__OMEGAFLOW_AWSH_ERR"|"$__OMEGAFLOW_AWSH_RETURN") builtin return 1 ;;
+            esac
+        fi
+    done
+    builtin return 0
+)
+# Bash restores these definition-scoped descriptors on return. Only the native
+# builtin receives the caller's stderr; preflight/helpers inherit no extra fd.
+trap() {
+    if __OMEGAFLOW_AWSH_TRAP_PREFLIGHT "$@" 3>&-; then
+        builtin trap "$@" 2>&3 3>&-
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP 3>&-
+    fi
+} 3>&2 2>/dev/null
+
+__OMEGAFLOW_AWSH_ENABLE_PREFLIGHT() (
+    builtin trap - EXIT
+    __OMEGAFLOW_AWSH_ARGS=("$@")
+    __OMEGAFLOW_AWSH_INDEX=0
+    __OMEGAFLOW_AWSH_QUERY=0
+    __OMEGAFLOW_AWSH_MUTATE=0
+    while (( __OMEGAFLOW_AWSH_INDEX < $# )); do
+        __OMEGAFLOW_AWSH_OPT=${__OMEGAFLOW_AWSH_ARGS[__OMEGAFLOW_AWSH_INDEX]}
+        [[ $__OMEGAFLOW_AWSH_OPT == -- ]] && { ((++__OMEGAFLOW_AWSH_INDEX)); break; }
+        [[ $__OMEGAFLOW_AWSH_OPT != -?* ]] && break
+        for (( __OMEGAFLOW_AWSH_CHAR=1; __OMEGAFLOW_AWSH_CHAR<${#__OMEGAFLOW_AWSH_OPT}; ++__OMEGAFLOW_AWSH_CHAR )); do
+            # Prefix removal is case-sensitive even when nocasematch is on.
+            # Do not depend on shopt: the workload may have disabled it.
+            __OMEGAFLOW_AWSH_LETTER=${__OMEGAFLOW_AWSH_OPT:__OMEGAFLOW_AWSH_CHAR:1}
+            if [[ -z ${__OMEGAFLOW_AWSH_LETTER#p} ]]; then
+                __OMEGAFLOW_AWSH_QUERY=1
+            elif [[ -z ${__OMEGAFLOW_AWSH_LETTER#a} || -z ${__OMEGAFLOW_AWSH_LETTER#s} ]]; then
+                ((1))
+            elif [[ -z ${__OMEGAFLOW_AWSH_LETTER#n} || -z ${__OMEGAFLOW_AWSH_LETTER#d} ]]; then
+                __OMEGAFLOW_AWSH_MUTATE=1
+            elif [[ -z ${__OMEGAFLOW_AWSH_LETTER#f} ]]; then
+                __OMEGAFLOW_AWSH_MUTATE=1
+                if (( __OMEGAFLOW_AWSH_CHAR+1 == ${#__OMEGAFLOW_AWSH_OPT} )); then
+                    ((++__OMEGAFLOW_AWSH_INDEX))
+                    (( __OMEGAFLOW_AWSH_INDEX == $# )) && builtin return 0
+                fi
+                break # Remaining option text is the filename.
+            else
+                builtin return 0
+            fi
+        done
+        ((++__OMEGAFLOW_AWSH_INDEX))
+    done
+    (( __OMEGAFLOW_AWSH_QUERY || !__OMEGAFLOW_AWSH_MUTATE )) && builtin return 0
+    for (( ; __OMEGAFLOW_AWSH_INDEX<$#; ++__OMEGAFLOW_AWSH_INDEX )); do
+        __OMEGAFLOW_AWSH_NAME=${__OMEGAFLOW_AWSH_ARGS[__OMEGAFLOW_AWSH_INDEX]}
+        if [[ -n $__OMEGAFLOW_AWSH_NAME &&
+            ( -z ${__OMEGAFLOW_AWSH_NAME#builtin} || -z ${__OMEGAFLOW_AWSH_NAME#enable} ||
+              -z ${__OMEGAFLOW_AWSH_NAME#exec} || -z ${__OMEGAFLOW_AWSH_NAME#jobs} ||
+              -z ${__OMEGAFLOW_AWSH_NAME#kill} || -z ${__OMEGAFLOW_AWSH_NAME#return} ||
+              -z ${__OMEGAFLOW_AWSH_NAME#trap} || -z ${__OMEGAFLOW_AWSH_NAME#wait} ) ]]; then
+            builtin return 1
+        fi
+    done
+    builtin return 0
+)
+enable() {
+    if __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT "$@" 3>&-; then
+        builtin enable "$@" 2>&3 3>&-
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP 3>&-
+    fi
+} 3>&2 2>/dev/null
+
+# The gate transport is B4.3; this leaf freezes the function identity and path.
+awsh() {
+    if [[ $# == 2 && -z ${1#gate} && -n $2 ]]; then
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock gate "$2"
+    else
+        builtin return 2
+    fi
+}
+# set remains an ordinary workload builtin. Temporarily enable it only for
+# fixed adapter settings, then restore its disabled state before authored source.
+__OMEGAFLOW_AWSH_SET() {
+    __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin trap - EXIT; builtin enable -p)$'\n'
+    if [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable set\n'* ]]; then
+        builtin set "$@"
+    else
+        builtin enable set
+        builtin set "$@"
+        builtin enable -n set
+    fi
+}
+__OMEGAFLOW_AWSH_ENTER() {
+    if [[ -z ${2#on} ]]; then
+        __OMEGAFLOW_AWSH_SET -H
+    else
+        __OMEGAFLOW_AWSH_SET +H
+    fi
+    __OMEGAFLOW_AWSH_SET -o "$3"
+    builtin return "$1"
+}
+__OMEGAFLOW_AWSH_RETURN() { builtin return "$1"; }
+__OMEGAFLOW_AWSH_PREPARE() {
+    if __OMEGAFLOW_AWSH_PREPARED=$(builtin trap - EXIT; /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock start-prepared && builtin enable printf && builtin printf x); then
+        [[ ${#__OMEGAFLOW_AWSH_PREPARED} == 2 && -z ${__OMEGAFLOW_AWSH_PREPARED#xx} ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+} 2>/dev/null
+__OMEGAFLOW_AWSH_START_RELEASED() {
+    builtin kill -s USR1 -- "$PPID" || __OMEGAFLOW_AWSH_FAIL_STOP
+} 2>/dev/null
+__OMEGAFLOW_AWSH_LOAD() {
+    if __OMEGAFLOW_AWSH_BUFFER=$(builtin trap - EXIT; /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock source && builtin enable printf && builtin printf x); then
+        __OMEGAFLOW_AWSH_MARKER=${__OMEGAFLOW_AWSH_BUFFER: -2:1}
+        # The shell-owned final x preserves bytes after the helper's final x.
+        [[ -z ${__OMEGAFLOW_AWSH_MARKER#x} && ${__OMEGAFLOW_AWSH_BUFFER: -3:1} == '}' ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        __OMEGAFLOW_AWSH_BUFFER=${__OMEGAFLOW_AWSH_BUFFER:0:${#__OMEGAFLOW_AWSH_BUFFER}-2}
+        # Reject unsafe attributes; keep readonly assignment faults isolated.
+        [[ ! -R READLINE_LINE && ! -R READLINE_POINT && ${READLINE_LINE@a} != *[aAilu]* && ${READLINE_POINT@a} != *[aAlu]* ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        (builtin trap - EXIT; READLINE_LINE= READLINE_POINT=0) >/dev/null 2>&1 || __OMEGAFLOW_AWSH_FAIL_STOP
+        READLINE_LINE=$__OMEGAFLOW_AWSH_BUFFER
+        READLINE_POINT=${#READLINE_LINE}
+        [[ $READLINE_LINE == "$__OMEGAFLOW_AWSH_BUFFER" && $READLINE_POINT == "${#READLINE_LINE}" ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+}
+builtin readonly -f __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD __OMEGAFLOW_AWSH_PREPARE __OMEGAFLOW_AWSH_START_RELEASED
+builtin bind -m emacs-standard -x '"\C-x\C-a":__OMEGAFLOW_AWSH_LOAD'
+builtin bind -m emacs-standard '"\C-x\C-b":"\C-x\C-a\C-m"'
+# The substitution becomes the exact peer process; no shell child remains.
+__OMEGAFLOW_AWSH_COMPLETION_STATE() {
+    builtin trap - EXIT
+    builtin exec /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$@"
+}
+# Validate in an isolated shell so temporary ordinary builtin enablement cannot
+# change the persistent workload. Trap values are captured in the parent: Bash
+# resets non-ignored dispositions when entering an ordinary subshell.
+__OMEGAFLOW_AWSH_VALIDATE() (
+    builtin trap - EXIT
+    [[ -z ${POSIXLY_CORRECT+x} && ${POSIXLY_CORRECT@a} == *r* &&
+       ${PS0@a} == *r* && $PS0 == '$(__OMEGAFLOW_AWSH_PREPARE)' &&
+       ${PROMPT_COMMAND@a} == *r* && $PROMPT_COMMAND == __OMEGAFLOW_AWSH_PROMPT &&
+       -z $PS1 && -z $PS2 && $1 == "$2" ]] || builtin return 1
+    __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin enable -p)$'\n'
+    for __OMEGAFLOW_AWSH_NAME in builtin enable exec jobs kill return trap wait; do
+        [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable '"$__OMEGAFLOW_AWSH_NAME"$'\n'* ]] || builtin return 1
+    done
+    builtin enable declare bind shopt
+    builtin shopt -u nocasematch
+    [[ -z $(builtin declare -F builtin command exec jobs kill return wait) ]] || builtin return 1
+    for __OMEGAFLOW_AWSH_NAME in __OMEGAFLOW_AWSH_FAIL_STOP __OMEGAFLOW_AWSH_TRAP_PREFLIGHT __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT __OMEGAFLOW_AWSH_SET __OMEGAFLOW_AWSH_ENTER __OMEGAFLOW_AWSH_RETURN __OMEGAFLOW_AWSH_LOAD __OMEGAFLOW_AWSH_PREPARE __OMEGAFLOW_AWSH_START_RELEASED __OMEGAFLOW_AWSH_PROMPT __OMEGAFLOW_AWSH_COMPLETION_STATE __OMEGAFLOW_AWSH_VALIDATE trap enable awsh; do
+        [[ $(builtin declare -p -F "$__OMEGAFLOW_AWSH_NAME") == "declare -fr $__OMEGAFLOW_AWSH_NAME" ]] || builtin return 1
+    done
+    [[ ! -o histexpand && ! -o errexit && ! -o errtrace && ! -o functrace &&
+       ! -o posix && ! -o noexec && ! -o verbose && ! -o xtrace && -o monitor && -o emacs && ! -o vi ]] || builtin return 1
+    builtin shopt -q interactive_comments || builtin return 1
+    if builtin shopt -q expand_aliases || builtin shopt -q extdebug || builtin shopt -q extglob; then builtin return 1; fi
+    __OMEGAFLOW_AWSH_BINDINGS=$(builtin bind -m emacs-standard -X)
+    [[ $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-a": "__OMEGAFLOW_AWSH_LOAD"'* || $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-a" "__OMEGAFLOW_AWSH_LOAD"'* ]] || builtin return 1
+    __OMEGAFLOW_AWSH_BINDINGS=$(builtin bind -m emacs-standard -s)
+    [[ $__OMEGAFLOW_AWSH_BINDINGS == *'"\C-x\C-b": "\C-x\C-a\C-m"'* ]] || builtin return 1
+)
+__OMEGAFLOW_AWSH_PROMPT() {
+    # Save status, verify reserved traps and ignore INT before state capture.
+    __OMEGAFLOW_AWSH_STATUS=$?
+    if [[ ${__OMEGAFLOW_AWSH_STARTED-} == 1 ]]; then
+        [[ -z $(builtin declare -F builtin command) && -z $(command builtin declare -F builtin command) ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        [[ -z $__OMEGAFLOW_AWSH_TRAPS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        builtin trap '' INT
+    fi
+    __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
+    [[ ${-#*H} != "$-" ]] && __OMEGAFLOW_AWSH_HISTORY=on
+    [[ -o emacs || -o vi ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+    [[ -o vi ]] && __OMEGAFLOW_AWSH_EDITING=vi
+    if [[ ${__OMEGAFLOW_AWSH_STARTED-} == 1 ]]; then
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        __OMEGAFLOW_AWSH_SET +H +e +E +T +o posix +n +v +x -m -o emacs
+        __OMEGAFLOW_AWSH_ENABLED=$'\n'$(builtin trap - EXIT; builtin enable -p)$'\n'
+        builtin enable shopt
+        builtin shopt -u expand_aliases extdebug extglob
+        builtin shopt -s interactive_comments
+        [[ $__OMEGAFLOW_AWSH_ENABLED == *$'\nenable shopt\n'* ]] || builtin enable -n shopt
+        __OMEGAFLOW_AWSH_VALIDATE "$__OMEGAFLOW_AWSH_TRAPS" "trap -- '' SIGINT" || __OMEGAFLOW_AWSH_FAIL_STOP
+        # Deferred permitted traps must observe the workload's option state.
+        # Canonical validation above ran before restoring these two fields.
+        __OMEGAFLOW_AWSH_ENTER 0 "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING"
+        if __OMEGAFLOW_AWSH_REPLY=$(__OMEGAFLOW_AWSH_COMPLETION_STATE "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING"); then
+            [[ -z $__OMEGAFLOW_AWSH_REPLY ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        else
+            __OMEGAFLOW_AWSH_FAIL_STOP
+        fi
+        builtin trap - INT
+        __OMEGAFLOW_AWSH_TRAPS=$(builtin trap -p CHLD INT DEBUG ERR RETURN)
+        [[ -z $__OMEGAFLOW_AWSH_TRAPS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        if builtin wait; then ((1)); else ((1)); fi
+        __OMEGAFLOW_AWSH_JOBS=$(builtin trap - EXIT; builtin jobs -p)
+        [[ -z $__OMEGAFLOW_AWSH_JOBS ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        # Capture cleanup trap changes before preparing canonical Readline state.
+        __OMEGAFLOW_AWSH_HISTORY=off __OMEGAFLOW_AWSH_EDITING=emacs
+        [[ ${-#*H} != "$-" ]] && __OMEGAFLOW_AWSH_HISTORY=on
+        [[ -o emacs || -o vi ]] || __OMEGAFLOW_AWSH_FAIL_STOP
+        [[ -o vi ]] && __OMEGAFLOW_AWSH_EDITING=vi
+        __OMEGAFLOW_AWSH_SET +H -o emacs
+        __OMEGAFLOW_AWSH_VALIDATE "$__OMEGAFLOW_AWSH_TRAPS" '' || __OMEGAFLOW_AWSH_FAIL_STOP
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
+    else
+        __OMEGAFLOW_AWSH_SET +H -o emacs
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-state "$__OMEGAFLOW_AWSH_STATUS" "$__OMEGAFLOW_AWSH_HISTORY" "$__OMEGAFLOW_AWSH_EDITING" || __OMEGAFLOW_AWSH_FAIL_STOP
+        PS1=''
+        __OMEGAFLOW_AWSH_STARTED=1
+        /omegaflow-runtime/bin/awsh bash-helper --socket=/run/omegaflow/session/bash/helper.sock prompt-ready || __OMEGAFLOW_AWSH_FAIL_STOP
+    fi
+} 2>/dev/null
+builtin readonly -f __OMEGAFLOW_AWSH_FAIL_STOP __OMEGAFLOW_AWSH_TRAP_PREFLIGHT __OMEGAFLOW_AWSH_ENABLE_PREFLIGHT __OMEGAFLOW_AWSH_PROMPT __OMEGAFLOW_AWSH_COMPLETION_STATE __OMEGAFLOW_AWSH_VALIDATE trap enable awsh
+PROMPT_COMMAND=__OMEGAFLOW_AWSH_PROMPT
+builtin readonly PROMPT_COMMAND

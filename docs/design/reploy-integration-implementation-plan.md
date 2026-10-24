@@ -9,14 +9,27 @@
   in the rebuilt stack, so PR numbers are not boundary evidence; within the
   rebuilt stack, the `approved` label on a PR is. Node identities are not
   recorded here because every restack rewrites them.
-- Updated: 2026-10-06.
+- Updated: 2026-10-13.
 - A2.7 is approved and merged as PR 38 at
   `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.5 and A2.6 remain approved
-  predecessors. A2.8 is approved at PR 39 head
-  `f0cc6f5031576e845958933976bcf8c08669efd7` and awaits merge. This
-  A2.9 design-only successor bounds implementation delivery to one PR per
-  numbered slice. Production implementation and Bash-build qualification
-  remain pending.
+  predecessors. A2.8 is merged as PR 39 at
+  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
+  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
+  partial implementation, including A2.10, the B2.3.1/B2.3.2 split and B2.3.3
+  correction. B1.2.1 and B1.3.1 are approved owning codec/corpus successors.
+  A2.11/PR58 separates qualified table data from runtime binaries and its
+  B2.1.1/PR59 generator correction is approved. A2.12/PR60's qualification and
+  authored-input evidence ownership amendment is approved at exact mapped head
+  `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`; B1.3.2/PR61's corpus correction
+  is approved at exact mapped head `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`;
+  and B2.8/PR62's qualification is approved at exact mapped head
+  `0ce7c7d74e47668f02d460bc279a17c7172e3311`. The qualified support scope is
+  limited to the three exact Linux/amd64 manifest target/build tuples Debian
+  12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9, bound
+  to `runtime/envoy/bash-builds.json`. ARM64 remains unqualified and the
+  complete Envoy/controller production path remains pending. A2.13 is a pending
+  design-only fixed-pair successor; B3.1.1 implementation follows only after
+  A2.13 receives exact-head approval. This plan makes no production claim.
 - A `.review` sidecar attests only the document bytes matching its recorded
   content hash. Changed documents require fresh review and byte-current
   attestations before approval; a sidecar does not establish PR approval.
@@ -305,12 +318,67 @@ amendment is an additional documentation gate before its affected B work.
   PR. Preserve the complete A2.7/A2.8 requirements and final real-actor gates;
   add explicit predecessor, isolated acceptance, and last-prerequisite proof
   ownership for each leaf. Review and approve this plan before preparing B1.1.
+- A2.10 corrects the terminal handoff after real B2.5 candidate tests exposed
+  canonical-frame redisplay. Save the complete fresh workload termios state,
+  prepare `ICANON` on and `ECHO` off before every adapter-owned Readline entry,
+  and prove entry by `ICANON` clearing while `ECHO` stays clear. After matching
+  `started_ack`, restore and verify the exact saved state through the existing
+  terminal-control lease before the start helper's successful reply. Preserve
+  intentional raw/no-echo state and the post-cleanup recapture for the next
+  operation. Keep the original Envoy-owned start epoch, queued-cancel ordering,
+  all wire forms, actors, helper markers and failure mappings. Align all four
+  governing documents and current attestations. This is one design-only PR;
+  refresh the static inventory's document-byte and affected prerequisite
+  bindings after review,
+  retaining every frozen wire byte, case ID and pending runtime claim;
+  B2.3.3 owns the readiness implementation correction, B2.5 submission proof,
+  B2.6 start integration, B2.7 completion integration and B2.8 qualification.
+  Envoy holds controller-terminal reads after `execute.input_through` until
+  accepted `start_released`, so input authored immediately after public start
+  reaches restored workload termios after the start helper has finished,
+  including Ctrl-C. Socket backpressure adds no unbounded application buffer
+  or new timer. B3.3 owns this forwarding boundary and its deterministic peer
+  cases; B3.4 repeats them with real Awsh/Bash, including delayed restoration,
+  immediate keys/Ctrl-C, preserved raw/no-echo state, input closure, recoverable
+  rejection/pre-submit cancellation and fatal start timeout without replay to
+  another operation.
+
+- A2.11 separates qualification output from the executable it qualifies after
+  B2.8 preparation demonstrated that embedding the exact Awsh digest in Awsh
+  creates a circular identity requirement. Keep the complete actual Awsh hash
+  and every behavioral asset bound by qualification. Generate table data into
+  the fixed manifest-bound regular `etc/bash-builds.json` payload; generate
+  data-independent schema consumers, including their source comments and
+  build identity inputs. Review all four governing documents and byte-current
+  attestations in this design-only successor. B2.1.1 owns the generator and
+  runtime lookup correction; B2.8 retains genuine qualification and every B2
+  case. Later adapter changes require affected entries to be requalified.
 
 Gate: each A2 slice is a design-only successor of the preceding approved slice
 and must complete deep design review, current-document attestation, required
 checks, and exact-head PR approval before its successor is published. No B
 implementation starts until A2.7, A2.8, and this A2.9 successor are approved and
 merged.
+
+A2.10 is a successor of the approved B2.4 stack tip. Its exact-head approval
+and current document attestations precede B2.3.3 publication; B2.3.3 approval
+precedes B2.5 completion. These successors require approval, not predecessor
+merge. Approved PR49 and PR50 stay immutable. No correction enables a complete
+production runtime or admits a supported Bash entry before its existing gate.
+
+A2.11 follows the approved B2.7 and B1.3.1 stack tip. Its exact-head approval
+and current four-document attestations precede B2.1.1 publication. The owning
+B2.1.1 successor follows A2.11 and precedes B2.8; B1.3.1's B1-C022 corpus
+correction is also a required B2.8 predecessor. Preserve approved PR45, PR46
+and all approved predecessor commits. These successors require approval, not
+merge, and do not admit a supported build without the B2.8 qualification gate.
+B2.1.1 proves qualified launch through an isolated test-only assembly linking
+the existing selected-shell launch module, using a genuinely measured candidate
+and its exact actual assembled Awsh binary and behavioral assets. Regenerating
+table data must leave that binary unchanged and permit the same qualified
+launch. This proof adds no production entrypoint and depends on no B3
+implementation. B2.8 still owns genuine per-target admission and every required
+B2 case; B3.2 owns production PTY/Awsh startup.
 
 The exact B1 base is the merge commit of the A2.7 PR approved at its exact final
 head, with current document attestations and all required checks passing. Record
@@ -611,12 +679,33 @@ catchable-signal inventory, Readline readiness/keymap/no-redisplay/UTF-8/
 maximum-line behavior, and exact startup PTY bytes from repeatable selected-
 build tests. Keep harness candidates distinct from shipped supported entries;
 candidate data may bootstrap isolated tests, but production consumers accept
-only qualified entries. Freeze observed bytes and generate all consumers from
-that one source, with stale-generation and unknown/mismatched-digest rejection
-checks. B2 closeout requires real evidence for every advertised entry and all
-B2-owned cases in the shared inventory. A missing external build input blocks
+only qualified entries. Freeze observed bytes in the canonical table and
+generate its runtime payload separately from schema consumer code, with
+stale-generation and unknown/mismatched-digest rejection checks. B2 closeout
+requires real evidence for every advertised entry and all B2-owned cases in the shared inventory. A missing external build input blocks
 the affected qualification work, not B1; adapter or trusted-input changes
 require rerunning the affected qualification before support is retained.
+
+The qualified Bash-build table is generated as a separate readable regular
+runtime payload at `/omegaflow-runtime/etc/bash-builds.json`, covered by the
+runtime manifest and the read-only runtime mount. Generated Envoy and Awsh
+consumer code reads only that fixed path, validates its manifest-bound bytes
+and strict qualified-entry schema, and independently selects the exact resolved
+Bash entry. Host preparation consumes the same canonical table. Neither table
+contents nor their digest are compiled into Envoy or Awsh, including generated
+source comments or build identity inputs. Runtime consumer code is generated
+from the table schema; stale schema consumers and stale generated table data
+are rejected separately.
+
+Qualification binds the complete actual Awsh executable, fixed Bash rcfile,
+empty inputrc, terminal entry, and complete selected locale tree. The generated
+qualified table is an output of qualification, not an adapter input to its own
+receipt. Its manifest digest is checked independently; this does not exempt
+any executable or behavioral asset from exact-byte qualification. Any change
+to a bound adapter input requires rerunning the affected qualification before
+support is retained, including changes made by later runtime leaves. No new
+wire message, actor, timer, configurable table path, or Reploy capability is
+introduced by this artifact separation.
 
 Align execution-policy framing, persistent Bash state, inspection-path
 resolution, and descriptor non-inheritance with the amended protocol. Awsh
@@ -634,7 +723,13 @@ Implement Awsh's exact one-exec descriptor intake, digest-selected generated
 Bash-build-table consumer, fixed rcfile/helper startup exchange, empty primary
 prompt, signal reset, process/session/foreground topology, Readline termios
 proof, first terminal drain, private readiness, selected-shell reaping, and
-partial-launch cleanup. Implement the A2.4 source checker and private active
+partial-launch cleanup. A2.10 requires echo off before Readline entry, a separate
+complete fresh workload termios reference, and exact restoration/readback under
+the existing terminal lease before the post-`started_ack` helper success reply.
+B2.3.3 corrects the existing readiness primitive; B2.6 integrates restoration
+into the real start owner, and B2.7 recaptures the post-cleanup reference before
+the next Readline entry. All consume existing phase budgets; Envoy remains the
+start-deadline and lifecycle owner. Implement the A2.4 source checker and private active
 operation record, parent-side `SIGUSR1` reception installed before Bash launch,
 fixed helper request/reply arities, canonical source-frame
 emitter, readonly adapter namespace, canonical parser/trap/trace/job-control
@@ -694,7 +789,9 @@ deterministic peers. B5/B6 close its real split/descendant-cleanup cases, B7
 closes inspection cases, and B8 closes terminal failure variants. B3's closeout
 does not require those later implementations or claim their conformance.
 
-Implement listeners, the controller-generated session-ID handshake, the
+Implement listeners, fixed selection of one terminal/telemetry pair, refusal or
+closure of unused extra connections without failing a valid capture, the
+controller-generated session-ID handshake, the
 independent actor-local connect/hello/ready deadlines, one PTY, persistent
 Awsh/Bash startup, shared PTY execution, exact byte relay, bounded control
 writes, an empty `HISTFILE` for controlled Bash after application
@@ -712,6 +809,13 @@ internal `0x18 0x02` PTY write, the fresh pre-start drain and mark,
 `start_release`/`started` ordering, complete public `operation_started` before
 `started_ack`, acceptance of private `start_released`, and the operation-start
 deadline and teardown coordination with the same setup/cleanup boundaries.
+Before operation-start begins, selecting an input-barrier timeout or cancellation
+starts one five-second pre-start result-delivery epoch. B3.3 owns the finite
+held-prefix delivery and complete empty-range result under that epoch, with
+fatal `prestart-output-timeout` and existing final-drain teardown on expiry.
+Prove blocked terminal output and recovery after normal prefix delivery without
+resetting source-rejection or operation-start bounds. This is an explicit new
+Envoy publication timing policy; Awsh and Reploy gain no timer or wire form.
 In B3's isolated foundation harness, use shared-PTY operations without authored
 background descendants. Exercise the real Awsh/Bash `input_close` ->
 `input_closed` -> state-bearing `prompt_ready` -> `completed` coordination with
@@ -1090,8 +1194,9 @@ against both reserved Readline sequences before `execute`; keep
 
 Add reproducible platform builds and the manifest for Envoy, Awsh, and their
 required runtime files. Package B2's qualified canonical digest-keyed Bash-build
-table and regenerate its host preparation, Envoy, and Awsh consumers using the
-same generator; reject stale consumers and unsupported or unqualified entries.
+table as the manifest-bound `etc/bash-builds.json` payload and regenerate
+its host preparation, Envoy, and Awsh schema consumers using the same
+generator; reject stale consumers and unsupported or unqualified entries.
 C4 does not originate the table or defer its first executable qualification.
 If packaging changes the adapter or trusted-input bytes used for qualification,
 rerun B2's harness against the packaged assets before accepting the affected
@@ -1293,8 +1398,11 @@ or weaken any clause or case in them. Every leaf inherits its package's exact
 actors, wire forms, failure/result rules, deadlines, bounds, and acceptance
 cases for the responsibility named in its row. The last leaf of each package
 runs its cumulative package gate. The final B8.4 and D3.3 gates remain mandatory.
-All 64 leaves are pending; the numbers below are estimates of changed production
-lines, not evidence that implementation or qualification exists.
+The original catalogue has 64 requirement anchors. Its B2.3 implementation was
+split into B2.3.1/B2.3.2, and A2.10 adds the B2.3.3 owning correction below.
+The retained B2.3 row is a historical requirement anchor, not an executable
+selector. The progress ledger records approved partial delivery; estimates
+are not implementation or qualification evidence.
 
 ### Ordering and proof accounting
 
@@ -1306,6 +1414,16 @@ no future implementation is a prerequisite for an earlier leaf's isolated
 acceptance. `B2` or another package in the prerequisites column means all its
 leaves and cumulative gate. The table names dependencies that explain the
 acceptance boundary, not permission to bypass earlier approvals.
+
+For this correction, A2.10 follows approved B2.4, then B2.3.3 follows A2.10
+and B2.4, then B2.5 follows B2.3.3. This preserves the approved predecessor
+commits and adds no merge prerequisite. The existing static B2.3 case identities
+remain requirement anchors: B2.3.1 owns launch, B2.3.2 startup coordination,
+and B2.3.3 the corrected terminal handoff. Existing `B1-C031-no-redisplay` and
+`B1-C064-fresh-termios` proofs retain their submission and completion owners;
+their readiness primitive additionally needs B2.3.3. Preparation records each
+exact owning test and pending cross-actor closure, without claiming that a
+historical static case proves the amended runtime behavior.
 
 Verified Reploy candidate acquisition/provenance and the resolved regular
 `/bin/bash` placement are prerequisites for the first real-shell test in B2.3,
@@ -1364,13 +1482,19 @@ proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget
 | B2.1 | 350–600 | B1 | Canonical candidate/qualified table admission validator, consumer generator and executable qualification runner | Reject unknown/stale consumers; candidate metadata cannot authorize production support; actual measurements pending B2.8 |
 | B2.2 | 350–650 | B1.2, B2.1 | Awsh helper socket transport and non-returning fail-stop helper mode | Exact framing, bounded stream loops, half-close/EOF, ancillary/trailing-byte rejection and fail-stop behavior |
 | B2.3 | 450–700 | B2.1–B2.2; verified candidate inputs and /bin/bash placement | Selected-shell launch, fixed startup assets, topology, descriptor intake/lease and readiness | Real candidate Bash launch, prompt-empty startup, termios, shell reap and partial-launch cleanup against deterministic Envoy; not yet a supported entry |
+| B2.3.1 | 450–750 | B2.1–B2.2; verified candidate inputs and /bin/bash placement | Descriptor handoff, controlling-terminal topology and raw selected-shell launch | Real candidate launch, parent/session/foreground and signal reset, descriptor isolation, partial-launch failure and reap; approved PR48 |
+| B2.3.2 | 450–750 | B2.3.1 | Ordered startup helpers, fixed assets, terminal leases and initial readiness | Real candidate empty prompt, complete termios/readiness transition, terminal drain/slave closure and bounded cleanup; approved PR49; A2.10 handoff correction belongs to B2.3.3 |
 | B2.4 | 450–700 | B2.3 | Readonly namespace, canonical parser state and whole-request trap/builtin mediation | Direct/expanded/mixed mutations, selected-build aliases/numbers, POSIX prevention and nested-shell normal behavior |
-| B2.5 | 450–700 | B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-input rejection |
+| B2.3.3 | 80–220 | A2.10 approved; B2.3.2/B2.4 | Echo-off Readline preparation, retained complete workload termios reference and exact existing-lease restoration/readback primitive | Real candidate readiness, no retained or inherited lease, exact state restoration and fatal identity/write/readback/context failure; start integration pending B2.6, fresh completion reference pending B2.7, support admission pending B2.8 |
+| B2.5 | 450–700 | B2.3.3, B2.4 | Source checker, canonical source frame, loader/submit Readline bindings and status restoration | Syntax/output-empty checker, suffix isolation, bounds, markers, no redisplay and reserved-binding validation; authored-input rejection remains C3.2 |
 | B2.6 | 350–650 | B2.5 | Awsh active start record, PS0/post-PS0 handshake and split-entry sentinel | Every start/helper phase with deterministic Envoy, fail-closed markers and redirection failures; actual split setup pending B5.3 |
 | B2.7 | 450–700 | B2.6 | Completion hook, helper identity, Bash inspection-path resolution and state/Readline handoff | Real Bash persistent state and resolved inspection plans, SIGINT-ignore window, empty jobs and final state validation against cleanup peer; real descendants pending B6.3/B6.5 |
-| B2.8 | 100–350 | B2.1–B2.7; verified Reploy build inputs and resolved /bin/bash placement | Qualification measurements, supported-entry admission and generated consumer integration | Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf |
-| B3.1 | 350–600 | B1, B2 | Envoy listeners, session handshake, actor-local deadlines and bounded channel writes | Actual transport/IDs; deterministic startup peer; real startup pending B3.2 |
-| B3.2 | 450–700 | B3.1, B2.8 | PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup | Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown |
+| A2.11 | 0 | B2.7, B1.3.1 approved | Four-document manifest-bound qualification-output amendment and current attestations | Deep design review, required checks and exact-head approval; no runtime or support claim |
+| B2.1.1 | 150–300 | A2.11 approved; B2.1/B2.7 | Fixed manifest-bound table payload, data-independent schema consumers and exact qualified runtime lookup | Strict fixed-path/manifest/schema/input rejection, stale generation checks, qualified launch in isolated test-only assembly linking the existing launch module, and stable exact Awsh bytes when table data is regenerated; no production entrypoint or B3 implementation prerequisite; B2.8 retains genuine target/all-case qualification |
+| B2.8 | 100–350 | B2.1–B2.7, B1.3.1, B1.3.2, B2.1.1; verified Reploy build inputs and resolved /bin/bash placement | Qualification measurements, supported-entry admission and generated consumer integration | Genuine per-target evidence for each advertised amd64/arm64 entry; complete B2 suite against deterministic Envoy; missing external inputs block this leaf |
+| B3.1 | 350–600 | B1, B2 | Historical B3.1 foundation: Envoy listeners, session handshake, fixed selected terminal/telemetry pair, actor-local deadlines and bounded channel writes | Historical transport/IDs and deterministic startup peer; fixed selected-pair continuity, unused extras refused or closed without failing valid capture, and no replacement/reconnect/second hello/deadline reset; current implementation belongs to B3.1.1 and real startup remains pending B3.2 |
+| B3.1.1 | 350–600 | A2.13 approved; B1, B2 | Current owning successor: recovered B3.1 transport foundation with a fixed selected pair, unused-extra rejection, coordinated readiness publication and mandatory listener coordinates | Actual TCP pair continuity across queued/concurrent extras, fatal selected-channel failures, original deadline and full-write proofs; no replacement/reconnect/second hello/deadline reset; retained readiness/address regressions; no real startup claim |
+| B3.2 | 450–700 | B3.1.1, B2.8 | PTY/Awsh launch, startup pump/table comparison, ready barrier and launch cleanup | Real qualified Bash/Awsh; exact 0–4096 startup bytes, complete ready before terminal release and idle shutdown |
 | B3.3 | 400–650 | B3.2 | Byte relay, stream marks, input watermark and operation-start sequencing | Fresh drain, setup timer, serialized submit and public/private start barriers; isolated setup/cleanup peers |
 | B3.4 | 250–500 | B3.3, B2.7 | Ordinary-return coordination and foundation assembly | Real Bash/Awsh return frames with bounded cleanup peer; full B3 coordination suite; actual split/descendants/inspection pending B5/B6/B7 |
 | B4.1 | 350–600 | B3 | PTY output frontiers, resize serialization and direct TIOCSWINSZ | Idle/active/Starting resize, continuous output, drain winners and fatal ioctl failure; split equivalent pending B5.3 |
@@ -1455,9 +1579,27 @@ browser/publication/host-parity/FIFO-cutover implementation.
 | A2.4–A2.5 | Approved prefix | Approved design predecessors; A2.5 PR 35 is merged |
 | A2.6 | Approved and merged | PR 36 has the approved label and is merged at `ff71c4ba6c9bebc3a9193ee9f0c59a98fa0c6551` |
 | A2.7 | Approved and merged | PR 38 approved at head `750209eec2946309c2abc93a47a91078099edb52` and merged at `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`; approved document/sidecar bytes and required checks verified |
-| A2.8 | Approved, awaiting merge | PR 39 is open with the approved label at exact head `f0cc6f5031576e845958933976bcf8c08669efd7`; approval/merge status verified before this replan |
-| A2.9 | Unapproved worktree | One-PR leaf replan; requires deep design review, current attestations, required checks, exact-head approval and merge before B1.1 |
-| B1.1–B8.4 | Pending | 35 one-PR leaves; raw material only |
+| A2.8 | Approved and merged | PR39 at `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; exact approved head `f0cc6f5031576e845958933976bcf8c08669efd7` |
+| A2.9 | Approved and merged | PR40 at `e10e61614f25c06da12fba2610803126390be1e7`; exact approved head `0286b0255e321f26cdf84e833dd5b1b3a13ffcb3` |
+| B1.1–B1.3 | Approved partial implementation | PR42 `36b59a73e346f908175fbee9fe9847284ea9aaa1`, PR43 `08bd24b3280584a3a9aeb970f11596e0122750a4`, PR45 `35632529e0770feab62f1279b1fbc64b3254569e`; static wire/case evidence only |
+| B2.1–B2.2 | Approved partial implementation | PR46 `2d27b1e8c738e0287d3acf9e811d97cf11dd5296`, PR47 `47ef02f071d314522f4029647ea78a36935edff3`; no supported Bash admission |
+| B2.3.1–B2.3.2 | Approved partial implementation | PR48 `9e25e3a0516ec67941e4c02c833c39ab4d3cf9f7`, PR49 `d843ed43536c60fd4548a7cc1cd0e5fbef8fc59f`; candidate launch/startup evidence; changed handoff requires B2.3.3 |
+| B2.4 | Approved partial implementation | PR50 `9929a451ceb81918102f2e581f1b4ddcdd68200e`; real candidate reserved-state proofs; immutable predecessor |
+| A2.10 | Approved amendment | PR51 `25a53b7bb4972717ab3754edea71614c3e707100`; echo-off entry and exact workload-state restoration |
+| B2.3.3 | Approved owning correction | PR52 `b83b9085c301887153c7e8980ae27016d82151e4`; readiness primitive; approved PR49 unchanged |
+| B2.5 | Approved partial implementation | PR53 `141ae5825a12df02746ccc9ef989f8f31c000fe6`; isolated source checker/frame/Readline proofs |
+| B2.6 | Approved partial implementation | PR54 `f1c897051f01ba65d10e3aa78330d4d3154795f9`; start integration against deterministic Envoy; real split setup pending B5.3 |
+| B1.2.1 | Approved owning correction | PR55 `04b542830225a2e081fed0757379b72435f39009`; private-codec successor; approved PR43 unchanged |
+| B2.7 | Approved partial implementation | PR56 `72d90ec0ea6b426bb508dad48e1e98c1a52cb9af`; completion proofs against cleanup peer; actual descendants/inspection pending later owners |
+| B1.3.1 | Approved owning correction | PR57 `7247feaefbc8ffb351f2655f4034bd8ec5be3b4d`; B1-C022 permits the native `trap -p CHLD INT` query; approved PR45 unchanged |
+| A2.11 | Approved amendment | PR58 `f9ba69153a63dfeb945b8f2eba6cb264d240c6c7`; separate manifest-bound qualification output; current document attestations, required checks and exact-head approval |
+| B2.1.1 | Approved owning correction | PR59 `a5aba34d4fb6a46a19530bb5347614ba5016c9fb`; A2.11 schema consumer/table separation; approved PR46 unchanged |
+| A2.12 | Approved amendment | PR60 `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`; qualification and authored-input evidence ownership amendment at the exact mapped head |
+| A2.13 | Pending amendment | Design-only fixed-pair successor; requires current four-document attestations, required checks and exact-head approval before B3.1.1 implementation |
+| B3.1.1 | Pending owning recovery | Recovered B3.1 transport foundation follows A2.13 exact-head approval; fixed selected pair, unused-extra handling and readiness/address proofs; no production or supported-Bash claim |
+| B1.3.2 | Approved owning correction | PR61 `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`; retains C3.2/C3.3 reserved-input requirements and B3.4 public-start closure in the corpus and generated consumers |
+| B2.8 | Approved qualification | PR62 `0ce7c7d74e47668f02d460bc279a17c7172e3311`; exact Debian 12/Bash 5.2.15, Debian 13/Bash 5.2.37 and Ubuntu 26.04/Bash 5.3.9 Linux/amd64 tuples in `runtime/envoy/bash-builds.json` only; ARM64 unqualified and full Envoy/controller production path pending |
+| B3.2–B8.4 | Pending | Genuine supported-target qualification beyond the approved B2.8 tuples and real-actor conformance remain delivery requirements |
 | C1.1–C8.2 | Pending | 19 one-PR leaves; raw material only |
 | D1.1–D3.3 | Pending | 10 one-PR leaves; raw material only |
 | E | Deferred | Requires terminal-only gate |
@@ -1465,3 +1607,65 @@ browser/publication/host-parity/FIFO-cutover implementation.
 Update this table only from executed checks and current review state. Historical
 PR labels and tests from superseded commits are context, not completion
 evidence for the rebuilt stack.
+
+## A2.12 qualification and authored-input ownership correction
+
+B2.8 qualifies the selected Bash adapter against its native B2 responsibilities.
+The reserved loader and submit bindings, echo-off entry, exact source/frame
+consumption and no redisplay remain mandatory native qualification evidence.
+Controller-authored terminal input must still reject either reserved sequence,
+including when its bytes span adjacent input steps, before sending `execute`.
+That compiler/client responsibility is owned by C3.2 and closes with C3.3; it
+cannot be claimed from a Bash qualification probe or moved into an adapter test
+peer. The B1 owning corpus successor retains `B1-C031-reserved-input` and
+`B1-C031-adjacent-step-input` with that owner, requirement and pending real-client
+proof. Neither case is deleted or marked executed by B2.8.
+
+The B2.5/B2.6 adapter-side pre-start and post-start failure assertions remain
+required in native B2 qualification against the deterministic Envoy peer.
+Actual public `operation_started` publication and failure crossings close in
+B3.4. The corresponding B1-C031 pre/post-public-start cases retain that later
+closure and cannot count as actual Envoy public-channel proof in B2.8.
+
+A2.12/PR60 is an approved design-only owning predecessor at exact mapped head
+`d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`. Its B1.3.2/PR61 corpus/generated-
+consumer correction is approved at exact mapped head
+`9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`, and B2.8/PR62 qualification is
+approved at exact mapped head `0ce7c7d74e47668f02d460bc279a17c7172e3311` for
+only the three exact Linux/amd64 manifest target/build tuples Debian 12/Bash
+5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9 bound to
+`runtime/envoy/bash-builds.json`. ARM64 remains unqualified and the complete
+Envoy/controller production path remains pending. A2.13 remains the pending
+design-only successor; after its exact-head approval, B3.1.1 is the next
+implementation gate. Preserve all approved predecessors. This changes no wire
+form, actor, timer, runtime entrypoint or user input policy, and authorizes no C3
+implementation in the selected B2/B3 campaign.
+
+## A2.13 fixed connection-pair policy and B3.1 recovery
+
+This design-only owning successor replaces the rule that an extra completed
+connection must fail the capture. Envoy keeps the selected terminal/telemetry
+pair fixed and closes its listeners after selection. Extra connections are
+refused or closed without processing their application data; an unused extra
+connection alone does not fail an otherwise valid recording. Required handshake
+validation and fatal selected-channel failures remain unchanged. There is no
+replacement channel, reconnect, second hello, deadline reset, new wire form,
+actor, timer or kernel-enforcement requirement.
+
+A2.13 includes existing static corpus reconciliation before B3.1.1: refresh all
+four governing-document authority hashes and the implementation-plan source
+hash, rebind the affected leaf prerequisites and package responsibility and
+acceptance records, and update the affected existing case and trace bindings
+without changing stable case IDs. These remain declarative records with
+unchanged pending runtime status; A2.13 makes no implementation or support
+claim. The queued and concurrent TCP proofs remain pending under B3.1.1.
+
+Deliver the four-document amendment, current document attestations, required
+checks and exact-head approval as A2.13. Then deliver the recovered B3.1
+foundation as the owning B3.1.1 successor under fresh preparation and growth
+authority, preserving the original stopped draft, its review and the verified
+readiness/address fixes as historical evidence. B3.1.1 completes the B3.1
+foundation responsibility; B3.2 follows that approved successor. B3.2–B3.4
+retain their existing launch, relay, start and return coordination boundaries.
+Preserve approved predecessors. No shared AWD changes, merge, B4 implementation,
+Reploy upgrade or unsupported Bash claims are authorized.
