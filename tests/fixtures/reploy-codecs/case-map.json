@@ -1,5 +1,5 @@
 {
-  "slice": "C1.1",
+  "slice": "C1.1\u2013C1.2",
   "test": "tests/test_reploy_codecs.py",
   "cases": {
     "C1-S001": "Every pinned public event/request and invalid-request golden; source byte hashes",
@@ -10,10 +10,13 @@
     "C1-S006": "Open diagnostic machine codes and safe UTF-8 text bounds",
     "C1-S007": "All nested terminal-result statuses, causes, recovery rules and consistency",
     "C1-S008": "Symmetric serialization rejection and no caller mutation",
-    "C1-S009": "Stateless message validation; lifecycle ordering remains C2"
+    "C1-S009": "Stateless message validation; lifecycle ordering remains C2",
+    "C1-S010": "Every pinned host-result golden, nullable phase, required field and nested status variant",
+    "C1-S011": "Host success/failure crossed outcomes, delivery evidence and cleanup recovery consistency",
+    "C1-S012": "Host malformed JSONL/UTF-8 and recursive duplicates; diagnostics beyond client bounds remain exact",
+    "C1-S013": "Cumulative C1 round trips and encoder rejection without caller mutation"
   },
   "pending": {
-    "C1.2": "Host-result codec and complete C1 integration/maximum corpus",
     "C2": "Lifecycle event ordering and request authority",
     "C3": "Public stream transport, actual client assembly and channel readiness",
     "C8": "Actual public controlled-session invocation and termination results"

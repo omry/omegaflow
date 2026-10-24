@@ -15,6 +15,10 @@
     "client-v1-invalid-requests.jsonl": {
       "source_path": "testdata/controlled-session/client-v1-invalid-requests.jsonl",
       "sha256": "fec8ce23574360403fca8f42de985efc9be2efe8922153a5edd5cd0b3cdb786f"
+    },
+    "run-results-v1.jsonl": {
+      "source_path": "testdata/controlled-session/run-results-v1.jsonl",
+      "sha256": "1fac0f974d0bf2917763ed345708a2b4b018b227b07539194261c73f8338520b"
     }
   }
 }
