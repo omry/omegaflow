@@ -9,11 +9,14 @@ import pytest
 
 from omegaflow.reploy_codecs import (
     CLIENT_SCHEMA,
+    HOST_RESULT_SCHEMA,
     MAX_LINE_BYTES,
     ReployCodecError,
     decode_event,
+    decode_host_result,
     decode_request,
     encode_event,
+    encode_host_result,
     encode_request,
 )
 
@@ -25,6 +28,9 @@ EVENTS = [json.loads(line) for line in EVENT_LINES]
 REQUESTS = [json.loads(line) for line in REQUEST_LINES]
 OPENED = next(v for v in EVENTS if v["type"] == "opened")
 RESULT = next(v for v in EVENTS if v["type"] == "terminated")["result"]
+HOST_LINES = (FIXTURES / "run-results-v1.jsonl").read_bytes().splitlines(keepends=True)
+HOST_RESULTS = [json.loads(line) for line in HOST_LINES]
+HOST_SUCCESS = next(v for v in HOST_RESULTS if v["ok"])
 
 
 def wire(value):
@@ -437,3 +443,279 @@ def test_C1_S009_codec_does_not_invent_lifecycle_order_or_authority():
         assert decode_request(encode_request(value)) == value
     for value in [terminated(), event("ready"), event("ready")]:
         assert decode_event(encode_event(value)) == value
+
+
+def reject_host(value):
+    with pytest.raises(ReployCodecError):
+        encode_host_result(value)
+    with pytest.raises(ReployCodecError):
+        decode_host_result(wire(value))
+
+
+def host(**updates):
+    value = deepcopy(HOST_SUCCESS)
+    value.update(updates)
+    return value
+
+
+@pytest.mark.parametrize("line", HOST_LINES)
+def test_C1_S010_host_goldens(line):
+    value = json.loads(line)
+    assert decode_host_result(line) == value
+    assert decode_host_result(encode_host_result(value)) == value
+
+
+@pytest.mark.parametrize("value", HOST_RESULTS)
+def test_C1_S010_host_required_and_unknown_fields(value):
+    for field in value:
+        invalid = deepcopy(value)
+        del invalid[field]
+        reject_host(invalid)
+    reject_host(dict(value, extra="unexpected"))
+
+
+@pytest.mark.parametrize("value", [None, [], True, 1, "host"])
+def test_C1_S010_host_requires_object(value):
+    reject_host(value)
+
+
+@pytest.mark.parametrize("value", [CLIENT_SCHEMA, "reploy-controlled-session-run-result-v2", None, 1])
+def test_C1_S010_host_schema(value):
+    reject_host(host(schema=value))
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true", [], {}])
+def test_C1_S010_host_ok_boolean(value):
+    reject_host(host(ok=value))
+
+
+@pytest.mark.parametrize("value", [False, 1, [], {}])
+def test_C1_S010_host_error_string_or_null(value):
+    reject_host(host(error=value, ok=False))
+
+
+@pytest.mark.parametrize("field", ["session_result", "controller_status", "controller_output", "delivery_tail_cleanup_status"])
+@pytest.mark.parametrize("value", [False, 0, "status", []])
+def test_C1_S010_host_nested_objects(field, value):
+    reject_host(host(**{field: value, "ok": False}))
+
+
+@pytest.mark.parametrize("field", ["controller_status", "controller_output", "delivery_tail_cleanup_status"])
+def test_C1_S010_host_nested_exact_fields(field):
+    value = host()
+    value[field]["extra"] = None
+    reject_host(value)
+    value = host()
+    del value[field]["kind"]
+    reject_host(value)
+    value = host()
+    value[field]["kind"] = "future"
+    reject_host(value)
+
+
+@pytest.mark.parametrize("field", ["controller_status", "controller_output"])
+def test_C1_S010_host_optional_null_phases(field):
+    # The producer projects each of these phases independently. Controller
+    # status is retained as data, not added to the producer's success predicate.
+    value = host(**{field: None})
+    if field == "controller_output":
+        value["ok"] = False
+    assert decode_host_result(encode_host_result(value)) == value
+
+
+def test_C1_S010_host_absent_session_phase():
+    value = host(session_result=None, result_delivered=None, result_acknowledged=None, ok=False)
+    assert decode_host_result(encode_host_result(value)) == value
+    for field in ["result_delivered", "result_acknowledged"]:
+        for flag in [False, True, 0, "false"]:
+            reject_host(dict(value, **{field: flag}))
+
+
+@pytest.mark.parametrize("field", ["result_delivered", "result_acknowledged"])
+@pytest.mark.parametrize("flag", [None, 0, 1, "true", [], {}])
+def test_C1_S010_host_delivery_booleans(field, flag):
+    reject_host(host(**{field: flag}))
+
+
+@pytest.mark.parametrize("kind,payload", [
+    ("unknown", {}), ("exited", {"code": 0}),
+    ("exited", {"code": -(1 << 63)}), ("exited", {"code": (1 << 63) - 1}),
+    ("terminated", {"reason": "signal"}), ("unavailable", {"reason": "unobserved"}),
+])
+def test_C1_S010_host_controller_process_variants(kind, payload):
+    value = host(controller_status={"kind": kind, **payload})
+    assert decode_host_result(encode_host_result(value)) == value
+
+
+@pytest.mark.parametrize("status", [
+    {"kind": "exited"}, {"kind": "exited", "code": True},
+    {"kind": "exited", "code": 0.0}, {"kind": "exited", "code": 1 << 63},
+    {"kind": "exited", "code": -(1 << 63) - 1}, {"kind": "unknown", "code": 0},
+    {"kind": "unknown", "reason": "known"}, {"kind": "terminated", "code": 1},
+    {"kind": "unavailable", "reason": "\n"}, {"kind": "future"},
+])
+def test_C1_S010_host_controller_process_rejection(status):
+    reject_host(host(controller_status=status))
+
+
+@pytest.mark.parametrize("kind", ["not-requested", "directory-retained", "file-published", "file-discarded", "failed"])
+def test_C1_S010_host_output_variants(kind):
+    value = host(controller_output={"kind": kind}, ok=kind not in {"file-discarded", "failed"})
+    assert decode_host_result(encode_host_result(value)) == value
+
+
+@pytest.mark.parametrize("value", [None, False, 1, [], {}])
+def test_C1_S010_host_output_reason_is_string(value):
+    reject_host(host(controller_output={"kind": "failed", "reason": value}, ok=False))
+
+
+@pytest.mark.parametrize("recovery", ["retry-cleanup", "reconcile-next-operation"])
+def test_C1_S010_host_tail_failed_cleanup(recovery):
+    value = host(delivery_tail_cleanup_status={"kind": "failed", "message": "cleanup failed"},
+                 delivery_tail_recovery_action=recovery, ok=False)
+    assert decode_host_result(encode_host_result(value)) == value
+
+
+def test_C1_S010_host_null_tail_pair():
+    value = host(delivery_tail_cleanup_status=None, delivery_tail_recovery_action=None, ok=False)
+    assert decode_host_result(encode_host_result(value)) == value
+    reject_host(dict(value, delivery_tail_recovery_action="none"))
+    reject_host(host(delivery_tail_recovery_action=None))
+
+
+@pytest.mark.parametrize("cleanup,recovery", [
+    ({"kind": "succeeded", "message": "error"}, "none"),
+    ({"kind": "succeeded"}, "retry-cleanup"),
+    ({"kind": "failed"}, "retry-cleanup"),
+    ({"kind": "failed", "message": "error"}, "none"),
+    ({"kind": "failed", "message": "\n"}, "retry-cleanup"),
+    ({"kind": "failed", "message": "error"}, "future"),
+    ({"kind": "succeeded"}, True),
+])
+def test_C1_S010_host_tail_cleanup_rejection(cleanup, recovery):
+    reject_host(host(delivery_tail_cleanup_status=cleanup, delivery_tail_recovery_action=recovery, ok=False))
+
+
+def failed_host_outcomes():
+    values = [
+        host(error="host error", ok=False), host(error="", ok=False),
+        host(result_delivered=False, result_acknowledged=False, ok=False),
+        host(result_acknowledged=False, ok=False), host(controller_output=None, ok=False),
+        host(controller_output={"kind": "file-discarded"}, ok=False),
+        host(controller_output={"kind": "failed", "reason": "publish failed"}, ok=False),
+        host(delivery_tail_cleanup_status=None, delivery_tail_recovery_action=None, ok=False),
+        host(delivery_tail_cleanup_status={"kind": "failed", "message": "cleanup failed"},
+             delivery_tail_recovery_action="retry-cleanup", ok=False),
+    ]
+    for update in [
+        {"cause": "host-cancel"},
+        {"cause": "workload-exit", "workload_status": {"kind": "exited", "code": 7}},
+        {"cause": "workload-exit", "workload_status": {"kind": "terminated"}},
+        {"workload_output_finalization_status": {"kind": "failed", "reason": "not drained"}},
+        {"runtime_observation_status": {"kind": "lost", "reason": "unobserved"}},
+        {"controller_finalization_status": {"kind": "not-completed"}},
+        {"cleanup_status": {"kind": "failed", "message": "cleanup failed"}, "recovery_action": "retry-cleanup"},
+    ]:
+        value = host(ok=False)
+        value["session_result"].update(update)
+        values.append(value)
+    return values
+
+
+@pytest.mark.parametrize("value", failed_host_outcomes())
+def test_C1_S011_host_failure_evidence_cannot_be_success(value):
+    assert decode_host_result(encode_host_result(value)) == value
+    reject_host(dict(value, ok=True))
+
+
+@pytest.mark.parametrize("cause", ["controller-terminate", "workload-exit"])
+def test_C1_S011_host_success_matches_pinned_producer(cause):
+    value = host()
+    value["session_result"].update(cause=cause, workload_status={"kind": "exited", "code": 0})
+    assert decode_host_result(encode_host_result(value)) == value
+    reject_host(dict(value, ok=False))
+
+
+def test_C1_S011_host_acknowledgement_requires_delivery():
+    reject_host(host(result_delivered=False, result_acknowledged=True, ok=False))
+
+
+def test_C1_S011_host_nested_session_values_reuse_public_validation():
+    value = host(ok=False)
+    value["session_result"]["cause"] = "runtime-observation-lost"
+    reject_host(value)
+    value = host(ok=False)
+    value["session_result"]["extra"] = "invalid"
+    reject_host(value)
+    value = host()
+    value["session_result"]["workload_status"]["code"] = True
+    reject_host(value)
+
+
+@pytest.mark.parametrize("diagnostic", ["", " embedded\ncontrol\x00\u200d ", "非ASCII" * 200, "x" * (MAX_LINE_BYTES + 1)])
+def test_C1_S012_host_diagnostics_preserve_public_strings(diagnostic):
+    for value in [host(error=diagnostic, ok=False),
+                  host(controller_output={"kind": "failed", "reason": diagnostic}, ok=False)]:
+        line = encode_host_result(value)
+        assert line.endswith(b"\n") and b"\n" not in line[:-1]
+        assert decode_host_result(line) == value
+
+
+@pytest.mark.parametrize("field", ["error", "controller_output"])
+def test_C1_S012_host_rejects_invalid_unicode(field):
+    update = "\ud800" if field == "error" else {"kind": "failed", "reason": "\ud800"}
+    reject_host(host(**{field: update, "ok": False}))
+
+
+@pytest.mark.parametrize("line", [
+    b"", b"{}", b"{}\r\n", b" {}\n", b"{} \n", b"{}\n{}\n", b"{}{}\n",
+    b"\xef\xbb\xbf{}\n", b"{\"error\":\"\xff\"}\n", b"{\n}\n",
+    b"{\"error\":NaN}\n", b"{\"error\":Infinity}\n", b"{\"error\":-Infinity}\n",
+    b"[]\n", b"null\n", b"true\n", b"{\"error\":\"first\",\"error\":\"second\"}\n",
+])
+def test_C1_S012_host_malformed_lines(line):
+    with pytest.raises(ReployCodecError):
+        decode_host_result(line)
+
+
+@pytest.mark.parametrize("line", [bytearray(b"{}\n"), "{}\n", None, 1])
+def test_C1_S012_host_requires_wire_bytes(line):
+    with pytest.raises(ReployCodecError):
+        decode_host_result(line)
+
+
+@pytest.mark.parametrize("field", ["session_result", "controller_status", "controller_output", "delivery_tail_cleanup_status"])
+def test_C1_S012_host_recursive_duplicates(field):
+    value = host()
+    nested = wire(value[field])[:-1]
+    duplicate = nested[:-1] + b',' + nested[1:]
+    line = wire(value)
+    key = ('"' + field + '":').encode()
+    line = line.replace(key + nested, key + duplicate, 1)
+    assert line != wire(value)
+    with pytest.raises(ReployCodecError, match="duplicate JSON field"):
+        decode_host_result(line)
+
+
+def test_C1_S013_cumulative_codec_round_trips_and_input_immutability():
+    for values, encode, decode in [
+        (EVENTS, encode_event, decode_event), (REQUESTS, encode_request, decode_request),
+        (HOST_RESULTS + failed_host_outcomes(), encode_host_result, decode_host_result),
+    ]:
+        for value in values:
+            original = deepcopy(value)
+            line = encode(value)
+            decoded = decode(line)
+            assert decoded == value == original
+            assert decoded is not value
+            decoded["schema"] = "changed"
+            assert value == original
+
+
+def test_C1_S013_schema_boundaries_do_not_accept_other_messages():
+    for encode in [encode_event, encode_request]:
+        with pytest.raises(ReployCodecError):
+            encode(HOST_SUCCESS)
+    for value in [EVENTS[0], REQUESTS[0]]:
+        reject_host(value)
+    assert HOST_RESULT_SCHEMA == "reploy-controlled-session-run-result-v1"
