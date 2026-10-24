@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "leaf": "C2.1",
+  "requirements": {
+    "startup_attachment_ordering": {
+      "owner": "C2.1",
+      "tests": [
+        "C2_S001",
+        "C2_S002",
+        "C2_S003",
+        "C2_S004",
+        "C2_S005",
+        "C2_S006"
+      ]
+    },
+    "ordinary_operation_and_session_completion": {
+      "owner": "C2.1",
+      "tests": [
+        "C2_S007",
+        "C2_S008",
+        "C2_S009",
+        "C2_S010",
+        "C2_S011",
+        "C2_S012",
+        "C2_S013",
+        "C2_S014",
+        "C2_S015"
+      ]
+    },
+    "cancellation_termination_ack_stderr_failure_retention": {
+      "owner": "C2.2",
+      "status": "pending"
+    },
+    "crossed_observations_and_Cancelling_completion_winner": {
+      "owner": "C2.3",
+      "status": "pending"
+    },
+    "actual_Envoy_channels_and_readiness_barrier": {
+      "owner": "C3.3",
+      "status": "pending"
+    },
+    "actual_Reploy_termination": {
+      "owner": "C8.2",
+      "status": "pending"
+    }
+  },
+  "tests": {
+    "C2_S001": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S001_public_peer_ordinary_session_and_operation"
+      ]
+    },
+    "C2_S002": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S002_attachment_confirmation_and_ready_crossing"
+      ]
+    },
+    "C2_S003": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S003_socket_is_one_opaque_argv_value"
+      ]
+    },
+    "C2_S004": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S004_original_attachment_deadline",
+        "test_C2_S004_confirmation_stops_attachment_deadline_not_an_unrelated_startup_timer",
+        "test_C2_S004_invalid_or_backwards_clock_is_fatal",
+        "test_C2_S004_unrepresentable_monotonic_time_is_fatal",
+        "test_C2_S004_diagnostic_does_not_reset_attachment_deadline"
+      ]
+    },
+    "C2_S005": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S005_malformed_public_event_never_authorizes_an_action",
+        "test_C2_S005_broker_ready_is_first",
+        "test_C2_S005_bad_startup_order_is_fatal",
+        "test_C2_S005_duplicate_startup_observation_fails"
+      ]
+    },
+    "C2_S006": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S006_missing_input_grant_cannot_bootstrap",
+        "test_C2_S006_no_execute_before_Envoy_barrier",
+        "test_C2_S006_opened_result_copies_do_not_mutate_authority"
+      ]
+    },
+    "C2_S007": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S007_artifact_completion_waits_for_both_output_and_attachment",
+        "test_C2_S007_no_premature_complete",
+        "test_C2_S007_duplicate_complete_never_sends_twice",
+        "test_C2_S007_complete_requires_grant"
+      ]
+    },
+    "C2_S008": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S008_startup_failure_does_not_wait_for_normal_finalization",
+        "test_C2_S008_result_cannot_rewrite_observations",
+        "test_C2_S008_workload_exit_cause_requires_prior_exit",
+        "test_C2_S008_other_cause_can_precede_workload_exit",
+        "test_C2_S008_diagnostic_never_advances_or_bootstraps",
+        "test_C2_S008_final_output_cannot_skip_lifecycle_order",
+        "test_C2_S008_premature_end_is_not_ordinary_success"
+      ]
+    },
+    "C2_S009": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S009_ordinary_operation_and_multiple_gates"
+      ]
+    },
+    "C2_S010": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S010_gate_interruption",
+        "test_C2_S010_gate_cannot_be_reused_in_same_operation"
+      ]
+    },
+    "C2_S011": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S011_failed_result_returns_to_idle",
+        "test_C2_S011_finalize_accepts_committed_result",
+        "test_C2_S011_shell_ended_completed_result_requires_resolved_gate",
+        "test_C2_S011_finalizing_completed_result_requires_resolved_gate",
+        "test_C2_S011_shell_ended_completed_result_is_accepted_without_gate"
+      ]
+    },
+    "C2_S012": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S012_wrong_operation_identity_never_changes_to_success",
+        "test_C2_S012_wrong_gate_identity",
+        "test_C2_S012_out_of_order_results_fail",
+        "test_C2_S012_shell_flag_is_boolean",
+        "test_C2_S012_terminal_result_type_is_not_an_escape_from_fail_closed",
+        "test_C2_S012_execute_never_replaces_an_active_operation",
+        "test_C2_S012_missing_operation_identity_is_rejected"
+      ]
+    },
+    "C2_S013": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S013_closed_requires_telemetry_and_terminal_EOF",
+        "test_C2_S013_idle_shell_exit_needs_no_operation_result",
+        "test_C2_S013_no_terminal_closure_before_drain",
+        "test_C2_S013_drain_and_closed_reasons_match",
+        "test_C2_S013_shell_ended_result_forbids_next_execute_even_before_drain"
+      ]
+    },
+    "C2_S014": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S014_no_actions_after_Reploy_termination_begins",
+        "test_C2_S014_Envoy_success_is_not_Reploy_success",
+        "test_C2_S014_stale_started_after_terminal_result_is_rejected"
+      ]
+    },
+    "C2_S015": {
+      "file": "tests/test_controller_lifecycle.py",
+      "functions": [
+        "test_C2_S015_optional_empty_status_reason_does_not_replace_authoritative_evidence",
+        "test_C2_S015_nonempty_status_reason_change_remains_fatal"
+      ]
+    }
+  },
+  "retained_static_anchors": [
+    {
+      "id": "B1-C065-controller-cancelling-operation_ready",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-C065-controller-cancelling-operation_continued",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-C065-controller-cancelling-operation_gate_interrupted",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_ready",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_continued",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_gate_interrupted",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C3.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-PACKAGE-C2.1",
+      "implementation_leaf": "C2.1",
+      "closure_leaf": "C2.1",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-PACKAGE-C2.2",
+      "implementation_leaf": "C2.2",
+      "closure_leaf": "C2.2",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    },
+    {
+      "id": "B1-PACKAGE-C2.3",
+      "implementation_leaf": "C2.3",
+      "closure_leaf": "C2.3",
+      "status": "pending",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+    }
+  ]
+}
