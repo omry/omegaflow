@@ -1,12 +1,12 @@
 # Python Envoy session client acceptance
 
 C3.1 implements strict Envoy v1 public codecs and a selected terminal/telemetry
-connection. The production modules have no recorder entrypoint and do not
+connection. C3.2 adds source/input admission, request writing and output-frontier facts. The production modules have no recorder entrypoint and do not
 launch Reploy, Envoy or Awsh. The socket tests use actual loopback TCP listeners
 with deterministic test-only server behavior. They establish transport behavior,
 not actual Envoy/Awsh or Reploy integration.
 
-Run `python -m pytest -q tests/test_envoy_codecs.py tests/test_envoy_transport.py`.
+Run `python -m pytest -q tests/test_envoy_codecs.py tests/test_envoy_transport.py tests/test_envoy_client.py`.
 Run the existing controller codec/lifecycle/session/crossing suites cumulatively.
 The full repository Python check remains `python -m nox -s ci`.
 
@@ -42,6 +42,26 @@ observe private buffering do so only to establish the exact cross-channel phase.
 
 `case-map.json` retains the B1 anchors and owning tests. The shared B1 inventory
 is immutable here. Actual local Envoy/Awsh operation and lifecycle crossings
-remain C3.3. Source/input policy, operation submission and post-ready output
-frontier matching remain C3.2. Actual Reploy termination remains C8.2. These
+remain C3.3. Actual Reploy termination remains C8.2. These
 pending boundaries cannot be inferred from a local peer pass.
+
+
+C3.2 admits the complete source and immutable encoded input plan before any
+execute byte. It uses the existing codec for source and enclosing-frame bounds;
+Bash syntax remains Awsh's check. Both reserved input sequences are rejected
+within chunks and across adjacent chunks, including empty non-writing steps.
+The writer owns sequence numbers and input_through. Only completed terminal
+writes advance that count; partial failure or cancellation closes the pair.
+Terminal input has no control-frame timer. Execute/continue cannot capture a
+watermark while a terminal write is unresolved, while cancel remains writable.
+The shared C2 operation object and a matching observed public start gate input.
+
+Frontier tests distinguish retained raw bytes from observed sender offsets.
+They reject regressing marks, timestamps, uncovered boundaries, wrong operation
+identities, and changed range anchors. Equal-offset marks can change stream.
+A terminal result's output_start remains its earlier opening anchor; pre-start
+failure/cancellation instead uses a later empty range. Telemetry returns before
+waiting for its raw bytes, preserving C3.3's original final-drain timer epoch.
+C3.3 still applies matching gate/control/result observations, verifies inspection
+plans, drives output barriers, and closes the actual local Envoy/Awsh cases.
+C3.2's TCP peers establish no such actual-actor closure or Reploy outcome.
