@@ -80,6 +80,9 @@ func (w *Workload) finishTerminalDrain(ctx context.Context, reason string) error
 	if err := w.channels.terminal.CloseWrite(); err != nil {
 		return err
 	}
+	if err := w.mark(ctx, true); err != nil {
+		return err
+	}
 	return w.channels.Send(ctx, protocol.Closed{Header: w.channels.header("closed"), Reason: reason, OutputThrough: w.OutputThrough})
 }
 

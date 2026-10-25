@@ -395,10 +395,18 @@ func TestDispatchShellEndAndTimeoutRequireCleanupAndEOF(t *testing.T) {
 					t.Fatal("late shell return replaced timeout", m)
 				}
 			}
-			if m, ok := nextDispatch(t, f).(*protocol.Draining); !ok || m.Reason != "shell_ended" {
+			drainMark, ok := nextRelayFrame(t, f.relayFixture).(*protocol.OutputMark)
+			if !ok {
+				t.Fatal("draining lacks immediately preceding covering mark")
+			}
+			if m, ok := nextRelayFrame(t, f.relayFixture).(*protocol.Draining); !ok || m.Reason != "shell_ended" || m.OutputThrough != drainMark.Offset || m.Seq != drainMark.Seq+1 {
 				t.Fatal("missing shell-ended drain", m)
 			}
-			if m, ok := nextDispatch(t, f).(*protocol.Closed); !ok || m.Reason != "shell_ended" {
+			closeMark, ok := nextRelayFrame(t, f.relayFixture).(*protocol.OutputMark)
+			if !ok || closeMark.Offset != drainMark.Offset || closeMark.ElapsedUS < drainMark.ElapsedUS {
+				t.Fatal("closed lacks its own covering mark", closeMark)
+			}
+			if m, ok := nextRelayFrame(t, f.relayFixture).(*protocol.Closed); !ok || m.Reason != "shell_ended" || m.OutputThrough != closeMark.Offset || m.Seq != closeMark.Seq+1 {
 				t.Fatal("missing closed", m)
 			}
 			f.control.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
@@ -432,6 +440,35 @@ func TestDispatchInterruptedGateConsumesOneLateContinue(t *testing.T) {
 		t.Fatal(err)
 	}
 	completedEvent(t, f)
+}
+
+func TestDispatchShellEndKeepsClosureMarkBudget(t *testing.T) {
+	for _, remaining := range []int{1, 2} {
+		t.Run(fmt.Sprint(remaining), func(t *testing.T) {
+			f := completionFixture(t)
+			f.r.mu.Lock()
+			f.r.w.marks = markLimit - remaining
+			f.r.mu.Unlock()
+			peers := &controlPeers{sessionID: 123, endShell: func(context.Context, string, bool) error {
+				f.result.Close()
+				f.slave.Close()
+				return nil
+			}}
+			done := controlledFixture(t, f, relayTestContext(t), cleanReturn, peers)
+			f.private(t, protocol.PrivateShellExit{ActiveOperationID: "operation-1", Status: 7, CWD: "/tmp"})
+			err := finishCompletion(t, done)
+			if err == nil || !strings.Contains(err.Error(), "output mark budget exhausted") || f.r.w.marks != markLimit || f.r.w.channels.Err() == nil {
+				t.Fatal("closure bypassed mark exhaustion or left session usable", err, f.r.w.marks)
+			}
+			// The operation result consumes the first mark. Exhaustion at
+			// either later terminal boundary must prevent successful closed.
+			for frame := range f.frames {
+				if _, ok := frame.(*protocol.Closed); ok {
+					t.Fatal("mark exhaustion produced successful closure")
+				}
+			}
+		})
+	}
 }
 
 func TestDispatchCommittedGatePredecessorSurvivesLaterCancel(t *testing.T) {

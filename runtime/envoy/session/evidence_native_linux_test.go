@@ -85,18 +85,31 @@ func (e *evidenceTranscript) awaitBytes(t *testing.T, through int64) {
 
 func (e *evidenceTranscript) event(t *testing.T) protocol.Message {
 	t.Helper()
+	var covering *protocol.OutputMark
 	for {
 		m := nativeFrame(t, e.n.reader)
 		encoded, err := protocol.EncodeEnvoy(m)
-		var header protocol.Header
+		var header struct {
+			protocol.Header
+			OutputStart   *int64 `json:"output_start"`
+			OutputThrough *int64 `json:"output_through"`
+		}
 		if err != nil || json.Unmarshal(encoded, &header) != nil || header.Seq != e.n.lastSeq+1 {
 			t.Fatal("evidence public sequence", m, err)
 		}
 		e.n.lastSeq = header.Seq
 		mark, ok := m.(*protocol.OutputMark)
 		if !ok {
+			boundary := header.OutputThrough
+			if boundary == nil {
+				boundary = header.OutputStart
+			}
+			if boundary != nil && (covering == nil || covering.Offset != *boundary || covering.Seq+1 != header.Seq) {
+				t.Fatal("event lacks immediately preceding covering mark", m, covering)
+			}
 			return m
 		}
+		covering = mark
 		if mark.Offset < e.offset || mark.ElapsedUS < e.elapsed ||
 			(mark.Stream != "pty" && mark.Stream != "stdout" && mark.Stream != "stderr") {
 			t.Fatal("invalid evidence mark", mark)

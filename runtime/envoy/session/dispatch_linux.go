@@ -482,12 +482,18 @@ func (c *Coordinator) endControlled(ctx context.Context, d *operationDispatch) (
 	c.w.CWD = exited.CWD
 	c.phase = 0
 	if err := c.work(phase, false, func(job context.Context) error {
+		if err := c.w.mark(job, true); err != nil {
+			return err
+		}
 		if err := c.w.channels.sendEvent(job, "draining", func(h protocol.Header) protocol.Message {
 			return protocol.Draining{Header: h, Reason: "shell_ended", OutputThrough: c.w.OutputThrough}
 		}); err != nil {
 			return err
 		}
 		if err := c.w.channels.terminal.CloseWrite(); err != nil {
+			return err
+		}
+		if err := c.w.mark(job, true); err != nil {
 			return err
 		}
 		return c.w.channels.sendEvent(job, "closed", func(h protocol.Header) protocol.Message {
