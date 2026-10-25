@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "implementation_leaf": "C3.1",
+  "implementation_leaf": "C3.2",
   "proof_boundary": "real local TCP channels against a deterministic test-only server",
   "cases": [
     {
@@ -41,10 +41,33 @@
       ],
       "closure_leaf": "C3.1",
       "actual_actor_closure": "not-claimed"
+    },
+    {
+      "id": "B1-C031-reserved-input",
+      "tests": [
+        "tests/test_envoy_client.py::test_C3_2_reserved_input_and_adjacent_steps_rejected_before_execute"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "pending"
+    },
+    {
+      "id": "B1-C031-adjacent-step-input",
+      "tests": [
+        "tests/test_envoy_client.py::test_C3_2_reserved_input_and_adjacent_steps_rejected_before_execute"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "pending"
+    },
+    {
+      "id": "B1-PACKAGE-C3.2",
+      "tests": [
+        "tests/test_envoy_client.py"
+      ],
+      "closure_leaf": "C3.2",
+      "actual_actor_closure": "not-claimed"
     }
   ],
   "later_owners": {
-    "C3.2": "source/input policy, operation submission and post-ready frontier handling",
     "C3.3": "inspection-result matching, C2 lifecycle assembly and actual local Envoy/Awsh integration",
     "C8.2": "actual Reploy invocation and termination"
   }

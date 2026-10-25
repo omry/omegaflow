@@ -62,14 +62,16 @@ class EnvoyTransport:
 
     All calls belong to one event loop and one serial caller. The caller owns
     and closes both evidence files. This class closes only its connections and
-    reads. It never retries or reports a Reploy lifecycle outcome. Telemetry
-    bytes go to their separate evidence sink, including malformed input.
+    reads and in-flight socket writes. It never retries or reports a Reploy
+    lifecycle outcome. Telemetry bytes go to their separate evidence sink,
+    including malformed input.
     """
 
     def __init__(self, terminal: socket.socket, telemetry: socket.socket, *, raw_log: BinaryIO,
                  telemetry_log: BinaryIO) -> None:
         self._channels = {"terminal": terminal, "telemetry": telemetry}
         self._reads: dict[str, asyncio.Task] = {}
+        self._writes: set[asyncio.Task] = set()
         self._events = deque()
         self._frames = EventFrames()
         self._raw_log = raw_log
@@ -82,6 +84,8 @@ class EnvoyTransport:
         self._eof: set[str] = set()
         self._hello_completed_at: float | None = None
         self._receiving = False
+        self._control_writing = False
+        self._terminal_writing = False
         raw_stat = os.fstat(raw_log.fileno())
         if raw_log is telemetry_log or not stat.S_ISREG(raw_stat.st_mode):
             raise ValueError("raw output requires a separate regular file")
@@ -124,8 +128,7 @@ class EnvoyTransport:
                 for host, port in (terminal, telemetry):
                     opened.append(await _connect_socket(host, port))
             owner = cls(*opened, raw_log=raw_log, telemetry_log=telemetry_log)
-            async with asyncio.timeout(WRITE_SECONDS):
-                await loop.sock_sendall(opened[1], hello)
+            await owner._write_control(hello)
             owner._hello_completed_at = loop.time()
             return owner
         except BaseException:
@@ -147,6 +150,60 @@ class EnvoyTransport:
     @property
     def raw_offset(self) -> int:
         return self._raw_offset
+
+    async def _send(self, channel: str, data: bytes) -> None:
+        # Own only the socket operation, not the caller's controller task.
+        task = asyncio.create_task(
+            asyncio.get_running_loop().sock_sendall(self._channels[channel], data))
+        self._writes.add(task)
+        try:
+            await task
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise
+            raise EnvoyTransportError(channel + " write aborted by transport disposal") from None
+        finally:
+            self._writes.discard(task)
+
+    async def _write_control(self, frame: bytes) -> None:
+        if self._closed or self._control_writing:
+            raise EnvoyTransportError("control write requires serial channel ownership")
+        self._control_writing = True
+        try:
+            async with asyncio.timeout(WRITE_SECONDS):
+                await self._send("telemetry", frame)
+        except BaseException:
+            await self.close()
+            raise
+        finally:
+            self._control_writing = False
+
+    async def write_control(self, frame: bytes) -> None:
+        """Write one already-encoded request under its individual write budget.
+
+        The Envoy client owns canonical encoding and request sequencing. No
+        second writer may use this selected telemetry connection.
+        """
+        if not self.ready or type(frame) is not bytes:
+            raise EnvoyTransportError("control write requires ready, encoded bytes")
+        await self._write_control(frame)
+
+    async def write_terminal(self, data: bytes) -> None:
+        """Write exact admitted input; the control-frame timer does not apply.
+
+        On partial failure or cancellation, close the pair. The caller must
+        never use an uncertain byte count for a subsequent request.
+        """
+        if not self.ready or self._terminal_writing or type(data) is not bytes:
+            raise EnvoyTransportError("terminal write requires ready, serial byte ownership")
+        self._terminal_writing = True
+        try:
+            await self._send("terminal", data)
+        except BaseException:
+            await self.close()
+            raise
+        finally:
+            self._terminal_writing = False
 
     def _append(self, data: bytes) -> None:
         if (self._raw_log.tell() != self._raw_offset
@@ -300,15 +357,19 @@ class EnvoyTransport:
             self._receiving = False
 
     async def close(self) -> None:
-        """Dispose all owned reads and sockets, preserving caller-owned logs."""
+        """Settle owned I/O before closing sockets; preserve caller-owned logs."""
         if self._closed:
             return
         self._closed = True
         self._ready = False
-        reads = list(self._reads.values())
-        for task in reads:
+        pending = [task for task in (*self._reads.values(), *self._writes)
+                   if task is not asyncio.current_task()]
+        for task in pending:
             task.cancel()
-        for selected in self._channels.values():
-            selected.close()
-        await asyncio.gather(*reads, return_exceptions=True)
-        self._reads.clear()
+        try:
+            await asyncio.gather(*pending, return_exceptions=True)
+        finally:
+            for selected in self._channels.values():
+                selected.close()
+            self._reads.clear()
+            self._writes.clear()
