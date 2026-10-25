@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "leaf": "C2.2",
+  "leaf": "C2.3",
   "requirements": {
     "startup_attachment_ordering": {
       "owner": "C2.1",
@@ -53,7 +53,25 @@
     },
     "crossed_observations_and_Cancelling_completion_winner": {
       "owner": "C2.3",
-      "status": "pending"
+      "status": "implemented",
+      "tests": [
+        "C2_S034",
+        "C2_S035",
+        "C2_S036",
+        "C2_S037",
+        "C2_S038",
+        "C2_S039",
+        "C2_S040",
+        "C2_S041",
+        "C2_S042",
+        "C2_S043",
+        "C2_S044",
+        "C2_S045",
+        "C2_S046",
+        "C2_S047",
+        "C2_S048",
+        "C2_S049"
+      ]
     },
     "actual_Envoy_channels_and_readiness_barrier": {
       "owner": "C3.3",
@@ -320,6 +338,104 @@
       "functions": [
         "test_C2_S033_clean_attachment_EOF_before_public_termination_is_not_a_failure"
       ]
+    },
+    "C2_S034": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S034_delayed_gate_observation_preserves_selected_lifecycle"
+      ]
+    },
+    "C2_S035": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S035_gate_observation_before_control_keeps_ordinary_transition"
+      ]
+    },
+    "C2_S036": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S036_cancel_supersedes_finalize_without_losing_predecessor"
+      ]
+    },
+    "C2_S037": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S037_committed_result_resolves_cancel_without_another_response"
+      ]
+    },
+    "C2_S038": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S038_unstarted_cancel_cannot_manufacture_success"
+      ]
+    },
+    "C2_S039": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S039_shell_end_resolves_unstarted_execute_and_cancel"
+      ]
+    },
+    "C2_S040": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S040_both_idle_shutdown_winners_close_cleanly"
+      ]
+    },
+    "C2_S041": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S041_crossed_started_closes_unstarted_drain_path",
+        "test_C2_S041_drain_cannot_skip_started_result_or_change_reason"
+      ]
+    },
+    "C2_S042": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S042_crossed_observations_keep_exact_operation_identity"
+      ]
+    },
+    "C2_S043": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S043_selected_lifecycle_does_not_allow_duplicate_observations"
+      ]
+    },
+    "C2_S044": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S044_crossed_gate_outcome_keeps_exact_gate_identity",
+        "test_C2_S044_crossed_ready_still_rejects_invalid_gate"
+      ]
+    },
+    "C2_S045": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S045_crossed_ready_never_reopens_ordinary_admission"
+      ]
+    },
+    "C2_S046": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S046_completion_winner_composes_with_public_teardown"
+      ]
+    },
+    "C2_S047": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S047_late_gate_during_public_termination_preserves_first_failure"
+      ]
+    },
+    "C2_S048": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S048_owner_retains_invalid_observation_before_valid_public_teardown"
+      ]
+    },
+    "C2_S049": {
+      "file": "tests/test_controller_crossings.py",
+      "functions": [
+        "test_C2_S049_complete_package_map_preserves_static_owners_and_pending_actual_proofs"
+      ]
     }
   },
   "retained_static_anchors": [
@@ -328,42 +444,72 @@
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-C065-controller-cancelling-operation_continued",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-C065-controller-cancelling-operation_gate_interrupted",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-C065-controller-finalizing-operation_ready",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-C065-controller-finalizing-operation_continued",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-C065-controller-finalizing-operation_gate_interrupted",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C3.3",
       "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "implementation_status": "implemented",
+      "tests": [
+        "C2_S034"
+      ],
+      "evidence": "tests/test_controller_crossings.py"
     },
     {
       "id": "B1-PACKAGE-C2.1",
@@ -385,8 +531,27 @@
       "id": "B1-PACKAGE-C2.3",
       "implementation_leaf": "C2.3",
       "closure_leaf": "C2.3",
-      "status": "pending",
-      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl"
+      "status": "implemented",
+      "source": "tests/fixtures/envoy-protocol-v1/cases.jsonl",
+      "tests": [
+        "C2_S034",
+        "C2_S035",
+        "C2_S036",
+        "C2_S037",
+        "C2_S038",
+        "C2_S039",
+        "C2_S040",
+        "C2_S041",
+        "C2_S042",
+        "C2_S043",
+        "C2_S044",
+        "C2_S045",
+        "C2_S046",
+        "C2_S047",
+        "C2_S048",
+        "C2_S049"
+      ],
+      "evidence": "tests/controller-lifecycle/case-map.json"
     }
   ]
 }

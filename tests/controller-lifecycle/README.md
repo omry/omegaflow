@@ -18,8 +18,9 @@ finalization. Structured session results remain complete private evidence.
 Run `.venv/bin/python -m pytest tests/test_controller_lifecycle.py` and the full
 `.venv/bin/python -m nox -s ci` profile. These leaves expose no executable capture
 path. C2.2 adds the concrete `ControllerSession` evidence adapter against a
-deterministic peer in `tests/test_controller_session.py`. C2.3 owns the full
-fake-client crossed-event matrix and cumulative C2 gate. C3.3 owns actual Envoy
+deterministic peer in `tests/test_controller_session.py`. C2.3 adds the full
+fake-client crossed-event matrix and cumulative C2 gate in
+`tests/test_controller_crossings.py`. C3.3 owns actual Envoy
 channel and raw-log barrier integration. C8.2 owns actual Reploy invocation.
 A successful fake trace does not establish any of those later proofs.
 
@@ -53,3 +54,27 @@ and write/flush failures remain capture failures with partial evidence retained.
 These tests use actual temporary files for streaming retention and deterministic
 failure sinks. Process execution, actual channel pumps and host invocation are
 not established by this peer and retain their C3/C8 owners.
+
+C2.3 consumes committed gate observations while a local cancel or finalize is
+pending. The core retains the predecessor phase, advances it once, and keeps
+the selected lifecycle state. Wrong identities, duplicate observations and
+ordinary requests remain invalid. A delayed gate cannot reopen handoff work.
+The same phase retains the existing crossed-start behavior without a second
+start-only flag. A terminal completion or finalization that wins inspection
+cancel resolves that request; the controller waits for no additional response.
+
+An Envoy shell-ended drain may supersede an unstarted execute and its cancel,
+or win an idle shutdown race. It clears the abandoned reservation without an
+operation result. A started active operation still requires its terminal result
+before ordinary drain. Both closed/terminal-EOF orders retain exact reasons.
+The typed peer then exercises public Reploy teardown and complete/ack barriers,
+including early attachment EOF, a retained capture failure and partial artifacts.
+These are deterministic observations through the existing core and session;
+actual channel delivery, scheduler handoff and raw-log barriers remain C3 work.
+
+Run the cumulative gate with
+`.venv/bin/python -m pytest -q tests/test_controller_crossings.py tests/test_controller_session.py tests/test_controller_lifecycle.py tests/test_reploy_codecs.py`
+and `.venv/bin/python -m nox -s ci`. The map covers all 49 C2 case IDs and the
+six original B1-C065 gate anchors. Their C2.3 implementation evidence is present;
+their actual-client closure remains pending at C3.3. The original B1 fixtures
+are unchanged. No fake trace establishes real Reploy termination or host success.
