@@ -1,0 +1,1 @@
+Add strict Envoy v1 public codecs and a bounded Python terminal/telemetry connection with an exact durable startup output barrier. The connection remains an internal component pending controller and recording integration.

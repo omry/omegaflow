@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "implementation_leaf": "C3.1",
+  "proof_boundary": "real local TCP channels against a deterministic test-only server",
+  "cases": [
+    {
+      "id": "B1-C001-controller-connect",
+      "tests": [
+        "tests/test_envoy_transport.py::test_connect_and_ready_epochs_are_shared_and_never_reset",
+        "tests/test_envoy_transport.py::test_connect_resolution_cancellation_is_inside_original_budget",
+        "tests/test_envoy_transport.py::test_second_connect_failure_disposes_first_socket"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "pending"
+    },
+    {
+      "id": "B1-C001-controller-ready",
+      "tests": [
+        "tests/test_envoy_transport.py::test_exact_startup_barrier_before_prompt_or_request",
+        "tests/test_envoy_transport.py::test_ready_timeout_includes_delay_before_wait_and_partial_progress",
+        "tests/test_envoy_transport.py::test_overflow_and_barrier_overrun_fail_without_early_append",
+        "tests/test_envoy_transport.py::test_selected_eof_before_barrier_is_failure"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "pending"
+    },
+    {
+      "id": "B1-C001-control-write-controller",
+      "tests": [
+        "tests/test_envoy_transport.py::test_hello_write_timeout_closes_both_selected_sockets",
+        "tests/test_envoy_transport.py::test_connect_and_ready_epochs_are_shared_and_never_reset"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "pending"
+    },
+    {
+      "id": "B1-PACKAGE-C3.1",
+      "tests": [
+        "tests/test_envoy_codecs.py",
+        "tests/test_envoy_transport.py"
+      ],
+      "closure_leaf": "C3.1",
+      "actual_actor_closure": "not-claimed"
+    }
+  ],
+  "later_owners": {
+    "C3.2": "source/input policy, operation submission and post-ready frontier handling",
+    "C3.3": "inspection-result matching, C2 lifecycle assembly and actual local Envoy/Awsh integration",
+    "C8.2": "actual Reploy invocation and termination"
+  }
+}
