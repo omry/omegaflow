@@ -293,7 +293,13 @@ def test_C2_S023_operation_cancel_has_exact_identity_and_does_not_terminate_Repl
     op.execute("op-17")
     if state is not OperationState.STARTING:
         op.started("op-17")
-    op.state = state
+    if state in {OperationState.GATED, OperationState.CONTINUING}:
+        op.gate_ready("op-17", "gate-17")
+    if state is OperationState.CONTINUING:
+        op.continue_operation("op-17", "gate-17")
+    if state is OperationState.FINALIZING:
+        op.finalize("op-17")
+    assert op.state is state
     assert peer.accept(peer.controller.cancel("op-17")) == ["cancel-operation"]
     assert peer.effects[-1].argv == ("op-17",)
     assert op.state is OperationState.CANCELLING

@@ -319,7 +319,7 @@ class OperationLifecycle:
         self._drain_reason: str | None = None
         self._closed_seen = False
         self._terminal_eof = False
-        self._awaiting_started = False
+        self._pending_phase: OperationState | None = None
         self._seen_gates: set[str] = set()
 
     def _require(self, condition: bool, message: str) -> None:
@@ -331,32 +331,41 @@ class OperationLifecycle:
         self._require(self.active_id is not None and operation_id == self.active_id,
                       "operation observation has the wrong identity")
 
+    def _phase(self) -> OperationState | None:
+        if self.state in {OperationState.CANCELLING, OperationState.FINALIZING}:
+            return self._pending_phase
+        return self.state
+
+    def _observe(self, phase: OperationState) -> None:
+        # A committed predecessor advances while the local lifecycle request
+        # stays pending. It never reopens ordinary gate or request admission.
+        if self.state in {OperationState.CANCELLING, OperationState.FINALIZING}:
+            self._pending_phase = phase
+        else:
+            self.state = phase
+
     def execute(self, operation_id: str) -> None:
         self._require(self.session.can_record and self.state is OperationState.IDLE
                       and not self.shell_ended, "controller is not ready for execute")
         self._require(type(operation_id) is str and bool(operation_id),
                       "invalid operation identity")
         self._seen_gates.clear()
-        self._awaiting_started = True
+        self._pending_phase = None
         self.active_id = operation_id
         self.state = OperationState.STARTING
 
     def started(self, operation_id: str) -> None:
         self._match(operation_id)
-        self._require(self._awaiting_started
-                      and self.state in {OperationState.STARTING, OperationState.CANCELLING},
-                      "unexpected operation_started")
-        self._awaiting_started = False
-        if self.state is OperationState.STARTING:
-            self.state = OperationState.RUNNING
+        self._require(self._phase() is OperationState.STARTING, "unexpected operation_started")
+        self._observe(OperationState.RUNNING)
 
     def gate_ready(self, operation_id: str, gate_id: str) -> None:
         self._match(operation_id)
-        self._require(self.state is OperationState.RUNNING and type(gate_id) is str
+        self._require(self._phase() is OperationState.RUNNING and type(gate_id) is str
                       and bool(gate_id) and gate_id not in self._seen_gates, "unexpected operation_ready")
         self._seen_gates.add(gate_id)
         self.gate_id = gate_id
-        self.state = OperationState.GATED
+        self._observe(OperationState.GATED)
 
     def continue_operation(self, operation_id: str, gate_id: str) -> None:
         self._match(operation_id)
@@ -366,23 +375,24 @@ class OperationLifecycle:
 
     def continued(self, operation_id: str, gate_id: str) -> None:
         self._match(operation_id)
-        self._require(self.state is OperationState.CONTINUING and gate_id == self.gate_id,
+        self._require(self._phase() is OperationState.CONTINUING and gate_id == self.gate_id,
                       "unexpected operation_continued")
         self.gate_id = None
-        self.state = OperationState.RUNNING
+        self._observe(OperationState.RUNNING)
 
     def gate_interrupted(self, operation_id: str, gate_id: str) -> None:
         self._match(operation_id)
-        self._require(self.state in {OperationState.GATED, OperationState.CONTINUING}
+        self._require(self._phase() in {OperationState.GATED, OperationState.CONTINUING}
                       and gate_id == self.gate_id, "unexpected operation_gate_interrupted")
         self.gate_id = None
-        self.state = OperationState.RUNNING
+        self._observe(OperationState.RUNNING)
 
     def finalize(self, operation_id: str) -> None:
         self._match(operation_id)
         self._require(self.session.can_record
                       and self.state in {OperationState.RUNNING, OperationState.GATED,
                                          OperationState.CONTINUING}, "invalid finalize request")
+        self._pending_phase = self.state
         self.state = OperationState.FINALIZING
 
     def cancel(self, operation_id: str) -> None:
@@ -391,6 +401,8 @@ class OperationLifecycle:
                       and self.state in {OperationState.STARTING, OperationState.RUNNING,
                                          OperationState.GATED, OperationState.CONTINUING,
                                          OperationState.FINALIZING}, "invalid cancel request")
+        if self.state is not OperationState.FINALIZING:
+            self._pending_phase = self.state
         self.state = OperationState.CANCELLING
 
     def terminal_result(self, operation_id: str, kind: str, *, shell_ended: bool = False) -> None:
@@ -406,11 +418,15 @@ class OperationLifecycle:
             OperationState.CANCELLING: {"cancelled", "completed", "finalized", "failed"},
         }
         kinds = allowed.get(self.state, set())
-        self._require(kind in kinds and (kind != "completed" or self.gate_id is None),
+        if self.state is OperationState.CANCELLING and self._phase() is OperationState.STARTING:
+            kinds = {"cancelled", "failed"}
+        self._require(kind in kinds and self._phase() is not None
+                      and (kind != "completed" or self.gate_id is None),
                       "unexpected terminal operation result")
         self.shell_ended = shell_ended
         self.active_id = None
         self.gate_id = None
+        self._pending_phase = None
         self.state = OperationState.IDLE
 
     def shutdown(self, reason: str) -> None:
@@ -422,10 +438,18 @@ class OperationLifecycle:
         self.state = OperationState.SHUTDOWN_SENT
 
     def draining(self, reason: str) -> None:
-        valid = ((self.state is OperationState.IDLE and self.shell_ended and reason == "shell_ended")
-                 or (self.state is OperationState.SHUTDOWN_SENT and reason == self._shutdown_reason)
-                 or (self.state is OperationState.IDLE and reason == "shell_ended"))
+        unstarted = (self.state in {OperationState.STARTING, OperationState.CANCELLING}
+                     and self._phase() is OperationState.STARTING)
+        valid = ((self.state is OperationState.IDLE and reason == "shell_ended")
+                 or (self.state is OperationState.SHUTDOWN_SENT
+                     and (reason == self._shutdown_reason or reason == "shell_ended"))
+                 or (unstarted and reason == "shell_ended"))
         self._require(valid, "unexpected Envoy drain")
+        self.active_id = None
+        self.gate_id = None
+        self._pending_phase = None
+        if reason == "shell_ended":
+            self.shell_ended = True
         self._drain_reason = reason
         self.state = OperationState.DRAINING
 
