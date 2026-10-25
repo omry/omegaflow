@@ -82,6 +82,8 @@ class EnvoyTransport:
         self._eof: set[str] = set()
         self._hello_completed_at: float | None = None
         self._receiving = False
+        self._control_writing = False
+        self._terminal_writing = False
         raw_stat = os.fstat(raw_log.fileno())
         if raw_log is telemetry_log or not stat.S_ISREG(raw_stat.st_mode):
             raise ValueError("raw output requires a separate regular file")
@@ -124,8 +126,7 @@ class EnvoyTransport:
                 for host, port in (terminal, telemetry):
                     opened.append(await _connect_socket(host, port))
             owner = cls(*opened, raw_log=raw_log, telemetry_log=telemetry_log)
-            async with asyncio.timeout(WRITE_SECONDS):
-                await loop.sock_sendall(opened[1], hello)
+            await owner._write_control(hello)
             owner._hello_completed_at = loop.time()
             return owner
         except BaseException:
@@ -147,6 +148,46 @@ class EnvoyTransport:
     @property
     def raw_offset(self) -> int:
         return self._raw_offset
+
+    async def _write_control(self, frame: bytes) -> None:
+        if self._closed or self._control_writing:
+            raise EnvoyTransportError("control write requires serial channel ownership")
+        self._control_writing = True
+        try:
+            async with asyncio.timeout(WRITE_SECONDS):
+                await asyncio.get_running_loop().sock_sendall(self._channels["telemetry"], frame)
+        except BaseException:
+            await self.close()
+            raise
+        finally:
+            self._control_writing = False
+
+    async def write_control(self, frame: bytes) -> None:
+        """Write one already-encoded request under its individual write budget.
+
+        The Envoy client owns canonical encoding and request sequencing. No
+        second writer may use this selected telemetry connection.
+        """
+        if not self.ready or type(frame) is not bytes:
+            raise EnvoyTransportError("control write requires ready, encoded bytes")
+        await self._write_control(frame)
+
+    async def write_terminal(self, data: bytes) -> None:
+        """Write exact admitted input; the control-frame timer does not apply.
+
+        On partial failure or cancellation, close the pair. The caller must
+        never use an uncertain byte count for a subsequent request.
+        """
+        if not self.ready or self._terminal_writing or type(data) is not bytes:
+            raise EnvoyTransportError("terminal write requires ready, serial byte ownership")
+        self._terminal_writing = True
+        try:
+            await asyncio.get_running_loop().sock_sendall(self._channels["terminal"], data)
+        except BaseException:
+            await self.close()
+            raise
+        finally:
+            self._terminal_writing = False
 
     def _append(self, data: bytes) -> None:
         if (self._raw_log.tell() != self._raw_offset
