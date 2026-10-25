@@ -48,18 +48,23 @@ func TestIdleTerminalClosureFormsAndReap(t *testing.T) {
 					t.Fatal("valid crossed terminal failed", err)
 				}
 				for _, kind := range []string{"draining", "closed"} {
+					var covering *protocol.OutputMark
 					for {
 						m := nextRelayFrame(t, f.relayFixture)
-						if _, ok := m.(*protocol.OutputMark); ok {
+						if mark, ok := m.(*protocol.OutputMark); ok {
+							covering = mark
 							continue
+						}
+						if covering == nil {
+							t.Fatal("terminal event lacks immediately preceding covering mark", m)
 						}
 						switch v := m.(type) {
 						case *protocol.Draining:
-							if kind != "draining" || v.Reason != "requested-reason" {
+							if kind != "draining" || v.Reason != "requested-reason" || v.OutputThrough != covering.Offset || v.Seq != covering.Seq+1 {
 								t.Fatal("terminal replaced requested reason", m)
 							}
 						case *protocol.Closed:
-							if kind != "closed" || v.Reason != "requested-reason" {
+							if kind != "closed" || v.Reason != "requested-reason" || v.OutputThrough != covering.Offset || v.Seq != covering.Seq+1 {
 								t.Fatal("wrong terminal ordering", m)
 							}
 						default:
@@ -118,6 +123,33 @@ func TestIdleTerminalRejectsInvalidClosure(t *testing.T) {
 				t.Fatal("invalid terminal left session usable")
 			}
 		})
+	}
+}
+
+func TestIdleTerminalClosureKeepsMarkBudget(t *testing.T) {
+	f := relayFixtureFor(t)
+	ctx := relayTestContext(t)
+	if err := f.r.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.slave.Close()
+	// The drain can publish its mark, but closed must consume its own mark.
+	f.r.w.marks = markLimit - 1
+	err := f.r.w.finishTerminalDrain(ctx, "budget-test")
+	if err == nil || !strings.Contains(err.Error(), "output mark budget exhausted") || f.r.w.marks != markLimit {
+		t.Fatal("closure bypassed the session mark budget", err, f.r.w.marks)
+	}
+	if _, ok := nextRelayFrame(t, f).(*protocol.OutputMark); !ok {
+		t.Fatal("missing drain mark")
+	}
+	if _, ok := nextRelayFrame(t, f).(*protocol.Draining); !ok {
+		t.Fatal("drain did not precede closure mark failure")
+	}
+	f.r.w.channels.Close()
+	for frame := range f.frames {
+		if _, ok := frame.(*protocol.Closed); ok {
+			t.Fatal("mark exhaustion produced successful closure")
+		}
 	}
 }
 

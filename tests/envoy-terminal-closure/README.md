@@ -8,6 +8,8 @@ Six Go-overlay omission controls must fail at their named diagnostics. The outpu
 
 Focused `TestIdleTerminal*` unit cases cover closed/shell_exit statuses0/23/137, wrong IDs/cwd/reason, nonterminal and duplicate/trailing/partial frames, premature EOF, nonzero/signalled supervisor outcomes and withheld EOF/reap under the caller deadline. These isolated tests supplement the native scenarios.
 
+B8.2.1 requires a separate covering `output_mark` immediately before both `draining` and `closed`, including active shell-exit and timeout closure. The strict native evidence reader checks each offset-bearing event against its own preceding mark. The public startup proof checks `mark, draining, mark, closed`, with consecutive sequences, equal closure offsets and nondecreasing mark times. The existing final-drain deadline and session mark budget apply to these marks. The focused idle and active assertions reject the original producer that omitted them.
+
 A selected-shell status is not the Awsh process exit status. A valid terminal frame still requires immediate private EOF and actual zero-status Awsh reap. An orphaned Bash wait may be reaped by Envoy only after the pinned Awsh lifetime has been reaped and Bash is its actual adopted child. Public marks cover exact raw bytes; no prompt, operation result or status is synthesized for failure.
 
 B8.3 owns exhaustive captured deadline/protocol_error crossings. B8.4 owns full B1–B8 actual-actor conformance. ARM64 is compile-only here. This leaf does not add a production entrypoint or claim deployment.
