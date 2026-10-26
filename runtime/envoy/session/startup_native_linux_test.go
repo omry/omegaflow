@@ -249,8 +249,12 @@ func TestNativePublicStartup(t *testing.T) {
 			if err != nil {
 				t.Fatal("terminal EOF", err)
 			}
+			closeMark, ok := nativeFrame(t, reader).(*protocol.OutputMark)
+			if !ok || closeMark.Seq != 4 || closeMark.Offset != draining.OutputThrough || closeMark.ElapsedUS < mark.ElapsedUS || closeMark.Stream != mark.Stream {
+				t.Fatal("missing closure covering mark", closeMark)
+			}
 			closed, ok := nativeFrame(t, reader).(*protocol.Closed)
-			if !ok || closed.Seq != 4 || closed.Reason != shutdown.Reason || closed.OutputThrough != int64(len(expected)+len(tail)) || draining.OutputThrough != closed.OutputThrough {
+			if !ok || closed.Seq != 5 || closed.Reason != shutdown.Reason || closed.OutputThrough != int64(len(expected)+len(tail)) || draining.OutputThrough != closed.OutputThrough {
 				t.Fatal("invalid closure boundary", closed)
 			}
 			if err := <-finished; err != nil {
