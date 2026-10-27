@@ -21,7 +21,7 @@ type operationInput struct{ event Event }
 func (*operationInput) Error() string { return "operation terminal input" }
 
 // Complete coordinates ordinary PTY or split return using the existing owners.
-// The caller retains its bound and cleanup owner. Lifecycle and gate facts
+// The caller retains cancellation and the cleanup owner. Lifecycle and gate facts
 // share this dispatcher; split cleanup and inspection retain their owners.
 func (c *Coordinator) Complete(ctx context.Context, cleanup ReturnCleanup) error {
 	return c.completeControlled(ctx, cleanup, nil)
@@ -52,9 +52,6 @@ func (c *Coordinator) completeReturn(ctx context.Context, cleanup ReturnCleanup,
 	defer c.busy.Store(false)
 	if c.active == nil || !c.active.started || c.exited != nil || (cleanup == nil && census == nil) || ctx.Err() != nil {
 		return fmt.Errorf("ordinary completion requires an active operation and cleanup owner")
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		return fmt.Errorf("ordinary completion requires the caller's existing bound")
 	}
 	if c.active.request.ExecutionShape == "split" && (c.splitResources() == nil || !c.active.splitAttached.Load()) {
 		return fmt.Errorf("operation requires its attached split owner")

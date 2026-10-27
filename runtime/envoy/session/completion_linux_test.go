@@ -311,8 +311,58 @@ func TestCompleteCancellationDuringCleanupCannotSkipRequiredCleanup(t *testing.T
 	}
 }
 
-func TestCompleteRequiresItsBoundedOwner(t *testing.T) {
-	for _, name := range []string{"unbounded", "expired", "no-cleanup", "concurrent", "split", "queued-cancel"} {
+func TestCompleteAcceptsControllerOwnedOperationDuration(t *testing.T) {
+	f := completionFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, bounded := ctx.Deadline(); bounded {
+		t.Fatal("operation inherited a test deadline")
+	}
+	done := completeFixture(t, f, ctx, func(cleanup context.Context, id string, pid int64) error {
+		deadline, bounded := cleanup.Deadline()
+		remaining := time.Until(deadline)
+		if !bounded || remaining <= 0 || remaining > finalDrainBudget {
+			return errors.New("ordinary cleanup lost its existing finite deadline")
+		}
+		if id != "operation-1" || pid != 77 {
+			return errors.New("cleanup received the wrong operation/helper identity")
+		}
+		return nil
+	})
+	if _, err := f.slave.Write([]byte("tail")); err != nil {
+		t.Fatal(err)
+	}
+	f.private(t, protocol.PrivateInputClose{OperationID: "operation-1", CompletionHelperPID: 77})
+	finishPrivateReturn(t, f, 7, "/work/new")
+	if err := finishCompletion(t, done); err != nil {
+		t.Fatal(err)
+	}
+	m := completedEvent(t, f)
+	prefix := "before-start\n"
+	if m.OperationID != "operation-1" || m.Status != 7 || m.Cwd != "/work/new" ||
+		m.OutputStart != int64(len(prefix)) || m.OutputThrough != int64(len(prefix)+4) || len(m.InspectionResults) != 0 {
+		t.Fatal("wrong completion or output range", m)
+	}
+	actual := make([]byte, m.OutputThrough)
+	f.terminal.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := io.ReadFull(f.terminal, actual); err != nil || string(actual) != prefix+"tail" {
+		t.Fatal("output range did not retain exact PTY bytes", string(actual), err)
+	}
+	if f.c.active != nil || f.r.w.CWD != "/work/new" {
+		t.Fatal("completed operation was not reusable")
+	}
+	request := startRequest()
+	request.OperationID = "operation-2"
+	next := f.start(t, context.Background(), request)
+	f.throughStarted(t)
+	f.private(t, protocol.PrivateStartReleased{OperationID: request.OperationID})
+	if r := finishStart(t, next); r.err != nil || !r.out.Started {
+		t.Fatal("next operation failed", r)
+	}
+}
+
+func TestCompleteRequiresItsLiveOwner(t *testing.T) {
+	for _, name := range []string{"expired", "no-cleanup", "concurrent", "split", "queued-cancel"} {
 		t.Run(name, func(t *testing.T) {
 			f := completionFixture(t)
 			ctx := relayTestContext(t)
@@ -321,8 +371,6 @@ func TestCompleteRequiresItsBoundedOwner(t *testing.T) {
 				return nil
 			})
 			switch name {
-			case "unbounded":
-				ctx = context.Background()
 			case "expired":
 				expired, cancel := context.WithCancel(ctx)
 				cancel()
