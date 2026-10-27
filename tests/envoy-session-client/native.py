@@ -13,6 +13,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import socket
+import signal
+import uuid
 
 from omegaflow.controller_lifecycle import OperationState
 from omegaflow.controller_session import ControllerSession
@@ -27,7 +30,8 @@ SCENARIOS = ("ordinary-state", "source-rejection", "inspection", "gate-input", "
              "inspection-crossed-cancel", "finalize-inspection-crossed-cancel",
              "crossed-cancel", "crossed-finalize", "crossed-cancel-continued",
              "crossed-finalize-continued", "crossed-cancel-interrupted",
-             "crossed-finalize-interrupted")
+             "crossed-finalize-interrupted", "entry-idle-cancel", "entry-idle-finalize",
+             "entry-idle-discard", "entry-selected-eof", "entry-signal")
 
 
 def save(path, value):
@@ -202,7 +206,12 @@ async def inspection_result_crossing(client, *, finalized):
 
 
 async def scenario(client, name):
-    if name == "ordinary-state":
+    if name == "entry-idle-discard":
+        await client.owner.client.transport.write_terminal(b"IDLE_BYTES_MUST_NOT_RUN")
+        result, data = await client.execute("builtin printf 'AFTER_IDLE\\n'")
+        assert result["status"] == 0 and b"AFTER_IDLE\r\n" in data
+        assert b"IDLE_BYTES_MUST_NOT_RUN" not in client.raw.read_bytes()
+    elif name == "ordinary-state":
         result, data = await client.execute("export C3_VALUE=kept; builtin cd /tmp; builtin printf 'ONE\\n'")
         assert result["status"] == 0 and result["cwd"] == "/tmp" and b"ONE\r\n" in data
         result, _ = await client.execute("builtin false")
@@ -502,12 +511,45 @@ class ChannelDelay:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def one(fixture, output, name):
+async def wait_listeners(proc, ports):
+    # Observe the child's actual listening sockets without consuming either
+    # single-admission channel. This is test-only bootstrap observation.
+    while proc.returncode is None:
+        inodes = set()
+        for path in Path(f"/proc/{proc.pid}/fd").iterdir():
+            try:
+                link = os.readlink(path)
+            except FileNotFoundError:
+                continue
+            if link.startswith("socket:["):
+                inodes.add(link[8:-1])
+        listeners = {int(fields[1].rsplit(":", 1)[1], 16)
+                     for line in Path(f"/proc/{proc.pid}/net/tcp").read_text().splitlines()[1:]
+                     if (fields := line.split())[3] == "0A" and fields[9] in inodes}
+        if ports <= listeners:
+            return
+        await asyncio.sleep(.01)
+    raise AssertionError("production Envoy exited before binding both listeners")
+
+
+async def one(envoy, output, name):
     folder = output / name
     folder.mkdir()
+    reserved = [socket.socket(), socket.socket()]
+    try:
+        for sock in reserved:
+            sock.bind(("127.0.0.1", 0))
+        ports = [sock.getsockname()[1] for sock in reserved]
+    finally:
+        for sock in reserved:
+            sock.close()
+    coordinates = {"terminal": f"127.0.0.1:{ports[0]}", "telemetry": f"127.0.0.1:{ports[1]}",
+                   "session_id": uuid.uuid4().hex}
+    bootstrap = asyncio.get_running_loop().time()
     proc = await asyncio.create_subprocess_exec(
-        fixture, "-test.run=^TestNativePythonClient$", "-test.v", "-test.timeout=40s",
-        env=os.environ | {"OMEGAFLOW_NATIVE_PYTHON_CLIENT": "1"},
+        envoy, "--session-id", coordinates["session_id"], "--terminal-listen", coordinates["terminal"],
+        "--telemetry-listen", coordinates["telemetry"], "--columns", "80", "--rows", "24",
+        env=os.environ,
         stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT)
     transcript = bytearray()
@@ -518,15 +560,9 @@ async def one(fixture, output, name):
         while chunk := await proc.stdout.read(65536):
             transcript.extend(chunk)
     try:
-        async with asyncio.timeout(5):
-            while True:
-                line = await proc.stdout.readline()
-                transcript.extend(line)
-                if line.startswith(b"C3_COORDINATES "):
-                    coordinates = json.loads(line.removeprefix(b"C3_COORDINATES "))
-                    break
-                assert line, "actual Envoy exited before coordinates"
         reader_task = asyncio.create_task(retain_fixture_output())
+        async with asyncio.timeout_at(bootstrap + 5):
+            await wait_listeners(proc, set(ports))
         with (folder / "raw.bin").open("w+b") as raw, (folder / "telemetry.jsonl").open("wb") as telemetry, \
                 (folder / "reploy-prerequisite.jsonl").open("wb") as events, (folder / "client-stderr.bin").open("wb") as errors:
             public = public_prerequisite(events, errors)
@@ -545,12 +581,45 @@ async def one(fixture, output, name):
                 terminal, telemetry_address = await proxy.start(terminal, telemetry_address)
             owner = await EnvoyTransport.connect(terminal, telemetry_address,
                                                   session_id=coordinates["session_id"],
-                                                  bootstrap_written_at=asyncio.get_running_loop().time(),
+                                                  bootstrap_written_at=bootstrap,
                                                   raw_log=raw, telemetry_log=telemetry)
             await owner.wait_ready()
             adapter = EnvoyController(owner, public)
             client = Client(adapter, folder / "raw.bin")
             client.proxy = proxy
+            if name.startswith("entry-") and name != "entry-idle-discard":
+                # Exercise the production assembly's fatal return and joined
+                # disposal, rather than substituting a cleanup or signal peer.
+                shell = owner.ready_event["shell_pid"]
+                # Go can fork from a non-leader OS thread. Linux reports the
+                # child on that thread,so inspect every task's children file.
+                children = {pid for task in Path(f"/proc/{proc.pid}/task").iterdir()
+                            for pid in (task / "children").read_text().split()}
+                assert children and Path(f"/proc/{shell}").exists()
+                if name in {"entry-idle-cancel", "entry-idle-finalize"}:
+                    frame = {"schema": "omegaflow-envoy-telemetry-v1", "type": name.removeprefix("entry-idle-"),
+                             "seq": 2, "operation_id": "never-started", "reason": "entry-fault"}
+                    await owner.write_control(json.dumps(frame).encode() + b"\n")
+                elif name == "entry-selected-eof":
+                    await owner.close()
+                else:
+                    proc.send_signal(signal.SIGTERM)
+                await asyncio.wait_for(proc.wait(), 6)
+                await reader_task
+                assert proc.returncode == 2, transcript.decode(errors="replace")
+                assert not Path(f"/proc/{shell}").exists()
+                assert all(not Path(f"/proc/{pid}").exists() for pid in children)
+                expected = {"entry-idle-cancel": b"idle cancel names another operation",
+                            "entry-idle-finalize": b"idle finalize names another operation",
+                            "entry-signal": b"context canceled"}.get(name)
+                if expected is not None:
+                    assert expected in transcript, transcript.decode(errors="replace")
+                save(folder / "result.json", {"passed": True, "scenario": name, "envoy_reaped": True,
+                     "envoy_exit": proc.returncode, "shell_reaped": True, "awsh_reaped": True,
+                     "entrypoint": "./cmd/omegaflow-envoy", "actual_actors": ["production Envoy", "Awsh", "qualified Bash"],
+                     "Reploy_prerequisite": "simulated;actual public invocation remains C8.2"})
+                print("C4_ENTRY_PROVED " + name, flush=True)
+                return
             await scenario(client, name)
             await adapter.request("shutdown", {"reason": "native-done"})
             async with asyncio.timeout(6):
@@ -561,9 +630,10 @@ async def one(fixture, output, name):
                  "raw_bytes": owner.raw_offset, "Envoy_closed": True, "Reploy_result_claimed": False})
         await asyncio.wait_for(proc.wait(), 6)
         await reader_task
-        assert proc.returncode == 0 and b"C3_ACTUAL_CLOSED_AND_REAPED" in transcript, transcript.decode(errors="replace")
-        save(folder / "result.json", {"passed": True, "scenario": name, "fixture_reaped": True,
-             "fixture_exit": proc.returncode, "actual_actors": ["Python controller", "Envoy", "Awsh", "qualified Bash"],
+        assert proc.returncode == 0, transcript.decode(errors="replace")
+        save(folder / "result.json", {"passed": True, "scenario": name, "envoy_reaped": True,
+             "envoy_exit": proc.returncode, "entrypoint": "./cmd/omegaflow-envoy",
+             "actual_actors": ["Python controller", "production Envoy command", "Awsh", "qualified Bash"],
              "Reploy_prerequisite": "simulated;actual public invocation remains C8.2"})
         print("C3_NATIVE_PROVED " + name, flush=True)
     finally:
@@ -587,12 +657,12 @@ async def one(fixture, output, name):
 
 async def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixture", required=True)
+    parser.add_argument("--envoy", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     for name in SCENARIOS:
-        await one(args.fixture, args.output, name)
+        await one(args.envoy, args.output, name)
 
 
 if __name__ == "__main__":

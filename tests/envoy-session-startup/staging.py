@@ -27,10 +27,12 @@ def temporary_binary(output):
 
 
 @contextmanager
-def build_peer(output, package):
+def build_peer(output, package, *, production=False):
     with temporary_binary(output) as binary:
         env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
-        subprocess.run(['go', 'test', '-buildvcs=false', '-c', '-o', str(binary), package],
+        build = (['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w -buildid=']
+                 if production else ['go', 'test', '-buildvcs=false', '-c'])
+        subprocess.run([*build, '-o', str(binary), package],
                        cwd=ROOT / 'runtime/envoy', check=True, env=env)
         current = binary.with_name('awsh-current')
         subprocess.run(['go', 'build', '-buildvcs=false', '-o', str(current), './cmd/awsh'],

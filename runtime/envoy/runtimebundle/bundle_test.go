@@ -13,6 +13,18 @@ import (
 	"testing"
 )
 
+// TestBuiltRuntimeCandidate is selected by the build-tool integration test.
+// The environment input is test-only; Load retains its fixed production root.
+func TestBuiltRuntimeCandidate(t *testing.T) {
+	root := os.Getenv("OMEGAFLOW_TEST_BUILT_RUNTIME")
+	if root == "" {
+		t.Skip("requires the build-tool test's exact candidate")
+	}
+	if _, err := verify(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func fixture(t *testing.T) (string, Manifest) {
 	t.Helper()
 	root := t.TempDir()

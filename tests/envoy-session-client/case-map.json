@@ -175,7 +175,7 @@
       "id": "B1-PACKAGE-C3.3",
       "tests": [
         "tests/test_envoy_controller.py",
-        "runtime/envoy/session/client_native_linux_test.go::TestNativePythonClient",
+        "runtime/envoy/cmd/omegaflow-envoy/main.go::main",
         "tests/envoy-session-client/run.py"
       ],
       "closure_leaf": "C3.3",

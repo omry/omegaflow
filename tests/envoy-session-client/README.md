@@ -97,8 +97,13 @@ pending.
 
 Run `python tests/envoy-session-client/run.py --qualification QUALIFICATION --output FRESH_OUTPUT`.
 Use a genuine qualification receipt from `tests/envoy-bash-qualification`; the
-runner checks exact qualified Awsh bytes and immutable Bash images. It runs all
-20 scenarios on each of amd64 Bash 5.2.15, 5.2.37 and 5.3.9: ordinary state,
+runner checks exact qualified Awsh bytes and immutable Bash images. The matrix
+uses the production `cmd/omegaflow-envoy` executable with its five
+required arguments. The controller observes the child's actual bound listeners
+without opening probe connections. The duplicated Go test entrypoint is removed;
+the session and restricted inspection workers use the real command.
+It runs the original 20 scenarios plus five production-entrypoint cases on each
+of amd64 Bash 5.2.15, 5.2.37 and 5.3.9. The original cases cover ordinary state,
 source rejection, inspections, gated input, cancellation, finalization,
 finalized inspections, split output, terminal input, reserved-input admission,
 resize, delayed raw output, completed and finalized inspection-result winners
