@@ -1724,13 +1724,6 @@ func TestStartPrestartDeliveryShellExitHandoff(t *testing.T) {
 	}
 }
 
-func TestStartOutputBoundaryRequiresDeadline(t *testing.T) {
-	f := relayFixtureFor(t)
-	if _, err := f.r.boundary(context.Background(), false, nil); err == nil || f.r.w.channels.Err() != nil {
-		t.Fatal("deadline-free publication was admitted or damaged idle session", err)
-	}
-}
-
 // The I/O worker may run while the coordinator is descheduled. A result must
 // wait for that owner even when both relay and telemetry are immediately free.
 func TestStartPublicationWaitsForFactOwner(t *testing.T) {

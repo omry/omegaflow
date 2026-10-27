@@ -174,6 +174,8 @@ func TestGateInputWaitRetainsOriginalDeadlineAndOperation(t *testing.T) {
 
 func TestGatePublicEventsHaveCoveringOutputBoundaries(t *testing.T) {
 	f := relayFixtureFor(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	facts := []protocol.PrivateMessage{
 		&protocol.PrivateGateReady{OperationID: "op", GateID: "gate"},
 		&protocol.PrivateGateContinued{OperationID: "op", GateID: "gate"},
@@ -185,7 +187,7 @@ func TestGatePublicEventsHaveCoveringOutputBoundaries(t *testing.T) {
 		if _, err := f.slave.Write([]byte("output")); err != nil {
 			t.Fatal(err)
 		}
-		if err := f.r.PublishGate(relayTestContext(t), fact); err != nil {
+		if err := f.r.PublishGate(ctx, fact); err != nil {
 			t.Fatal(err)
 		}
 		for {
