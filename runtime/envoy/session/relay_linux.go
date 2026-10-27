@@ -358,6 +358,8 @@ func (r *Relay) Drain(ctx context.Context) (offset int64, err error) {
 
 // boundary keeps the delivered offset stable through publication. A pre-start
 // terminal event consumes only the admitted prefix; prepared uses a fresh drain.
+// A phase owner supplies its deadline; ordinary gate output retains caller
+// cancellation without imposing an Envoy operation-duration limit.
 func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) error) (offset int64, err error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
@@ -365,10 +367,7 @@ func (r *Relay) boundary(ctx context.Context, fresh bool, publish func(int64) er
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return 0, fmt.Errorf("output boundary requires an active deadline")
-	}
+	deadline, _ := ctx.Deadline()
 	select {
 	case <-r.barrier:
 	case <-ctx.Done():

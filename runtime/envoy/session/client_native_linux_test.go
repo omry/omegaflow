@@ -89,7 +89,9 @@ func TestNativePythonClient(t *testing.T) {
 					t.Fatal("actual start", out, err)
 				}
 				if out.Started {
-					if err := c.completeOperation(ctx, owner); err != nil {
+					// The harness bounds the test, but operation duration belongs
+					// to the controller and is not an Envoy context deadline.
+					if err := c.completeOperation(lifecycleContext{ctx}, owner); err != nil {
 						t.Fatal("actual process/inspection completion", err)
 					}
 				}

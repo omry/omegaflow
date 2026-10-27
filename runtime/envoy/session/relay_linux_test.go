@@ -645,6 +645,49 @@ func TestRelayDrainCapsAlreadyBlockedWriterWithOriginalEpoch(t *testing.T) {
 	}
 }
 
+func TestRelayBoundaryWithoutDeadlineJoinsBlockedOutputOnCancel(t *testing.T) {
+	f := relayFixtureFor(t)
+	f.terminal.SetReadBuffer(4096)
+	f.r.w.channels.terminal.SetWriteBuffer(1024)
+	f.slave.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	written := make(chan error, 1)
+	go func() { _, err := f.slave.Write(bytes.Repeat([]byte("output"), 1<<18)); written <- err }()
+	waitKernelQueue(t, nil, f.r.w.channels.terminal, syscall.TIOCOUTQ)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := f.r.boundary(ctx, true, nil); done <- err }()
+	// Wait for the existing boundary owner to take over the blocked writer.
+	wait := relayTestContext(t)
+	for {
+		f.r.phaseMu.Lock()
+		active := f.r.phase == ctx
+		f.r.phaseMu.Unlock()
+		if active {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatal("deadline-free boundary did not acquire its writer", err)
+		case <-wait.Done():
+			t.Fatal("boundary did not take over the blocked writer")
+		default:
+			runtime.Gosched()
+		}
+	}
+	cancel()
+	if err := finishCompletion(t, done); !errors.Is(err, context.Canceled) {
+		t.Fatal("boundary lost caller cancellation", err)
+	}
+	fatal(t, f.r.w.channels)
+	f.slave.SetWriteDeadline(time.Now())
+	select {
+	case <-written:
+	case <-relayTestContext(t).Done():
+		t.Fatal("retained workload-side test writer")
+	}
+}
+
 func TestRelayPTYSerializationDoesNotReplaceEarlierWriterDeadline(t *testing.T) {
 	f := relayFixtureFor(t)
 	s := f.r.w.channels
