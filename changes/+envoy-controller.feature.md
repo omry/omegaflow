@@ -1,0 +1,1 @@
+Compose the Envoy client with the controller lifecycle, including matched inspection results, output barriers, crossed controls and final channel closure. Add qualified local Envoy/Awsh/Bash acceptance coverage.

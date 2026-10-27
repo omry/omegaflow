@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "implementation_leaf": "C3.2",
-  "proof_boundary": "real local TCP channels against a deterministic test-only server",
+  "implementation_leaf": "C3.3",
+  "proof_boundary": "Deterministic TCP fault peers plus actual Python/Envoy/Awsh/Bash actors;Reploy prerequisite observations are simulated",
   "cases": [
     {
       "id": "B1-C001-controller-connect",
@@ -11,7 +11,10 @@
         "tests/test_envoy_transport.py::test_second_connect_failure_disposes_first_socket"
       ],
       "closure_leaf": "C3.3",
-      "actual_actor_closure": "pending"
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer tests retain clock/fault obligations",
+      "native_scenarios": [
+        "ordinary-state"
+      ]
     },
     {
       "id": "B1-C001-controller-ready",
@@ -22,7 +25,10 @@
         "tests/test_envoy_transport.py::test_selected_eof_before_barrier_is_failure"
       ],
       "closure_leaf": "C3.3",
-      "actual_actor_closure": "pending"
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer tests retain clock/fault obligations",
+      "native_scenarios": [
+        "ordinary-state"
+      ]
     },
     {
       "id": "B1-C001-control-write-controller",
@@ -31,7 +37,10 @@
         "tests/test_envoy_transport.py::test_connect_and_ready_epochs_are_shared_and_never_reset"
       ],
       "closure_leaf": "C3.3",
-      "actual_actor_closure": "pending"
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer tests retain clock/fault obligations",
+      "native_scenarios": [
+        "ordinary-state"
+      ]
     },
     {
       "id": "B1-PACKAGE-C3.1",
@@ -48,7 +57,10 @@
         "tests/test_envoy_client.py::test_C3_2_reserved_input_and_adjacent_steps_rejected_before_execute"
       ],
       "closure_leaf": "C3.3",
-      "actual_actor_closure": "pending"
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer tests retain clock/fault obligations",
+      "native_scenarios": [
+        "reserved-input"
+      ]
     },
     {
       "id": "B1-C031-adjacent-step-input",
@@ -56,7 +68,10 @@
         "tests/test_envoy_client.py::test_C3_2_reserved_input_and_adjacent_steps_rejected_before_execute"
       ],
       "closure_leaf": "C3.3",
-      "actual_actor_closure": "pending"
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer tests retain clock/fault obligations",
+      "native_scenarios": [
+        "reserved-input"
+      ]
     },
     {
       "id": "B1-PACKAGE-C3.2",
@@ -65,10 +80,131 @@
       ],
       "closure_leaf": "C3.2",
       "actual_actor_closure": "not-claimed"
+    },
+    {
+      "id": "B1-C065-controller-cancelling-operation_ready",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_ready-False-cancel]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer crossing parameter retained",
+      "native_scenarios": [
+        "crossed-cancel"
+      ]
+    },
+    {
+      "id": "B1-C065-controller-cancelling-operation_continued",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_continued-False-cancel]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer crossing parameter retained",
+      "native_scenarios": [
+        "crossed-cancel-continued"
+      ]
+    },
+    {
+      "id": "B1-C065-controller-cancelling-operation_gate_interrupted",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_gate_interrupted-False-cancel]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; real awsh gate interrupted-gate FIFO hold, late control and exact committed-result comparison",
+      "native_scenarios": [
+        "crossed-cancel-interrupted"
+      ]
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_ready",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_ready-False-finalize]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer crossing parameter retained",
+      "native_scenarios": [
+        "crossed-finalize"
+      ]
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_continued",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_continued-False-finalize]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; deterministic peer crossing parameter retained",
+      "native_scenarios": [
+        "crossed-finalize-continued"
+      ]
+    },
+    {
+      "id": "B1-C065-controller-finalizing-operation_gate_interrupted",
+      "tests": [
+        "tests/test_envoy_controller.py::test_crossed_gate_keeps_selected_lifecycle_and_does_not_reopen_input[operation_gate_interrupted-False-finalize]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; real awsh gate interrupted-gate FIFO hold, late control and exact committed-result comparison",
+      "native_scenarios": [
+        "crossed-finalize-interrupted"
+      ]
+    },
+    {
+      "id": "B1-C3.3-inspection-completed-cancel-winner",
+      "requirement": "C2.3 ordinary completion winning inspection cancel; actual-client closure retained by C3.3",
+      "tests": [
+        "tests/test_envoy_controller.py::test_committed_inspection_result_wins_later_cancel[False]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: actual Python/Envoy/Awsh/Bash development and complete matrices",
+      "native_scenarios": [
+        "inspection-crossed-cancel"
+      ]
+    },
+    {
+      "id": "B1-C3.3-inspection-finalized-cancel-winner",
+      "requirement": "B7.3 planned-finalization inspection winner; C3.3 actual-client closure preserves finalization",
+      "tests": [
+        "tests/test_envoy_controller.py::test_committed_inspection_result_wins_later_cancel[True]"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "tests/envoy-session-client/run.py: actual Python/Envoy/Awsh/Bash development and complete matrices",
+      "native_scenarios": [
+        "finalize-inspection-crossed-cancel"
+      ]
+    },
+    {
+      "id": "B1-PACKAGE-C3.3",
+      "tests": [
+        "tests/test_envoy_controller.py",
+        "runtime/envoy/session/client_native_linux_test.go::TestNativePythonClient",
+        "tests/envoy-session-client/run.py"
+      ],
+      "closure_leaf": "C3.3",
+      "actual_actor_closure": "all20 scenarios on each qualified amd64 target",
+      "native_scenarios": [
+        "ordinary-state",
+        "source-rejection",
+        "inspection",
+        "gate-input",
+        "cancel",
+        "finalize",
+        "finalize-inspection",
+        "split",
+        "input",
+        "reserved-input",
+        "resize",
+        "raw-barrier",
+        "inspection-crossed-cancel",
+        "finalize-inspection-crossed-cancel",
+        "crossed-cancel",
+        "crossed-finalize",
+        "crossed-cancel-continued",
+        "crossed-finalize-continued",
+        "crossed-cancel-interrupted",
+        "crossed-finalize-interrupted"
+      ]
     }
   ],
   "later_owners": {
-    "C3.3": "inspection-result matching, C2 lifecycle assembly and actual local Envoy/Awsh integration",
     "C8.2": "actual Reploy invocation and termination"
   }
 }
