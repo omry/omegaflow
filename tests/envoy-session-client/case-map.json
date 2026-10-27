@@ -175,7 +175,7 @@
       "id": "B1-PACKAGE-C3.3",
       "tests": [
         "tests/test_envoy_controller.py",
-        "runtime/envoy/session/client_native_linux_test.go::TestNativePythonClient",
+        "runtime/envoy/cmd/omegaflow-envoy/main.go::main",
         "tests/envoy-session-client/run.py"
       ],
       "closure_leaf": "C3.3",
@@ -202,6 +202,16 @@
         "crossed-cancel-interrupted",
         "crossed-finalize-interrupted"
       ]
+    }
+  ],
+  "assembly_regressions": [
+    {
+      "id": "C4.1-completion-idle-discard",
+      "requirement": "Input admitted by a completed operation cannot end the idle session or enter a later operation",
+      "tests": ["tests/envoy-session-client/native.py::scenario"],
+      "closure_leaf": "C4.1",
+      "native_scenarios": ["completion-idle-discard"],
+      "actual_actor_closure": "tests/envoy-session-client/run.py: complete three-target native matrix; the normal scenario exercises completion input without forcing its delivery order"
     }
   ],
   "later_owners": {

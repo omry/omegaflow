@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: runtime/envoy/go.mod
+          go-version-file: runtime/envoy/.go-version
           cache: false
 
       - name: Test public protocol
@@ -50,6 +50,11 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: runtime/envoy/.go-version
+          cache: false
 
       - name: Install package and test dependencies
         run: python -m pip install -e ".[dev,browser]"
