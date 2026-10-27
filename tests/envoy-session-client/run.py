@@ -20,7 +20,7 @@ def source_binding():
         "envoy_controller.py", "envoy_client.py", "envoy_transport.py", "envoy_codecs.py",
         "controller_session.py", "controller_lifecycle.py", "reploy_codecs.py")]
     paths += [Path(__file__), Path(__file__).with_name("native.py"),
-              ROOT / "runtime/envoy/session/client_native_linux_test.go",
+              ROOT / "runtime/envoy/cmd/omegaflow-envoy/main.go",
               ROOT / "tests/fixtures/reploy-codecs/client-v1-events.jsonl"]
     paths += [p for p in (ROOT / "runtime/envoy").rglob("*")
               if p.is_file() and p.suffix in {".go", ".s", ".mod", ".sum"}]
@@ -40,7 +40,7 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     before = source_binding()
     rows = []
-    with build_peer(output, "./session") as (binary, awsh):
+    with build_peer(output, "./cmd/omegaflow-envoy", production=True) as (binary, awsh):
         for row, entry, actual in verified_rows(args.qualification.resolve(), awsh):
             if args.release and row["release"] != args.release:
                 continue
@@ -52,7 +52,7 @@ def main():
                        "-v", str(ROOT / "src") + ":/c3-src:ro",
                        "-v", str(ROOT / "tests") + ":/c3-tests:ro",
                        "-v", str(evidence) + ":/evidence:rw", iid,
-                       "/c3-tests/envoy-session-client/native.py", "--fixture",
+                       "/c3-tests/envoy-session-client/native.py", "--envoy",
                        "/omegaflow-runtime/bin/envoy", "--output", "/evidence"]
             started = time.time()
             log = context / "native.log"
@@ -64,13 +64,15 @@ def main():
                         "inspection-crossed-cancel", "finalize-inspection-crossed-cancel",
                         "crossed-cancel", "crossed-finalize", "crossed-cancel-continued",
                         "crossed-finalize-continued", "crossed-cancel-interrupted",
-                        "crossed-finalize-interrupted"}
+                        "crossed-finalize-interrupted", "entry-idle-cancel", "entry-idle-finalize",
+                        "entry-idle-discard", "entry-selected-eof", "entry-signal"}
             passed = (result.returncode == 0 and {v["scenario"] for v in results} == expected
-                      and len(results) == len(expected) and all(v["passed"] and v["fixture_reaped"] for v in results))
+                      and len(results) == len(expected) and all(v["passed"] and v["envoy_reaped"] for v in results))
             rows.append({"release": row["release"], "passed": passed, "returncode": result.returncode,
                          "argv": command, "started_unix": started, "completed_unix": time.time(),
                          "qualified_awsh_sha256": awsh, "base_image": actual, "test_image": iid,
-                         "test_binary_sha256": sha(binary), "log": str(log), "log_sha256": sha(log),
+                         "envoy_sha256": sha(binary), "entrypoint": "./cmd/omegaflow-envoy",
+                         "log": str(log), "log_sha256": sha(log),
                          "results": results})
             save(output / "progress.json", rows)
             if not passed:
