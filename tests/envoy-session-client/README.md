@@ -97,8 +97,14 @@ pending.
 
 Run `python tests/envoy-session-client/run.py --qualification QUALIFICATION --output FRESH_OUTPUT`.
 Use a genuine qualification receipt from `tests/envoy-bash-qualification`; the
-runner checks exact qualified Awsh bytes and immutable Bash images. It runs all
-20 scenarios on each of amd64 Bash 5.2.15, 5.2.37 and 5.3.9: ordinary state,
+runner checks exact qualified Awsh bytes and immutable Bash images. The matrix
+uses the production `cmd/omegaflow-envoy` executable with its five
+required arguments. The controller observes the child's actual bound listeners
+without opening probe connections. The duplicated Go test entrypoint is removed;
+the session and restricted inspection workers use the real command.
+It runs the original 20 scenarios, five production-entrypoint cases and one
+completion-input regression on each
+of amd64 Bash 5.2.15, 5.2.37 and 5.3.9. The original cases cover ordinary state,
 source rejection, inspections, gated input, cancellation, finalization,
 finalized inspections, split output, terminal input, reserved-input admission,
 resize, delayed raw output, completed and finalized inspection-result winners
@@ -118,6 +124,11 @@ crossings hold terminal bytes and the original result independently, issue the
 typed cancel after the real result is committed, and verify orderly fixture reap
 plus admission of the next operation. `--release` is a development subset and
 cannot satisfy the complete matrix.
+
+The completion-input regression sends terminal input during an operation, lets
+the idle owner run after its result, and requires a later operation and orderly
+shutdown. Input from the completed operation must not enter the later operation.
+This normal scenario does not force the socket reader's scheduling order.
 
 The dedicated non-root Go fixture runs production Envoy/Awsh/Bash process,
 inspection and cleanup owners. Only Reploy prerequisite observations are
