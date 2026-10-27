@@ -70,7 +70,7 @@ executables built from one runtime module:
 - linker flags `-s -w -buildid=`.
 
 The production commands are built from `./cmd/omegaflow-envoy` and
-`./cmd/omegaflow-awsh`. This protocol slice adds neither placeholder. Once the
+`./cmd/awsh`. This protocol slice adds neither placeholder. Once the
 commands exist, the Envoy release build is equivalent to:
 
 ```text
@@ -80,7 +80,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 ```
 
 The corresponding Awsh build changes the output and package to `awsh` and
-`./cmd/omegaflow-awsh`. Release materialization records the source revision,
+`./cmd/awsh`. Release materialization records the source revision,
 Go version, target, file size, and SHA-256 digest for both binaries. Rebuilding
 the same source with the pinned Go patch release and target must reproduce each
 digest before either binary is added to the runtime manifest.

@@ -5,7 +5,7 @@
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
-      "sha256": "9fc71791194e4e7e20cadb4c71d4900309bb4b40863759fb6de5bb6f8996a8f8"
+      "sha256": "d140032688c4eb9d891e2743bebe701a6c4bf8279c5d007617818f403baa12a4"
     },
     {
       "path": "docs/design/omegaflow-envoy-design.md",
