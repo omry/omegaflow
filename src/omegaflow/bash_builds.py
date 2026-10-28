@@ -10,6 +10,7 @@ import stat
 
 RUNTIME_TABLE = '/omegaflow-runtime/etc/bash-builds.json'
 LIMIT = 2097152
+GO_TOOLCHAIN = 'go1.26.8'
 HEX = re.compile('[0-9a-f]{64}\\Z')
 NAME = re.compile('[A-Za-z_][A-Za-z_0-9]*\\Z')
 def case_ids():
