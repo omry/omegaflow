@@ -315,7 +315,9 @@ def generated(value):
                             (require, shape, text, digest, canonical, sha, pairs, decode, absolute,
                              target, candidate, identities, adapter_inputs, measurements,
                              probe_result, receipt, validate_table))
-    schema = (f"RUNTIME_TABLE = {RUNTIME_TABLE!r}\nLIMIT = {LIMIT}\n"
+    toolchain = "go" + (ROOT / "runtime/envoy/.go-version").read_text(encoding="ascii").strip()
+    require(re.fullmatch(r"go[0-9]+\.[0-9]+\.[0-9]+", toolchain), "exact Go toolchain pin")
+    schema = (f"RUNTIME_TABLE = {RUNTIME_TABLE!r}\nLIMIT = {LIMIT}\nGO_TOOLCHAIN = {toolchain!r}\n"
               f"HEX = re.compile({HEX.pattern!r})\nNAME = re.compile({NAME.pattern!r})\n"
               f"def case_ids():\n    return {case_ids()!r}\n\n")
     host = '# ' + header + '\n' + PYTHON_CONSUMER.replace('TABLE_LITERAL', repr(data.decode())).replace('VALIDATORS', schema + validators)

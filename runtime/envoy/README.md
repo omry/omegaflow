@@ -66,3 +66,26 @@ complete qualification evidence. Before acceptance, rebuild and verify at the
 exact committed revision. A development base revision does not identify WIP.
 ARM64 cross-compilation does not establish native qualification. Installed-source
 staging and public Reploy launch remain separate acceptance boundaries.
+# Installed runtime resource
+
+For an artifact-bearing Linux/amd64 wheel, set the build-time-only
+`OMEGAFLOW_RUNTIME_ARTIFACT` to a canonical, accepted C4.2 artifact directory.
+The existing Hatch hook verifies the package version, checkout revision,
+platform, manifest and exact qualified payload, then includes it unchanged at
+`omegaflow/runtime/linux-amd64`. The build logs its manifest SHA-256. The
+artifact remains descriptor-bound through wheel finalization. With the option
+absent, the existing ordinary wheel build remains available.
+
+`omegaflow.runtime_staging.stage_runtime()` is a context manager. It reads only
+that installed resource, validates its entire inventory without following links,
+and yields a private read-only copy. Installer write bits are accepted; output
+data and manifest use 0444, executables and directories use 0555, under a 0700
+parent. The original manifest and qualification bytes are retained. The complete
+private allocation is disposable: on exit or failure, cleanup enumerates and
+removes every entry inside that parent through its retained directory descriptor,
+without following symlinks. Consumers must leave the staged tree in place while
+active and must not move it outside the private parent. Replacement of the
+parent pathname is detected and reported without cleaning the replacement
+directory. Missing or changed resources fail closed. There is no runtime path
+override, checkout fallback or download.
+

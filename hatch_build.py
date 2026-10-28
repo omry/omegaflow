@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+from contextlib import ExitStack
+import hashlib
+import os
 import platform as platform_module
+import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -47,12 +52,52 @@ def vendor_asciinema(root: Path, platform: str, *, output: Path) -> None:
     module.vendor(platform, output=output)
 
 
+def runtime_artifact(root: Path, stack: ExitStack) -> Path | None:
+    """Build-only bridge; installed runtime selection never reads this option."""
+    value = os.environ.get("OMEGAFLOW_RUNTIME_ARTIFACT")
+    if value is None:
+        return None
+    if not value or not Path(value).is_absolute():
+        raise ValueError("OMEGAFLOW_RUNTIME_ARTIFACT must name an absolute existing artifact")
+    # This hook runs in the source build environment, before the package exists.
+    sys.path.insert(0, str(root / "src"))
+    try:
+        from omegaflow.runtime_artifact import capture_artifact
+    finally:
+        sys.path.pop(0)
+    if (root / ".sl").is_dir():
+        command = ["sl", "log", "-r", ".", "-T", "{node}"]
+    elif (root / ".git").exists():
+        command = ["git", "rev-parse", "HEAD"]
+    else:
+        raise ValueError("artifact wheel requires its exact source checkout revision")
+    revision = subprocess.check_output(command, cwd=root, text=True,
+                                       env=os.environ | {"CHGDISABLE": "1"}).strip()
+    version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    artifact = Path(value)
+    captured = stack.enter_context(capture_artifact(
+        artifact, version=version, source_revision=revision, readonly=True))
+    print("OmegaFlow runtime manifest sha256=" + hashlib.sha256(captured.manifest_bytes).hexdigest())
+    return artifact
+
+
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         if self.target_name != "wheel" or version != "standard":
             return
 
         root = Path(self.root)
+        self._runtime_stack = ExitStack()
+        try:
+            CustomBuildHook._initialize_wheel(self, root, build_data)
+        except BaseException:
+            self._runtime_stack.close()
+            raise
+
+    def _initialize_wheel(self, root: Path, build_data: dict[str, Any]) -> None:
+        runtime = runtime_artifact(root, self._runtime_stack)
+        if runtime is not None and current_build_platform() != "linux-x86_64":
+            raise ValueError("Linux/amd64 runtime requires a Linux/amd64 wheel build")
         bin_dir = root / "src" / "omegaflow" / "bin"
         bundled_recorder = bin_dir / "asciinema"
         if not bundled_recorder.is_file():
@@ -69,6 +114,10 @@ class CustomBuildHook(BuildHookInterface):
                 "building a platform wheel"
             )
         platform = platform_file.read_text(encoding="utf-8").strip()
+        if runtime is not None:
+            if platform != "linux-x86_64":
+                raise ValueError("runtime and bundled recorder architectures differ")
+            build_data.setdefault("force_include", {})[str(runtime)] = "omegaflow/runtime/linux-amd64"
         try:
             tag = WHEEL_TAGS[platform]
         except KeyError as exc:
@@ -78,3 +127,8 @@ class CustomBuildHook(BuildHookInterface):
 
         build_data["tag"] = tag
         build_data["pure_python"] = False
+
+    def finalize(self, version: str, build_data: dict[str, Any], artifact_path: str) -> None:
+        stack = getattr(self, "_runtime_stack", None)
+        if stack is not None:
+            stack.close()  # Recheck the original bound artifact after Hatch copied it.
