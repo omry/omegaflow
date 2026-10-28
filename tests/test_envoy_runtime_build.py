@@ -27,6 +27,10 @@ def checkout(tmp_path):
     for name in ("bash_builds.py", "build_envoy_runtime.py"):
         shutil.copyfile(ROOT / "tools" / name, source / "tools" / name)
     shutil.copyfile(ROOT / "pyproject.toml", source / "pyproject.toml")
+    package = source / "src/omegaflow"
+    package.mkdir(parents=True)
+    for name in ("__init__.py", "runtime_artifact.py"):
+        shutil.copyfile(ROOT / "src/omegaflow" / name, package / name)
     cases = source / "tests/fixtures/envoy-protocol-v1/cases.jsonl"
     cases.parent.mkdir(parents=True)
     shutil.copyfile(ROOT / "tests/fixtures/envoy-protocol-v1/cases.jsonl", cases)
@@ -128,6 +132,7 @@ def test_reject_wrong_identity_or_existing_output(checkout, tmp_path, fault):
     output = tmp_path / "output"
     if fault == "toolchain":
         (source / "runtime/envoy/.go-version").write_text("0.0.0\n")
+        subprocess.run([sys.executable, str(source / "tools/bash_builds.py"), "generate"], check=True)
     elif fault == "unqualified":
         path = source / "runtime/envoy/bash-builds.json"
         table = json.loads(path.read_bytes())

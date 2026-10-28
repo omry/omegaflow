@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 from omegaconf import OmegaConf
+from test_runtime_artifact import runtime_fixture
 
 from omegaflow import __version__
 from omegaflow import audio
@@ -8067,3 +8068,95 @@ def test_watch_server_can_serve_without_calling_browser_opener(
     assert observed == {"served": True}
     assert "open the URL in a browser; press Ctrl-C to stop" in output
     assert "stopped local watch server" in output
+
+
+# These fixtures are deliberately synthetic; a real artifact-wheel round trip
+# is also required by the delivery acceptance matrix.
+
+
+def prepare_runtime_hook(tmp_path, monkeypatch, runtime_fixture):
+    source, _, _ = runtime_fixture
+    for path in source.rglob("*"):
+        path.chmod(0o555 if path.is_dir() or path.parent.name == "bin" else 0o444)
+    source.chmod(0o555)
+    project = tmp_path / "project"
+    recorder = project / "src/omegaflow/bin/asciinema"
+    recorder.parent.mkdir(parents=True)
+    recorder.write_bytes(b"synthetic recorder")
+    recorder.with_suffix(".platform").write_text("linux-x86_64\n")
+    (project / ".sl").mkdir()
+    (project / "pyproject.toml").write_text('[project]\nversion="0.9.0"\n')
+    module = load_hatch_build_module()
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *a, **k: "a" * 40)
+    monkeypatch.setattr(module, "current_build_platform", lambda: "linux-x86_64")
+    monkeypatch.setenv("OMEGAFLOW_RUNTIME_ARTIFACT", str(source))
+    class Hook:
+        root = str(project)
+        target_name = "wheel"
+    return module, Hook(), source, recorder
+
+
+def test_runtime_build_hook_includes_complete_artifact_without_source_staging(
+    tmp_path, monkeypatch, runtime_fixture, capsys,
+):
+    module, hook, source, _ = prepare_runtime_hook(tmp_path, monkeypatch, runtime_fixture)
+    data = {"force_include": {"another": "existing-resource"}}
+    module.CustomBuildHook.initialize(hook, "standard", data)
+    assert data == {"force_include": {"another": "existing-resource",
+                       str(source): "omegaflow/runtime/linux-amd64"},
+                    "pure_python": False, "tag": "py3-none-manylinux_2_35_x86_64"}
+    assert not (Path(hook.root) / "src/omegaflow/runtime").exists()
+    assert "manifest sha256=" in capsys.readouterr().out
+    module.CustomBuildHook.finalize(hook, "standard", data, "synthetic-wheel")
+
+
+@pytest.mark.parametrize("fault", ["empty", "relative", "missing", "alias", "revision", "version",
+                                   "platform", "recorder", "no-vcs"])
+def test_runtime_build_hook_fails_closed(tmp_path, monkeypatch, runtime_fixture, fault):
+    module, hook, source, recorder = prepare_runtime_hook(tmp_path, monkeypatch, runtime_fixture)
+    if fault in {"empty", "relative", "missing"}:
+        monkeypatch.setenv("OMEGAFLOW_RUNTIME_ARTIFACT", {"empty": "", "relative": "runtime",
+                                                       "missing": str(tmp_path / "missing")}[fault])
+    elif fault == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(source, target_is_directory=True)
+        monkeypatch.setenv("OMEGAFLOW_RUNTIME_ARTIFACT", str(alias))
+    elif fault == "revision":
+        monkeypatch.setattr(module.subprocess, "check_output", lambda *a, **k: "b" * 40)
+    elif fault == "version":
+        (Path(hook.root) / "pyproject.toml").write_text('[project]\nversion="9.0.0"\n')
+    elif fault == "platform":
+        monkeypatch.setattr(module, "current_build_platform", lambda: None)
+    elif fault == "recorder":
+        recorder.with_suffix(".platform").write_text("linux-aarch64\n")
+    else:
+        (Path(hook.root) / ".sl").rmdir()
+    with pytest.raises(ValueError):
+        module.CustomBuildHook.initialize(hook, "standard", {})
+
+
+def test_runtime_build_hook_rechecks_source_after_hatch_copy(tmp_path, monkeypatch, runtime_fixture):
+    module, hook, source, _ = prepare_runtime_hook(tmp_path, monkeypatch, runtime_fixture)
+    data = {}
+    module.CustomBuildHook.initialize(hook, "standard", data)
+    path = source / "bin/envoy"
+    path.chmod(0o755)
+    path.write_bytes(b"changed after initialization")
+    path.chmod(0o555)
+    with pytest.raises(ValueError, match="mutated|changed"):
+        module.CustomBuildHook.finalize(hook, "standard", data, "synthetic-wheel")
+
+
+def test_runtime_build_hook_reads_the_git_checkout_revision(tmp_path, monkeypatch, runtime_fixture):
+    module, hook, _, _ = prepare_runtime_hook(tmp_path, monkeypatch, runtime_fixture)
+    (Path(hook.root) / ".sl").rmdir()
+    (Path(hook.root) / ".git").mkdir()
+    calls = []
+    def revision(command, **kwargs):
+        calls.append((command, kwargs["cwd"]))
+        return "a" * 40
+    monkeypatch.setattr(module.subprocess, "check_output", revision)
+    data = {}
+    module.CustomBuildHook.initialize(hook, "standard", data)
+    module.CustomBuildHook.finalize(hook, "standard", data, "synthetic-wheel")
+    assert calls == [(["git", "rev-parse", "HEAD"], Path(hook.root))]
