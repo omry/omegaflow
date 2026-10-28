@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "98b4fdc917f0807c30de93d32cf1f4b0cc32a8bb68d1c1b3d8bf1cdb267af525",
+  "source_sha256": "d858bfee759c773f8a1025a25c434758a8ec0ef668930d4be7e0e60c50cf4d9e",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "98b4fdc917f0807c30de93d32cf1f4b0cc32a8bb68d1c1b3d8bf1cdb267af525"
+      "sha256": "d858bfee759c773f8a1025a25c434758a8ec0ef668930d4be7e0e60c50cf4d9e"
     }
   ],
   "begin": "The cumulative suite covers inspection",
@@ -524,7 +524,7 @@
     },
     "C5.1": {
       "prerequisites": "C4",
-      "implementation": "Manifest validation and private read-only staging",
+      "implementation": "Installed-artifact package bridge, manifest validation and private read-only staging",
       "acceptance": "Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly"
     },
     "C5.2": {
@@ -538,12 +538,12 @@
       "acceptance": "Complete resolved models, read-only controller config and retained YAML; no post-composition repair"
     },
     "C6.2": {
-      "prerequisites": "C6.1",
+      "prerequisites": "C6.1, RP-C6",
       "implementation": "Launch environment reserved-value composition and validation",
       "acceptance": "Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values"
     },
     "C6.3": {
-      "prerequisites": "C6.2, C4/C5/B2.8",
+      "prerequisites": "C6.2, C4/C5/B2.8, RP-C6",
       "implementation": "Trusted mounts, resolved /bin/bash qualification and final launch preflight",
       "acceptance": "Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate"
     },

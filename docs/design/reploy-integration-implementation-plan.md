@@ -2,39 +2,27 @@
 
 ## Status
 
-- Temporary delivery plan.
-- Trusted implementation boundary: the rebuilt stack's base, the tip of
-  `main`, which carries the formerly approved implementation stack. That
-  stack's final pre-rebuild PR number, 8, has since been reused by an open PR
-  in the rebuilt stack, so PR numbers are not boundary evidence; within the
-  rebuilt stack, the `approved` label on a PR is. Node identities are not
-  recorded here because every restack rewrites them.
-- Updated: 2026-10-13.
-- A2.7 is approved and merged as PR 38 at
-  `f37cd3cdaddf6e04b80011e5b47ee21cb78aca27`. A2.5 and A2.6 remain approved
-  predecessors. A2.8 is merged as PR 39 at
-  `31e9a497bca99139e00ef64c2a4c4042a4b89e78`; A2.9 is merged as PR 40 at
-  `e10e61614f25c06da12fba2610803126390be1e7`. B1 and B2.1–B2.7 have approved
-  partial implementation, including A2.10, the B2.3.1/B2.3.2 split and B2.3.3
-  correction. B1.2.1 and B1.3.1 are approved owning codec/corpus successors.
-  A2.11/PR58 separates qualified table data from runtime binaries and its
-  B2.1.1/PR59 generator correction is approved. A2.12/PR60's qualification and
-  authored-input evidence ownership amendment is approved at exact mapped head
-  `d797010be57dd3c7935f3ad43c4fa1fe7d9ddc86`; B1.3.2/PR61's corpus correction
-  is approved at exact mapped head `9ca32c5ec367b8714dbf32b70537bd88c6ef55b6`;
-  and B2.8/PR62's qualification is approved at exact mapped head
-  `0ce7c7d74e47668f02d460bc279a17c7172e3311`. The qualified support scope is
-  limited to the three exact Linux/amd64 manifest target/build tuples Debian
-  12/Bash 5.2.15, Debian 13/Bash 5.2.37, and Ubuntu 26.04/Bash 5.3.9, bound
-  to `runtime/envoy/bash-builds.json`. ARM64 remains unqualified and the
-  complete Envoy/controller production path remains pending. A2.13 is a pending
-  design-only fixed-pair successor; B3.1.1 implementation follows only after
-  A2.13 receives exact-head approval. This plan makes no production claim.
-- A `.review` sidecar attests only the document bytes matching its recorded
-  content hash. Changed documents require fresh review and byte-current
-  attestations before approval; a sidecar does not establish PR approval.
-  The A2.7 merge retains the historical document and sidecar evidence for that
-  approved boundary.
+- Temporary delivery plan, updated 2026-10-28 for the remaining Part C design.
+- Current inspected implementation tip is C4.1 / PR109 at
+  `27d3da957b4790d3638d745599a99956d4fac3c1`. C1–C3, the required runtime
+  predecessors and C4.1 have retained approved delivery evidence. C4.2 and
+  C5–C8 remain unimplemented. This amendment is design-only. Local design
+  review is recorded in its sidecar; PR approval remains pending.
+- The original rebuilt stack and its later approved successors remain the
+  implementation history. An old PR number, prototype, or source extract is
+  not approval evidence. Accepted predecessors must retain their exact mapped
+  heads and policy-specific approval/terminal evidence.
+- Qualified Bash scope remains the three exact Linux/amd64 tuples Debian
+  12/5.2.15, Debian 13/5.2.37 and Ubuntu 26.04/5.3.9. C4.2 must requalify the
+  actual packaged adapter bytes. ARM64 remains unqualified.
+- The remaining-C design explicitly includes C5.1's installed-artifact bridge
+  and the owner-approved external RP-C6 public Reploy inspection/admission
+  prerequisite before C6.2/C6.3. RP-C6 design, cost and delivery remain pending;
+  this amendment does not implement that capability or select a new release.
+- A `.review` sidecar attests only the document bytes matching its content
+  hash. Changed documents need fresh byte-current review; a sidecar does not
+  establish PR approval. Existing review and delivery history remains evidence
+  only for its original identities.
 - Retire this document after terminal-only Reploy integration is complete and
   the remaining work has moved to separately approved plans.
 
@@ -44,7 +32,9 @@ the Reploy integration. Product contracts remain in
 [Reploy Recording Environments Design](reploy-environments-design.md), and
 [OmegaFlow Envoy Protocol v1](envoy-protocol-v1.md).
 
-## Starting point
+## Original starting point
+
+This section records the original rebuild boundary, not the current C4.1 tip.
 
 The approved implementation contains neither the Envoy protocol models and
 fixtures nor an Awsh or Envoy implementation. Independent documentation slices
@@ -166,6 +156,26 @@ each row when its selected material is integrated into a reviewed stack slice.
   narrowing a claim is not evidence that the underlying behavior exists.
 
 ## Delivery sequence
+
+### Remaining Part C implementation detail
+
+[Part C implementation design and readiness](part-c-implementation-design.md)
+details C4.2–C8.2 against the approved C4.1 base. It defines concrete handoffs,
+owned implementation/test work, bottom-up estimates and acceptance ownership.
+The catalogue below remains the only delivery task list; this is supporting
+implementation detail, not another workflow or replacement campaign.
+
+This amendment adds the minimal installed-artifact package bridge to C5.1's
+installed-source responsibility. It adds the separately owned RP-C6 public
+Reploy exact-generation inspection/admission prerequisite required by C6.2/C6.3.
+Its required semantics, acceptance, ownership and unknown cost are specified in
+the supporting design; its concrete API and delivery require separate Reploy
+review. Do not begin C6.2/C6.3 or claim all remaining C execution is ready until
+RP-C6 is delivered and its consumer conformance passes. No OmegaFlow slice split,
+new qualification, Reploy upgrade or product implementation is
+established by this design update. Adopt approved design changes into the
+existing campaign only through its guarded design/replan path; do not rewrite
+historical pins, task completion or evidence.
 
 ### A. Design delta
 
@@ -1532,15 +1542,24 @@ proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget
 | C3.3 | 200–450 | C3.2, B8.4 | Inspection/control results and controller-client assembly | Complete C3 suite with real local Envoy/Awsh; crossed lifecycle and channel barriers; real Reploy termination pending C8.2 |
 | C4.1 | 350–600 | B8.4, B2.8 | Reproducible runtime builds and manifest generation | Exact Envoy/Awsh/fixed rcfile/inputrc/terminal/locale asset identities and platform outputs |
 | C4.2 | 200–450 | C4.1, B2.1/B2.8 | Qualified table packaging, regenerated consumers and package qualification enforcement | Reject stale/unqualified entries; rerun exact packaged changed bytes; complete C4 artifact gate |
-| C5.1 | 350–600 | C4 | Manifest validation and private read-only staging | Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly |
+| C5.1 | 350–600 | C4 | Installed-artifact package bridge, manifest validation and private read-only staging | Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly |
 | C5.2 | 200–450 | C5.1, B2 | Staged asset conformance and trusted-asset validation | Exact staged rcfile/helper/inputrc/terminal/locale behavior and framing/fail-stop; complete C5 suite |
 | C6.1 | 350–600 | C5 | Typed controller/workload blueprint models and Hydra composition | Complete resolved models, read-only controller config and retained YAML; no post-composition repair |
-| C6.2 | 300–550 | C6.1 | Launch environment reserved-value composition and validation | Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values |
-| C6.3 | 350–650 | C6.2, C4/C5/B2.8 | Trusted mounts, resolved /bin/bash qualification and final launch preflight | Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate |
+| C6.2 | 300–550 | C6.1, RP-C6 | Launch environment reserved-value composition and validation | Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values |
+| C6.3 | 350–650 | C6.2, C4/C5/B2.8, RP-C6 | Trusted mounts, resolved /bin/bash qualification and final launch preflight | Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate |
 | C7.1 | 300–500 | C2/C3, C5/C6 | Bounded controller input manifest and declared asset validation | Schema/path/hash/bounds/recording-plan rejection before client start |
 | C7.2 | 200–400 | C7.1 | Read-only controller-only input mount and internal command assembly | Exact /omegaflow-input isolation and validated invocation; complete C7 gate |
 | C8.1 | 350–600 | C1–C7 | Controlled-session capability preflight and separate deployment invocation | Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints |
 | C8.2 | 300–550 | C8.1 | Host result/stderr retention, partial artifacts and Reploy termination reporting | Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates |
+
+RP-C6 is an external Reploy predecessor of C6.2 and C6.3. Their listed semantic
+prerequisites also include RP-C6's reviewed public contract, compatible delivered
+release and exact-generation consumer proof. It is not a local delivery selector
+or an extra PR hidden under either leaf. Its delivery cost remains separately
+estimated and reviewed by the Reploy owner. Until those prerequisites pass,
+C6.2/C6.3 and dependent launch acceptance remain pending; C4.2, C5 and C6.1 can
+continue under their existing gates. Campaign adoption must preserve this edge
+and all approved predecessors, counters, exclusions and historical evidence.
 
 ### D delivery leaves
 
