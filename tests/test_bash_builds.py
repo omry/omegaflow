@@ -486,6 +486,9 @@ def test_cli_generation_and_stale_check(tmp_path, monkeypatch):
     source = tmp_path / "candidate-table.json"
     source.write_text(json.dumps(table(False)))
     required = tool.case_ids()
+    pin = tmp_path / "runtime/envoy/.go-version"
+    pin.parent.mkdir(parents=True)
+    pin.write_bytes((ROOT / "runtime/envoy/.go-version").read_bytes())
     monkeypatch.setattr(tool, "ROOT", tmp_path)
     # Preserve the independently reviewed case corpus while testing output paths.
     monkeypatch.setattr(tool, "case_ids", lambda: required)
