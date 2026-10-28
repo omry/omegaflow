@@ -139,3 +139,12 @@ scenario requires orderly Envoy closure and actual fixture exit/reap. The
 receipt binds runtime and client source hashes/modes and retains raw output,
 telemetry, observations, actor logs and scenario results. This matrix establishes
 no ARM64 qualification or actual Reploy invocation or termination.
+
+For C4.2 package acceptance, add `--runtime /absolute/path/qualified-runtime`
+to the native runner's `--qualification PATH --output NEW_DIRECTORY` command.
+This path verifies and copies the whole qualified artifact. It builds neither
+binary and replaces neither the table nor manifest. All 26 scenarios run on
+each genuine target with production Envoy and Awsh verification. The selected
+qualification entries must equal the packaged entries. The original artifact
+and source bindings must remain unchanged. `--release` remains a development
+subset and does not establish the three-target acceptance.

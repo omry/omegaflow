@@ -6,9 +6,44 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def artifact_tool():
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import build_envoy_runtime
+    return build_envoy_runtime
+
+
+def stage_artifact(output, release, actual, artifact):
+    """Copy the whole accepted artifact; never synthesize a table or manifest."""
+    tool = artifact_tool()
+    before = tool.read_artifact(artifact)
+    context = output / release
+    context.mkdir()
+    shutil.copytree(artifact, context / 'runtime')
+    if tool.read_artifact(context / 'runtime') != before:
+        raise ValueError('runtime copy changed artifact bytes')
+    (context / 'Dockerfile').write_text(
+        f'FROM {actual}\n'
+        'RUN find /omegaflow-runtime -type d -exec chmod u+w {} + '
+        '&& rm -rf /omegaflow-runtime /run/omegaflow/session '
+        '&& chown 1000:1000 /run/omegaflow && chmod 700 /run/omegaflow\n'
+        'COPY runtime /omegaflow-runtime\n'
+        'RUN chmod 555 /omegaflow-runtime\nWORKDIR /\nUSER 1000:1000\n')
+    iidfile = context / 'image-id.txt'
+    with (context / 'build.log').open('w') as log:
+        subprocess.run(['docker', 'build', '--iidfile', str(iidfile), str(context)],
+                       env={**os.environ, 'DOCKER_BUILDKIT': '0'}, stdout=log,
+                       stderr=subprocess.STDOUT, check=True)
+    if tool.read_artifact(artifact) != before:
+        raise ValueError('caller artifact changed during image build')
+    save(context / 'artifact.json', {'manifest': before[0],
+         'manifest_sha256': sha(artifact / 'manifest.json')})
+    return iidfile.read_text().strip(), context
 
 
 def sha(path):

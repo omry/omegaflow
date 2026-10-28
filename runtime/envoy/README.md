@@ -46,3 +46,23 @@ Awsh/Bash disposal. `entry-idle-discard` proves idle bytes cannot enter the next
 operation. The original 20 client scenarios retain ordinary lifecycle,
 inspection-worker and crossed-control coverage. `B1-PACKAGE-C4.2` remains pending
 the separate exact packaged-byte qualification gate.
+
+C4.2 qualification measures one immutable builder candidate on all three
+retained Linux/amd64 Bash tuples using the existing native qualifier's
+`--runtime PATH` option. After admitting all three receipts and regenerating
+consumers, rebuild into a fresh output. Both binaries and every behavioral asset
+must equal the measured candidate. The packaged table contains qualified entries
+only. Verify the final artifact without changing it:
+
+```sh
+python tools/build_envoy_runtime.py --verify-qualified /absolute/path/runtime \
+  --source-revision FULL_COMMITTED_REVISION
+```
+
+This guard checks the manifest, exact inventory, hashes, modes, current version,
+platform, pinned toolchain, generated consumers and every advertised receipt's
+adapter map. Run the actual client matrix with the same `--runtime PATH` and
+complete qualification evidence. Before acceptance, rebuild and verify at the
+exact committed revision. A development base revision does not identify WIP.
+ARM64 cross-compilation does not establish native qualification. Installed-source
+staging and public Reploy launch remain separate acceptance boundaries.

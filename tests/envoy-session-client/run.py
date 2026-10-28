@@ -2,6 +2,7 @@
 """C3.3 actual-local-actor matrix using the existing qualified native staging."""
 
 import argparse
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests/envoy-session-startup"))
-from staging import build_peer, save, sha, stage, verified_rows
+from staging import artifact_tool, build_peer, save, sha, stage, stage_artifact, verified_rows
 
 
 def source_binding():
@@ -33,18 +34,33 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qualification", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--runtime", type=Path, help="execute this complete qualified artifact unchanged")
     parser.add_argument("--release", choices=("5.2.15", "5.2.37", "5.3.9"),
                         help="development subset;cannot satisfy the complete C3.3 matrix")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     before = source_binding()
+    artifact = args.runtime
+    artifact_before = None
+    if artifact is not None:
+        tool = artifact_tool()
+        manifest, payload = tool.read_artifact(artifact)
+        tool.verify_qualified(artifact, manifest["source_revision"])
+        artifact_before = manifest, payload
+    peer = (nullcontext((artifact / "bin/envoy", sha(artifact / "bin/awsh")))
+            if artifact is not None else build_peer(output, "./cmd/omegaflow-envoy", production=True))
     rows = []
-    with build_peer(output, "./cmd/omegaflow-envoy", production=True) as (binary, awsh):
+    with peer as (binary, awsh):
         for row, entry, actual in verified_rows(args.qualification.resolve(), awsh):
             if args.release and row["release"] != args.release:
                 continue
-            iid, context = stage(output, row["release"], entry, actual, binary)
+            if artifact is None:
+                iid, context = stage(output, row["release"], entry, actual, binary)
+            else:
+                if entry != tool.bash_builds.read(artifact / "etc/bash-builds.json")["builds"].get(entry["candidate"]["executable_sha256"]):
+                    raise ValueError("qualification matrix differs from packaged entry")
+                iid, context = stage_artifact(output, row["release"], actual, artifact)
             evidence = context / "native-evidence"
             evidence.mkdir()
             command = ["docker", "run", "--rm", "--network=none", "--entrypoint=/usr/bin/python3",
@@ -78,6 +94,8 @@ def main():
             if not passed:
                 raise RuntimeError("actual C3 Python client failed: " + str(log))
     assert source_binding() == before, "C3 source or mode changed during native matrix"
+    if artifact is not None:
+        assert tool.read_artifact(artifact) == artifact_before, "runtime artifact changed during native matrix"
     if not args.release:
         assert {row["release"] for row in rows} == {"5.2.15", "5.2.37", "5.3.9"}
     save(output / "results.json", {"status": "passed", "rows": rows, "sources": before,
