@@ -38,3 +38,12 @@ peers. Public startup and ordinary-return integration belong to B3; real split
 setup, descendants and inspection belong to their later owning leaves. Authored
 controller-input rejection remains with C3.2/C3.3. Cross-builds and amd64 results
 do not qualify arm64 targets.
+
+C4.2 adds `--runtime /absolute/path/runtime` to this same command. This selects
+one immutable builder artifact for every target. Only test executables are
+compiled. Awsh, Envoy, the rcfile, inputrc, terminal and locale files are copied
+from that artifact. The receipt binds every behavioral input. Table and manifest
+outputs are excluded to avoid self-reference; Envoy is a separate probe input.
+The caller's complete artifact must remain unchanged. Admission writes a table
+only inside each disposable image. Review all three entries before replacing
+the canonical table; a subset run cannot establish complete package acceptance.

@@ -43,12 +43,16 @@ def native(candidate_path):
         'executable_sha256': bash_digest, 'resolved_path': bash_path,
         'system_rc': '/etc/bash.bashrc'}
     inputs, assets = {}, {}
+    packaged = Path('/omegaflow-runtime/manifest.json').exists()
     for tree in ('/omegaflow-runtime', '/qualification'):
         for path in sorted(Path(tree).rglob('*')):
             if path.is_file():
+                if packaged and str(path) in ('/omegaflow-runtime/manifest.json',
+                                               '/omegaflow-runtime/etc/bash-builds.json'):
+                    continue
                 resolved, digest = tool.file_hash(path)
                 inputs[resolved] = digest
-                if tree == '/omegaflow-runtime':
+                if tree == '/omegaflow-runtime' and str(path) != '/omegaflow-runtime/bin/envoy':
                     assets[str(path)] = resolved
     for path in (bash_path, sys.executable):
         resolved, digest = tool.file_hash(path)
@@ -103,10 +107,14 @@ def native(candidate_path):
     print(json.dumps({'candidate': build, 'qualification': receipt}))
 
 
-def stage(context):
+def stage(context, artifact=None):
     runtime = context / 'runtime'
-    (runtime / 'bin').mkdir(parents=True)
-    (runtime / 'etc').mkdir()
+    if artifact is None:
+        (runtime / 'bin').mkdir(parents=True)
+        (runtime / 'etc').mkdir()
+    else:
+        context.mkdir(parents=True)
+        shutil.copytree(artifact, runtime)
     proof = context / 'qualification'
     (proof / 'bin').mkdir(parents=True)
     repo = proof / 'repo'
@@ -130,27 +138,31 @@ def stage(context):
             # Binding their previous data would recreate the circular input.
             for output in ('bash-builds.json', 'etc/bash-builds.json'):
                 (target / output).unlink()
-    for name in ('awsh-bashrc', 'inputrc'):
-        shutil.copyfile(ROOT / 'runtime/envoy/etc' / name, runtime / 'etc' / name)
+    if artifact is None:
+        for name in ('awsh-bashrc', 'inputrc'):
+            shutil.copyfile(ROOT / 'runtime/envoy/etc' / name, runtime / 'etc' / name)
     shutil.copyfile(ROOT / 'tests/envoy-bash-launch/observe.py', proof / 'observe.py')
     env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
-    subprocess.run(['go', 'build', '-buildvcs=false', '-o', str(runtime / 'bin/awsh'), './cmd/awsh'],
-                   cwd=ROOT / 'runtime/envoy', env=env, check=True)
+    if artifact is None:
+        subprocess.run(['go', 'build', '-buildvcs=false', '-o', str(runtime / 'bin/awsh'), './cmd/awsh'],
+                       cwd=ROOT / 'runtime/envoy', env=env, check=True)
     shutil.copyfile(runtime / 'bin/awsh', proof / 'bin/awsh-real')
     (proof / 'bin/awsh-real').chmod(0o555)
     for name, package in PACKAGES.items():
         subprocess.run(['go', 'test', '-buildvcs=false', '-c', '-o',
                         str(proof / 'bin' / (name + '.test')), './' + package],
                        cwd=ROOT / 'runtime/envoy', env=env, check=True)
+    trusted_assets = ('' if artifact is not None else
+        '&& cp -a /usr/share/terminfo/. /omegaflow-runtime/share/terminfo/ '
+        '&& if test -d /lib/terminfo; then cp -a /lib/terminfo/. /omegaflow-runtime/share/terminfo/; fi '
+        '&& cp -a /usr/lib/locale/. /omegaflow-runtime/lib/locale/ ')
     (context / 'Dockerfile').write_text(
         'ARG CANDIDATE\nFROM ${CANDIDATE}\n'
         'COPY runtime /omegaflow-runtime\nCOPY qualification /qualification\n'
         'RUN rm /etc/bash.bashrc && mkdir -p /run/omegaflow/session /proof '
         '/omegaflow-runtime/share/terminfo /omegaflow-runtime/lib/locale '
         '&& cp /qualification/repo/tests/envoy-bash-reserved-state/cases.json /proof/cases.json '
-        '&& cp -a /usr/share/terminfo/. /omegaflow-runtime/share/terminfo/ '
-        '&& if test -d /lib/terminfo; then cp -a /lib/terminfo/. /omegaflow-runtime/share/terminfo/; fi '
-        '&& cp -a /usr/lib/locale/. /omegaflow-runtime/lib/locale/ '
+        + trusted_assets +
         '&& chown 1000:1000 /run/omegaflow/session && chmod 700 /run/omegaflow/session '
         '&& chmod -R a-w /omegaflow-runtime /qualification /proof\nWORKDIR /\n')
 
@@ -161,12 +173,17 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--release')
     parser.add_argument('--native', type=Path)
+    parser.add_argument('--runtime', type=Path, help='qualify these exact packaged bytes without rebuilding')
     args = parser.parse_args()
     if args.native:
         return native(args.native)
     if args.acquisition is None or args.output is None:
         parser.error('--acquisition and --output are required')
     tool = module(ROOT / 'tools/bash_builds.py', 'builds')
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import build_envoy_runtime as runtime_build
+    artifact = args.runtime
+    before = runtime_build.read_artifact(artifact) if artifact is not None else None
     launch = module(ROOT / 'tests/envoy-bash-launch/run.py', 'launch')
     candidates = launch._validate_acquisition(tool.read(args.acquisition))
     if args.release:
@@ -176,7 +193,7 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     context = output / 'context'
-    stage(context)
+    stage(context, artifact)
     save(output / 'inputs.json', {
         'acquisition_sha256': tool.sha(args.acquisition.read_bytes()),
         'context': {str(p.relative_to(context)): tool.sha(p.read_bytes())
@@ -214,6 +231,8 @@ def main():
             row['receipt_sha256'] = tool.sha((directory / 'receipt.json').read_bytes())
     finally:
         save(output / 'results.json', results)
+        if artifact is not None:
+            tool.require(runtime_build.read_artifact(artifact) == before, 'caller runtime candidate changed')
     print('Native B2 qualification passed: ' + str(output))
 
 
