@@ -89,3 +89,41 @@ parent pathname is detected and reported without cleaning the replacement
 directory. Missing or changed resources fail closed. There is no runtime path
 override, checkout fallback or download.
 
+## Installed-stage native acceptance
+
+Install an artifact-bearing wheel in an isolated environment. Use that
+environment's Python with `-I` to hold the actual installed stage while the
+existing native qualifier and client runners execute its unchanged bytes:
+
+```sh
+/absolute/installed/bin/python -I /absolute/repo/tests/envoy-session-startup/installed.py \
+  --python /absolute/repo/.venv/bin/python \
+  --acquisition /absolute/retained/acquisition.json \
+  --qualification /absolute/retained/admitted-qualification \
+  --output /absolute/new-installed-stage-evidence
+```
+
+The installed staging, artifact and table modules must match the repository
+bytes. The coordinator records installed-source and stage identities before and
+after execution, including modes, and checks disposal of the private allocation.
+Failed native commands retain their logs and failure status.
+The test subprocesses use creation mask `022` so their generated Go test
+binaries remain executable by the unprivileged native test child. This does not
+change the installed stage's modes or its `0700` private parent.
+
+The qualifier exercises all 258 case IDs twice on each of the three genuine
+targets. The actual-client runner exercises its 26 scenarios on each target.
+It uses the original admitted profiles matching the packaged table; the new
+qualification receipts record staged behavior without rewriting that table.
+
+The client's test-only `--asset-controls` mode also corrupts a separate disposable
+copy of each of the 18 payload files and the manifest on every target. Each case
+requires an actual fatal `shell-launch` diagnostic, no readiness or terminal
+output, no private session allocation, and Envoy exit/reap. The existing test
+proxy retains actual terminal EOF until diagnostic observation and records that
+schedule. For the corrupted
+Envoy-file case, a separately mounted pristine production Envoy verifies the
+corrupted fixed-root tree. The control does not execute corrupted code. Normal
+acceptance uses the complete pristine stage and the literal production paths.
+These are installed-stage proofs; final composed-image launch remains C6.3.
+
