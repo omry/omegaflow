@@ -21,7 +21,7 @@ from omegaflow.controller_lifecycle import OperationState
 from omegaflow.controller_session import ControllerSession
 from omegaflow.envoy_client import EnvoyClientError
 from omegaflow.envoy_controller import EnvoyController
-from omegaflow.envoy_transport import EnvoyTransport
+from omegaflow.envoy_transport import EnvoyTransport, EnvoyTransportError
 from omegaflow.reploy_codecs import encode_event
 
 
@@ -446,6 +446,10 @@ class ChannelDelay:
         self.buffering_gate = False
         self.buffered_telemetry = []
         self.holding_terminal = asyncio.Event()
+        self.hold_terminal_eof = False
+        self.terminal_received_bytes = 0
+        self.terminal_eof_seen = asyncio.Event()
+        self.release_terminal_eof = asyncio.Event()
         self.committed_result = None
         self.servers = []
         self.tasks = set()
@@ -462,6 +466,8 @@ class ChannelDelay:
                     incoming, upstream = await asyncio.open_connection(*actual, limit=262144)
                     async def forward(source, destination, pause, telemetry=False):
                         while data := await (source.readline() if telemetry else source.read(65536)):
+                            if pause:
+                                self.terminal_received_bytes += len(data)
                             if pause and self.hold:
                                 await self.release_raw.wait()
                             event = json.loads(data) if telemetry else None
@@ -490,6 +496,9 @@ class ChannelDelay:
                                 await self.release_result.wait()
                             destination.write(data)
                             await destination.drain()
+                        if pause and self.hold_terminal_eof:
+                            self.terminal_eof_seen.set()
+                            await self.release_terminal_eof.wait()
                         destination.write_eof()
                     pumps = [asyncio.create_task(forward(reader, upstream, False)),
                              asyncio.create_task(forward(incoming, writer, delayed, telemetry=not delayed))]
@@ -512,6 +521,7 @@ class ChannelDelay:
         self.release.set()
         self.release_raw.set()
         self.release_result.set()
+        self.release_terminal_eof.set()
         for server in self.servers:
             server.close()
             await server.wait_closed()
@@ -542,7 +552,7 @@ async def wait_listeners(proc, ports):
     raise AssertionError("production Envoy exited before binding both listeners")
 
 
-async def one(envoy, output, name):
+async def one(envoy, output, name, *, rejected_asset=None):
     folder = output / name
     folder.mkdir()
     reserved = [socket.socket(), socket.socket()]
@@ -578,9 +588,10 @@ async def one(envoy, output, name):
             public = public_prerequisite(events, errors)
             address = lambda value: (value.rsplit(":", 1)[0], int(value.rsplit(":", 1)[1]))
             terminal, telemetry_address = address(coordinates["terminal"]), address(coordinates["telemetry"])
-            if name == "raw-barrier" or name.startswith("crossed-") \
+            if rejected_asset is not None or name == "raw-barrier" or name.startswith("crossed-") \
                     or name in {"inspection-crossed-cancel", "finalize-inspection-crossed-cancel"}:
                 proxy = ChannelDelay()
+                proxy.hold_terminal_eof = rejected_asset is not None
                 if name in {"inspection-crossed-cancel", "finalize-inspection-crossed-cancel"}:
                     proxy.hold_result = ("operation_finalized" if name == "finalize-inspection-crossed-cancel"
                                          else "operation_completed")
@@ -593,6 +604,48 @@ async def one(envoy, output, name):
                                                   session_id=coordinates["session_id"],
                                                   bootstrap_written_at=bootstrap,
                                                   raw_log=raw, telemetry_log=telemetry)
+            if rejected_asset is not None:
+                try:
+                    try:
+                        await owner.wait_ready()
+                    except EnvoyTransportError:
+                        pass
+                    else:
+                        raise AssertionError("corrupt runtime reached readiness")
+                    telemetry.flush()
+                    frames = [json.loads(line) for line in
+                              (folder / "telemetry.jsonl").read_bytes().splitlines()]
+                    fatal = [v for v in frames if v["type"] == "diagnostic"
+                             and v["severity"] == "fatal" and v["code"] == "shell-launch"]
+                    assert fatal and not any(v["type"] == "ready" for v in frames), frames
+                    assert not owner.ready and owner.raw_offset == 0
+                    assert raw.seek(0, os.SEEK_END) == 0
+                    await asyncio.wait_for(proc.wait(), 6)
+                    await reader_task
+                    assert proc.returncode == 2, transcript.decode(errors="replace")
+                    await asyncio.wait_for(proxy.terminal_eof_seen.wait(), 1)
+                    assert proxy.terminal_received_bytes == 0, (
+                        "unexpected terminal bytes before rejection", proxy.terminal_received_bytes)
+                    # Public diagnostics intentionally omit private input paths.
+                    # The retained command stderr carries the precise cause.
+                    expected = (b"runtime manifest" if rejected_asset == "manifest.json"
+                                else rejected_asset.encode())
+                    assert expected in transcript, transcript.decode(errors="replace")
+                    assert not Path("/run/omegaflow/session").exists()
+                    save(folder / "result.json", {
+                        "passed": True, "scenario": name, "asset": rejected_asset,
+                        "diagnostics": fatal, "terminal_bytes": proxy.terminal_received_bytes, "ready": False,
+                        "private_allocation": False, "envoy_reaped": True,
+                        "envoy_exit": proc.returncode, "executed_envoy_sha256":
+                        hashlib.sha256(Path(envoy).read_bytes()).hexdigest(),
+                        "refusal_cause": transcript.decode(errors="replace"),
+                        "terminal_eof_observed": True,
+                        "terminal_eof_schedule": "retained by test proxy until diagnostic observation",
+                        "actual_actor": "production Envoy fixed-root validator",
+                        "Reploy_invocation": "not claimed"})
+                    return
+                finally:
+                    await owner.close()
             await owner.wait_ready()
             adapter = EnvoyController(owner, public)
             client = Client(adapter, folder / "raw.bin")
@@ -669,10 +722,16 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--envoy", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--expect-asset-rejection",
+                        help="isolated corrupt-copy startup control; no normal scenarios")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    for name in SCENARIOS:
-        await one(args.envoy, args.output, name)
+    if args.expect_asset_rejection:
+        await one(args.envoy, args.output, "asset-rejection",
+                  rejected_asset=args.expect_asset_rejection)
+    else:
+        for name in SCENARIOS:
+            await one(args.envoy, args.output, name)
 
 
 if __name__ == "__main__":
