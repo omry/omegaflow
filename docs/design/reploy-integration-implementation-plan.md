@@ -2,12 +2,16 @@
 
 ## Status
 
-- Temporary delivery plan, updated 2026-10-28 for the remaining Part C design.
-- Current inspected implementation tip is C4.1 / PR109 at
-  `27d3da957b4790d3638d745599a99956d4fac3c1`. C1–C3, the required runtime
-  predecessors and C4.1 have retained approved delivery evidence. C4.2 and
-  C5–C8 remain unimplemented. This amendment is design-only. Local design
-  review is recorded in its sidecar; PR approval remains pending.
+- Temporary delivery plan, updated 2026-10-30 to bring C7.1 ahead of C6.
+- The verified merged base is C5.2 / PR113, merge
+  `fef3d7c8b88779507c0fc8b4071680eabb249cc2`, whose tree matches the accepted
+  head `ce931c842cb5fe9547ed1420e270bf3d5271c564`. Delivery through C5.2 has
+  retained approval and terminal evidence. C6.1 is preserved, unaccepted WIP;
+  the remaining C6–C8 leaves are not complete. This order amendment is
+  design-only and requires fresh local review, remote PR approval and guarded
+  campaign adoption before implementation. Earlier review sidecars attest
+  only their original bytes. PR113's merge was verified; this amendment creates
+  no merge and does not reapprove predecessor PRs.
 - The original rebuilt stack and its later approved successors remain the
   implementation history. An old PR number, prototype, or source extract is
   not approval evidence. Accepted predecessors must retain their exact mapped
@@ -17,8 +21,10 @@
   actual packaged adapter bytes. ARM64 remains unqualified.
 - The remaining-C design explicitly includes C5.1's installed-artifact bridge
   and the owner-approved external RP-C6 public Reploy inspection/admission
-  prerequisite before C6.2/C6.3. RP-C6 design, cost and delivery remain pending;
-  this amendment does not implement that capability or select a new release.
+  prerequisite before C6.2/C6.3. RP-C6 delivery remains pending and is deferred
+  while Reploy finishes its higher-priority multi-identity work. C6.1 also has
+  the separate known native endpoint-publication blocker. This amendment does
+  not resolve either dependency, implement Reploy or select a new release.
 - A `.review` sidecar attests only the document bytes matching its content
   hash. Changed documents need fresh byte-current review; a sidecar does not
   establish PR approval. Existing review and delivery history remains evidence
@@ -1425,6 +1431,20 @@ acceptance. `B2` or another package in the prerequisites column means all its
 leaves and cumulative gate. The table names dependencies that explain the
 acceptance boundary, not permission to bypass earlier approvals.
 
+The 2026-10-30 Part C order amendment moves the existing C7.1 leaf immediately
+after C5.2, before the preserved C6.1 work. The remaining order is C7.1, C6.1,
+C6.2, C6.3, C7.2, C8.1, C8.2. The C table below is the owning order; numerical
+slice names do not override it. Approved predecessors and all slice IDs stay
+unchanged. C7.1 consumes existing recording-plan models and the accepted C2/C3
+and C5 contracts, not prepared Reploy images, C6 models or a speculative RP-C6
+API. Its former broad C6 dependency belongs at C7.2's composition/acceptance
+boundary instead. C7.2 retains the complete C6 gate, and C8 still requires all
+of C1–C7. No slice is split, duplicated or accepted from deferred launch proof.
+
+This amendment permits planning independent controller-input work while Reploy
+finishes multi-identity work. It does not reactivate the stopped campaign or
+authorize implementation before the amended plan is reviewed and adopted.
+
 For this correction, A2.10 follows approved B2.4, then B2.3.3 follows A2.10
 and B2.4, then B2.5 follows B2.3.3. This preserves the approved predecessor
 commits and adds no merge prerequisite. The existing static B2.3 case identities
@@ -1544,11 +1564,11 @@ proof-only leaves cannot absorb unrelated subsystem rewrites within spare budget
 | C4.2 | 200–450 | C4.1, B2.1/B2.8 | Qualified table packaging, regenerated consumers and package qualification enforcement | Reject stale/unqualified entries; rerun exact packaged changed bytes; complete C4 artifact gate |
 | C5.1 | 350–600 | C4 | Installed-artifact package bridge, manifest validation and private read-only staging | Paths/modes/types/digests/extra payload rejection, verified installed source and manifest-last assembly |
 | C5.2 | 200–450 | C5.1, B2 | Staged asset conformance and trusted-asset validation | Exact staged rcfile/helper/inputrc/terminal/locale behavior and framing/fail-stop; complete C5 suite |
+| C7.1 | 300–500 | C2/C3, C5 | Bounded controller input manifest and declared asset validation | Schema/path/hash/bounds/recording-plan rejection before client start; no C6 model, prepared generation or Reploy invocation |
 | C6.1 | 350–600 | C5 | Typed controller/workload blueprint models and Hydra composition | Complete resolved models, read-only controller config and retained YAML; no post-composition repair |
 | C6.2 | 300–550 | C6.1, RP-C6 | Launch environment reserved-value composition and validation | Full forbidden-name/prefix matrix and exact final HISTFILE/INPUTRC/TERM/locale values |
 | C6.3 | 350–650 | C6.2, C4/C5/B2.8, RP-C6 | Trusted mounts, resolved /bin/bash qualification and final launch preflight | Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate |
-| C7.1 | 300–500 | C2/C3, C5/C6 | Bounded controller input manifest and declared asset validation | Schema/path/hash/bounds/recording-plan rejection before client start |
-| C7.2 | 200–400 | C7.1 | Read-only controller-only input mount and internal command assembly | Exact /omegaflow-input isolation and validated invocation; complete C7 gate |
+| C7.2 | 200–400 | C7.1, C6 | Read-only controller-only input mount and internal command assembly | Exact /omegaflow-input isolation, endpoint declarations matched to the composed blueprint and validated invocation; complete C7 gate |
 | C8.1 | 350–600 | C1–C7 | Controlled-session capability preflight and separate deployment invocation | Linux/Docker/target/attachment/no-reconnect/private-environment matrix, recording-backend routing and trusted endpoints |
 | C8.2 | 300–550 | C8.1 | Host result/stderr retention, partial artifacts and Reploy termination reporting | Real public invocation, fatal outcome termination request/result, complete C8 and independent C gates |
 
@@ -1557,9 +1577,14 @@ prerequisites also include RP-C6's reviewed public contract, compatible delivere
 release and exact-generation consumer proof. It is not a local delivery selector
 or an extra PR hidden under either leaf. Its delivery cost remains separately
 estimated and reviewed by the Reploy owner. Until those prerequisites pass,
-C6.2/C6.3 and dependent launch acceptance remain pending; C4.2, C5 and C6.1 can
-continue under their existing gates. Campaign adoption must preserve this edge
-and all approved predecessors, counters, exclusions and historical evidence.
+C6.2/C6.3 and dependent launch acceptance remain pending. C7.1 has no RP-C6
+dependency and is the next independent leaf after adoption of this order
+amendment. C6.1 retains its separate endpoint-publication blocker and pending
+review findings. C7.2 and C8 remain behind their complete C6 acceptance gates.
+Campaign adoption must preserve these edges and all approved predecessors,
+counters, exclusions, the preserved C6.1 WIP and historical evidence. Use the
+existing guarded plan-review/adoption path; changing this catalogue alone does
+not change the saved campaign queue or its stopped state.
 
 ### D delivery leaves
 
