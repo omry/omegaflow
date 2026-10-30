@@ -10,8 +10,14 @@ Its requirements come from [Workload Envoy](omegaflow-envoy-design.md),
 The delivery catalogue remains the single list of slice identities and order.
 This document supplies implementation detail; it is not a second delivery plan.
 
-The inspected base is C4.1, `27d3da957b4790d3638d745599a99956d4fac3c1`.
-C1–C3 and the runtime foundations already exist there. C4.2 and C5–C8 do not.
+The original inspected design base was C4.1,
+`27d3da957b4790d3638d745599a99956d4fac3c1`. The 2026-10-30 order amendment
+uses verified C5.2 merge `fef3d7c8b88779507c0fc8b4071680eabb249cc2`, whose
+tree matches accepted C5.2 head `ce931c842cb5fe9547ed1420e270bf3d5271c564`;
+delivery through C5.2 has retained approval and terminal evidence. C6.1 is
+preserved, unaccepted WIP. This amendment brings the independent C7.1 input
+contract ahead of C6. Fresh design review, remote approval and guarded campaign
+adoption remain required; no implementation or campaign transition is claimed.
 Existing controller classes are reusable components, not a public Reploy runner.
 The review must distinguish a sufficiently specified design from an executable
 prerequisite. The owner has selected a separate public Reploy prerequisite,
@@ -72,6 +78,15 @@ history and map every responsibility and test to exactly one child. Never
 restart approved work, discard a required case, or reuse a parent ID for two PRs.
 Changes to an approved predecessor require its own correction successor.
 
+The catalogue's amended remaining order is C7.1, C6.1, C6.2, C6.3, C7.2, C8.1,
+C8.2. C7.1 uses the existing recording-plan model and accepted C2/C3/C5 contracts;
+it has no dependency on final blueprint composition or a new Reploy API. C7.2
+retains complete C6 acceptance for controller-input composition and invocation.
+This changes delivery order, not the per-run execution order above. RP-C6 waits
+while Reploy finishes its higher-priority multi-identity work. Preserve C6.1's
+WIP, pending review findings and separate native endpoint-publication blocker.
+Neither external dependency is waived by moving C7.1 forward.
+
 The estimates include additions and deletions, executable build/staging tools,
 generated production text, integration code and failure handling. Test estimates
 include genuine fixtures, fault controls and integration work. Shared suites
@@ -83,11 +98,11 @@ Numbers are bottom-up planning estimates, not measured diffs or guarantees.
 | C4.2 | Artifact guard 180, shared projection 40, generated text 30; 250 | 650 | 15 | Detailed; native execution pending |
 | C5.1 | Installed reader/validation 200, private copy 220, package bridge 180; 600 | 650 | 7 | Package bridge specified below |
 | C5.2 | Trusted-asset checks 150, existing-runner integration 100; 250 | 500 | 6 | Uses accepted C5.1 output |
+| C7.1 | Run schema/plan encoding 250, bounded validation 150, asset inventory 100; 500 | 600 | 5 | Next independent leaf after plan adoption; no C6/Reploy dependency; round-trip every admitted plan variant |
 | C6.1 | Generic structural models 250, registration/composition 130, native YAML/templates 120; 500 | 650 | 8 | Model surface must match selected Reploy contract |
 | C6.2 | Environment materialization 180, reject/final-value checks 150, composition integration 120; 450 | 400 | 5 | Implementation waits for RP-C6 acceptance |
 | C6.3 | Mount checks 180, Bash/asset checks 200, launch evidence integration 170; 550 | 650 | 6 | Implementation waits for RP-C6 acceptance |
-| C7.1 | Run schema/plan encoding 250, bounded validation 150, asset inventory 100; 500 | 600 | 5 | Plan round-trip must cover existing variants |
-| C7.2 | Private input copy 100, mount/command composition 150, entry validation 100; 350 | 350 | 5 | No recorder adaptation |
+| C7.2 | Private input copy 100, mount/command composition 150, entry validation 100; 350 | 350 | 5 | Requires C7.1 and complete C6 acceptance; no recorder adaptation |
 | C8.1 | Capability/routing 180, public command adapter 180, deployment assembly 180; 540 | 600 | 6 | Depends on C6 handoff resolution |
 | C8.2 | Public client effect executor 200, host invocation/result 180, retention/teardown 170; 550 | 800 | 7 | Actual public Reploy proof required |
 
@@ -308,13 +323,16 @@ estimates and coherent delivery cuts. Its cost is currently unknown and excluded
 from OmegaFlow's slice estimates; it cannot be treated as a free small helper or
 hidden in C6.2/C6.3. A large estimate returns to design review before delivery.
 
-C4.2, C5 and C6.1 can proceed under their normal prerequisites. C6.2 and C6.3
-require the reviewed RP-C6 contract, delivered compatible release and passing
+C6.2 and C6.3 require the reviewed RP-C6 contract, delivered compatible release and passing
 consumer conformance probes before implementation. C8 launch acceptance also
 waits for those proofs. OmegaFlow's implementation consumes the documented report
 and expected-identity input exactly; missing/unknown/changed evidence fails closed.
 Do not parse private Reploy state/broker protocols, bypass the public handoff,
 upgrade Reploy silently, or weaken the pre-bootstrap checks.
+
+C7.1 is independent of this external handoff and now precedes C6 in the owning
+catalogue. C6.1 retains its separately observed native endpoint-publication
+blocker; moving C7.1 does not close it.
 
 ## C7: bounded input and internal controller command
 
@@ -324,6 +342,13 @@ initial dimensions, reserved endpoint IDs, selected application endpoint IDs,
 artifact policy, and declared assets with relative name, byte size and SHA-256.
 The complete manifest is at most 8 MiB. No secret, host output path, endpoint
 coordinate, Docker information or private socket appears in it.
+
+Implement and accept this input contract before C6, using the existing compiled
+recording-plan models, C2/C3 contracts and C5 validation primitives. Do not import
+unaccepted C6 blueprint types, invent a future Reploy API, or start a Reploy
+client. C7.1 validates endpoint ID syntax and uniqueness in the envelope; C7.2
+owns matching those IDs to the final composed blueprint's declarations. The
+input contract does not accept endpoint coordinates or a prepared generation.
 
 Use one strict JSON envelope with required keys `schema`, `recording_id`,
 `recording_plan`, `terminal`, `envoy_endpoints`, `application_endpoints`,
@@ -383,6 +408,12 @@ initially empty controller output directory. Add the internal module command,
 not a user-facing CLI or new terminal runner. The later D1 adapter consumes this
 same input contract. Unit tests plus blueprint/command integration prove rejected
 input never launches the session client and cannot overlap the output mount.
+
+C7.2 follows C7.1 and the complete C6 gate. Prove controller-only placement,
+endpoint-declaration agreement, command assembly and rejected-input behavior on
+that accepted composition. Its local staging work may be prepared earlier, but
+it is not another leaf and cannot close C7.2 or C7 acceptance before C6. C8's
+public invocation and real termination evidence retain all existing prerequisites.
 
 ## C8: public deployment and lifecycle execution
 
