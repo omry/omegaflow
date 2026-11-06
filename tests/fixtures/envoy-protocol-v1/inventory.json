@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "docs/design/reploy-integration-implementation-plan.md",
-  "source_sha256": "d858bfee759c773f8a1025a25c434758a8ec0ef668930d4be7e0e60c50cf4d9e",
+  "source_sha256": "3958d7c36f1c6abe3fd4d9da00137ee53a635f9198742df7ccf6798453f2d9cf",
   "authorities": [
     {
       "path": "docs/design/envoy-protocol-v1.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "docs/design/reploy-integration-implementation-plan.md",
-      "sha256": "d858bfee759c773f8a1025a25c434758a8ec0ef668930d4be7e0e60c50cf4d9e"
+      "sha256": "3958d7c36f1c6abe3fd4d9da00137ee53a635f9198742df7ccf6798453f2d9cf"
     }
   ],
   "begin": "The cumulative suite covers inspection",
@@ -548,14 +548,14 @@
       "acceptance": "Shadow/missing/mismatched asset rejection, exact build/system-rc selection and /run/omegaflow tmpfs plan; complete C6 gate"
     },
     "C7.1": {
-      "prerequisites": "C2/C3, C5/C6",
+      "prerequisites": "C2/C3, C5",
       "implementation": "Bounded controller input manifest and declared asset validation",
-      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start"
+      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start; no C6 model, prepared generation or Reploy invocation"
     },
     "C7.2": {
-      "prerequisites": "C7.1",
+      "prerequisites": "C7.1, C6",
       "implementation": "Read-only controller-only input mount and internal command assembly",
-      "acceptance": "Exact /omegaflow-input isolation and validated invocation; complete C7 gate"
+      "acceptance": "Exact /omegaflow-input isolation, endpoint declarations matched to the composed blueprint and validated invocation; complete C7 gate"
     },
     "C8.1": {
       "prerequisites": "C1\u2013C7",
@@ -872,12 +872,12 @@
     {
       "id": "PACKAGE-C7.1",
       "leaf": "C7.1",
-      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start"
+      "acceptance": "Schema/path/hash/bounds/recording-plan rejection before client start; no C6 model, prepared generation or Reploy invocation"
     },
     {
       "id": "PACKAGE-C7.2",
       "leaf": "C7.2",
-      "acceptance": "Exact /omegaflow-input isolation and validated invocation; complete C7 gate"
+      "acceptance": "Exact /omegaflow-input isolation, endpoint declarations matched to the composed blueprint and validated invocation; complete C7 gate"
     },
     {
       "id": "PACKAGE-C8.1",
