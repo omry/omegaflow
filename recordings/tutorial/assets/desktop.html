@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OmegaFlow Tutorial Desktop</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 72% 24%, #344a73 0, #152138 42%, #0b1020 100%);
+      }
+
+      .taskbar {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        height: 44px;
+        align-items: center;
+        gap: 12px;
+        padding: 0 14px;
+        border-top: 1px solid rgb(255 255 255 / 14%);
+        background: rgb(7 11 19 / 88%);
+        box-shadow: 0 -8px 24px rgb(0 0 0 / 28%);
+      }
+
+      .launcher {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid #8b7bff;
+        border-radius: 8px;
+        color: #a89cff;
+        font-weight: 800;
+      }
+
+      .label {
+        color: rgb(235 239 255 / 72%);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="taskbar">
+      <span class="launcher">Ω</span>
+      <span class="label">OmegaFlow tutorial</span>
+    </div>
+  </body>
+</html>
